@@ -62,6 +62,24 @@ medspa-ai-platform/
    task run
    ```
 
+### Running with Docker + LocalStack
+
+For full integration testing (API + Postgres + Redis + mocked AWS services), use Docker Compose:
+
+```bash
+cp .env.example .env        # if you haven't already
+docker compose up --build   # or: task docker-up
+```
+
+This starts:
+
+- Go API container (port 8080)
+- PostgreSQL 15 (port 5432) with `medspa/medspa` credentials
+- Redis 7 (port 6379)
+- LocalStack (port 4566) emulating Secrets Manager/SQS/SNS/Lambda/CloudWatch Logs
+
+Shut everything down with `docker compose down -v` (or `task docker-down`). When using LocalStack, point AWS SDK clients at `AWS_ENDPOINT_URL=http://localstack:4566` and use the dummy credentials already present in `.env.example`.
+
 ### Available Tasks
 
 Run `task --list` to see all available tasks:
