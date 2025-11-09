@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -137,5 +138,70 @@ func TestTwilioWebhookHandler_WithSignatureValidation(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+func TestTwilioWebhookHandler_WithValidSignature(t *testing.T) {
+	logger := logging.Default()
+	authToken := "valid_secret"
+	handler := NewHandler(authToken, logger)
+
+	formData := url.Values{}
+	formData.Set("MessageSid", "SM999")
+	formData.Set("From", "+15555555555")
+	formData.Set("Body", "Ping")
+
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "example.com"
+
+	webhookURL := "http://example.com/messaging/twilio/webhook"
+	signature := computeSignature(buildSignaturePayload(webhookURL, formData), authToken)
+	req.Header.Set("X-Twilio-Signature", signature)
+
+	w := httptest.NewRecorder()
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
+
+func TestTwilioWebhookHandler_ParseError(t *testing.T) {
+	logger := logging.Default()
+	handler := NewHandler("", logger)
+
+	// Body contains invalid percent-encoding to force ParseForm error.
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader("%"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHealthCheck(t *testing.T) {
+	logger := logging.Default()
+	handler := NewHandler("", logger)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+
+	handler.HealthCheck(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp["status"] != "ok" {
+		t.Errorf("expected status ok, got %s", resp["status"])
 	}
 }

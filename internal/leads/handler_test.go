@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -86,6 +88,51 @@ func TestCreateWebLead_MissingContact(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestCreateWebLead_InvalidJSON(t *testing.T) {
+	repo := NewInMemoryRepository()
+	logger := logging.Default()
+	handler := NewHandler(repo, logger)
+
+	req := httptest.NewRequest(http.MethodPost, "/leads/web", strings.NewReader("{"))
+	w := httptest.NewRecorder()
+
+	handler.CreateWebLead(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+type failingRepository struct{}
+
+func (f failingRepository) Create(context.Context, *CreateLeadRequest) (*Lead, error) {
+	return nil, errors.New("boom")
+}
+
+func (f failingRepository) GetByID(context.Context, string) (*Lead, error) {
+	return nil, ErrLeadNotFound
+}
+
+func TestCreateWebLead_RepositoryError(t *testing.T) {
+	logger := logging.Default()
+	handler := NewHandler(failingRepository{}, logger)
+
+	payload := CreateLeadRequest{
+		Name:  "Failing Repo",
+		Email: "fail@example.com",
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/leads/web", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.CreateWebLead(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }
 
