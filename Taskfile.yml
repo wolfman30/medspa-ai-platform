@@ -90,6 +90,16 @@ tasks:
     cmds:
       - terraform apply
 
+  docker-up:
+    desc: Start local stack (API + Postgres + Redis + LocalStack)
+    cmds:
+      - docker compose up --build
+
+  docker-down:
+    desc: Stop local stack and remove containers
+    cmds:
+      - docker compose down -v
+
   ci:
     desc: Run all CI checks
     cmds:
