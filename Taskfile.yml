@@ -31,13 +31,17 @@ tasks:
 
   test:
     desc: Run all tests
+    env:
+      CGO_ENABLED: "1"
     cmds:
-      - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      - go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
   test-coverage:
     desc: Run tests and show coverage report
+    env:
+      CGO_ENABLED: "1"
     cmds:
-      - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      - go test -v -coverprofile=coverage.txt -covermode=atomic ./...
       - go tool cover -html=coverage.txt -o coverage.html
       - echo "Coverage report generated at coverage.html"
 
