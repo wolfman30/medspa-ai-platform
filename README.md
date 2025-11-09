@@ -87,11 +87,17 @@ The application uses the following environment variables:
 - `TWILIO_WEBHOOK_SECRET` - Secret for webhook signature verification
 - `PAYMENT_PROVIDER_KEY` - Payment provider API key
 
+### Architecture Reference
+
+The detailed platform design lives in `docs/ARCHITECTURE_V3.md`. Keep it updated as components evolve.
+
 ### Deployment
 
 The application is deployed on AWS using:
 
-- **API Gateway + Lambda** - Serverless API hosting
+- **ECS/Fargate** - Primary API + worker services (always-on Go binaries)
+- **Lambda (optional)** - Lightweight event/webhook processors
+- **API Gateway / ALB** - External ingress
 - **RDS PostgreSQL** - Managed database
 - **VPC** - Network isolation
 - **Secrets Manager** - Secure credential storage
