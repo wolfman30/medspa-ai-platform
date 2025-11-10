@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     env_file:
       - .env
     environment:
@@ -12,7 +13,7 @@ services:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: localstack
       AWS_SECRET_ACCESS_KEY: localstack
-      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ENDPOINT_OVERRIDE: http://localstack:4566
     ports:
       - "8080:8080"
     depends_on:
@@ -43,6 +44,22 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+  conversation-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: conversation-worker
+    env_file:
+      - .env
+    environment:
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: localstack
+      AWS_SECRET_ACCESS_KEY: localstack
+      AWS_ENDPOINT_OVERRIDE: http://localstack:4566
+    depends_on:
+      localstack:
+        condition: service_started
 
   localstack:
     image: localstack/localstack:3.0
