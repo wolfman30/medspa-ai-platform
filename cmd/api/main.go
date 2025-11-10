@@ -11,6 +11,7 @@ import (
 
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	"github.com/wolfman30/medspa-ai-platform/internal/config"
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -29,16 +30,19 @@ func main() {
 
 	// Initialize repositories and services
 	leadsRepo := leads.NewInMemoryRepository()
+	conversationService := conversation.NewStubService()
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
 	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, logger)
+	conversationHandler := conversation.NewHandler(conversationService, logger)
 
 	// Setup router
 	routerCfg := &router.Config{
-		Logger:           logger,
-		LeadsHandler:     leadsHandler,
-		MessagingHandler: messagingHandler,
+		Logger:              logger,
+		LeadsHandler:        leadsHandler,
+		MessagingHandler:    messagingHandler,
+		ConversationHandler: conversationHandler,
 	}
 	r := router.New(routerCfg)
 

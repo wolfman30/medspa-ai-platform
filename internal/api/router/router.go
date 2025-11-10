@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -12,9 +13,10 @@ import (
 
 // Config holds router configuration
 type Config struct {
-	Logger           *logging.Logger
-	LeadsHandler     *leads.Handler
-	MessagingHandler *messaging.Handler
+	Logger              *logging.Logger
+	LeadsHandler        *leads.Handler
+	MessagingHandler    *messaging.Handler
+	ConversationHandler *conversation.Handler
 }
 
 // New creates a new Chi router with all routes configured
@@ -40,6 +42,14 @@ func New(cfg *Config) http.Handler {
 	r.Route("/messaging", func(r chi.Router) {
 		r.Post("/twilio/webhook", cfg.MessagingHandler.TwilioWebhook)
 	})
+
+	// Conversation routes
+	if cfg.ConversationHandler != nil {
+		r.Route("/conversations", func(r chi.Router) {
+			r.Post("/start", cfg.ConversationHandler.Start)
+			r.Post("/message", cfg.ConversationHandler.Message)
+		})
+	}
 
 	return r
 }
