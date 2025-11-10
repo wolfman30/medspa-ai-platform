@@ -9,8 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
-	"github.com/wolfman30/medspa-ai-platform/internal/config"
+	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
@@ -19,7 +23,7 @@ import (
 
 func main() {
 	// Load configuration
-	cfg := config.Load()
+	cfg := appconfig.Load()
 
 	// Initialize logger
 	logger := logging.New(cfg.LogLevel)
@@ -30,12 +34,22 @@ func main() {
 
 	// Initialize repositories and services
 	leadsRepo := leads.NewInMemoryRepository()
-	conversationService := conversation.NewStubService()
+	conversationEngine := conversation.NewStubService()
+
+	awsCfg, err := loadAWSConfig(context.Background(), cfg)
+	if err != nil {
+		logger.Error("failed to load AWS config", "error", err)
+		os.Exit(1)
+	}
+
+	sqsClient := sqs.NewFromConfig(awsCfg)
+	conversationQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
+	conversationDispatcher := conversation.NewOrchestrator(conversationEngine, conversationQueue, logger)
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
 	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, logger)
-	conversationHandler := conversation.NewHandler(conversationService, logger)
+	conversationHandler := conversation.NewHandler(conversationDispatcher, logger)
 
 	// Setup router
 	routerCfg := &router.Config{
@@ -80,6 +94,41 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := conversationDispatcher.Shutdown(ctx); err != nil {
+		logger.Error("failed to shutdown conversation dispatcher", "error", err)
+	}
+
 	logger.Info("server stopped")
 	fmt.Println("Server exited gracefully")
+}
+
+func loadAWSConfig(ctx context.Context, cfg *appconfig.Config) (aws.Config, error) {
+	loaders := []func(*config.LoadOptions) error{
+		config.WithRegion(cfg.AWSRegion),
+		config.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(cfg.AWSAccessKeyID, cfg.AWSSecretAccessKey, ""),
+		),
+	}
+
+	awsCfg, err := config.LoadDefaultConfig(ctx, loaders...)
+	if err != nil {
+		return aws.Config{}, err
+	}
+
+	if endpoint := cfg.AWSEndpointOverride; endpoint != "" {
+		awsCfg.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				if service == sqs.ServiceID {
+					return aws.Endpoint{
+						URL:           endpoint,
+						PartitionID:   "aws",
+						SigningRegion: cfg.AWSRegion,
+					}, nil
+				}
+				return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+			},
+		)
+	}
+
+	return awsCfg, nil
 }

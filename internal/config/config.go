@@ -7,27 +7,37 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	Port                string
-	Env                 string
-	LogLevel            string
-	DatabaseURL         string
-	TwilioAccountSID    string
-	TwilioAuthToken     string
-	TwilioWebhookSecret string
-	PaymentProviderKey  string
+	Port                 string
+	Env                  string
+	LogLevel             string
+	DatabaseURL          string
+	TwilioAccountSID     string
+	TwilioAuthToken      string
+	TwilioWebhookSecret  string
+	PaymentProviderKey   string
+	AWSRegion            string
+	AWSAccessKeyID       string
+	AWSSecretAccessKey   string
+	AWSEndpointOverride  string
+	ConversationQueueURL string
 }
 
 // Load reads configuration from environment variables
 func Load() *Config {
 	return &Config{
-		Port:                getEnv("PORT", "8080"),
-		Env:                 getEnv("ENV", "development"),
-		LogLevel:            getEnv("LOG_LEVEL", "info"),
-		DatabaseURL:         getEnv("DATABASE_URL", ""),
-		TwilioAccountSID:    getEnv("TWILIO_ACCOUNT_SID", ""),
-		TwilioAuthToken:     getEnv("TWILIO_AUTH_TOKEN", ""),
-		TwilioWebhookSecret: getEnv("TWILIO_WEBHOOK_SECRET", ""),
-		PaymentProviderKey:  getEnv("PAYMENT_PROVIDER_KEY", ""),
+		Port:                 getEnv("PORT", "8080"),
+		Env:                  getEnv("ENV", "development"),
+		LogLevel:             getEnv("LOG_LEVEL", "info"),
+		DatabaseURL:          getEnv("DATABASE_URL", ""),
+		TwilioAccountSID:     getEnv("TWILIO_ACCOUNT_SID", ""),
+		TwilioAuthToken:      getEnv("TWILIO_AUTH_TOKEN", ""),
+		TwilioWebhookSecret:  getEnv("TWILIO_WEBHOOK_SECRET", ""),
+		PaymentProviderKey:   getEnv("PAYMENT_PROVIDER_KEY", ""),
+		AWSRegion:            getEnv("AWS_REGION", "us-east-1"),
+		AWSAccessKeyID:       getEnv("AWS_ACCESS_KEY_ID", "localstack"),
+		AWSSecretAccessKey:   getEnv("AWS_SECRET_ACCESS_KEY", "localstack"),
+		AWSEndpointOverride:  getEnv("AWS_ENDPOINT_OVERRIDE", "http://localhost:4566"),
+		ConversationQueueURL: getEnv("CONVERSATION_QUEUE_URL", "http://localhost:4566/000000000000/conversation-events"),
 	}
 }
 

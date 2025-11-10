@@ -304,7 +304,7 @@ roi = total_monthly_impact / platform_cost
 - **Temporal / worker pool (Go)** - Async EMR sync + reconciliation
 
 ### **AI/NLP**
-- **OpenAI GPT-4** - Conversational engine
+- **OpenAI GPT-5** - Conversational engine
 - **Langchain** - Conversation memory management
 - **Embeddings DB** - Service knowledge base
 
