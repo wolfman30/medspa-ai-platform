@@ -64,7 +64,7 @@ services:
   localstack:
     image: localstack/localstack:3.0
     environment:
-      SERVICES: secretsmanager,sqs,sns,lambda,logs
+      SERVICES: secretsmanager,sqs,sns,lambda,logs,dynamodb
       AWS_REGION: us-east-1
       EDGE_PORT: 4566
     ports:

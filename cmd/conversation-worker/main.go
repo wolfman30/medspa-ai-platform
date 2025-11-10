@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -26,11 +27,14 @@ func main() {
 
 	sqsClient := sqs.NewFromConfig(awsConfig)
 	queue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
+	dynamoClient := dynamodb.NewFromConfig(awsConfig)
+	jobStore := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
 
 	processor := conversation.NewStubService()
 	worker := conversation.NewWorker(
 		processor,
 		queue,
+		jobStore,
 		logger,
 		conversation.WithWorkerCount(4),
 	)

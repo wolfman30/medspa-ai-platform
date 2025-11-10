@@ -13,7 +13,8 @@ import (
 func TestWorkerProcessesMessages(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &recordingService{}
-	worker := NewWorker(service, queue, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+	store := &stubJobUpdater{}
+	worker := NewWorker(service, queue, store, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -43,6 +44,10 @@ func TestWorkerProcessesMessages(t *testing.T) {
 
 	if service.startCalls != 1 {
 		t.Fatalf("expected 1 start call, got %d", service.startCalls)
+	}
+
+	if len(store.completed) != 1 || store.completed[0] != "job-1" {
+		t.Fatalf("expected job completion to be recorded, got %#v", store.completed)
 	}
 }
 
@@ -108,4 +113,19 @@ func waitFor(cond func() bool, timeout time.Duration, t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("condition not met within %s", timeout)
+}
+
+type stubJobUpdater struct {
+	completed []string
+	failed    []string
+}
+
+func (s *stubJobUpdater) MarkCompleted(ctx context.Context, jobID string, resp *Response, conversationID string) error {
+	s.completed = append(s.completed, jobID)
+	return nil
+}
+
+func (s *stubJobUpdater) MarkFailed(ctx context.Context, jobID string, errMsg string) error {
+	s.failed = append(s.failed, jobID)
+	return nil
 }
