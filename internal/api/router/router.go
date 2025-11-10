@@ -48,6 +48,7 @@ func New(cfg *Config) http.Handler {
 		r.Route("/conversations", func(r chi.Router) {
 			r.Post("/start", cfg.ConversationHandler.Start)
 			r.Post("/message", cfg.ConversationHandler.Message)
+			r.Get("/jobs/{jobID}", cfg.ConversationHandler.JobStatus)
 		})
 	}
 

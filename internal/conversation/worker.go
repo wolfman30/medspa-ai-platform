@@ -15,6 +15,7 @@ import (
 type Worker struct {
 	processor Service
 	queue     queueClient
+	jobs      JobUpdater
 	logger    *logging.Logger
 
 	cfg workerConfig
@@ -75,12 +76,15 @@ func WithReceiveBatchSize(size int) WorkerOption {
 }
 
 // NewWorker constructs a queue consumer around the provided processor.
-func NewWorker(processor Service, queue queueClient, logger *logging.Logger, opts ...WorkerOption) *Worker {
+func NewWorker(processor Service, queue queueClient, jobs JobUpdater, logger *logging.Logger, opts ...WorkerOption) *Worker {
 	if processor == nil {
 		panic("conversation: processor cannot be nil")
 	}
 	if queue == nil {
 		panic("conversation: queue cannot be nil")
+	}
+	if jobs == nil {
+		panic("conversation: job store cannot be nil")
 	}
 	if logger == nil {
 		logger = logging.Default()
@@ -98,6 +102,7 @@ func NewWorker(processor Service, queue queueClient, logger *logging.Logger, opt
 	return &Worker{
 		processor: processor,
 		queue:     queue,
+		jobs:      jobs,
 		logger:    logger,
 		cfg:       cfg,
 	}
@@ -158,20 +163,33 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		return
 	}
 
-	var err error
+	var (
+		err  error
+		resp *Response
+	)
 	switch payload.Kind {
 	case jobTypeStart:
-		_, err = w.processor.StartConversation(ctx, payload.Start)
+		resp, err = w.processor.StartConversation(ctx, payload.Start)
 	case jobTypeMessage:
-		_, err = w.processor.ProcessMessage(ctx, payload.Message)
+		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
 	default:
 		err = fmt.Errorf("conversation: unknown job type %q", payload.Kind)
 	}
 
 	if err != nil {
 		w.logger.Error("conversation job failed", "error", err, "job_id", payload.ID, "kind", payload.Kind)
+		if storeErr := w.jobs.MarkFailed(ctx, payload.ID, err.Error()); storeErr != nil {
+			w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+		}
 	} else {
 		w.logger.Debug("conversation job processed", "job_id", payload.ID, "kind", payload.Kind)
+		convID := resp.ConversationID
+		if convID == "" && payload.Kind == jobTypeMessage {
+			convID = payload.Message.ConversationID
+		}
+		if storeErr := w.jobs.MarkCompleted(ctx, payload.ID, resp, convID); storeErr != nil {
+			w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+		}
 	}
 
 	w.deleteMessage(context.Background(), msg.ReceiptHandle)

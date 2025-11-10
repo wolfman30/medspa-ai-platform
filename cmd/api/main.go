@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
@@ -41,11 +42,13 @@ func main() {
 	sqsClient := sqs.NewFromConfig(awsCfg)
 	conversationQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
 	conversationPublisher := conversation.NewPublisher(conversationQueue, logger)
+	dynamoClient := dynamodb.NewFromConfig(awsCfg)
+	jobStore := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
 	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, logger)
-	conversationHandler := conversation.NewHandler(conversationPublisher, logger)
+	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, logger)
 
 	// Setup router
 	routerCfg := &router.Config{
