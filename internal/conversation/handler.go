@@ -1,23 +1,30 @@
 package conversation
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// Handler wires HTTP requests to the conversation service.
+// Enqueuer defines how conversation requests are dispatched.
+type Enqueuer interface {
+	EnqueueStart(ctx context.Context, req StartRequest) (string, error)
+	EnqueueMessage(ctx context.Context, req MessageRequest) (string, error)
+}
+
+// Handler wires HTTP requests to the conversation queue.
 type Handler struct {
-	service Service
-	logger  *logging.Logger
+	enqueuer Enqueuer
+	logger   *logging.Logger
 }
 
 // NewHandler creates a conversation handler.
-func NewHandler(service Service, logger *logging.Logger) *Handler {
+func NewHandler(enqueuer Enqueuer, logger *logging.Logger) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
+		enqueuer: enqueuer,
+		logger:   logger,
 	}
 }
 
@@ -30,14 +37,14 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.StartConversation(r.Context(), req)
+	jobID, err := h.enqueuer.EnqueueStart(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to start conversation", "error", err)
-		http.Error(w, "Failed to start conversation", http.StatusInternalServerError)
+		h.logger.Error("failed to enqueue start conversation", "error", err)
+		http.Error(w, "Failed to schedule conversation start", http.StatusInternalServerError)
 		return
 	}
 
-	h.writeJSON(w, http.StatusCreated, resp)
+	h.writeAccepted(w, jobID)
 }
 
 // Message handles POST /conversations/message.
@@ -49,14 +56,14 @@ func (h *Handler) Message(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.ProcessMessage(r.Context(), req)
+	jobID, err := h.enqueuer.EnqueueMessage(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to process message", "error", err)
-		http.Error(w, "Failed to process message", http.StatusInternalServerError)
+		h.logger.Error("failed to enqueue message", "error", err)
+		http.Error(w, "Failed to schedule message", http.StatusInternalServerError)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, resp)
+	h.writeAccepted(w, jobID)
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -65,4 +72,14 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, payload any) {
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		h.logger.Error("failed to write JSON response", "error", err)
 	}
+}
+
+func (h *Handler) writeAccepted(w http.ResponseWriter, jobID string) {
+	h.writeJSON(w, http.StatusAccepted, struct {
+		JobID  string `json:"jobId"`
+		Status string `json:"status"`
+	}{
+		JobID:  jobID,
+		Status: "accepted",
+	})
 }
