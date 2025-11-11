@@ -131,13 +131,24 @@ func (s *JobStore) MarkCompleted(ctx context.Context, jobID string, resp *Respon
 		return fmt.Errorf("conversation: failed to marshal response: %w", err)
 	}
 
-	return s.updateJob(ctx, jobID, map[string]types.AttributeValue{
-		":status":       &types.AttributeValueMemberS{Value: string(JobStatusCompleted)},
-		":response":     respAttr,
-		":conversation": &types.AttributeValueMemberS{Value: conversationID},
-		":error":        &types.AttributeValueMemberS{Value: ""},
-		":updated":      &types.AttributeValueMemberS{Value: time.Now().UTC().Format(time.RFC3339Nano)},
-	}, "SET #status = :status, response = :response, conversationId = :conversation, errorMessage = :error, updatedAt = :updated")
+	return s.updateJob(
+		ctx,
+		jobID,
+		map[string]types.AttributeValue{
+			":status":       &types.AttributeValueMemberS{Value: string(JobStatusCompleted)},
+			":response":     respAttr,
+			":conversation": &types.AttributeValueMemberS{Value: conversationID},
+			":error":        &types.AttributeValueMemberS{Value: ""},
+			":updated":      &types.AttributeValueMemberS{Value: time.Now().UTC().Format(time.RFC3339Nano)},
+		},
+		map[string]string{
+			"#status":   "status",
+			"#response": "response",
+			"#error":    "errorMessage",
+			"#updated":  "updatedAt",
+		},
+		"SET #status = :status, #response = :response, conversationId = :conversation, #error = :error, #updated = :updated",
+	)
 }
 
 // MarkFailed updates a job to the failed state.
@@ -145,12 +156,23 @@ func (s *JobStore) MarkFailed(ctx context.Context, jobID string, errMsg string) 
 	if jobID == "" {
 		return errors.New("conversation: jobID required")
 	}
-	return s.updateJob(ctx, jobID, map[string]types.AttributeValue{
-		":status":   &types.AttributeValueMemberS{Value: string(JobStatusFailed)},
-		":response": &types.AttributeValueMemberNULL{Value: true},
-		":error":    &types.AttributeValueMemberS{Value: errMsg},
-		":updated":  &types.AttributeValueMemberS{Value: time.Now().UTC().Format(time.RFC3339Nano)},
-	}, "SET #status = :status, response = :response, errorMessage = :error, updatedAt = :updated")
+	return s.updateJob(
+		ctx,
+		jobID,
+		map[string]types.AttributeValue{
+			":status":   &types.AttributeValueMemberS{Value: string(JobStatusFailed)},
+			":response": &types.AttributeValueMemberNULL{Value: true},
+			":error":    &types.AttributeValueMemberS{Value: errMsg},
+			":updated":  &types.AttributeValueMemberS{Value: time.Now().UTC().Format(time.RFC3339Nano)},
+		},
+		map[string]string{
+			"#status":   "status",
+			"#response": "response",
+			"#error":    "errorMessage",
+			"#updated":  "updatedAt",
+		},
+		"SET #status = :status, #response = :response, #error = :error, #updated = :updated",
+	)
 }
 
 // GetJob fetches a job by ID.
@@ -178,14 +200,14 @@ func (s *JobStore) GetJob(ctx context.Context, jobID string) (*JobRecord, error)
 	return &job, nil
 }
 
-func (s *JobStore) updateJob(ctx context.Context, jobID string, values map[string]types.AttributeValue, expression string) error {
+func (s *JobStore) updateJob(ctx context.Context, jobID string, values map[string]types.AttributeValue, names map[string]string, expression string) error {
 	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(s.tableName),
 		Key: map[string]types.AttributeValue{
 			"jobId": &types.AttributeValueMemberS{Value: jobID},
 		},
 		UpdateExpression:          aws.String(expression),
-		ExpressionAttributeNames:  map[string]string{"#status": "status"},
+		ExpressionAttributeNames:  names,
 		ExpressionAttributeValues: values,
 		ConditionExpression:       aws.String("attribute_exists(jobId)"),
 	})

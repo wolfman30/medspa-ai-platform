@@ -15,15 +15,17 @@ type Service interface {
 
 // StartRequest represents the minimal data we need to open a conversation.
 type StartRequest struct {
-	LeadID string
-	Intro  string
-	Source string
+	LeadID   string
+	Intro    string
+	Source   string
+	ClinicID string
 }
 
 // MessageRequest represents a single turn in the conversation.
 type MessageRequest struct {
 	ConversationID string
 	Message        string
+	ClinicID       string
 }
 
 // Response is a simple DTO returned to the API layer.

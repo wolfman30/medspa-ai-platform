@@ -15,9 +15,7 @@ import (
 )
 
 func TestHandler_Start_AcceptsJob(t *testing.T) {
-	enqueuer := &stubEnqueuer{
-		startJobID: "job-start-1",
-	}
+	enqueuer := &stubEnqueuer{}
 	store := &stubJobStore{}
 	handler := NewHandler(enqueuer, store, logging.Default())
 
@@ -44,23 +42,21 @@ func TestHandler_Start_AcceptsJob(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.JobID != "job-start-1" {
-		t.Fatalf("expected job ID job-start-1, got %s", resp.JobID)
-	}
-
 	if enqueuer.lastStartReq.LeadID != payload.LeadID {
 		t.Fatalf("expected LeadID %s, got %s", payload.LeadID, enqueuer.lastStartReq.LeadID)
 	}
 
-	if store.lastPut == nil || store.lastPut.JobID != "job-start-1" || store.lastPut.RequestType != jobTypeStart {
+	if store.lastPut == nil || store.lastPut.JobID != resp.JobID || store.lastPut.RequestType != jobTypeStart {
 		t.Fatalf("expected job store to capture pending job, got %#v", store.lastPut)
+	}
+
+	if enqueuer.lastStartJobID != resp.JobID {
+		t.Fatalf("expected enqueuer to receive jobID %s, got %s", resp.JobID, enqueuer.lastStartJobID)
 	}
 }
 
 func TestHandler_Message_AcceptsJob(t *testing.T) {
-	enqueuer := &stubEnqueuer{
-		messageJobID: "job-msg-1",
-	}
+	enqueuer := &stubEnqueuer{}
 	store := &stubJobStore{}
 	handler := NewHandler(enqueuer, store, logging.Default())
 
@@ -86,16 +82,16 @@ func TestHandler_Message_AcceptsJob(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.JobID != "job-msg-1" {
-		t.Fatalf("expected job ID job-msg-1, got %s", resp.JobID)
-	}
-
 	if enqueuer.lastMessageReq.ConversationID != payload.ConversationID {
 		t.Fatalf("expected conversation ID %s, got %s", payload.ConversationID, enqueuer.lastMessageReq.ConversationID)
 	}
 
 	if store.lastPut == nil || store.lastPut.MessageRequest == nil || store.lastPut.MessageRequest.ConversationID != payload.ConversationID {
 		t.Fatalf("expected job store to capture message job, got %#v", store.lastPut)
+	}
+
+	if enqueuer.lastMessageJobID != resp.JobID {
+		t.Fatalf("expected enqueuer to receive jobID %s, got %s", resp.JobID, enqueuer.lastMessageJobID)
 	}
 }
 
@@ -201,22 +197,24 @@ func routeWithJobID(req *http.Request, jobID string) *http.Request {
 }
 
 type stubEnqueuer struct {
-	startJobID     string
-	messageJobID   string
-	startErr       error
-	messageErr     error
-	lastStartReq   StartRequest
-	lastMessageReq MessageRequest
+	startErr         error
+	messageErr       error
+	lastStartReq     StartRequest
+	lastMessageReq   MessageRequest
+	lastStartJobID   string
+	lastMessageJobID string
 }
 
-func (s *stubEnqueuer) EnqueueStart(ctx context.Context, req StartRequest) (string, error) {
+func (s *stubEnqueuer) EnqueueStart(ctx context.Context, jobID string, req StartRequest) error {
 	s.lastStartReq = req
-	return s.startJobID, s.startErr
+	s.lastStartJobID = jobID
+	return s.startErr
 }
 
-func (s *stubEnqueuer) EnqueueMessage(ctx context.Context, req MessageRequest) (string, error) {
+func (s *stubEnqueuer) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest) error {
 	s.lastMessageReq = req
-	return s.messageJobID, s.messageErr
+	s.lastMessageJobID = jobID
+	return s.messageErr
 }
 
 type stubJobStore struct {

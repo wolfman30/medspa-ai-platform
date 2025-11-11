@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -49,11 +50,103 @@ func TestWorkerProcessesMessages(t *testing.T) {
 	if len(store.completed) != 1 || store.completed[0] != "job-1" {
 		t.Fatalf("expected job completion to be recorded, got %#v", store.completed)
 	}
+
+	if queue.deleted != 1 {
+		t.Fatalf("expected delete to be invoked once, got %d", queue.deleted)
+	}
+}
+
+func TestWorkerHandlesProcessingErrors(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &recordingService{failStart: true}
+	store := &stubJobUpdater{}
+	worker := NewWorker(service, queue, store, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:   "job-fail",
+		Kind: jobTypeStart,
+		Start: StartRequest{
+			LeadID: "lead-err",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-fail",
+		Body:          string(body),
+		ReceiptHandle: "rh-fail",
+	})
+
+	waitFor(func() bool {
+		return len(store.failed) == 1
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if store.failed[0].jobID != "job-fail" || store.failed[0].err == "" {
+		t.Fatalf("expected failure to be recorded, got %#v", store.failed[0])
+	}
+}
+
+func TestWorkerSkipsMalformedPayload(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &recordingService{}
+	store := &stubJobUpdater{}
+	worker := NewWorker(service, queue, store, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	queue.enqueue(queueMessage{ID: "bad", Body: "{", ReceiptHandle: "rh-bad"})
+
+	time.Sleep(50 * time.Millisecond)
+
+	cancel()
+	worker.Wait()
+
+	if service.startCalls != 0 && service.messageCalls != 0 {
+		t.Fatalf("expected no processor calls for malformed body")
+	}
+	if len(store.completed) != 0 || len(store.failed) != 0 {
+		t.Fatalf("expected no job updates for malformed payload")
+	}
+}
+
+func TestWorkerConfigOptions(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &recordingService{}
+	store := &stubJobUpdater{}
+
+	worker := NewWorker(
+		service,
+		queue,
+		store,
+		logging.Default(),
+		WithWorkerCount(3),
+		WithReceiveBatchSize(20),
+		WithReceiveWaitSeconds(30),
+	)
+
+	if worker.cfg.workers != 3 {
+		t.Fatalf("expected worker count override, got %d", worker.cfg.workers)
+	}
+	if worker.cfg.receiveBatchSize != maxReceiveBatchSize {
+		t.Fatalf("expected batch size capped at %d, got %d", maxReceiveBatchSize, worker.cfg.receiveBatchSize)
+	}
+	if worker.cfg.receiveWaitSecs != maxWaitSeconds {
+		t.Fatalf("expected wait seconds capped at %d, got %d", maxWaitSeconds, worker.cfg.receiveWaitSecs)
+	}
 }
 
 type recordingService struct {
 	startCalls   int
 	messageCalls int
+	failStart    bool
 	mu           sync.Mutex
 }
 
@@ -61,6 +154,9 @@ func (r *recordingService) StartConversation(ctx context.Context, req StartReque
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.startCalls++
+	if r.failStart {
+		return nil, errors.New("processor boom")
+	}
 	return &Response{}, nil
 }
 
@@ -72,7 +168,9 @@ func (r *recordingService) ProcessMessage(ctx context.Context, req MessageReques
 }
 
 type scriptedQueue struct {
-	ch chan queueMessage
+	ch       chan queueMessage
+	deleted  int
+	delMutex sync.Mutex
 }
 
 func newScriptedQueue() *scriptedQueue {
@@ -101,6 +199,9 @@ func (s *scriptedQueue) Receive(ctx context.Context, maxMessages int, waitSecond
 }
 
 func (s *scriptedQueue) Delete(ctx context.Context, receiptHandle string) error {
+	s.delMutex.Lock()
+	s.deleted++
+	s.delMutex.Unlock()
 	return nil
 }
 
@@ -117,7 +218,10 @@ func waitFor(cond func() bool, timeout time.Duration, t *testing.T) {
 
 type stubJobUpdater struct {
 	completed []string
-	failed    []string
+	failed    []struct {
+		jobID string
+		err   string
+	}
 }
 
 func (s *stubJobUpdater) MarkCompleted(ctx context.Context, jobID string, resp *Response, conversationID string) error {
@@ -126,6 +230,9 @@ func (s *stubJobUpdater) MarkCompleted(ctx context.Context, jobID string, resp *
 }
 
 func (s *stubJobUpdater) MarkFailed(ctx context.Context, jobID string, errMsg string) error {
-	s.failed = append(s.failed, jobID)
+	s.failed = append(s.failed, struct {
+		jobID string
+		err   string
+	}{jobID: jobID, err: errMsg})
 	return nil
 }

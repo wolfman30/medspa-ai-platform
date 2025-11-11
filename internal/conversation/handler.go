@@ -7,13 +7,14 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
 // Enqueuer defines how conversation requests are dispatched.
 type Enqueuer interface {
-	EnqueueStart(ctx context.Context, req StartRequest) (string, error)
-	EnqueueMessage(ctx context.Context, req MessageRequest) (string, error)
+	EnqueueStart(ctx context.Context, jobID string, req StartRequest) error
+	EnqueueMessage(ctx context.Context, jobID string, req MessageRequest) error
 }
 
 // Handler wires HTTP requests to the conversation queue.
@@ -41,16 +42,17 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobID, err := h.enqueuer.EnqueueStart(r.Context(), req)
-	if err != nil {
-		h.logger.Error("failed to enqueue start conversation", "error", err)
-		http.Error(w, "Failed to schedule conversation start", http.StatusInternalServerError)
-		return
-	}
+	jobID := uuid.NewString()
 
 	if err := h.recordPendingJob(r.Context(), jobID, jobTypeStart, &req, nil); err != nil {
 		h.logger.Error("failed to persist job record", "error", err)
 		http.Error(w, "Failed to persist job record", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.enqueuer.EnqueueStart(r.Context(), jobID, req); err != nil {
+		h.logger.Error("failed to enqueue start conversation", "error", err)
+		http.Error(w, "Failed to schedule conversation start", http.StatusInternalServerError)
 		return
 	}
 
@@ -66,16 +68,17 @@ func (h *Handler) Message(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobID, err := h.enqueuer.EnqueueMessage(r.Context(), req)
-	if err != nil {
-		h.logger.Error("failed to enqueue message", "error", err)
-		http.Error(w, "Failed to schedule message", http.StatusInternalServerError)
-		return
-	}
+	jobID := uuid.NewString()
 
 	if err := h.recordPendingJob(r.Context(), jobID, jobTypeMessage, nil, &req); err != nil {
 		h.logger.Error("failed to persist job record", "error", err)
 		http.Error(w, "Failed to persist job record", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.enqueuer.EnqueueMessage(r.Context(), jobID, req); err != nil {
+		h.logger.Error("failed to enqueue message", "error", err)
+		http.Error(w, "Failed to schedule message", http.StatusInternalServerError)
 		return
 	}
 

@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 )
@@ -28,14 +29,16 @@ func LoadAWSConfig(ctx context.Context, cfg *appconfig.Config) (aws.Config, erro
 	if endpoint := cfg.AWSEndpointOverride; endpoint != "" {
 		awsCfg.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
-				if service == sqs.ServiceID {
+				switch service {
+				case sqs.ServiceID, dynamodb.ServiceID:
 					return aws.Endpoint{
 						URL:           endpoint,
 						PartitionID:   "aws",
 						SigningRegion: cfg.AWSRegion,
 					}, nil
+				default:
+					return aws.Endpoint{}, &aws.EndpointNotFoundError{}
 				}
-				return aws.Endpoint{}, &aws.EndpointNotFoundError{}
 			},
 		)
 	}

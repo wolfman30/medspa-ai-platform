@@ -34,9 +34,12 @@ type queuePayload struct {
 	Message MessageRequest `json:"message,omitempty"`
 }
 
-func encodePayload(kind jobType, start StartRequest, message MessageRequest) (queuePayload, string, error) {
+func encodePayload(kind jobType, jobID string, start StartRequest, message MessageRequest) (queuePayload, string, error) {
+	if jobID == "" {
+		jobID = uuid.NewString()
+	}
 	payload := queuePayload{
-		ID:      uuid.NewString(),
+		ID:      jobID,
 		Kind:    kind,
 		Start:   start,
 		Message: message,
