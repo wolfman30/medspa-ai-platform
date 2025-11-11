@@ -6,12 +6,18 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ProcessedStore records webhook events that were already handled.
+type rowQuerier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type ProcessedStore struct {
-	pool *pgxpool.Pool
+	pool rowQuerier
 }
 
 func NewProcessedStore(pool *pgxpool.Pool) *ProcessedStore {
@@ -19,6 +25,13 @@ func NewProcessedStore(pool *pgxpool.Pool) *ProcessedStore {
 		panic("events: pgx pool required")
 	}
 	return &ProcessedStore{pool: pool}
+}
+
+func newProcessedStoreWithExec(exec rowQuerier) *ProcessedStore {
+	if exec == nil {
+		panic("events: exec required")
+	}
+	return &ProcessedStore{pool: exec}
 }
 
 // AlreadyProcessed checks if we've seen this provider event id.

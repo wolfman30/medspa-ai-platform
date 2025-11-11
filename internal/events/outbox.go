@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -26,8 +28,13 @@ type DeliveryHandler interface {
 }
 
 // OutboxStore persists events for reliable delivery.
+type execQuerier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
 type OutboxStore struct {
-	pool *pgxpool.Pool
+	pool execQuerier
 }
 
 func NewOutboxStore(pool *pgxpool.Pool) *OutboxStore {
@@ -35,6 +42,13 @@ func NewOutboxStore(pool *pgxpool.Pool) *OutboxStore {
 		panic("events: pgx pool required")
 	}
 	return &OutboxStore{pool: pool}
+}
+
+func newOutboxStoreWithExec(exec execQuerier) *OutboxStore {
+	if exec == nil {
+		panic("events: exec querier required")
+	}
+	return &OutboxStore{pool: exec}
 }
 
 func (s *OutboxStore) Insert(ctx context.Context, orgID string, eventType string, payload any) (uuid.UUID, error) {
