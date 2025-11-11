@@ -161,4 +161,3 @@ func buildAbsoluteURL(r *http.Request) string {
 	}
 	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.RequestURI())
 }
-

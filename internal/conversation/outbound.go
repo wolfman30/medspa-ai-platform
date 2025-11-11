@@ -17,4 +17,3 @@ type OutboundReply struct {
 	Body           string
 	Metadata       map[string]string
 }
-

@@ -13,9 +13,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"

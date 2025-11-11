@@ -31,11 +31,11 @@ const (
 )
 
 type queuePayload struct {
-	ID          string         `json:"id"`
-	Kind        jobType        `json:"kind"`
-	Start       StartRequest   `json:"start,omitempty"`
-	Message     MessageRequest `json:"message,omitempty"`
-	TrackStatus bool           `json:"track_status"`
+	ID          string                     `json:"id"`
+	Kind        jobType                    `json:"kind"`
+	Start       StartRequest               `json:"start,omitempty"`
+	Message     MessageRequest             `json:"message,omitempty"`
+	TrackStatus bool                       `json:"track_status"`
 	Payment     *events.PaymentSucceededV1 `json:"payment,omitempty"`
 }
 

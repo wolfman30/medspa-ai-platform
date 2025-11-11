@@ -39,4 +39,3 @@ func TestRequireOrgIDMissingHeader(t *testing.T) {
 		t.Fatalf("expected 400 for missing org, got %d", rr.Code)
 	}
 }
-

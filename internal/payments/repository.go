@@ -116,4 +116,3 @@ func toPGUUID(id uuid.UUID) pgtype.UUID {
 		Valid: true,
 	}
 }
-

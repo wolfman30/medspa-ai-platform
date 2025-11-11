@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
 const (

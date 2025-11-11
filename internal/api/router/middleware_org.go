@@ -26,4 +26,3 @@ func requireOrgID(next http.Handler) http.Handler {
 func orgIDFromRequest(r *http.Request) (string, bool) {
 	return tenancy.OrgIDFromContext(r.Context())
 }
-

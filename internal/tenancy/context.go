@@ -20,4 +20,3 @@ func OrgIDFromContext(ctx context.Context) (string, bool) {
 	orgID, ok := val.(string)
 	return orgID, ok && orgID != ""
 }
-

@@ -79,7 +79,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 			"location_id": s.locationID,
 		},
 		"checkout_options": map[string]any{
-			"redirect_url":            s.successURL,
+			"redirect_url":             s.successURL,
 			"ask_for_shipping_address": false,
 		},
 		"metadata": map[string]string{
@@ -136,4 +136,3 @@ func buildIdempotencyKey(orgID, leadID string, amount int32) string {
 	sum := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(sum[:])
 }
-

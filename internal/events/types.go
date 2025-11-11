@@ -48,4 +48,3 @@ type BookingConfirmedV1 struct {
 	ScheduledFor   *time.Time `json:"scheduled_for,omitempty"`
 	ConversationID string     `json:"conversation_id,omitempty"`
 }
-

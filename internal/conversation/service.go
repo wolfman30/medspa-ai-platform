@@ -83,4 +83,3 @@ func (s *StubService) ProcessMessage(ctx context.Context, req MessageRequest) (*
 		Timestamp:      time.Now().UTC(),
 	}, nil
 }
-
