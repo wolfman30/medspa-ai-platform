@@ -11,6 +11,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/redis/go-redis/v9"
+	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -48,7 +50,24 @@ func main() {
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
 	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, logger)
-	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, logger)
+	var knowledgeRepo conversation.KnowledgeRepository
+	var ragStore *conversation.MemoryRAGStore
+	if cfg.OpenAIAPIKey != "" && cfg.OpenAIEmbeddingModel != "" {
+		openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
+		if cfg.OpenAIBaseURL != "" {
+			openaiCfg.BaseURL = cfg.OpenAIBaseURL
+		}
+		openaiClient := openai.NewClientWithConfig(openaiCfg)
+
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+		})
+		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
+		ragStore = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
+	}
+
+	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, knowledgeRepo, ragStore, logger)
 
 	// Setup router
 	routerCfg := &router.Config{
