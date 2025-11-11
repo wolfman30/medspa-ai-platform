@@ -1,0 +1,16 @@
+{
+  "data": {
+    "id": "msg_01J123ABC",
+    "status": "queued",
+    "from": "+15553334444",
+    "to": "+15552223333",
+    "text": "hello patient",
+    "created_at": "2024-10-01T12:00:00Z",
+    "completed_at": "0001-01-01T00:00:00Z",
+    "direction": "outbound",
+    "parts": 1,
+    "payload": "",
+    "media_urls": [],
+    "carrier_status": "accepted"
+  }
+}
