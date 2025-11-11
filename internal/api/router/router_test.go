@@ -2,6 +2,7 @@ package router
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -19,7 +21,11 @@ func newTestRouter(t *testing.T) http.Handler {
 
 	logger := logging.Default()
 	leadsHandler := leads.NewHandler(leads.NewInMemoryRepository(), logger)
-	messagingHandler := messaging.NewHandler("", logger)
+	publisher := &noopPublisher{}
+	resolver := messaging.NewStaticOrgResolver(map[string]string{
+		"+10000000000": "org-test",
+	})
+	messagingHandler := messaging.NewHandler("", publisher, resolver, logger)
 
 	cfg := &Config{
 		Logger:           logger,
@@ -70,6 +76,7 @@ func TestRouterLeadsWebEndpoint(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/leads/web", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Org-Id", "org-test")
 	rr := httptest.NewRecorder()
 
 	router.ServeHTTP(rr, req)
@@ -94,6 +101,7 @@ func TestRouterMessagingWebhookEndpoint(t *testing.T) {
 	form := url.Values{}
 	form.Set("MessageSid", "SM123")
 	form.Set("From", "+10000000000")
+	form.Set("To", "+10000000000")
 	form.Set("Body", "Hi there")
 
 	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(form.Encode()))
@@ -109,4 +117,10 @@ func TestRouterMessagingWebhookEndpoint(t *testing.T) {
 	if ct := rr.Header().Get("Content-Type"); ct != "application/xml" {
 		t.Fatalf("expected XML response, got %s", ct)
 	}
+}
+
+type noopPublisher struct{}
+
+func (noopPublisher) EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error {
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
+	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -17,6 +18,8 @@ type Config struct {
 	LeadsHandler        *leads.Handler
 	MessagingHandler    *messaging.Handler
 	ConversationHandler *conversation.Handler
+	PaymentsHandler     *payments.CheckoutHandler
+	SquareWebhook       *payments.SquareWebhookHandler
 }
 
 // New creates a new Chi router with all routes configured
@@ -30,30 +33,42 @@ func New(cfg *Config) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
 
-	// Health check
-	r.Get("/health", cfg.MessagingHandler.HealthCheck)
-
-	// Leads routes
-	r.Route("/leads", func(r chi.Router) {
-		r.Post("/web", cfg.LeadsHandler.CreateWebLead)
+	// Public endpoints (webhooks, health checks)
+	r.Group(func(public chi.Router) {
+		public.Get("/health", cfg.MessagingHandler.HealthCheck)
+		public.Route("/messaging", func(r chi.Router) {
+			r.Post("/twilio/webhook", cfg.MessagingHandler.TwilioWebhook)
+		})
+		if cfg.SquareWebhook != nil {
+			public.Post("/webhooks/square", cfg.SquareWebhook.Handle)
+		}
 	})
 
-	// Messaging routes
-	r.Route("/messaging", func(r chi.Router) {
-		r.Post("/twilio/webhook", cfg.MessagingHandler.TwilioWebhook)
-	})
+	// Tenant-scoped API routes
+	r.Group(func(tenant chi.Router) {
+		tenant.Use(requireOrgID)
 
-	// Conversation routes
-	if cfg.ConversationHandler != nil {
-		r.Route("/conversations", func(r chi.Router) {
-			r.Post("/start", cfg.ConversationHandler.Start)
-			r.Post("/message", cfg.ConversationHandler.Message)
-			r.Get("/jobs/{jobID}", cfg.ConversationHandler.JobStatus)
+		tenant.Route("/leads", func(r chi.Router) {
+			r.Post("/web", cfg.LeadsHandler.CreateWebLead)
 		})
-		r.Route("/knowledge", func(r chi.Router) {
-			r.Post("/{clinicID}", cfg.ConversationHandler.AddKnowledge)
-		})
-	}
+
+		if cfg.PaymentsHandler != nil {
+			tenant.Route("/payments", func(r chi.Router) {
+				r.Post("/checkout", cfg.PaymentsHandler.CreateCheckout)
+			})
+		}
+
+		if cfg.ConversationHandler != nil {
+			tenant.Route("/conversations", func(r chi.Router) {
+				r.Post("/start", cfg.ConversationHandler.Start)
+				r.Post("/message", cfg.ConversationHandler.Message)
+				r.Get("/jobs/{jobID}", cfg.ConversationHandler.JobStatus)
+			})
+			tenant.Route("/knowledge", func(r chi.Router) {
+				r.Post("/{clinicID}", cfg.ConversationHandler.AddKnowledge)
+			})
+		}
+	})
 
 	return r
 }

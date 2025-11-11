@@ -205,13 +205,13 @@ type stubEnqueuer struct {
 	lastMessageJobID string
 }
 
-func (s *stubEnqueuer) EnqueueStart(ctx context.Context, jobID string, req StartRequest) error {
+func (s *stubEnqueuer) EnqueueStart(ctx context.Context, jobID string, req StartRequest, opts ...PublishOption) error {
 	s.lastStartReq = req
 	s.lastStartJobID = jobID
 	return s.startErr
 }
 
-func (s *stubEnqueuer) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest) error {
+func (s *stubEnqueuer) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest, opts ...PublishOption) error {
 	s.lastMessageReq = req
 	s.lastMessageJobID = jobID
 	return s.messageErr

@@ -1,0 +1,20 @@
+version: "2"
+sql:
+  - schema: "migrations"
+    queries: "internal/payments/sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "paymentsql"
+        out: "internal/payments/sqlc"
+        sql_package: "pgx/v5"
+        emit_interface: true
+  - schema: "migrations"
+    queries: "internal/bookings/sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "bookingsql"
+        out: "internal/bookings/sqlc"
+        sql_package: "pgx/v5"
+        emit_interface: true

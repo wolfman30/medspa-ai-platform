@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
+	"github.com/wolfman30/medspa-ai-platform/internal/events"
 )
 
 type queueClient interface {
@@ -25,24 +27,30 @@ type jobType string
 const (
 	jobTypeStart   jobType = "start"
 	jobTypeMessage jobType = "message"
+	jobTypePayment jobType = "payment_succeeded.v1"
 )
 
 type queuePayload struct {
-	ID      string         `json:"id"`
-	Kind    jobType        `json:"kind"`
-	Start   StartRequest   `json:"start,omitempty"`
-	Message MessageRequest `json:"message,omitempty"`
+	ID          string         `json:"id"`
+	Kind        jobType        `json:"kind"`
+	Start       StartRequest   `json:"start,omitempty"`
+	Message     MessageRequest `json:"message,omitempty"`
+	TrackStatus bool           `json:"track_status"`
+	Payment     *events.PaymentSucceededV1 `json:"payment,omitempty"`
 }
 
-func encodePayload(kind jobType, jobID string, start StartRequest, message MessageRequest) (queuePayload, string, error) {
-	if jobID == "" {
-		jobID = uuid.NewString()
+type PublishOption func(*queuePayload)
+
+// WithoutJobTracking disables job status persistence for fire-and-forget work.
+func WithoutJobTracking() PublishOption {
+	return func(p *queuePayload) {
+		p.TrackStatus = false
 	}
-	payload := queuePayload{
-		ID:      jobID,
-		Kind:    kind,
-		Start:   start,
-		Message: message,
+}
+
+func encodePayload(payload queuePayload) (queuePayload, string, error) {
+	if payload.ID == "" {
+		payload.ID = uuid.NewString()
 	}
 
 	body, err := json.Marshal(payload)

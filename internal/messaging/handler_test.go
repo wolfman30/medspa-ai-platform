@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -96,12 +98,12 @@ func TestParseTwilioWebhook(t *testing.T) {
 }
 
 func TestTwilioWebhookHandler(t *testing.T) {
-	logger := logging.Default()
-	handler := NewHandler("", logger) // No signature validation for this test
+	handler, pub := newTestHandler(t, "", nil, nil)
 
 	formData := url.Values{}
 	formData.Set("MessageSid", "SM123")
 	formData.Set("From", "+1234567890")
+	formData.Set("To", "+15551234567")
 	formData.Set("Body", "Hello")
 
 	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
@@ -118,16 +120,22 @@ func TestTwilioWebhookHandler(t *testing.T) {
 	if contentType != "application/xml" {
 		t.Errorf("expected Content-Type application/xml, got %s", contentType)
 	}
+	if !pub.called {
+		t.Fatalf("expected publisher to be called")
+	}
+	if pub.lastReq.OrgID != "org-test" {
+		t.Fatalf("expected org-test, got %s", pub.lastReq.OrgID)
+	}
 }
 
 func TestTwilioWebhookHandler_WithSignatureValidation(t *testing.T) {
-	logger := logging.Default()
 	authToken := "test_secret"
-	handler := NewHandler(authToken, logger)
+	handler, _ := newTestHandler(t, authToken, nil, nil)
 
 	formData := url.Values{}
 	formData.Set("MessageSid", "SM123")
 	formData.Set("From", "+1234567890")
+	formData.Set("To", "+15551234567")
 
 	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -142,14 +150,14 @@ func TestTwilioWebhookHandler_WithSignatureValidation(t *testing.T) {
 }
 
 func TestTwilioWebhookHandler_WithValidSignature(t *testing.T) {
-	logger := logging.Default()
 	authToken := "valid_secret"
-	handler := NewHandler(authToken, logger)
+	handler, pub := newTestHandler(t, authToken, nil, nil)
 
 	formData := url.Values{}
 	formData.Set("MessageSid", "SM999")
 	formData.Set("From", "+15555555555")
 	formData.Set("Body", "Ping")
+	formData.Set("To", "+15551234567")
 
 	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -165,11 +173,13 @@ func TestTwilioWebhookHandler_WithValidSignature(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
+	if !pub.called {
+		t.Fatalf("expected publisher to be called")
+	}
 }
 
 func TestTwilioWebhookHandler_ParseError(t *testing.T) {
-	logger := logging.Default()
-	handler := NewHandler("", logger)
+	handler, pub := newTestHandler(t, "", nil, nil)
 
 	// Body contains invalid percent-encoding to force ParseForm error.
 	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader("%"))
@@ -181,11 +191,37 @@ func TestTwilioWebhookHandler_ParseError(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
+	if pub.called {
+		t.Fatalf("did not expect publisher call on parse error")
+	}
+}
+
+func TestTwilioWebhookHandler_UnknownOrg(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{})
+	handler, pub := newTestHandler(t, "", nil, resolver)
+
+	formData := url.Values{}
+	formData.Set("MessageSid", "SM777")
+	formData.Set("From", "+15555555555")
+	formData.Set("Body", "Ping")
+	formData.Set("To", "+19998887777")
+
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown org, got %d", w.Code)
+	}
+	if pub.called {
+		t.Fatalf("did not expect publisher call when org missing")
+	}
 }
 
 func TestHealthCheck(t *testing.T) {
-	logger := logging.Default()
-	handler := NewHandler("", logger)
+	handler, _ := newTestHandler(t, "", nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -203,5 +239,41 @@ func TestHealthCheck(t *testing.T) {
 
 	if resp["status"] != "ok" {
 		t.Errorf("expected status ok, got %s", resp["status"])
+	}
+}
+
+type stubPublisher struct {
+	called  bool
+	lastJob string
+	lastReq conversation.MessageRequest
+	err     error
+}
+
+func (s *stubPublisher) EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error {
+	s.called = true
+	s.lastJob = jobID
+	s.lastReq = req
+	return s.err
+}
+
+func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResolver) (*Handler, *stubPublisher) {
+	t.Helper()
+	pub := &stubPublisher{err: pubErr}
+	if resolver == nil {
+		resolver = NewStaticOrgResolver(map[string]string{
+			"+15551234567": "org-test",
+		})
+	}
+	handler := NewHandler(secret, pub, resolver, logging.Default())
+	return handler, pub
+}
+
+func TestStaticResolverDefaultNumber(t *testing.T) {
+	res := NewStaticOrgResolver(map[string]string{
+		"(555) 123-4567": "org-a",
+	})
+	num := res.DefaultFromNumber("org-a")
+	if num != "+5551234567" {
+		t.Fatalf("expected normalized e164, got %s", num)
 	}
 }

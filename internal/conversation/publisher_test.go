@@ -33,6 +33,26 @@ func TestPublisher_EnqueueStart(t *testing.T) {
 	if payload.Start.LeadID != "lead-1" {
 		t.Fatalf("expected LeadID lead-1, got %s", payload.Start.LeadID)
 	}
+	if !payload.TrackStatus {
+		t.Fatalf("expected job tracking enabled by default")
+	}
+}
+
+func TestPublisher_WithoutJobTracking(t *testing.T) {
+	queue := &stubQueue{}
+	publisher := NewPublisher(queue, logging.Default())
+
+	if err := publisher.EnqueueMessage(context.Background(), "", MessageRequest{ConversationID: "conv-1"}, WithoutJobTracking()); err != nil {
+		t.Fatalf("enqueue returned error: %v", err)
+	}
+
+	var payload queuePayload
+	if err := json.Unmarshal([]byte(queue.sent[0]), &payload); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+	if payload.TrackStatus {
+		t.Fatalf("expected job tracking disabled")
+	}
 }
 
 type stubQueue struct {

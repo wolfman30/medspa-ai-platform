@@ -11,7 +11,7 @@ import (
 // Repository defines the interface for lead storage
 type Repository interface {
 	Create(ctx context.Context, req *CreateLeadRequest) (*Lead, error)
-	GetByID(ctx context.Context, id string) (*Lead, error)
+	GetByID(ctx context.Context, orgID string, id string) (*Lead, error)
 }
 
 // InMemoryRepository is a stub implementation of Repository using in-memory storage
@@ -35,6 +35,7 @@ func (r *InMemoryRepository) Create(ctx context.Context, req *CreateLeadRequest)
 
 	lead := &Lead{
 		ID:        uuid.New().String(),
+		OrgID:     req.OrgID,
 		Name:      req.Name,
 		Email:     req.Email,
 		Phone:     req.Phone,
@@ -51,12 +52,12 @@ func (r *InMemoryRepository) Create(ctx context.Context, req *CreateLeadRequest)
 }
 
 // GetByID retrieves a lead by ID
-func (r *InMemoryRepository) GetByID(ctx context.Context, id string) (*Lead, error) {
+func (r *InMemoryRepository) GetByID(ctx context.Context, orgID string, id string) (*Lead, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	lead, ok := r.leads[id]
-	if !ok {
+	if !ok || lead.OrgID != orgID {
 		return nil, ErrLeadNotFound
 	}
 

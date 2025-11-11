@@ -14,7 +14,15 @@ type Config struct {
 	TwilioAccountSID      string
 	TwilioAuthToken       string
 	TwilioWebhookSecret   string
+	TwilioFromNumber      string
+	TwilioOrgMapJSON      string
 	PaymentProviderKey    string
+	SquareAccessToken     string
+	SquareLocationID      string
+	SquareWebhookKey      string
+	SquareSuccessURL      string
+	SquareCancelURL       string
+	DepositAmountCents    int
 	AWSRegion             string
 	AWSAccessKeyID        string
 	AWSSecretAccessKey    string
@@ -39,7 +47,15 @@ func Load() *Config {
 		TwilioAccountSID:      getEnv("TWILIO_ACCOUNT_SID", ""),
 		TwilioAuthToken:       getEnv("TWILIO_AUTH_TOKEN", ""),
 		TwilioWebhookSecret:   getEnv("TWILIO_WEBHOOK_SECRET", ""),
+		TwilioFromNumber:      getEnv("TWILIO_FROM_NUMBER", ""),
+		TwilioOrgMapJSON:      getEnv("TWILIO_ORG_MAP_JSON", ""),
 		PaymentProviderKey:    getEnv("PAYMENT_PROVIDER_KEY", ""),
+		SquareAccessToken:     getEnv("SQUARE_ACCESS_TOKEN", ""),
+		SquareLocationID:      getEnv("SQUARE_LOCATION_ID", ""),
+		SquareWebhookKey:      getEnv("SQUARE_WEBHOOK_SIGNATURE_KEY", ""),
+		SquareSuccessURL:      getEnv("SQUARE_SUCCESS_URL", ""),
+		SquareCancelURL:       getEnv("SQUARE_CANCEL_URL", ""),
+		DepositAmountCents:    getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
 		AWSRegion:             getEnv("AWS_REGION", "us-east-1"),
 		AWSAccessKeyID:        getEnv("AWS_ACCESS_KEY_ID", "localstack"),
 		AWSSecretAccessKey:    getEnv("AWS_SECRET_ACCESS_KEY", "localstack"),
