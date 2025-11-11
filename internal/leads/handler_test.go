@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -28,6 +29,7 @@ func TestCreateWebLead_Success(t *testing.T) {
 
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/leads/web", bytes.NewReader(body))
+	req = req.WithContext(tenancy.WithOrgID(req.Context(), "org-test"))
 	w := httptest.NewRecorder()
 
 	handler.CreateWebLead(w, req)
@@ -61,6 +63,7 @@ func TestCreateWebLead_InvalidRequest(t *testing.T) {
 
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/leads/web", bytes.NewReader(body))
+	req = req.WithContext(tenancy.WithOrgID(req.Context(), "org-test"))
 	w := httptest.NewRecorder()
 
 	handler.CreateWebLead(w, req)
@@ -82,6 +85,7 @@ func TestCreateWebLead_MissingContact(t *testing.T) {
 
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/leads/web", bytes.NewReader(body))
+	req = req.WithContext(tenancy.WithOrgID(req.Context(), "org-test"))
 	w := httptest.NewRecorder()
 
 	handler.CreateWebLead(w, req)
@@ -97,6 +101,7 @@ func TestCreateWebLead_InvalidJSON(t *testing.T) {
 	handler := NewHandler(repo, logger)
 
 	req := httptest.NewRequest(http.MethodPost, "/leads/web", strings.NewReader("{"))
+	req = req.WithContext(tenancy.WithOrgID(req.Context(), "org-test"))
 	w := httptest.NewRecorder()
 
 	handler.CreateWebLead(w, req)
@@ -112,7 +117,7 @@ func (f failingRepository) Create(context.Context, *CreateLeadRequest) (*Lead, e
 	return nil, errors.New("boom")
 }
 
-func (f failingRepository) GetByID(context.Context, string) (*Lead, error) {
+func (f failingRepository) GetByID(context.Context, string, string) (*Lead, error) {
 	return nil, ErrLeadNotFound
 }
 
@@ -127,6 +132,7 @@ func TestCreateWebLead_RepositoryError(t *testing.T) {
 
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/leads/web", bytes.NewReader(body))
+	req = req.WithContext(tenancy.WithOrgID(req.Context(), "org-test"))
 	w := httptest.NewRecorder()
 
 	handler.CreateWebLead(w, req)
@@ -141,6 +147,7 @@ func TestRepository_Create(t *testing.T) {
 	ctx := context.Background()
 
 	req := &CreateLeadRequest{
+		OrgID:   "org-test",
 		Name:    "Jane Smith",
 		Email:   "jane@example.com",
 		Phone:   "+1987654321",
@@ -171,6 +178,7 @@ func TestRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
 	req := &CreateLeadRequest{
+		OrgID: "org-test",
 		Name:  "Test User",
 		Email: "test@example.com",
 	}
@@ -180,7 +188,7 @@ func TestRepository_GetByID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	found, err := repo.GetByID(ctx, created.ID)
+	found, err := repo.GetByID(ctx, "org-test", created.ID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -194,7 +202,7 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 	repo := NewInMemoryRepository()
 	ctx := context.Background()
 
-	_, err := repo.GetByID(ctx, "nonexistent")
+	_, err := repo.GetByID(ctx, "org-test", "nonexistent")
 	if err != ErrLeadNotFound {
 		t.Errorf("expected ErrLeadNotFound, got %v", err)
 	}

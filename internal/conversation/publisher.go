@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -28,21 +29,47 @@ func NewPublisher(queue queueClient, logger *logging.Logger) *Publisher {
 }
 
 // EnqueueStart publishes a StartConversation job.
-func (p *Publisher) EnqueueStart(ctx context.Context, jobID string, req StartRequest) error {
-	return p.enqueue(ctx, jobTypeStart, jobID, req, MessageRequest{})
+func (p *Publisher) EnqueueStart(ctx context.Context, jobID string, req StartRequest, opts ...PublishOption) error {
+	payload := queuePayload{
+		ID:    jobID,
+		Kind:  jobTypeStart,
+		Start: req,
+	}
+	return p.enqueue(ctx, payload, opts...)
 }
 
 // EnqueueMessage publishes a ProcessMessage job.
-func (p *Publisher) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest) error {
-	return p.enqueue(ctx, jobTypeMessage, jobID, StartRequest{}, req)
+func (p *Publisher) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest, opts ...PublishOption) error {
+	payload := queuePayload{
+		ID:      jobID,
+		Kind:    jobTypeMessage,
+		Message: req,
+	}
+	return p.enqueue(ctx, payload, opts...)
 }
 
-func (p *Publisher) enqueue(ctx context.Context, kind jobType, jobID string, start StartRequest, message MessageRequest) error {
+// EnqueuePaymentSucceeded publishes a payment event for downstream processors.
+func (p *Publisher) EnqueuePaymentSucceeded(ctx context.Context, event events.PaymentSucceededV1) error {
+	payload := queuePayload{
+		ID:      event.EventID,
+		Kind:    jobTypePayment,
+		Payment: &event,
+	}
+	return p.enqueue(ctx, payload, WithoutJobTracking())
+}
+
+func (p *Publisher) enqueue(ctx context.Context, payload queuePayload, opts ...PublishOption) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	payload, body, err := encodePayload(kind, jobID, start, message)
+	payload.TrackStatus = true
+	for _, opt := range opts {
+		opt(&payload)
+	}
+
+	var err error
+	payload, body, err := encodePayload(payload)
 	if err != nil {
 		return err
 	}
@@ -51,6 +78,6 @@ func (p *Publisher) enqueue(ctx context.Context, kind jobType, jobID string, sta
 		return fmt.Errorf("conversation: failed to enqueue job: %w", err)
 	}
 
-	p.logger.Debug("conversation job enqueued", "job_id", payload.ID, "kind", kind)
+	p.logger.Debug("conversation job enqueued", "job_id", payload.ID, "kind", payload.Kind, "track_status", payload.TrackStatus)
 	return nil
 }

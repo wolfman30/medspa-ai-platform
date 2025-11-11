@@ -28,9 +28,11 @@ func TestGPTService_StartConversation_PersistsHistory(t *testing.T) {
 
 	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default())
 	resp, err := service.StartConversation(context.Background(), StartRequest{
-		LeadID: "lead-123",
-		Intro:  "Need dermaplaning",
-		Source: "web",
+		LeadID:  "lead-123",
+		Intro:   "Need dermaplaning",
+		Source:  "web",
+		Channel: ChannelSMS,
+		OrgID:   "org-1",
 	})
 	if err != nil {
 		t.Fatalf("StartConversation returned error: %v", err)
@@ -71,9 +73,11 @@ func TestGPTService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
 
 	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default())
 	startResp, err := service.StartConversation(context.Background(), StartRequest{
-		LeadID: "lead-1",
-		Intro:  "Book facial",
-		Source: "sms",
+		LeadID:  "lead-1",
+		Intro:   "Book facial",
+		Source:  "sms",
+		Channel: ChannelSMS,
+		OrgID:   "org-1",
 	})
 	if err != nil {
 		t.Fatalf("start failed: %v", err)
@@ -82,6 +86,8 @@ func TestGPTService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
 	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
 		ConversationID: startResp.ConversationID,
 		Message:        "Do you have Friday afternoon?",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
 	})
 	if err != nil {
 		t.Fatalf("ProcessMessage returned error: %v", err)
@@ -113,6 +119,8 @@ func TestGPTService_ProcessMessage_UnknownConversation(t *testing.T) {
 	_, err := service.ProcessMessage(context.Background(), MessageRequest{
 		ConversationID: "conv_missing",
 		Message:        "hello",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
 	})
 	if err == nil || !strings.Contains(err.Error(), "unknown conversation") {
 		t.Fatalf("expected unknown conversation error, got %v", err)
@@ -182,6 +190,8 @@ func TestGPTService_UsesRAGContext(t *testing.T) {
 		LeadID:   "lead-99",
 		Intro:    "dermaplaning",
 		Source:   "web",
+		Channel:  ChannelSMS,
+		OrgID:    "org-123",
 		ClinicID: "clinic-77",
 	})
 	if err != nil {

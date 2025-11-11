@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -16,6 +19,8 @@ type Worker struct {
 	processor Service
 	queue     queueClient
 	jobs      JobUpdater
+	messenger ReplyMessenger
+	bookings  bookingConfirmer
 	logger    *logging.Logger
 
 	cfg workerConfig
@@ -76,7 +81,11 @@ func WithReceiveBatchSize(size int) WorkerOption {
 }
 
 // NewWorker constructs a queue consumer around the provided processor.
-func NewWorker(processor Service, queue queueClient, jobs JobUpdater, logger *logging.Logger, opts ...WorkerOption) *Worker {
+type bookingConfirmer interface {
+	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
+}
+
+func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger ReplyMessenger, bookings bookingConfirmer, logger *logging.Logger, opts ...WorkerOption) *Worker {
 	if processor == nil {
 		panic("conversation: processor cannot be nil")
 	}
@@ -103,6 +112,8 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, logger *lo
 		processor: processor,
 		queue:     queue,
 		jobs:      jobs,
+		messenger: messenger,
+		bookings:  bookings,
 		logger:    logger,
 		cfg:       cfg,
 	}
@@ -172,23 +183,35 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		resp, err = w.processor.StartConversation(ctx, payload.Start)
 	case jobTypeMessage:
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
+	case jobTypePayment:
+		err = w.handlePaymentEvent(ctx, payload.Payment)
 	default:
 		err = fmt.Errorf("conversation: unknown job type %q", payload.Kind)
 	}
 
 	if err != nil {
 		w.logger.Error("conversation job failed", "error", err, "job_id", payload.ID, "kind", payload.Kind)
-		if storeErr := w.jobs.MarkFailed(ctx, payload.ID, err.Error()); storeErr != nil {
-			w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+		if payload.TrackStatus {
+			if storeErr := w.jobs.MarkFailed(ctx, payload.ID, err.Error()); storeErr != nil {
+				w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+			}
 		}
 	} else {
 		w.logger.Debug("conversation job processed", "job_id", payload.ID, "kind", payload.Kind)
-		convID := resp.ConversationID
-		if convID == "" && payload.Kind == jobTypeMessage {
-			convID = payload.Message.ConversationID
+		var convID string
+		if resp != nil {
+			convID = resp.ConversationID
+			if convID == "" && payload.Kind == jobTypeMessage {
+				convID = payload.Message.ConversationID
+			}
 		}
-		if storeErr := w.jobs.MarkCompleted(ctx, payload.ID, resp, convID); storeErr != nil {
-			w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+		if payload.TrackStatus {
+			if storeErr := w.jobs.MarkCompleted(ctx, payload.ID, resp, convID); storeErr != nil {
+				w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+			}
+		}
+		if payload.Kind == jobTypeMessage {
+			w.sendReply(ctx, payload, resp)
 		}
 	}
 
@@ -206,4 +229,79 @@ func (w *Worker) deleteMessage(ctx context.Context, receiptHandle string) {
 	if err := w.queue.Delete(deleteCtx, receiptHandle); err != nil {
 		w.logger.Error("failed to delete conversation job", "error", err)
 	}
+}
+
+func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Response) {
+	if w.messenger == nil || resp == nil || resp.Message == "" {
+		return
+	}
+	msg := payload.Message
+	if msg.Channel != ChannelSMS {
+		return
+	}
+	if msg.From == "" || msg.To == "" {
+		return
+	}
+
+	sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	reply := OutboundReply{
+		OrgID:          msg.OrgID,
+		LeadID:         msg.LeadID,
+		ConversationID: resp.ConversationID,
+		To:             msg.From,
+		From:           msg.To,
+		Body:           resp.Message,
+		Metadata: map[string]string{
+			"job_id": payload.ID,
+		},
+	}
+
+	if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+		w.logger.Error("failed to send outbound reply", "error", err, "job_id", payload.ID, "org_id", msg.OrgID)
+	}
+}
+
+func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucceededV1) error {
+	if evt == nil {
+		return errors.New("conversation: missing payment payload")
+	}
+	if w.bookings == nil {
+		return nil
+	}
+	orgID, err := uuid.Parse(evt.OrgID)
+	if err != nil {
+		return fmt.Errorf("conversation: invalid org id: %w", err)
+	}
+	leadID, err := uuid.Parse(evt.LeadID)
+	if err != nil {
+		return fmt.Errorf("conversation: invalid lead id: %w", err)
+	}
+	if err := w.bookings.ConfirmBooking(ctx, orgID, leadID, evt.ScheduledFor); err != nil {
+		return fmt.Errorf("conversation: confirm booking failed: %w", err)
+	}
+	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
+		body := "Your appointment is confirmed! We'll share final details shortly."
+		if evt.ScheduledFor != nil {
+			body = fmt.Sprintf("Your appointment on %s is confirmed. See you soon!", evt.ScheduledFor.Format(time.RFC1123))
+		}
+		reply := OutboundReply{
+			OrgID:          evt.OrgID,
+			LeadID:         evt.LeadID,
+			ConversationID: "",
+			To:             evt.LeadPhone,
+			From:           evt.FromNumber,
+			Body:           body,
+			Metadata: map[string]string{
+				"event_id": evt.EventID,
+			},
+		}
+		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+			w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+		}
+	}
+	return nil
 }

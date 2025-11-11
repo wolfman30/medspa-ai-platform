@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -15,7 +18,7 @@ func TestWorkerProcessesMessages(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &recordingService{}
 	store := &stubJobUpdater{}
-	worker := NewWorker(service, queue, store, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+	worker := NewWorker(service, queue, store, nil, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -23,8 +26,9 @@ func TestWorkerProcessesMessages(t *testing.T) {
 	worker.Start(ctx)
 
 	payload := queuePayload{
-		ID:   "job-1",
-		Kind: jobTypeStart,
+		ID:          "job-1",
+		Kind:        jobTypeStart,
+		TrackStatus: true,
 		Start: StartRequest{
 			LeadID: "lead-123",
 		},
@@ -56,19 +60,114 @@ func TestWorkerProcessesMessages(t *testing.T) {
 	}
 }
 
-func TestWorkerHandlesProcessingErrors(t *testing.T) {
+func TestWorkerSendsReplies(t *testing.T) {
 	queue := newScriptedQueue()
-	service := &recordingService{failStart: true}
+	service := &replyService{}
 	store := &stubJobUpdater{}
-	worker := NewWorker(service, queue, store, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+	messenger := &stubMessenger{}
+	worker := NewWorker(service, queue, store, messenger, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker.Start(ctx)
 
 	payload := queuePayload{
-		ID:   "job-fail",
-		Kind: jobTypeStart,
+		ID:          "job-msg",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "hi",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-2",
+		Body:          string(body),
+		ReceiptHandle: "rh-2",
+	})
+
+	waitFor(func() bool {
+		return messenger.called
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if messenger.last.Body != "auto-reply" {
+		t.Fatalf("expected auto-reply body, got %s", messenger.last.Body)
+	}
+	if messenger.last.To != "+12223334444" || messenger.last.From != "+15556667777" {
+		t.Fatalf("unexpected to/from: %#v", messenger.last)
+	}
+}
+
+func TestWorkerProcessesPaymentEvent(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &recordingService{}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	bookings := &stubBookingConfirmer{}
+	worker := NewWorker(service, queue, store, messenger, bookings, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	orgID := uuid.New()
+	leadID := uuid.New()
+	event := events.PaymentSucceededV1{
+		EventID:     "evt-123",
+		OrgID:       orgID.String(),
+		LeadID:      leadID.String(),
+		LeadPhone:   "+19998887777",
+		FromNumber:  "+15550000000",
+		AmountCents: 5000,
+		OccurredAt:  time.Now().UTC(),
+	}
+	payload := queuePayload{
+		ID:          "job-payment",
+		Kind:        jobTypePayment,
+		TrackStatus: false,
+		Payment:     &event,
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-pay", Body: string(body), ReceiptHandle: "rh-pay"})
+
+	waitFor(func() bool {
+		return len(bookings.calls) == 1 && messenger.called
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if len(bookings.calls) != 1 {
+		t.Fatalf("expected booking confirm call, got %d", len(bookings.calls))
+	}
+	if messenger.last.To != event.LeadPhone {
+		t.Fatalf("expected sms to lead, got %s", messenger.last.To)
+	}
+}
+
+func TestWorkerHandlesProcessingErrors(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &recordingService{failStart: true}
+	store := &stubJobUpdater{}
+	worker := NewWorker(service, queue, store, nil, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-fail",
+		Kind:        jobTypeStart,
+		TrackStatus: true,
 		Start: StartRequest{
 			LeadID: "lead-err",
 		},
@@ -96,7 +195,7 @@ func TestWorkerSkipsMalformedPayload(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &recordingService{}
 	store := &stubJobUpdater{}
-	worker := NewWorker(service, queue, store, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+	worker := NewWorker(service, queue, store, nil, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -126,6 +225,8 @@ func TestWorkerConfigOptions(t *testing.T) {
 		service,
 		queue,
 		store,
+		nil,
+		nil,
 		logging.Default(),
 		WithWorkerCount(3),
 		WithReceiveBatchSize(20),
@@ -165,6 +266,19 @@ func (r *recordingService) ProcessMessage(ctx context.Context, req MessageReques
 	defer r.mu.Unlock()
 	r.messageCalls++
 	return &Response{}, nil
+}
+
+type replyService struct{}
+
+func (r *replyService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
+	return &Response{}, nil
+}
+
+func (r *replyService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
+	return &Response{
+		ConversationID: req.ConversationID,
+		Message:        "auto-reply",
+	}, nil
 }
 
 type scriptedQueue struct {
@@ -234,5 +348,31 @@ func (s *stubJobUpdater) MarkFailed(ctx context.Context, jobID string, errMsg st
 		jobID string
 		err   string
 	}{jobID: jobID, err: errMsg})
+	return nil
+}
+
+type stubMessenger struct {
+	called bool
+	last   OutboundReply
+}
+
+func (s *stubMessenger) SendReply(ctx context.Context, reply OutboundReply) error {
+	s.called = true
+	s.last = reply
+	return nil
+}
+
+type stubBookingConfirmer struct {
+	calls []struct {
+		org  uuid.UUID
+		lead uuid.UUID
+	}
+}
+
+func (s *stubBookingConfirmer) ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error {
+	s.calls = append(s.calls, struct {
+		org  uuid.UUID
+		lead uuid.UUID
+	}{org: orgID, lead: leadID})
 	return nil
 }

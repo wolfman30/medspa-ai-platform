@@ -9,17 +9,34 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
+	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
 func main() {
 	cfg := appconfig.Load()
 	logger := logging.New(cfg.LogLevel)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var dbPool *pgxpool.Pool
+	if cfg.DatabaseURL != "" {
+		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("worker failed to connect to postgres", "error", err)
+			os.Exit(1)
+		}
+		dbPool = pool
+		defer dbPool.Close()
+	}
 
 	awsConfig, err := mainconfig.LoadAWSConfig(context.Background(), cfg)
 	if err != nil {
@@ -33,16 +50,28 @@ func main() {
 	jobStore := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
 
 	processor := buildConversationService(cfg, logger)
+	var messenger conversation.ReplyMessenger
+	if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
+		messenger = messaging.NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger)
+	} else {
+		logger.Warn("twilio credentials missing; SMS replies disabled")
+	}
+
+	var bookingBridge conversationBookingAdapter
+	if dbPool != nil {
+		repo := bookings.NewRepository(dbPool)
+		bookingBridge = conversationBookingAdapter{inner: bookings.NewService(repo, logger)}
+	}
+
 	worker := conversation.NewWorker(
 		processor,
 		queue,
 		jobStore,
+		messenger,
+		bookingBridge,
 		logger,
 		conversation.WithWorkerCount(4),
 	)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	worker.Start(ctx)
 
@@ -132,4 +161,16 @@ func hydrateRAGFromRedis(ctx context.Context, repo conversation.KnowledgeReposit
 		}
 	}
 	return nil
+}
+
+type conversationBookingAdapter struct {
+	inner *bookings.Service
+}
+
+func (a conversationBookingAdapter) ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error {
+	if a.inner == nil {
+		return nil
+	}
+	_, err := a.inner.ConfirmBooking(ctx, orgID, leadID, scheduledFor)
+	return err
 }

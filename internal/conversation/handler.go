@@ -15,8 +15,8 @@ import (
 
 // Enqueuer defines how conversation requests are dispatched.
 type Enqueuer interface {
-	EnqueueStart(ctx context.Context, jobID string, req StartRequest) error
-	EnqueueMessage(ctx context.Context, jobID string, req MessageRequest) error
+	EnqueueStart(ctx context.Context, jobID string, req StartRequest, opts ...PublishOption) error
+	EnqueueMessage(ctx context.Context, jobID string, req MessageRequest, opts ...PublishOption) error
 }
 
 // Handler wires HTTP requests to the conversation queue.

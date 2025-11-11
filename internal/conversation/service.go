@@ -7,25 +7,44 @@ import (
 )
 
 // Service describes how the conversation engine should behave.
-// We'll swap the implementation later (GPT-5, LangChain, etc.).
 type Service interface {
 	StartConversation(ctx context.Context, req StartRequest) (*Response, error)
 	ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error)
 }
 
+// Channel identifies which transport the conversation is happening on.
+type Channel string
+
+const (
+	ChannelUnknown Channel = ""
+	ChannelSMS     Channel = "sms"
+)
+
 // StartRequest represents the minimal data we need to open a conversation.
 type StartRequest struct {
-	LeadID   string
-	Intro    string
-	Source   string
-	ClinicID string
+	OrgID          string
+	LeadID         string
+	Intro          string
+	Source         string
+	ClinicID       string
+	Channel        Channel
+	From           string
+	To             string
+	ConversationID string
+	Metadata       map[string]string
 }
 
 // MessageRequest represents a single turn in the conversation.
 type MessageRequest struct {
+	OrgID          string
+	LeadID         string
 	ConversationID string
 	Message        string
 	ClinicID       string
+	Channel        Channel
+	From           string
+	To             string
+	Metadata       map[string]string
 }
 
 // Response is a simple DTO returned to the API layer.
@@ -45,10 +64,13 @@ func NewStubService() *StubService {
 
 // StartConversation returns a canned greeting plus a generated conversation ID.
 func (s *StubService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
-	id := fmt.Sprintf("conv_%s_%d", req.LeadID, time.Now().UnixNano())
+	id := req.ConversationID
+	if id == "" {
+		id = fmt.Sprintf("conv_%s_%d", req.LeadID, time.Now().UnixNano())
+	}
 	return &Response{
 		ConversationID: id,
-		Message:        "👋 Thanks for reaching out! I'm your MedSpa concierge. How can I help?",
+		Message:        "dY`< Thanks for reaching out! I'm your MedSpa concierge. How can I help?",
 		Timestamp:      time.Now().UTC(),
 	}, nil
 }
@@ -61,3 +83,4 @@ func (s *StubService) ProcessMessage(ctx context.Context, req MessageRequest) (*
 		Timestamp:      time.Now().UTC(),
 	}, nil
 }
+

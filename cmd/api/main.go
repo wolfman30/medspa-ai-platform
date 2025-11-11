@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,12 +15,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
+	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -33,9 +38,35 @@ func main() {
 		"port", cfg.Port,
 	)
 
+	appCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+
+	var dbPool *pgxpool.Pool
+	if cfg.DatabaseURL != "" {
+		ctx, cancel := context.WithTimeout(appCtx, 5*time.Second)
+		defer cancel()
+		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("failed to connect to postgres", "error", err)
+			os.Exit(1)
+		}
+		if err := pool.Ping(ctx); err != nil {
+			logger.Error("failed to ping postgres", "error", err)
+			os.Exit(1)
+		}
+		dbPool = pool
+		defer dbPool.Close()
+		logger.Info("connected to postgres")
+	}
+
 	// Initialize repositories and services
-	leadsRepo := leads.NewInMemoryRepository()
-	awsCfg, err := mainconfig.LoadAWSConfig(context.Background(), cfg)
+	var leadsRepo leads.Repository
+	if dbPool != nil {
+		leadsRepo = leads.NewPostgresRepository(dbPool)
+	} else {
+		leadsRepo = leads.NewInMemoryRepository()
+	}
+	awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
 	if err != nil {
 		logger.Error("failed to load AWS config", "error", err)
 		os.Exit(1)
@@ -49,7 +80,26 @@ func main() {
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
-	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, logger)
+	orgRouting := map[string]string{}
+	if raw := strings.TrimSpace(cfg.TwilioOrgMapJSON); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &orgRouting); err != nil {
+			logger.Warn("failed to parse TWILIO_ORG_MAP_JSON", "error", err)
+		}
+	}
+	if len(orgRouting) == 0 {
+		logger.Warn("TWILIO_ORG_MAP_JSON empty; SMS webhooks will be rejected unless numbers are configured")
+	}
+	resolver := messaging.NewStaticOrgResolver(orgRouting)
+	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, conversationPublisher, resolver, logger)
+	var paymentsRepo *payments.Repository
+	var outboxStore *events.OutboxStore
+	var processedStore *events.ProcessedStore
+	if dbPool != nil {
+		paymentsRepo = payments.NewRepository(dbPool)
+		outboxStore = events.NewOutboxStore(dbPool)
+		processedStore = events.NewProcessedStore(dbPool)
+	}
+
 	var knowledgeRepo conversation.KnowledgeRepository
 	var ragStore *conversation.MemoryRAGStore
 	if cfg.OpenAIAPIKey != "" && cfg.OpenAIEmbeddingModel != "" {
@@ -66,8 +116,18 @@ func main() {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
 		ragStore = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
 	}
-
 	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, knowledgeRepo, ragStore, logger)
+
+	var checkoutHandler *payments.CheckoutHandler
+	var squareWebhookHandler *payments.SquareWebhookHandler
+	if paymentsRepo != nil && processedStore != nil && outboxStore != nil {
+		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger)
+		checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, squareSvc, logger, int32(cfg.DepositAmountCents))
+		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, logger)
+		dispatcher := conversation.NewOutboxDispatcher(conversationPublisher)
+		deliverer := events.NewDeliverer(outboxStore, dispatcher, logger)
+		go deliverer.Start(appCtx)
+	}
 
 	// Setup router
 	routerCfg := &router.Config{
@@ -75,6 +135,8 @@ func main() {
 		LeadsHandler:        leadsHandler,
 		MessagingHandler:    messagingHandler,
 		ConversationHandler: conversationHandler,
+		PaymentsHandler:     checkoutHandler,
+		SquareWebhook:       squareWebhookHandler,
 	}
 	r := router.New(routerCfg)
 

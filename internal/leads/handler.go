@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -30,6 +31,13 @@ func (h *Handler) CreateWebLead(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	orgID, ok := tenancy.OrgIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "missing org context", http.StatusBadRequest)
+		return
+	}
+	req.OrgID = orgID
 
 	lead, err := h.repo.Create(r.Context(), &req)
 	if err != nil {
