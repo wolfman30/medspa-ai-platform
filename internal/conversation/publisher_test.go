@@ -12,12 +12,9 @@ func TestPublisher_EnqueueStart(t *testing.T) {
 	queue := &stubQueue{}
 	publisher := NewPublisher(queue, logging.Default())
 
-	jobID, err := publisher.EnqueueStart(context.Background(), StartRequest{LeadID: "lead-1"})
-	if err != nil {
+	jobID := "job-123"
+	if err := publisher.EnqueueStart(context.Background(), jobID, StartRequest{LeadID: "lead-1"}); err != nil {
 		t.Fatalf("enqueue returned error: %v", err)
-	}
-	if jobID == "" {
-		t.Fatal("expected job ID to be set")
 	}
 	if len(queue.sent) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(queue.sent))
@@ -29,6 +26,9 @@ func TestPublisher_EnqueueStart(t *testing.T) {
 	}
 	if payload.Kind != jobTypeStart {
 		t.Fatalf("expected jobType start, got %s", payload.Kind)
+	}
+	if payload.ID != jobID {
+		t.Fatalf("expected job ID %s, got %s", jobID, payload.ID)
 	}
 	if payload.Start.LeadID != "lead-1" {
 		t.Fatalf("expected LeadID lead-1, got %s", payload.Start.LeadID)

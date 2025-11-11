@@ -27,30 +27,30 @@ func NewPublisher(queue queueClient, logger *logging.Logger) *Publisher {
 	}
 }
 
-// EnqueueStart publishes a StartConversation job and returns the job ID.
-func (p *Publisher) EnqueueStart(ctx context.Context, req StartRequest) (string, error) {
-	return p.enqueue(ctx, jobTypeStart, req, MessageRequest{})
+// EnqueueStart publishes a StartConversation job.
+func (p *Publisher) EnqueueStart(ctx context.Context, jobID string, req StartRequest) error {
+	return p.enqueue(ctx, jobTypeStart, jobID, req, MessageRequest{})
 }
 
-// EnqueueMessage publishes a ProcessMessage job and returns the job ID.
-func (p *Publisher) EnqueueMessage(ctx context.Context, req MessageRequest) (string, error) {
-	return p.enqueue(ctx, jobTypeMessage, StartRequest{}, req)
+// EnqueueMessage publishes a ProcessMessage job.
+func (p *Publisher) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest) error {
+	return p.enqueue(ctx, jobTypeMessage, jobID, StartRequest{}, req)
 }
 
-func (p *Publisher) enqueue(ctx context.Context, kind jobType, start StartRequest, message MessageRequest) (string, error) {
+func (p *Publisher) enqueue(ctx context.Context, kind jobType, jobID string, start StartRequest, message MessageRequest) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	payload, body, err := encodePayload(kind, start, message)
+	payload, body, err := encodePayload(kind, jobID, start, message)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if err := p.queue.Send(ctx, body); err != nil {
-		return "", fmt.Errorf("conversation: failed to enqueue job: %w", err)
+		return fmt.Errorf("conversation: failed to enqueue job: %w", err)
 	}
 
 	p.logger.Debug("conversation job enqueued", "job_id", payload.ID, "kind", kind)
-	return payload.ID, nil
+	return nil
 }
