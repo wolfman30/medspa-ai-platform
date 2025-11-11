@@ -34,4 +34,3 @@ func TestOrgIDFromContext_EmptyOrMissing(t *testing.T) {
 		t.Fatalf("expected empty org id to return false")
 	}
 }
-

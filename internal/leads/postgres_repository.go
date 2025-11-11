@@ -86,4 +86,3 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 	}
 	return &lead, nil
 }
-

@@ -85,4 +85,3 @@ func toPGNullableTime(t *time.Time) pgtype.Timestamptz {
 		Valid: true,
 	}
 }
-
