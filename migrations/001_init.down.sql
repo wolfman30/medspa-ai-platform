@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS leads;
+DROP TABLE IF EXISTS processed_events;
+DROP TABLE IF EXISTS outbox;
+
+DROP EXTENSION IF EXISTS "uuid-ossp";

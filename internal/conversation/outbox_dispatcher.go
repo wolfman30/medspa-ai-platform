@@ -18,7 +18,7 @@ func NewOutboxDispatcher(publisher *Publisher) *OutboxDispatcher {
 }
 
 func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry) error {
-	switch entry.Type {
+	switch entry.EventType {
 	case "payment_succeeded.v1":
 		var evt events.PaymentSucceededV1
 		if err := json.Unmarshal(entry.Payload, &evt); err != nil {
@@ -26,6 +26,6 @@ func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry)
 		}
 		return d.publisher.EnqueuePaymentSucceeded(ctx, evt)
 	default:
-		return fmt.Errorf("conversation: unhandled outbox type %s", entry.Type)
+		return fmt.Errorf("conversation: unhandled outbox type %s", entry.EventType)
 	}
 }

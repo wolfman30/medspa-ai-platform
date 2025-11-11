@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,9 +38,13 @@ func newProcessedStoreWithExec(exec rowQuerier) *ProcessedStore {
 
 // AlreadyProcessed checks if we've seen this provider event id.
 func (s *ProcessedStore) AlreadyProcessed(ctx context.Context, provider, eventID string) (bool, error) {
-	query := `SELECT 1 FROM processed_events WHERE provider = $1 AND event_id = $2`
+	eventUUID, _, _, err := normalizeProcessedEvent(provider, eventID)
+	if err != nil {
+		return false, err
+	}
+	query := `SELECT 1 FROM processed_events WHERE event_id = $1`
 	var exists int
-	if err := s.pool.QueryRow(ctx, query, provider, eventID).Scan(&exists); err != nil {
+	if err := s.pool.QueryRow(ctx, query, eventUUID).Scan(&exists); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
@@ -49,14 +55,30 @@ func (s *ProcessedStore) AlreadyProcessed(ctx context.Context, provider, eventID
 
 // MarkProcessed inserts an event id for the provider, returning false if it already exists.
 func (s *ProcessedStore) MarkProcessed(ctx context.Context, provider, eventID string) (bool, error) {
+	eventUUID, normalizedProvider, normalizedEventID, err := normalizeProcessedEvent(provider, eventID)
+	if err != nil {
+		return false, err
+	}
 	query := `
-		INSERT INTO processed_events (provider, event_id)
-		VALUES ($1, $2)
+		INSERT INTO processed_events (event_id, provider, external_event_id)
+		VALUES ($1, NULLIF($2, ''), NULLIF($3, ''))
 		ON CONFLICT DO NOTHING
 	`
-	ct, err := s.pool.Exec(ctx, query, provider, eventID)
+	ct, err := s.pool.Exec(ctx, query, eventUUID, normalizedProvider, normalizedEventID)
 	if err != nil {
 		return false, fmt.Errorf("events: mark processed: %w", err)
 	}
 	return ct.RowsAffected() > 0, nil
+}
+
+var processedNamespace = uuid.MustParse("1c4b4ef0-0f1f-4f8b-8a9c-7c0fba51cdbd")
+
+func normalizeProcessedEvent(provider, eventID string) (uuid.UUID, string, string, error) {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return uuid.Nil, "", "", fmt.Errorf("events: event id required")
+	}
+	provider = strings.TrimSpace(provider)
+	key := provider + ":" + eventID
+	return uuid.NewSHA1(processedNamespace, []byte(key)), provider, eventID, nil
 }

@@ -13,11 +13,11 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// OutboxEntry represents a pending event.
+// OutboxEntry represents a pending event row.
 type OutboxEntry struct {
 	ID        uuid.UUID
-	OrgID     string
-	Type      string
+	Aggregate string
+	EventType string
 	Payload   json.RawMessage
 	CreatedAt time.Time
 }
@@ -51,17 +51,17 @@ func newOutboxStoreWithExec(exec execQuerier) *OutboxStore {
 	return &OutboxStore{pool: exec}
 }
 
-func (s *OutboxStore) Insert(ctx context.Context, orgID string, eventType string, payload any) (uuid.UUID, error) {
+func (s *OutboxStore) Insert(ctx context.Context, aggregate string, eventType string, payload any) (uuid.UUID, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("events: marshal payload: %w", err)
 	}
 	id := uuid.New()
 	query := `
-		INSERT INTO outbox (id, org_id, type, payload)
+		INSERT INTO outbox (id, aggregate, event_type, payload)
 		VALUES ($1, $2, $3, $4)
 	`
-	if _, err := s.pool.Exec(ctx, query, id, orgID, eventType, data); err != nil {
+	if _, err := s.pool.Exec(ctx, query, id, aggregate, eventType, data); err != nil {
 		return uuid.Nil, fmt.Errorf("events: insert outbox: %w", err)
 	}
 	return id, nil
@@ -69,9 +69,9 @@ func (s *OutboxStore) Insert(ctx context.Context, orgID string, eventType string
 
 func (s *OutboxStore) FetchPending(ctx context.Context, limit int32) ([]OutboxEntry, error) {
 	query := `
-		SELECT id, org_id, type, payload, created_at
+		SELECT id, aggregate, event_type, payload, created_at
 		FROM outbox
-		WHERE delivered_at IS NULL
+		WHERE dispatched_at IS NULL
 		ORDER BY created_at
 		LIMIT $1
 	`
@@ -85,7 +85,7 @@ func (s *OutboxStore) FetchPending(ctx context.Context, limit int32) ([]OutboxEn
 	for rows.Next() {
 		var entry OutboxEntry
 		var payload []byte
-		if err := rows.Scan(&entry.ID, &entry.OrgID, &entry.Type, &payload, &entry.CreatedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.Aggregate, &entry.EventType, &payload, &entry.CreatedAt); err != nil {
 			return nil, fmt.Errorf("events: scan outbox: %w", err)
 		}
 		entry.Payload = append([]byte(nil), payload...)
@@ -97,8 +97,8 @@ func (s *OutboxStore) FetchPending(ctx context.Context, limit int32) ([]OutboxEn
 func (s *OutboxStore) MarkDelivered(ctx context.Context, id uuid.UUID) (bool, error) {
 	query := `
 		UPDATE outbox
-		SET delivered_at = now()
-		WHERE id = $1 AND delivered_at IS NULL
+		SET dispatched_at = now()
+		WHERE id = $1 AND dispatched_at IS NULL
 	`
 	ct, err := s.pool.Exec(ctx, query, id)
 	if err != nil {
@@ -168,13 +168,13 @@ func (d *Deliverer) drain(ctx context.Context) {
 	}
 	for _, entry := range entries {
 		if err := d.handler.Handle(ctx, entry); err != nil {
-			d.logger.Error("outbox delivery failed", "error", err, "event_id", entry.ID, "type", entry.Type)
+			d.logger.Error("outbox delivery failed", "error", err, "event_id", entry.ID, "type", entry.EventType)
 			continue
 		}
 		if ok, err := d.store.MarkDelivered(ctx, entry.ID); err != nil {
 			d.logger.Error("failed to mark outbox delivered", "error", err, "event_id", entry.ID)
 		} else if ok {
-			d.logger.Debug("outbox delivered", "event_id", entry.ID, "type", entry.Type)
+			d.logger.Debug("outbox delivered", "event_id", entry.ID, "type", entry.EventType)
 		}
 	}
 }

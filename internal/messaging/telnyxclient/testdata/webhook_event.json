@@ -1,0 +1,12 @@
+{
+  "data": {
+    "event_type": "message.received",
+    "id": "evt_01JTELNYX",
+    "occurred_at": "2024-10-01T12:30:00Z",
+    "payload": {
+      "from": "+15559001234",
+      "to": "+15553334444",
+      "text": "STOP"
+    }
+  }
+}
