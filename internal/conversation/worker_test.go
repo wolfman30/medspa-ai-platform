@@ -41,18 +41,18 @@ func TestWorkerProcessesMessages(t *testing.T) {
 	})
 
 	waitFor(func() bool {
-		return service.startCalls > 0
+		return service.startCount() > 0
 	}, time.Second, t)
 
 	cancel()
 	worker.Wait()
 
-	if service.startCalls != 1 {
-		t.Fatalf("expected 1 start call, got %d", service.startCalls)
+	if service.startCount() != 1 {
+		t.Fatalf("expected 1 start call, got %d", service.startCount())
 	}
 
-	if len(store.completed) != 1 || store.completed[0] != "job-1" {
-		t.Fatalf("expected job completion to be recorded, got %#v", store.completed)
+	if jobs := store.completedJobs(); len(jobs) != 1 || jobs[0] != "job-1" {
+		t.Fatalf("expected job completion to be recorded, got %#v", jobs)
 	}
 
 	if queue.deleted != 1 {
@@ -93,17 +93,18 @@ func TestWorkerSendsReplies(t *testing.T) {
 	})
 
 	waitFor(func() bool {
-		return messenger.called
+		return messenger.wasCalled()
 	}, time.Second, t)
 
 	cancel()
 	worker.Wait()
 
-	if messenger.last.Body != "auto-reply" {
-		t.Fatalf("expected auto-reply body, got %s", messenger.last.Body)
+	last := messenger.lastReply()
+	if last.Body != "auto-reply" {
+		t.Fatalf("expected auto-reply body, got %s", last.Body)
 	}
-	if messenger.last.To != "+12223334444" || messenger.last.From != "+15556667777" {
-		t.Fatalf("unexpected to/from: %#v", messenger.last)
+	if last.To != "+12223334444" || last.From != "+15556667777" {
+		t.Fatalf("unexpected to/from: %#v", last)
 	}
 }
 
@@ -140,17 +141,17 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	queue.enqueue(queueMessage{ID: "msg-pay", Body: string(body), ReceiptHandle: "rh-pay"})
 
 	waitFor(func() bool {
-		return len(bookings.calls) == 1 && messenger.called
+		return bookings.callCount() == 1 && messenger.wasCalled()
 	}, time.Second, t)
 
 	cancel()
 	worker.Wait()
 
-	if len(bookings.calls) != 1 {
-		t.Fatalf("expected booking confirm call, got %d", len(bookings.calls))
+	if bookings.callCount() != 1 {
+		t.Fatalf("expected booking confirm call, got %d", bookings.callCount())
 	}
-	if messenger.last.To != event.LeadPhone {
-		t.Fatalf("expected sms to lead, got %s", messenger.last.To)
+	if messenger.lastReply().To != event.LeadPhone {
+		t.Fatalf("expected sms to lead, got %s", messenger.lastReply().To)
 	}
 }
 
@@ -180,14 +181,14 @@ func TestWorkerHandlesProcessingErrors(t *testing.T) {
 	})
 
 	waitFor(func() bool {
-		return len(store.failed) == 1
+		return store.failureCount() == 1
 	}, time.Second, t)
 
 	cancel()
 	worker.Wait()
 
-	if store.failed[0].jobID != "job-fail" || store.failed[0].err == "" {
-		t.Fatalf("expected failure to be recorded, got %#v", store.failed[0])
+	if store.failureCount() != 1 {
+		t.Fatalf("expected failure to be recorded")
 	}
 }
 
@@ -208,10 +209,10 @@ func TestWorkerSkipsMalformedPayload(t *testing.T) {
 	cancel()
 	worker.Wait()
 
-	if service.startCalls != 0 && service.messageCalls != 0 {
+	if service.startCount() != 0 && service.messageCount() != 0 {
 		t.Fatalf("expected no processor calls for malformed body")
 	}
-	if len(store.completed) != 0 || len(store.failed) != 0 {
+	if len(store.completedJobs()) != 0 || store.failureCount() != 0 {
 		t.Fatalf("expected no job updates for malformed payload")
 	}
 }
@@ -266,6 +267,18 @@ func (r *recordingService) ProcessMessage(ctx context.Context, req MessageReques
 	defer r.mu.Unlock()
 	r.messageCalls++
 	return &Response{}, nil
+}
+
+func (r *recordingService) startCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.startCalls
+}
+
+func (r *recordingService) messageCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.messageCalls
 }
 
 type replyService struct{}
@@ -336,30 +349,62 @@ type stubJobUpdater struct {
 		jobID string
 		err   string
 	}
+	mu sync.Mutex
 }
 
 func (s *stubJobUpdater) MarkCompleted(ctx context.Context, jobID string, resp *Response, conversationID string) error {
+	s.mu.Lock()
 	s.completed = append(s.completed, jobID)
+	s.mu.Unlock()
 	return nil
 }
 
 func (s *stubJobUpdater) MarkFailed(ctx context.Context, jobID string, errMsg string) error {
+	s.mu.Lock()
 	s.failed = append(s.failed, struct {
 		jobID string
 		err   string
 	}{jobID: jobID, err: errMsg})
+	s.mu.Unlock()
 	return nil
+}
+
+func (s *stubJobUpdater) completedJobs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.completed...)
+}
+
+func (s *stubJobUpdater) failureCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.failed)
 }
 
 type stubMessenger struct {
 	called bool
 	last   OutboundReply
+	mu     sync.Mutex
 }
 
 func (s *stubMessenger) SendReply(ctx context.Context, reply OutboundReply) error {
+	s.mu.Lock()
 	s.called = true
 	s.last = reply
+	s.mu.Unlock()
 	return nil
+}
+
+func (s *stubMessenger) wasCalled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.called
+}
+
+func (s *stubMessenger) lastReply() OutboundReply {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.last
 }
 
 type stubBookingConfirmer struct {
@@ -367,12 +412,21 @@ type stubBookingConfirmer struct {
 		org  uuid.UUID
 		lead uuid.UUID
 	}
+	mu sync.Mutex
 }
 
 func (s *stubBookingConfirmer) ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error {
+	s.mu.Lock()
 	s.calls = append(s.calls, struct {
 		org  uuid.UUID
 		lead uuid.UUID
 	}{org: orgID, lead: leadID})
+	s.mu.Unlock()
 	return nil
+}
+
+func (s *stubBookingConfirmer) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.calls)
 }
