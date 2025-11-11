@@ -50,6 +50,9 @@ func New(cfg *Config) http.Handler {
 			r.Post("/message", cfg.ConversationHandler.Message)
 			r.Get("/jobs/{jobID}", cfg.ConversationHandler.JobStatus)
 		})
+		r.Route("/knowledge", func(r chi.Router) {
+			r.Post("/{clinicID}", cfg.ConversationHandler.AddKnowledge)
+		})
 	}
 
 	return r

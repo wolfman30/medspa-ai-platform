@@ -17,7 +17,7 @@ import (
 func TestHandler_Start_AcceptsJob(t *testing.T) {
 	enqueuer := &stubEnqueuer{}
 	store := &stubJobStore{}
-	handler := NewHandler(enqueuer, store, logging.Default())
+	handler := NewHandler(enqueuer, store, nil, nil, logging.Default())
 
 	payload := StartRequest{
 		LeadID: "lead-123",
@@ -58,7 +58,7 @@ func TestHandler_Start_AcceptsJob(t *testing.T) {
 func TestHandler_Message_AcceptsJob(t *testing.T) {
 	enqueuer := &stubEnqueuer{}
 	store := &stubJobStore{}
-	handler := NewHandler(enqueuer, store, logging.Default())
+	handler := NewHandler(enqueuer, store, nil, nil, logging.Default())
 
 	payload := MessageRequest{
 		ConversationID: "conv-123",
@@ -96,7 +96,7 @@ func TestHandler_Message_AcceptsJob(t *testing.T) {
 }
 
 func TestHandler_Start_InvalidJSON(t *testing.T) {
-	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, logging.Default())
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, nil, nil, logging.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/conversations/start", strings.NewReader("{"))
 	w := httptest.NewRecorder()
@@ -109,7 +109,7 @@ func TestHandler_Start_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_Message_InvalidJSON(t *testing.T) {
-	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, logging.Default())
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, nil, nil, logging.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/conversations/message", strings.NewReader("{"))
 	w := httptest.NewRecorder()
@@ -122,7 +122,7 @@ func TestHandler_Message_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_Start_EnqueueError(t *testing.T) {
-	handler := NewHandler(&stubEnqueuer{startErr: errors.New("boom")}, &stubJobStore{}, logging.Default())
+	handler := NewHandler(&stubEnqueuer{startErr: errors.New("boom")}, &stubJobStore{}, nil, nil, logging.Default())
 
 	payload := StartRequest{LeadID: "lead"}
 	body, _ := json.Marshal(payload)
@@ -138,7 +138,7 @@ func TestHandler_Start_EnqueueError(t *testing.T) {
 }
 
 func TestHandler_Message_EnqueueError(t *testing.T) {
-	handler := NewHandler(&stubEnqueuer{messageErr: errors.New("boom")}, &stubJobStore{}, logging.Default())
+	handler := NewHandler(&stubEnqueuer{messageErr: errors.New("boom")}, &stubJobStore{}, nil, nil, logging.Default())
 
 	payload := MessageRequest{ConversationID: "conv", Message: "Hi"}
 	body, _ := json.Marshal(payload)
@@ -160,7 +160,7 @@ func TestHandler_JobStatus_Success(t *testing.T) {
 			Status: JobStatusCompleted,
 		},
 	}
-	handler := NewHandler(&stubEnqueuer{}, store, logging.Default())
+	handler := NewHandler(&stubEnqueuer{}, store, nil, nil, logging.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/conversations/jobs/job-123", nil)
 	req = routeWithJobID(req, "job-123")
@@ -177,7 +177,7 @@ func TestHandler_JobStatus_NotFound(t *testing.T) {
 	store := &stubJobStore{
 		getErr: ErrJobNotFound,
 	}
-	handler := NewHandler(&stubEnqueuer{}, store, logging.Default())
+	handler := NewHandler(&stubEnqueuer{}, store, nil, nil, logging.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/conversations/jobs/job-xyz", nil)
 	req = routeWithJobID(req, "job-xyz")
@@ -234,4 +234,82 @@ func (s *stubJobStore) GetJob(ctx context.Context, jobID string) (*JobRecord, er
 		return s.getJob, s.getErr
 	}
 	return nil, s.getErr
+}
+
+func TestHandler_AddKnowledge_Success(t *testing.T) {
+	repo := &stubKnowledgeRepo{}
+	rag := &stubRAGIngestor{}
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, repo, rag, logging.Default())
+
+	payload := map[string]any{"documents": []string{"Doc A", "Doc B"}}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/knowledge/clinic-1", bytes.NewReader(body))
+	req = routeWithClinicID(req, "clinic-1")
+	w := httptest.NewRecorder()
+
+	handler.AddKnowledge(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", w.Code)
+	}
+	if len(repo.appended["clinic-1"]) != 2 {
+		t.Fatalf("expected repo to store docs, got %#v", repo.appended)
+	}
+	if rag.calls != 1 {
+		t.Fatalf("expected rag ingestor to be called once, got %d", rag.calls)
+	}
+}
+
+func TestHandler_AddKnowledge_InvalidBody(t *testing.T) {
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, nil, nil, logging.Default())
+
+	req := httptest.NewRequest(http.MethodPost, "/knowledge/clinic", strings.NewReader("{}"))
+	req = routeWithClinicID(req, "clinic")
+	w := httptest.NewRecorder()
+
+	handler.AddKnowledge(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when repo not configured, got %d", w.Code)
+	}
+}
+
+func routeWithClinicID(req *http.Request, clinicID string) *http.Request {
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("clinicID", clinicID)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+}
+
+type stubKnowledgeRepo struct {
+	appended map[string][]string
+	err      error
+}
+
+func (s *stubKnowledgeRepo) AppendDocuments(ctx context.Context, clinicID string, docs []string) error {
+	if s.err != nil {
+		return s.err
+	}
+	if s.appended == nil {
+		s.appended = make(map[string][]string)
+	}
+	s.appended[clinicID] = append(s.appended[clinicID], docs...)
+	return nil
+}
+
+func (s *stubKnowledgeRepo) GetDocuments(ctx context.Context, clinicID string) ([]string, error) {
+	return s.appended[clinicID], nil
+}
+
+func (s *stubKnowledgeRepo) LoadAll(ctx context.Context) (map[string][]string, error) {
+	return s.appended, nil
+}
+
+type stubRAGIngestor struct {
+	calls int
+}
+
+func (s *stubRAGIngestor) AddDocuments(ctx context.Context, clinicID string, docs []string) error {
+	s.calls++
+	return nil
 }
