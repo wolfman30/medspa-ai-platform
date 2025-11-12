@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
 )
 
@@ -100,4 +101,17 @@ type recordedMessage struct {
 	ClinicID uuid.UUID
 	From     string
 	To       string
+}
+
+type stubConversationPublisher struct {
+	calls   int
+	lastJob string
+	last    conversation.MessageRequest
+}
+
+func (s *stubConversationPublisher) EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error {
+	s.calls++
+	s.lastJob = jobID
+	s.last = req
+	return nil
 }

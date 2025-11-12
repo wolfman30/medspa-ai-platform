@@ -1,0 +1,16 @@
+{
+  "data": {
+    "id": "evt_message",
+    "event_type": "message.received",
+    "occurred_at": "2024-10-01T12:05:00Z",
+    "payload": {
+      "id": "msg_inbound",
+      "direction": "inbound",
+      "text": "Need info",
+      "media_urls": [],
+      "status": "received",
+      "from": { "phone_number": "+15550001111" },
+      "to": { "phone_number": "+15559998888" }
+    }
+  }
+}
