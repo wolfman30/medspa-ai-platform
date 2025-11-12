@@ -66,7 +66,7 @@ func NewAdminMessagingHandler(cfg AdminMessagingConfig) *AdminMessagingHandler {
 		stopAck:           defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
 		helpAck:           defaultString(cfg.HelpAck, "Reply STOP to opt out or contact support@medspa.ai."),
 		retryBaseDelay:    cfg.RetryBaseDelay,
-		metrics:          cfg.Metrics,
+		metrics:           cfg.Metrics,
 	}
 }
 
