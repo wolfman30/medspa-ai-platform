@@ -2,9 +2,11 @@ package events
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	pgx "github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	pgxmock "github.com/pashagolub/pgxmock/v4"
 )
 
@@ -63,4 +65,41 @@ func TestNewProcessedStorePanicsOnNilPool(t *testing.T) {
 		}
 	}()
 	NewProcessedStore(nil)
+}
+
+func TestNewProcessedStoreReturnsInstance(t *testing.T) {
+	store := NewProcessedStore(&pgxpool.Pool{})
+	if store == nil {
+		t.Fatalf("expected processed store instance")
+	}
+}
+
+func TestNewProcessedStoreWithExecPanicsOnNil(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for nil exec")
+		}
+	}()
+	newProcessedStoreWithExec(nil)
+}
+
+func TestProcessedStoreErrorPaths(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgx mock: %v", err)
+	}
+	defer mock.Close()
+	store := newProcessedStoreWithExec(mock)
+	eventUUID, _, _, err := normalizeProcessedEvent("p", "evt")
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	mock.ExpectQuery("SELECT 1 FROM processed_events").WithArgs(eventUUID).WillReturnError(errors.New("db down"))
+	if _, err := store.AlreadyProcessed(context.Background(), "p", "evt"); err == nil {
+		t.Fatalf("expected lookup error")
+	}
+	mock.ExpectExec("INSERT INTO processed_events").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(errors.New("insert fail"))
+	if _, err := store.MarkProcessed(context.Background(), "p", "evt"); err == nil {
+		t.Fatalf("expected mark processed error")
+	}
 }

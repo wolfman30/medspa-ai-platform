@@ -1,0 +1,12 @@
+{
+  "data": {
+    "id": "evt_dlr",
+    "event_type": "message.delivery_status",
+    "occurred_at": "2024-10-01T12:05:00Z",
+    "payload": {
+      "id": "dlr_1",
+      "message_id": "msg_outbound",
+      "status": "delivered"
+    }
+  }
+}

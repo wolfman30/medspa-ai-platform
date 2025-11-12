@@ -13,6 +13,7 @@ CREATE TABLE hosted_number_orders (
     clinic_id uuid NOT NULL,
     e164_number text NOT NULL,
     status text NOT NULL CHECK (status IN ('pending', 'verifying', 'documents_submitted', 'activated', 'failed')),
+    provider_order_id text UNIQUE,
     last_error text,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
@@ -80,6 +81,10 @@ CREATE TABLE messages (
     body text,
     mms_media jsonb NOT NULL DEFAULT '[]'::jsonb,
     provider_status text,
+    provider_message_id text,
+    send_attempts integer NOT NULL DEFAULT 0,
+    last_attempt_at timestamptz,
+    next_retry_at timestamptz,
     delivered_at timestamptz,
     failed_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -88,6 +93,8 @@ CREATE TABLE messages (
 
 CREATE INDEX idx_messages_clinic_created ON messages (clinic_id, created_at DESC);
 CREATE INDEX idx_messages_recipient_direction ON messages (clinic_id, to_e164, direction);
+CREATE INDEX idx_messages_retry_window ON messages (next_retry_at) WHERE direction = 'outbound';
+CREATE UNIQUE INDEX idx_messages_provider_message ON messages (provider_message_id) WHERE provider_message_id IS NOT NULL;
 
 CREATE TRIGGER set_timestamp_messages
 BEFORE UPDATE ON messages
