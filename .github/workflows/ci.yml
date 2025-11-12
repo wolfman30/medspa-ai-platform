@@ -63,10 +63,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
-    steps:
+
     env:
       GOTOOLCHAIN: go1.24.9
+
+    steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
