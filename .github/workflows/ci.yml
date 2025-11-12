@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      GOTOOLCHAIN: local
     
     steps:
     - name: Checkout code
@@ -91,6 +93,8 @@ jobs:
     needs: [test]
     permissions:
       contents: read
+    env:
+      GOTOOLCHAIN: local
     
     steps:
     - name: Checkout code
