@@ -6,6 +6,21 @@
 
 ---
 
+## 🚦 Telnyx-First MVP Progress
+
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Telnyx hosted messaging + STOP/HELP compliance | ✅ Done | Admin APIs, webhooks, hosted-order lifecycle, retry/metrics live |
+| Messaging ACL → AI queue bridge | ✅ Done (this change) | Telnyx inbound events now enqueue deterministic conversation jobs with metadata |
+| GPT-5-mini conversation worker (Redis context) | ⚙️ Running | Conversation worker + MemoryRAG already handle Twilio pilot traffic |
+| LangChain orchestration + Astra DB vector store | 🚧 Next up | MemoryRAGStore stubbed; need managed vector DB + LangChain toolchain wiring |
+| EMR adapters + Square deposit loop | 🚧 In progress | API clients exist; still need slot writeback + deposit reconciliation worker |
+| Reminder scheduler (T‑24h/T‑6h/T‑1h SMS) | 🚧 Pending | Requires new worker + template set + Telnyx send service |
+
+**Overall readiness for GA pilot:** ~45%. Messaging and queue plumbing are production-ready; AI orchestration, EMR bridges, and payment/reminder loops remain.
+
+---
+
 ## 🔥 Three Core Problems We Solve
 
 ### 1. **Fully Conversational AI Expert** 
@@ -105,6 +120,55 @@ graph TB
 
 ---
 
+## 📦 Telnyx Messaging + AI Conversation Layer (Modular)
+
+```
+[Telnyx Ingress]
+  - Telnyx Voice missed-call webhook
+  - Telnyx SMS/MMS webhook
+
+[Messaging ACL]
+  - Chi router (Go)
+  - Signature verification + processed_events idempotency
+  - STOP/HELP + quiet-hour enforcement
+  - Messaging store (AWS RDS Postgres)
+
+[AI Conversation Core]
+  - SQS conversation queue + Dynamo job tracker
+  - GPT worker (Go) calling ChatGPT-5-mini
+  - LangChain orchestrator (Python tool runner)
+  - Redis (AWS ElastiCache) for rolling context
+
+[Knowledge & RAG]
+  - Knowledge intake UI → Redis knowledge repo
+  - Embedding service (OpenAI text-embedding-3-small)
+  - Vector DB (DataStax Astra DB w/ vector search)
+  - Retrieval wiring feeding LangChain prompts
+
+[Booking + Payments]
+  - EMR adapters (Boulevard, Aesthetic Record, PatientNow)
+  - Square Checkout refundable deposit links
+  - Outbox → SQS for reconciliation + analytics
+
+[Reminder & Follow Up]
+  - Reminder scheduler (Go worker, cron queue)
+  - Telnyx send service for T‑24h / T‑6h / T‑1h SMS
+
+[Observability Shell]
+  - slog JSON → CloudWatch
+  - Prometheus `/metrics`
+  - OpenTelemetry traces/ids propagated through Chi
+```
+
+**Primary managed services**
+- Router: `chi` (Go 1.24.9)
+- Data: AWS RDS Postgres, AWS ElastiCache Redis, DataStax Astra DB (vector store)
+- AI: ChatGPT-5-mini via LangChain orchestration, MemoryRAG fallback, Astra DB vectors
+- Messaging: Telnyx Hosted SMS/MMS + delivery receipts
+- Async: Amazon SQS for conversations + reminders
+
+---
+
 ## 📊 Critical Data Flows
 
 ### 🚨 **After-Hours Missed Call → Booking (The $10K/month Flow)**
@@ -119,8 +183,9 @@ sequenceDiagram
     participant Clinic
 
     Note over Patient: 8:15 PM Tuesday
-    Patient->>Twilio: Calls clinic (missed)
-    Twilio->>AI: Webhook (<1 sec)
+    Patient->>Telnyx: Calls clinic (missed)
+    Telnyx->>Messaging ACL: Voice webhook (<1 sec)
+    Messaging ACL->>AI: Enqueue GPT job with org/lead ids
     AI->>Patient: "Hi! I saw we missed your call.<br/>I can help book your appointment!"
     
     Patient->>AI: "Yes, new client, want Botox"
@@ -129,15 +194,16 @@ sequenceDiagram
     AI->>Patient: "Great! New client consults are $50.<br/>I have Friday 2PM or 3:30PM"
     
     Patient->>AI: "3:30 works"
-    AI->>AI: Generate deposit request
-    AI->>Square: Create checkout link
+    AI->>AI: Generate deposit request + shortlist call summary
+    AI->>Square Checkout: Create refundable deposit link
     Square->>AI: Return payment URL + expiry
     AI->>Patient: "Perfect! Please secure your spot<br/>with a $50 deposit: [link]"
     
-    Patient->>Square: Completes payment
+    Patient->>Square Checkout: Completes payment
     Square->>AI: Payment webhook
     AI->>EMR: Create patient + booking
-    AI->>Patient: "All set! See you Friday 3:30PM"
+    AI->>Patient: "All set! See you Friday 3:30PM — reminders coming your way."
+    AI->>Telnyx: Schedule T-24h/T-6h/T-1h reminders
     AI->>Clinic: Update dashboard metrics
 ```
 

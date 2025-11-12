@@ -192,6 +192,7 @@ func main() {
 			Store:            msgStore,
 			Processed:        processedStore,
 			Telnyx:           telnyxClient,
+			Conversation:     conversationPublisher,
 			Logger:           logger,
 			MessagingProfile: cfg.TelnyxMessagingProfileID,
 			StopAck:          cfg.TelnyxStopReply,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
@@ -19,6 +20,10 @@ import (
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
+
+type conversationPublisher interface {
+	EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error
+}
 
 type processedTracker interface {
 	AlreadyProcessed(ctx context.Context, provider, eventID string) (bool, error)
@@ -32,6 +37,7 @@ type TelnyxWebhookHandler struct {
 	store            messagingStore
 	processed        processedTracker
 	telnyx           telnyxClient
+	conversation     conversationPublisher
 	logger           *logging.Logger
 	messagingProfile string
 	stopAck          string
@@ -44,6 +50,7 @@ type TelnyxWebhookConfig struct {
 	Store            messagingStore
 	Processed        processedTracker
 	Telnyx           telnyxClient
+	Conversation     conversationPublisher
 	Logger           *logging.Logger
 	MessagingProfile string
 	StopAck          string
@@ -59,6 +66,7 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		store:            cfg.Store,
 		processed:        cfg.Processed,
 		telnyx:           cfg.Telnyx,
+		conversation:     cfg.Conversation,
 		logger:           cfg.Logger,
 		messagingProfile: cfg.MessagingProfile,
 		stopAck:          defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
@@ -236,6 +244,8 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		h.sendAutoReply(context.Background(), to, from, h.stopAck)
 	} else if help {
 		h.sendAutoReply(context.Background(), to, from, h.helpAck)
+	} else {
+		h.dispatchConversation(context.Background(), evt, payload, clinicID)
 	}
 	return nil
 }
@@ -390,4 +400,36 @@ type telnyxHostedPayload struct {
 	PhoneNumber string `json:"phone_number"`
 	Status      string `json:"status"`
 	LastError   string `json:"last_error"`
+}
+
+func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt telnyxEvent, payload telnyxMessagePayload, clinicID uuid.UUID) {
+	if h.conversation == nil {
+		return
+	}
+	orgID := clinicID.String()
+	from := messaging.NormalizeE164(payload.FromNumber())
+	to := messaging.NormalizeE164(payload.ToNumber())
+	if from == "" || to == "" || strings.TrimSpace(payload.Text) == "" {
+		return
+	}
+	req := conversation.MessageRequest{
+		OrgID:          orgID,
+		LeadID:         fmt.Sprintf("%s:%s", orgID, from),
+		ConversationID: fmt.Sprintf("sms:%s:%s", orgID, from),
+		Message:        payload.Text,
+		Channel:        conversation.ChannelSMS,
+		From:           from,
+		To:             to,
+		Metadata: map[string]string{
+			"telnyx_event_id":   evt.ID,
+			"telnyx_message_id": payload.ID,
+			"direction":         payload.Direction,
+		},
+	}
+	jobID := fmt.Sprintf("telnyx:%s", payload.ID)
+	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := h.conversation.EnqueueMessage(publishCtx, jobID, req, conversation.WithoutJobTracking()); err != nil {
+		h.logger.Error("failed to enqueue telnyx conversation job", "error", err, "job_id", jobID)
+	}
 }
