@@ -24,11 +24,11 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
-	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
+	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -37,16 +37,16 @@ func main() {
 	// Load configuration
 	cfg := appconfig.Load()
 
-    // Initialize logger
-    logger := logging.New(cfg.LogLevel)
-    logger.Info("starting medspa-ai-platform API server",
-        "env", cfg.Env,
-        "port", cfg.Port,
-    )
+	// Initialize logger
+	logger := logging.New(cfg.LogLevel)
+	logger.Info("starting medspa-ai-platform API server",
+		"env", cfg.Env,
+		"port", cfg.Port,
+	)
 
-    registry := prometheus.NewRegistry()
-    messagingMetrics := observemetrics.NewMessagingMetrics(registry)
-    metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	registry := prometheus.NewRegistry()
+	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
+	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 
 	appCtx, stop := context.WithCancel(context.Background())
 	defer stop()
@@ -145,7 +145,7 @@ func main() {
 			StopAck:           cfg.TelnyxStopReply,
 			HelpAck:           cfg.TelnyxHelpReply,
 			RetryBaseDelay:    cfg.TelnyxRetryBaseDelay,
-			Metrics:          messagingMetrics,
+			Metrics:           messagingMetrics,
 		})
 	}
 	var paymentsRepo *payments.Repository
