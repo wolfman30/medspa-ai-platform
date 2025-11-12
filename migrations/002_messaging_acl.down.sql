@@ -42,6 +42,9 @@ DROP TABLE IF EXISTS hosted_number_orders;
 DROP TABLE IF EXISTS messages;
 DROP TABLE IF EXISTS unsubscribes;
 
+DROP INDEX IF EXISTS idx_messages_provider_message;
+DROP INDEX IF EXISTS idx_messages_retry_window;
+
 DROP FUNCTION IF EXISTS set_updated_at();
 
 COMMIT;

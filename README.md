@@ -92,17 +92,15 @@ Run `task --list` to see all available tasks:
 
 ## Production Environment
 
-### Environment Variables
-
-The application uses the following environment variables:
-
 - `PORT` - HTTP server port (default: 8080)
 - `ENV` - Environment name (development, staging, production)
 - `LOG_LEVEL` - Logging level (debug, info, warn, error)
 - `DATABASE_URL` - PostgreSQL connection string
-- `TWILIO_ACCOUNT_SID` - Twilio account identifier
-- `TWILIO_AUTH_TOKEN` - Twilio authentication token
-- `TWILIO_WEBHOOK_SECRET` - Secret for webhook signature verification
+- `TELNYX_API_KEY` / `TELNYX_MESSAGING_PROFILE_ID` / `TELNYX_WEBHOOK_SECRET` - Telnyx Hosted Messaging creds
+- `TELNYX_STOP_REPLY` / `TELNYX_HELP_REPLY` - Templates for STOP/HELP autoresponses
+- `TELNYX_RETRY_MAX_ATTEMPTS` / `TELNYX_RETRY_BASE_DELAY` - Retry policy for the messaging worker
+- `TELNYX_HOSTED_POLL_INTERVAL` - Poll cadence for hosted number orders
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_SECRET` - Existing Twilio integration (legacy inbound)
 - `PAYMENT_PROVIDER_KEY` - Payment provider API key
 
 ### Architecture Reference
@@ -143,6 +141,19 @@ GitHub Actions automatically:
 ### Leads
 
 - `POST /leads/web` - Capture web form lead submission
+
+### Messaging (Telnyx)
+
+- `POST /admin/hosted/orders` – start a hosted messaging order for a clinic (requires admin JWT)
+- `POST /admin/10dlc/brands` / `/admin/10dlc/campaigns` – onboard 10DLC brand + campaign metadata
+- `POST /admin/messages:send` – send SMS/MMS via Telnyx with quiet-hours + STOP enforcement
+- `POST /webhooks/telnyx/messages` – inbound message + delivery receipt webhook (signature validated, idempotent)
+- `POST /webhooks/telnyx/hosted` – hosted order status webhooks
+- `GET /metrics` – Prometheus metrics (`medspa_messaging_*` counters/histograms)
+
+Run `make run-worker` (or deploy `cmd/messaging-worker`) alongside the API to poll hosted orders and retry failed outbound sends.
+
+Use `scripts/check_package_coverage.sh` or `make ci-cover` to ensure all new messaging packages stay above the 90% coverage gate enforced in CI.
 
 ### Messaging
 

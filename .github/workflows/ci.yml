@@ -33,31 +33,27 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Download dependencies
-      run: go mod download
+      run: make deps
 
-    - name: Verify dependencies
-      run: go mod verify
-
-    - name: Run gofmt
+    - name: Verify formatter
       run: |
-        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-          echo "The following files are not formatted:"
-          gofmt -s -l .
+        DIFF=$(gofmt -s -l .)
+        if [ -n "$DIFF" ]; then
+          echo "gofmt required on:" && echo "$DIFF"
           exit 1
         fi
 
     - name: Run go vet
-      run: go vet ./...
+      run: make vet
 
-    - name: Run tests
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+    - name: Run govulncheck
+      run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.txt
-        flags: unittests
-        fail_ci_if_error: false
+    - name: Run unit tests
+      run: make test
+
+    - name: Enforce package coverage
+      run: make ci-cover
 
   terraform:
     name: Terraform

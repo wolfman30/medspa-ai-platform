@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -57,6 +58,28 @@ func TestSendMessage(t *testing.T) {
 	}
 	if resp.ID != "msg_01J123ABC" || resp.Status != "queued" {
 		t.Fatalf("unexpected response: %#v", resp)
+	}
+}
+
+func TestNewClientDefaultsAndValidation(t *testing.T) {
+	if _, err := New(Config{}); err == nil {
+		t.Fatalf("expected api key validation error")
+	}
+	client, err := New(Config{APIKey: "key"})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if client.baseURL != defaultBaseURL {
+		t.Fatalf("expected default base url, got %s", client.baseURL)
+	}
+	if client.httpClient == nil || client.httpClient.Timeout != 10*time.Second {
+		t.Fatalf("expected default timeout")
+	}
+	if client.maxRetries != 0 {
+		t.Fatalf("expected retries to default to 0")
+	}
+	if client.logger == nil {
+		t.Fatalf("expected default logger")
 	}
 }
 
@@ -177,6 +200,20 @@ func TestCheckHostedEligibility(t *testing.T) {
 	if !resp.Eligible || !strings.Contains(capturedQuery, "phone_number=%2B15551112222") {
 		t.Fatalf("unexpected eligibility response: %#v query=%s", resp, capturedQuery)
 	}
+	if _, err := client.CheckHostedEligibility(context.Background(), ""); err == nil {
+		t.Fatalf("expected validation error for blank input")
+	}
+}
+
+func TestCheckHostedEligibilityHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	if _, err := client.CheckHostedEligibility(context.Background(), "+1555"); err == nil {
+		t.Fatalf("expected http error")
+	}
 }
 
 func TestCreateHostedOrder(t *testing.T) {
@@ -225,6 +262,21 @@ func TestSubmitOwnershipVerification(t *testing.T) {
 	}
 	if err := client.SubmitOwnershipVerification(context.Background(), "", ""); err == nil {
 		t.Fatalf("expected validation error")
+	}
+}
+
+func TestCreateHostedOrderHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"detail":"try later"}`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	_, err := client.CreateHostedOrder(context.Background(), HostedOrderRequest{
+		ClinicID: "c", PhoneNumber: "+1", AuthorizedContact: "Alice",
+	})
+	if err == nil {
+		t.Fatalf("expected http error")
 	}
 }
 
@@ -279,18 +331,141 @@ func TestCreateBrandAndCampaign(t *testing.T) {
 	}
 }
 
+func TestCreateBrandHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("fail"))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	_, err := client.CreateBrand(context.Background(), BrandRequest{
+		ClinicID:     "c",
+		LegalName:    "Clinic",
+		Website:      "https://clinic",
+		AddressLine:  "1",
+		City:         "SF",
+		State:        "CA",
+		PostalCode:   "94105",
+		Country:      "US",
+		ContactName:  "Alice",
+		ContactEmail: "ops@example.com",
+		ContactPhone: "+1555",
+	})
+	if err == nil {
+		t.Fatalf("expected brand http error")
+	}
+}
+
+func TestCreateCampaignHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("fail"))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	_, err := client.CreateCampaign(context.Background(), CampaignRequest{
+		BrandID:        "b",
+		UseCase:        "alerts",
+		SampleMessages: []string{"hi"},
+		HelpMessage:    "help",
+		StopMessage:    "stop",
+	})
+	if err == nil {
+		t.Fatalf("expected campaign http error")
+	}
+}
+
+func TestUploadDocumentHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	if err := client.UploadDocument(context.Background(), "ord_1", DocumentTypeLOA, "loa.pdf", strings.NewReader("data")); err == nil {
+		t.Fatalf("expected upload error")
+	}
+}
+
+func TestUploadDocumentCopyError(t *testing.T) {
+	client := newTestClient(t, nil, Config{})
+	if err := client.UploadDocument(context.Background(), "ord_1", DocumentTypeLOA, "loa.pdf", failingReader{}); err == nil {
+		t.Fatalf("expected copy error")
+	}
+}
+
 func TestPayloadValidationErrors(t *testing.T) {
 	if err := (SendMessageRequest{}).validate(); err == nil {
 		t.Fatalf("expected send validation error")
 	}
+	if err := (SendMessageRequest{From: "+1", To: "+2"}).validate(); err == nil {
+		t.Fatalf("expected body/media validation error")
+	}
+	validSend := SendMessageRequest{From: "+1", To: "+2", MediaURLs: []string{"https://example.com/1.jpg"}}
+	if err := validSend.validate(); err != nil {
+		t.Fatalf("unexpected send validation failure: %v", err)
+	}
 	if err := (HostedOrderRequest{}).validate(); err == nil {
 		t.Fatalf("expected hosted order validation error")
+	}
+	if err := (HostedOrderRequest{ClinicID: "c"}).validate(); err == nil {
+		t.Fatalf("expected phone validation error")
+	}
+	if err := (HostedOrderRequest{ClinicID: "c", PhoneNumber: "+1"}).validate(); err == nil {
+		t.Fatalf("expected contact validation error")
 	}
 	if err := (BrandRequest{}).validate(); err == nil {
 		t.Fatalf("expected brand validation error")
 	}
+	if err := (BrandRequest{ClinicID: "c"}).validate(); err == nil {
+		t.Fatalf("expected brand legal name validation error")
+	}
+	if err := (BrandRequest{ClinicID: "c", LegalName: "Clinic"}).validate(); err == nil {
+		t.Fatalf("expected brand website validation error")
+	}
+	if err := (BrandRequest{ClinicID: "c", LegalName: "Clinic", Website: "https://clinic", AddressLine: "1", City: "SF", State: "CA", PostalCode: "94105"}).validate(); err == nil {
+		t.Fatalf("expected brand contact validation error")
+	}
+	validBrand := BrandRequest{
+		ClinicID:     "c",
+		LegalName:    "Clinic",
+		Website:      "https://clinic",
+		AddressLine:  "1",
+		City:         "SF",
+		State:        "CA",
+		PostalCode:   "94105",
+		Country:      "US",
+		ContactName:  "Alice",
+		ContactEmail: "ops@example.com",
+		ContactPhone: "+1555",
+		Vertical:     "healthcare",
+	}
+	if err := validBrand.validate(); err != nil {
+		t.Fatalf("expected valid brand request, got %v", err)
+	}
 	if err := (CampaignRequest{}).validate(); err == nil {
 		t.Fatalf("expected campaign validation error")
+	}
+	if err := (CampaignRequest{BrandID: "b"}).validate(); err == nil {
+		t.Fatalf("expected use case validation error")
+	}
+	if err := (CampaignRequest{BrandID: "b", UseCase: "alerts"}).validate(); err == nil {
+		t.Fatalf("expected sample messages validation error")
+	}
+	if err := (CampaignRequest{BrandID: "b", UseCase: "alerts", SampleMessages: []string{"hi"}}).validate(); err == nil {
+		t.Fatalf("expected help/stop validation error")
+	}
+	if err := (CampaignRequest{BrandID: "b", UseCase: "alerts", SampleMessages: []string{"hi"}, HelpMessage: "help"}).validate(); err == nil {
+		t.Fatalf("expected stop message validation error")
+	}
+	validCampaign := CampaignRequest{
+		BrandID:        "b",
+		UseCase:        "alerts",
+		SampleMessages: []string{"hi"},
+		HelpMessage:    "reply HELP",
+		StopMessage:    "reply STOP",
+	}
+	if err := validCampaign.validate(); err != nil {
+		t.Fatalf("expected valid campaign request, got %v", err)
 	}
 }
 
@@ -300,6 +475,244 @@ func TestVerifyWebhookSignatureMismatch(t *testing.T) {
 		t.Fatalf("expected signature mismatch")
 	}
 }
+
+func TestVerifyWebhookSignatureMissingTimestamp(t *testing.T) {
+	client := newTestClient(t, nil, Config{WebhookSecret: "secret"})
+	if err := client.VerifyWebhookSignature("", "abc", []byte("{}")); err == nil {
+		t.Fatalf("expected timestamp error")
+	}
+}
+
+func TestUploadDocumentValidationErrors(t *testing.T) {
+	client := newTestClient(t, nil, Config{})
+	if err := client.UploadDocument(context.Background(), "", DocumentTypeLOA, "loa.pdf", strings.NewReader("data")); err == nil {
+		t.Fatalf("expected order id validation error")
+	}
+	if err := client.UploadDocument(context.Background(), "ord_1", "", "loa.pdf", strings.NewReader("data")); err == nil {
+		t.Fatalf("expected document type validation error")
+	}
+	if err := client.UploadDocument(context.Background(), "ord_1", DocumentTypeLOA, "loa.pdf", nil); err == nil {
+		t.Fatalf("expected reader validation error")
+	}
+}
+
+func TestShouldRetryLogic(t *testing.T) {
+	if !shouldRetry(0, timeoutErr{}) {
+		t.Fatalf("expected timeout errors to retry")
+	}
+	if shouldRetry(0, context.Canceled) {
+		t.Fatalf("context cancel should not retry")
+	}
+	if !shouldRetry(http.StatusTooManyRequests, nil) {
+		t.Fatalf("429 should retry")
+	}
+	if !shouldRetry(http.StatusBadGateway, nil) {
+		t.Fatalf("5xx should retry")
+	}
+	if shouldRetry(http.StatusBadRequest, nil) {
+		t.Fatalf("4xx (except 429) should not retry")
+	}
+}
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+func TestClientValidationShortCircuits(t *testing.T) {
+	client := newTestClient(t, nil, Config{})
+	if _, err := client.SendMessage(context.Background(), SendMessageRequest{}); err == nil {
+		t.Fatalf("expected send validation error")
+	}
+	if _, err := client.CreateHostedOrder(context.Background(), HostedOrderRequest{}); err == nil {
+		t.Fatalf("expected hosted order validation error")
+	}
+	if _, err := client.CreateBrand(context.Background(), BrandRequest{}); err == nil {
+		t.Fatalf("expected brand validation error")
+	}
+	if _, err := client.CreateCampaign(context.Background(), CampaignRequest{}); err == nil {
+		t.Fatalf("expected campaign validation error")
+	}
+	if _, err := client.GetHostedOrder(context.Background(), ""); err == nil {
+		t.Fatalf("expected get hosted order validation error")
+	}
+}
+
+func TestGetHostedOrderDecodeError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data":`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{})
+	if _, err := client.GetHostedOrder(context.Background(), "order"); err == nil {
+		t.Fatalf("expected decode error")
+	}
+}
+
+func TestGetHostedOrderHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"detail":"missing"}`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	if _, err := client.GetHostedOrder(context.Background(), "order"); err == nil {
+		t.Fatalf("expected http error")
+	}
+}
+
+func TestSendMessageHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"detail":"bad payload"}`))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	_, err := client.SendMessage(context.Background(), SendMessageRequest{
+		From: "+1", To: "+2", Body: "hi",
+	})
+	if err == nil || !strings.Contains(err.Error(), "bad payload") {
+		t.Fatalf("expected api error, got %v", err)
+	}
+}
+
+func TestSendMessageHTTPErrorFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("gateway exploded"))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server, Config{MaxRetries: 0})
+	if _, err := client.SendMessage(context.Background(), SendMessageRequest{From: "+1", To: "+2", Body: "hi"}); err == nil {
+		t.Fatalf("expected api error")
+	}
+}
+
+func TestAPIErrorFormatting(t *testing.T) {
+	errWithTitle := &apiError{Title: "bad", StatusCode: 400}
+	if !strings.Contains(errWithTitle.Error(), "bad") {
+		t.Fatalf("expected title in error string")
+	}
+	errWithDetail := &apiError{Detail: "oops", StatusCode: 422}
+	if !strings.Contains(errWithDetail.Error(), "oops") {
+		t.Fatalf("expected detail in error string")
+	}
+	errFallback := &apiError{StatusCode: 500}
+	if !strings.Contains(errFallback.Error(), "500") {
+		t.Fatalf("expected fallback message")
+	}
+}
+
+func TestDecodeAPIErrorFallback(t *testing.T) {
+	err := decodeAPIError(500, []byte("broken json"))
+	apiErr, ok := err.(*apiError)
+	if !ok || apiErr.Detail != "broken json" {
+		t.Fatalf("expected fallback detail, got %#v", err)
+	}
+}
+
+func TestDecodeDataWrapperError(t *testing.T) {
+	if _, err := decodeDataWrapper[struct{}]([]byte("nope")); err == nil {
+		t.Fatalf("expected decode error")
+	}
+}
+
+func TestLogRetryWithoutLogger(t *testing.T) {
+	client := &Client{}
+	client.logRetry("/x", 0, 500, errors.New("boom"))
+}
+
+func TestVerifyWebhookSignatureRequiresSecret(t *testing.T) {
+	client := newTestClient(t, nil, Config{WebhookSecret: ""})
+	if err := client.VerifyWebhookSignature("", "", []byte("{}")); err == nil {
+		t.Fatalf("expected missing secret error")
+	}
+}
+
+func TestInvokeContextCancellation(t *testing.T) {
+	client := newTestClient(t, nil, Config{})
+	client.httpClient = &http.Client{Transport: cancelOnContextTransport{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := client.invoke(ctx, http.MethodGet, "/test", nil, nil, ""); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled error, got %v", err)
+	}
+}
+
+func TestInvokeSleepCancellation(t *testing.T) {
+	client := newTestClient(t, nil, Config{MaxRetries: 1, Backoff: 50 * time.Millisecond})
+	client.httpClient = &http.Client{Transport: retryTransport{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		cancel()
+	}()
+	if _, err := client.invoke(ctx, http.MethodGet, "/retry", nil, nil, ""); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation during sleep, got %v", err)
+	}
+}
+
+func TestInvokeNonRetryableError(t *testing.T) {
+	client := newTestClient(t, nil, Config{MaxRetries: 1})
+	client.httpClient = &http.Client{Transport: cancelErrorTransport{}}
+	if _, err := client.invoke(context.Background(), http.MethodGet, "/nr", nil, nil, ""); err == nil || !strings.Contains(err.Error(), "http error") {
+		t.Fatalf("expected non-retryable http error, got %v", err)
+	}
+}
+
+func TestInvokeReadError(t *testing.T) {
+	client := newTestClient(t, nil, Config{})
+	client.httpClient = &http.Client{Transport: readErrorTransport{}}
+	if _, err := client.invoke(context.Background(), http.MethodGet, "/read", nil, nil, ""); err == nil || !strings.Contains(err.Error(), "read response") {
+		t.Fatalf("expected read error, got %v", err)
+	}
+}
+
+type cancelOnContextTransport struct{}
+
+func (cancelOnContextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	<-req.Context().Done()
+	return nil, req.Context().Err()
+}
+
+type retryTransport struct{}
+
+func (retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body:       io.NopCloser(strings.NewReader("{}")),
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+type cancelErrorTransport struct{}
+
+func (cancelErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return nil, context.Canceled
+}
+
+type readErrorTransport struct{}
+
+func (readErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       errBody{},
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+type errBody struct{}
+
+func (errBody) Read(p []byte) (int, error) { return 0, errors.New("body read fail") }
+func (errBody) Close() error               { return nil }
+
+type failingReader struct{}
+
+func (failingReader) Read(p []byte) (int, error) { return 0, errors.New("copy fail") }
 
 func newTestClient(t *testing.T, server *httptest.Server, cfg Config) *Client {
 	t.Helper()

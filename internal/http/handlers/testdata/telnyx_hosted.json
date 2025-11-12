@@ -1,0 +1,14 @@
+{
+  "data": {
+    "id": "evt_hosted",
+    "event_type": "hosted_messaging.order.updated",
+    "occurred_at": "2024-10-01T13:00:00Z",
+    "payload": {
+      "id": "hno_123",
+      "clinic_id": "11111111-2222-3333-4444-555555555555",
+      "phone_number": "+15559998888",
+      "status": "activated",
+      "last_error": ""
+    }
+  }
+}

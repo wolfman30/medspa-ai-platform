@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
@@ -21,8 +23,12 @@ import (
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
+	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
+	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
+	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
+	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -31,12 +37,16 @@ func main() {
 	// Load configuration
 	cfg := appconfig.Load()
 
-	// Initialize logger
-	logger := logging.New(cfg.LogLevel)
-	logger.Info("starting medspa-ai-platform API server",
-		"env", cfg.Env,
-		"port", cfg.Port,
-	)
+    // Initialize logger
+    logger := logging.New(cfg.LogLevel)
+    logger.Info("starting medspa-ai-platform API server",
+        "env", cfg.Env,
+        "port", cfg.Port,
+    )
+
+    registry := prometheus.NewRegistry()
+    messagingMetrics := observemetrics.NewMessagingMetrics(registry)
+    metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 
 	appCtx, stop := context.WithCancel(context.Background())
 	defer stop()
@@ -66,6 +76,11 @@ func main() {
 	} else {
 		leadsRepo = leads.NewInMemoryRepository()
 	}
+
+	var msgStore *messaging.Store
+	if dbPool != nil {
+		msgStore = messaging.NewStore(dbPool)
+	}
 	awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
 	if err != nil {
 		logger.Error("failed to load AWS config", "error", err)
@@ -91,6 +106,48 @@ func main() {
 	}
 	resolver := messaging.NewStaticOrgResolver(orgRouting)
 	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, conversationPublisher, resolver, logger)
+
+	var telnyxClient *telnyxclient.Client
+	if cfg.TelnyxAPIKey != "" {
+		client, err := telnyxclient.New(telnyxclient.Config{
+			APIKey:        cfg.TelnyxAPIKey,
+			WebhookSecret: cfg.TelnyxWebhookSecret,
+			Timeout:       10 * time.Second,
+			Logger:        logger.Logger,
+		})
+		if err != nil {
+			logger.Error("failed to configure telnyx client", "error", err)
+			os.Exit(1)
+		}
+		telnyxClient = client
+	}
+
+	var quietHours compliance.QuietHours
+	quietHoursEnabled := false
+	if cfg.QuietHoursStart != "" && cfg.QuietHoursEnd != "" {
+		if parsed, err := compliance.ParseQuietHours(cfg.QuietHoursStart, cfg.QuietHoursEnd, cfg.QuietHoursTimezone); err != nil {
+			logger.Warn("invalid quiet hours configuration", "error", err)
+		} else {
+			quietHours = parsed
+			quietHoursEnabled = true
+		}
+	}
+
+	var adminMessagingHandler *handlers.AdminMessagingHandler
+	if msgStore != nil && telnyxClient != nil {
+		adminMessagingHandler = handlers.NewAdminMessagingHandler(handlers.AdminMessagingConfig{
+			Store:             msgStore,
+			Logger:            logger,
+			Telnyx:            telnyxClient,
+			QuietHours:        quietHours,
+			QuietHoursEnabled: quietHoursEnabled,
+			MessagingProfile:  cfg.TelnyxMessagingProfileID,
+			StopAck:           cfg.TelnyxStopReply,
+			HelpAck:           cfg.TelnyxHelpReply,
+			RetryBaseDelay:    cfg.TelnyxRetryBaseDelay,
+			Metrics:          messagingMetrics,
+		})
+	}
 	var paymentsRepo *payments.Repository
 	var outboxStore *events.OutboxStore
 	var processedStore *events.ProcessedStore
@@ -129,6 +186,20 @@ func main() {
 		go deliverer.Start(appCtx)
 	}
 
+	var telnyxWebhookHandler *handlers.TelnyxWebhookHandler
+	if msgStore != nil && telnyxClient != nil && processedStore != nil {
+		telnyxWebhookHandler = handlers.NewTelnyxWebhookHandler(handlers.TelnyxWebhookConfig{
+			Store:            msgStore,
+			Processed:        processedStore,
+			Telnyx:           telnyxClient,
+			Logger:           logger,
+			MessagingProfile: cfg.TelnyxMessagingProfileID,
+			StopAck:          cfg.TelnyxStopReply,
+			HelpAck:          cfg.TelnyxHelpReply,
+			Metrics:          messagingMetrics,
+		})
+	}
+
 	// Setup router
 	routerCfg := &router.Config{
 		Logger:              logger,
@@ -137,6 +208,10 @@ func main() {
 		ConversationHandler: conversationHandler,
 		PaymentsHandler:     checkoutHandler,
 		SquareWebhook:       squareWebhookHandler,
+		AdminMessaging:      adminMessagingHandler,
+		TelnyxWebhooks:      telnyxWebhookHandler,
+		AdminAuthSecret:     cfg.AdminJWTSecret,
+		MetricsHandler:      metricsHandler,
 	}
 	r := router.New(routerCfg)
 

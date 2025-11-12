@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -21,6 +22,17 @@ func (badEvent) EventType() string { return "" }
 func (s *stubExec) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	s.args = args
 	return pgconn.CommandTag{}, nil
+}
+
+type failingExec struct {
+	err error
+}
+
+func (f failingExec) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	if f.err == nil {
+		f.err = errors.New("boom")
+	}
+	return pgconn.CommandTag{}, f.err
 }
 
 func TestNewEnvelope(t *testing.T) {
@@ -118,8 +130,26 @@ func TestWithTimestampOption(t *testing.T) {
 	}
 }
 
+func TestWithTimestampZeroNoOverride(t *testing.T) {
+	target := time.Unix(100, 0).UTC()
+	env, err := newEnvelope("agg", "", MessageReceivedV1{MessageID: "x"}, WithTimestamp(target), WithTimestamp(time.Time{}))
+	if err != nil {
+		t.Fatalf("newEnvelope: %v", err)
+	}
+	if env.TimestampMicros != target.UnixMicro() {
+		t.Fatalf("zero timestamp override should be ignored")
+	}
+}
+
 func TestAppendCanonicalEventRequiresExec(t *testing.T) {
 	if _, err := AppendCanonicalEvent(context.Background(), nil, "agg", "", MessageSentV1{MessageID: "x"}); err == nil {
 		t.Fatal("expected exec error")
+	}
+}
+
+func TestAppendCanonicalEventPropagatesExecError(t *testing.T) {
+	exec := failingExec{}
+	if _, err := AppendCanonicalEvent(context.Background(), exec, "agg", "", MessageSentV1{MessageID: "x"}); err == nil {
+		t.Fatalf("expected exec failure")
 	}
 }
