@@ -3,6 +3,7 @@ package messagingworker
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,9 +49,11 @@ func (f *fakeRetryStore) UpdateMessageStatus(ctx context.Context, providerID, st
 type fakeTelnyxSender struct {
 	resp *telnyxclient.MessageResponse
 	err  error
+	last telnyxclient.SendMessageRequest
 }
 
 func (f *fakeTelnyxSender) SendMessage(ctx context.Context, req telnyxclient.SendMessageRequest) (*telnyxclient.MessageResponse, error) {
+	f.last = req
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -131,4 +134,39 @@ func TestRetrySenderHandlesScheduleError(t *testing.T) {
 func TestRetrySenderDrainWithoutClient(t *testing.T) {
 	sender := NewRetrySender(&fakeRetryStore{}, nil, nil)
 	sender.drain(context.Background())
+}
+
+func TestRetrySenderWithMaxAttempts(t *testing.T) {
+	sender := NewRetrySender(&fakeRetryStore{}, &fakeTelnyxSender{}, nil)
+	sender.WithMaxAttempts(10)
+	if sender.maxAttempts != 10 {
+		t.Fatalf("expected maxAttempts override, got %d", sender.maxAttempts)
+	}
+	sender.WithMaxAttempts(0)
+	if sender.maxAttempts != 10 {
+		t.Fatalf("zero value should not change maxAttempts")
+	}
+}
+
+func TestRetrySenderSendsMediaAndDefaultStatus(t *testing.T) {
+	msgID := uuid.New()
+	store := &fakeRetryStore{
+		messages: []messaging.MessageRecord{{
+			ID:   msgID,
+			From: "+1", To: "+2",
+			Body: "pic", Media: []string{"https://img/1"},
+		}},
+	}
+	telnyx := &fakeTelnyxSender{resp: &telnyxclient.MessageResponse{ID: "resp", Status: ""}}
+	sender := NewRetrySender(store, telnyx, nil)
+	sender.drain(context.Background())
+	if len(store.statusUpdates) != 1 {
+		t.Fatalf("expected status update when telnyx succeeds")
+	}
+	if telnyx.last.MediaURLs == nil || len(telnyx.last.MediaURLs) != 1 {
+		t.Fatalf("expected media to be forwarded, got %#v", telnyx.last.MediaURLs)
+	}
+	if !strings.Contains(store.statusUpdates[0], "queued") {
+		t.Fatalf("empty provider status should default to queued, got %s", store.statusUpdates[0])
+	}
 }
