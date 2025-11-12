@@ -29,6 +29,18 @@ func (f *fakeHostedStore) UpsertHostedOrder(ctx context.Context, q messaging.Que
 	return nil
 }
 
+type fakeHostedStoreUpsertErr struct {
+	orders []messaging.HostedOrderRecord
+}
+
+func (f *fakeHostedStoreUpsertErr) PendingHostedOrders(ctx context.Context, limit int) ([]messaging.HostedOrderRecord, error) {
+	return f.orders, nil
+}
+
+func (f *fakeHostedStoreUpsertErr) UpsertHostedOrder(ctx context.Context, q messaging.Querier, record messaging.HostedOrderRecord) error {
+	return errors.New("update failed")
+}
+
 type fakeHostedClient struct{}
 
 func (fakeHostedClient) GetHostedOrder(ctx context.Context, orderID string) (*telnyxclient.HostedOrder, error) {
@@ -66,6 +78,12 @@ func TestHostedPollerHandlesErrors(t *testing.T) {
 func TestHostedPollerClientErrors(t *testing.T) {
 	store := &fakeHostedStore{orders: []messaging.HostedOrderRecord{{ID: uuid.New(), ClinicID: uuid.New(), ProviderOrderID: "hno_2"}}}
 	poller := NewHostedPoller(store, fakeHostedClientErr{}, nil)
+	poller.drain(context.Background())
+}
+
+func TestHostedPollerUpsertErrorLogged(t *testing.T) {
+	store := &fakeHostedStoreUpsertErr{orders: []messaging.HostedOrderRecord{{ID: uuid.New(), ClinicID: uuid.New(), ProviderOrderID: "hno_3"}}}
+	poller := NewHostedPoller(store, fakeHostedClient{}, nil)
 	poller.drain(context.Background())
 }
 
