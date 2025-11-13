@@ -2,7 +2,6 @@ package conversation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,10 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const (
-	conversationTTL           = 24 * time.Hour
-	defaultOpenAISystemPrompt = "You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa. Keep responses short, actionable, and compliant with HIPAA. Never invent medical advice. Guide leads toward booking by clarifying needs, suggesting available services, and offering to reserve time with a provider."
-)
+const defaultOpenAISystemPrompt = "You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa. Keep responses short, actionable, and compliant with HIPAA. Never invent medical advice. Guide leads toward booking by clarifying needs, suggesting available services, and offering to reserve time with a provider."
 
 var gptTracer = otel.Tracer("medspa.internal.conversation.gpt")
 
@@ -29,11 +25,11 @@ type chatClient interface {
 
 // GPTService produces conversation responses using OpenAI and stores context in Redis.
 type GPTService struct {
-	client chatClient
-	redis  *redis.Client
-	rag    RAGRetriever
-	model  string
-	logger *logging.Logger
+	client  chatClient
+	rag     RAGRetriever
+	model   string
+	logger  *logging.Logger
+	history *historyStore
 }
 
 // NewGPTService returns a GPT-backed Service implementation.
@@ -52,11 +48,11 @@ func NewGPTService(client chatClient, redisClient *redis.Client, rag RAGRetrieve
 	}
 
 	return &GPTService{
-		client: client,
-		redis:  redisClient,
-		rag:    rag,
-		model:  model,
-		logger: logger,
+		client:  client,
+		rag:     rag,
+		model:   model,
+		logger:  logger,
+		history: newHistoryStore(redisClient, gptTracer),
 	}
 }
 
@@ -98,7 +94,7 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 		Content: reply,
 	})
 
-	if err := s.saveHistory(ctx, conversationID, history); err != nil {
+	if err := s.history.Save(ctx, conversationID, history); err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
@@ -124,7 +120,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		attribute.String("medspa.channel", string(req.Channel)),
 	)
 
-	history, err := s.loadHistory(ctx, req.ConversationID)
+	history, err := s.history.Load(ctx, req.ConversationID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -145,7 +141,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		Content: reply,
 	})
 
-	if err := s.saveHistory(ctx, req.ConversationID, history); err != nil {
+	if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
@@ -186,45 +182,6 @@ func (s *GPTService) generateResponse(ctx context.Context, history []openai.Chat
 	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }
 
-func (s *GPTService) saveHistory(ctx context.Context, conversationID string, history []openai.ChatCompletionMessage) error {
-	ctx, span := gptTracer.Start(ctx, "conversation.save_history")
-	defer span.End()
-
-	data, err := json.Marshal(history)
-	if err != nil {
-		span.RecordError(err)
-		return fmt.Errorf("conversation: failed to marshal history: %w", err)
-	}
-	if err := s.redis.Set(ctx, conversationKey(conversationID), data, conversationTTL).Err(); err != nil {
-		span.RecordError(err)
-		return fmt.Errorf("conversation: failed to persist history: %w", err)
-	}
-	return nil
-}
-
-func (s *GPTService) loadHistory(ctx context.Context, conversationID string) ([]openai.ChatCompletionMessage, error) {
-	ctx, span := gptTracer.Start(ctx, "conversation.load_history")
-	defer span.End()
-
-	data, err := s.redis.Get(ctx, conversationKey(conversationID)).Bytes()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			err = fmt.Errorf("conversation: unknown conversation %s", conversationID)
-			span.RecordError(err)
-			return nil, err
-		}
-		span.RecordError(err)
-		return nil, fmt.Errorf("conversation: failed to load history: %w", err)
-	}
-
-	var history []openai.ChatCompletionMessage
-	if err := json.Unmarshal(data, &history); err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("conversation: failed to decode history: %w", err)
-	}
-	return history, nil
-}
-
 func formatIntroMessage(req StartRequest, conversationID string) string {
 	builder := strings.Builder{}
 	builder.WriteString("Lead introduction:\n")
@@ -255,10 +212,6 @@ func formatIntroMessage(req StartRequest, conversationID string) string {
 	}
 	builder.WriteString(fmt.Sprintf("Message: %s", req.Intro))
 	return builder.String()
-}
-
-func conversationKey(id string) string {
-	return fmt.Sprintf("conversation:%s", id)
 }
 
 func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, clinicID, query string) []openai.ChatCompletionMessage {

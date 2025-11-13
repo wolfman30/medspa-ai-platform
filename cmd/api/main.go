@@ -24,6 +24,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
+	"github.com/wolfman30/medspa-ai-platform/internal/langchain"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
@@ -158,22 +159,35 @@ func main() {
 	}
 
 	var knowledgeRepo conversation.KnowledgeRepository
-	var ragStore *conversation.MemoryRAGStore
-	if cfg.OpenAIAPIKey != "" && cfg.OpenAIEmbeddingModel != "" {
-		openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
-		if cfg.OpenAIBaseURL != "" {
-			openaiCfg.BaseURL = cfg.OpenAIBaseURL
-		}
-		openaiClient := openai.NewClientWithConfig(openaiCfg)
-
+	var ragIngestor conversation.RAGIngestor
+	if cfg.RedisAddr != "" && (cfg.OpenAIEmbeddingModel != "" || cfg.LangChainBaseURL != "") {
 		redisClient := redis.NewClient(&redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
 		})
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
-		ragStore = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
+
+		if cfg.LangChainBaseURL != "" {
+			client, err := langchain.NewClient(langchain.Config{
+				BaseURL: cfg.LangChainBaseURL,
+				APIKey:  cfg.LangChainAPIKey,
+				Timeout: cfg.LangChainTimeout,
+			})
+			if err != nil {
+				logger.Error("failed to initialize langchain client", "error", err)
+				os.Exit(1)
+			}
+			ragIngestor = conversation.NewLangChainIngestor(client)
+		} else if cfg.OpenAIAPIKey != "" && cfg.OpenAIEmbeddingModel != "" {
+			openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
+			if cfg.OpenAIBaseURL != "" {
+				openaiCfg.BaseURL = cfg.OpenAIBaseURL
+			}
+			openaiClient := openai.NewClientWithConfig(openaiCfg)
+			ragIngestor = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
+		}
 	}
-	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, knowledgeRepo, ragStore, logger)
+	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, knowledgeRepo, ragIngestor, logger)
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler

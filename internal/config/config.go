@@ -46,6 +46,9 @@ type Config struct {
 	OpenAIModel              string
 	OpenAIBaseURL            string
 	OpenAIEmbeddingModel     string
+	LangChainBaseURL         string
+	LangChainAPIKey          string
+	LangChainTimeout         time.Duration
 	RedisAddr                string
 	RedisPassword            string
 }
@@ -91,6 +94,9 @@ func Load() *Config {
 		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", ""),
 		OpenAIEmbeddingModel:     getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+		LangChainBaseURL:         getEnv("LANGCHAIN_BASE_URL", ""),
+		LangChainAPIKey:          getEnv("LANGCHAIN_API_KEY", ""),
+		LangChainTimeout:         getEnvAsDuration("LANGCHAIN_TIMEOUT", 8*time.Second),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:            getEnv("REDIS_PASSWORD", ""),
 	}

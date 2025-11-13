@@ -17,6 +17,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/langchain"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -100,8 +101,8 @@ func main() {
 }
 
 func buildConversationService(cfg *appconfig.Config, logger *logging.Logger) conversation.Service {
-	if cfg.OpenAIAPIKey == "" {
-		logger.Warn("OPENAI_API_KEY missing; using stub conversation service")
+	if cfg.LangChainBaseURL == "" && cfg.OpenAIAPIKey == "" {
+		logger.Warn("no conversation engine configured; using stub conversation service")
 		return conversation.NewStubService()
 	}
 
@@ -109,6 +110,29 @@ func buildConversationService(cfg *appconfig.Config, logger *logging.Logger) con
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
 	})
+	knowledgeRepo := conversation.NewRedisKnowledgeRepository(redisClient)
+	ctx := context.Background()
+	if err := ensureDefaultKnowledge(ctx, knowledgeRepo); err != nil {
+		logger.Warn("failed to seed default RAG context", "error", err)
+	}
+
+	if cfg.LangChainBaseURL != "" {
+		client, err := langchain.NewClient(langchain.Config{
+			BaseURL: cfg.LangChainBaseURL,
+			APIKey:  cfg.LangChainAPIKey,
+			Timeout: cfg.LangChainTimeout,
+		})
+		if err != nil {
+			logger.Error("failed to configure langchain client", "error", err)
+			os.Exit(1)
+		}
+		ingestor := conversation.NewLangChainIngestor(client)
+		if err := hydrateRAGFromRedis(ctx, knowledgeRepo, ingestor, logger); err != nil {
+			logger.Warn("failed to sync knowledge to langchain", "error", err)
+		}
+		logger.Info("using LangChain conversation service", "endpoint", cfg.LangChainBaseURL)
+		return conversation.NewLangChainService(client, redisClient, logger)
+	}
 
 	openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
 	if cfg.OpenAIBaseURL != "" {
@@ -119,12 +143,7 @@ func buildConversationService(cfg *appconfig.Config, logger *logging.Logger) con
 	var rag conversation.RAGRetriever
 	if cfg.OpenAIEmbeddingModel != "" {
 		ragStore := conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
-		repo := conversation.NewRedisKnowledgeRepository(redisClient)
-		ctx := context.Background()
-		if err := ensureDefaultKnowledge(ctx, repo); err != nil {
-			logger.Warn("failed to seed default RAG context", "error", err)
-		}
-		if err := hydrateRAGFromRedis(ctx, repo, ragStore, logger); err != nil {
+		if err := hydrateRAGFromRedis(ctx, knowledgeRepo, ragStore, logger); err != nil {
 			logger.Warn("failed to hydrate RAG store", "error", err)
 		}
 		rag = ragStore
@@ -150,7 +169,10 @@ func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowled
 	return repo.AppendDocuments(ctx, "", docs)
 }
 
-func hydrateRAGFromRedis(ctx context.Context, repo conversation.KnowledgeRepository, rag *conversation.MemoryRAGStore, logger *logging.Logger) error {
+func hydrateRAGFromRedis(ctx context.Context, repo conversation.KnowledgeRepository, rag conversation.RAGIngestor, logger *logging.Logger) error {
+	if rag == nil {
+		return nil
+	}
 	docsByClinic, err := repo.LoadAll(ctx)
 	if err != nil {
 		return err

@@ -13,7 +13,7 @@
 | Telnyx hosted messaging + STOP/HELP compliance | ✅ Done | Admin APIs, webhooks, hosted-order lifecycle, retry/metrics live |
 | Messaging ACL → AI queue bridge | ✅ Done (this change) | Telnyx inbound events now enqueue deterministic conversation jobs with metadata |
 | GPT-5-mini conversation worker (Redis context) | ⚙️ Running | Conversation worker + MemoryRAG already handle Twilio pilot traffic |
-| LangChain orchestration + Astra DB vector store | 🚧 Next up | MemoryRAGStore stubbed; need managed vector DB + LangChain toolchain wiring |
+| LangChain orchestration + Astra DB vector store | ⚙️ Running | FastAPI LangChain orchestrator writes to Astra vectors + streams replies via worker |
 | EMR adapters + Square deposit loop | 🚧 In progress | API clients exist; still need slot writeback + deposit reconciliation worker |
 | Reminder scheduler (T‑24h/T‑6h/T‑1h SMS) | 🚧 Pending | Requires new worker + template set + Telnyx send service |
 
@@ -140,10 +140,10 @@ graph TB
   - Redis (AWS ElastiCache) for rolling context
 
 [Knowledge & RAG]
-  - Knowledge intake UI → Redis knowledge repo
-  - Embedding service (OpenAI text-embedding-3-small)
-  - Vector DB (DataStax Astra DB w/ vector search)
-  - Retrieval wiring feeding LangChain prompts
+  - Knowledge intake UI → Redis knowledge repo → LangChain `/v1/knowledge` ingest
+  - LangChain orchestrator (FastAPI) calling OpenAI + Astra DB vector store
+  - Vector DB (DataStax Astra DB w/ clinic + global partitions)
+  - Retrieval wiring feeding LangChain prompts (Go worker sends history via `/v1/conversations/respond`)
 
 [Booking + Payments]
   - EMR adapters (Boulevard, Aesthetic Record, PatientNow)
