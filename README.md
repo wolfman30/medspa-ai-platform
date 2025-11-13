@@ -19,6 +19,7 @@ medspa-ai-platform/
 │   └── payments/            # Payment processing
 ├── pkg/
 │   └── logging/             # Shared logging utilities
+├── orchestrator/            # LangChain + Astra DB FastAPI service
 ├── infra/
 │   └── terraform/           # Infrastructure as code
 └── .github/
@@ -61,6 +62,15 @@ medspa-ai-platform/
    ```bash
    task run
    ```
+
+6. (Optional) Run the LangChain orchestrator service for RAG + response generation:
+   ```bash
+   cd orchestrator
+   python -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   uvicorn app:app --reload --port 8081
+   ```
+   See `orchestrator/README.md` for env vars and Astra DB setup.
 
 ### Running with Docker + LocalStack
 
