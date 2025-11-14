@@ -1,4 +1,4 @@
-package config
+﻿package config
 
 import (
 	"os"
@@ -11,6 +11,8 @@ type Config struct {
 	Port                     string
 	Env                      string
 	LogLevel                 string
+	UseMemoryQueue           bool
+	WorkerCount              int
 	DatabaseURL              string
 	TelnyxAPIKey             string
 	TelnyxMessagingProfileID string
@@ -46,9 +48,6 @@ type Config struct {
 	OpenAIModel              string
 	OpenAIBaseURL            string
 	OpenAIEmbeddingModel     string
-	LangChainBaseURL         string
-	LangChainAPIKey          string
-	LangChainTimeout         time.Duration
 	RedisAddr                string
 	RedisPassword            string
 }
@@ -59,6 +58,8 @@ func Load() *Config {
 		Port:                     getEnv("PORT", "8080"),
 		Env:                      getEnv("ENV", "development"),
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
+		UseMemoryQueue:           getEnvAsBool("USE_MEMORY_QUEUE", false),
+		WorkerCount:              getEnvAsInt("WORKER_COUNT", 2),
 		DatabaseURL:              getEnv("DATABASE_URL", ""),
 		TelnyxAPIKey:             getEnv("TELNYX_API_KEY", ""),
 		TelnyxMessagingProfileID: getEnv("TELNYX_MESSAGING_PROFILE_ID", ""),
@@ -94,9 +95,6 @@ func Load() *Config {
 		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", ""),
 		OpenAIEmbeddingModel:     getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
-		LangChainBaseURL:         getEnv("LANGCHAIN_BASE_URL", ""),
-		LangChainAPIKey:          getEnv("LANGCHAIN_API_KEY", ""),
-		LangChainTimeout:         getEnvAsDuration("LANGCHAIN_TIMEOUT", 8*time.Second),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:            getEnv("REDIS_PASSWORD", ""),
 	}

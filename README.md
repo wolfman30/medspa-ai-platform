@@ -19,7 +19,6 @@ medspa-ai-platform/
 │   └── payments/            # Payment processing
 ├── pkg/
 │   └── logging/             # Shared logging utilities
-├── orchestrator/            # LangChain + Astra DB FastAPI service
 ├── infra/
 │   └── terraform/           # Infrastructure as code
 └── .github/
@@ -63,15 +62,6 @@ medspa-ai-platform/
    task run
    ```
 
-6. (Optional) Run the LangChain orchestrator service for RAG + response generation:
-   ```bash
-   cd orchestrator
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   uvicorn app:app --reload --port 8081
-   ```
-   See `orchestrator/README.md` for env vars and Astra DB setup.
-
 ### Running with Docker + LocalStack
 
 For full integration testing (API + Postgres + Redis + mocked AWS services), use Docker Compose:
@@ -89,6 +79,10 @@ This starts:
 - LocalStack (port 4566) emulating Secrets Manager/SQS/SNS/Lambda/CloudWatch Logs
 
 Shut everything down with `docker compose down -v` (or `task docker-down`). When using LocalStack, point AWS SDK clients at `AWS_ENDPOINT_URL=http://localstack:4566` and use the dummy credentials already present in `.env.example`.
+
+### Bootstrap Deployment (Lightsail + Neon)
+
+For the low-cost deployment described in the bootstrap plan, use `docker-compose.bootstrap.yml` and follow `docs/BOOTSTRAP_DEPLOYMENT.md`. This runs the API and workers in a single container with `USE_MEMORY_QUEUE=true`, connects to Neon Postgres, and talks to a Redis instance installed on the host.
 
 ### Available Tasks
 

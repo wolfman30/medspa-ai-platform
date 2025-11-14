@@ -13,7 +13,7 @@
 | Telnyx hosted messaging + STOP/HELP compliance | ✅ Done | Admin APIs, webhooks, hosted-order lifecycle, retry/metrics live |
 | Messaging ACL → AI queue bridge | ✅ Done (this change) | Telnyx inbound events now enqueue deterministic conversation jobs with metadata |
 | GPT-5-mini conversation worker (Redis context) | ⚙️ Running | Conversation worker + MemoryRAG already handle Twilio pilot traffic |
-| LangChain orchestration + Astra DB vector store | ⚙️ Running | FastAPI LangChain orchestrator writes to Astra vectors + streams replies via worker |
+| Redis MemoryRAG + GPT (LangChain retired) | ✅ Done | Workers call OpenAI directly with Redis-backed context; the Python orchestrator has been removed in bootstrap mode |
 | EMR adapters + Square deposit loop | 🚧 In progress | API clients exist; still need slot writeback + deposit reconciliation worker |
 | Reminder scheduler (T‑24h/T‑6h/T‑1h SMS) | 🚧 Pending | Requires new worker + template set + Telnyx send service |
 
@@ -134,16 +134,14 @@ graph TB
   - Messaging store (AWS RDS Postgres)
 
 [AI Conversation Core]
-  - SQS conversation queue + Dynamo job tracker
-  - GPT worker (Go) calling ChatGPT-5-mini
-  - LangChain orchestrator (Python tool runner)
-  - Redis (AWS ElastiCache) for rolling context
+  - In-memory queue (bootstrap) or SQS + Dynamo job tracker (scale)
+  - GPT worker (Go) calling GPT-4o-mini directly
+  - Redis (local/ElastiCache) for rolling context
 
 [Knowledge & RAG]
-  - Knowledge intake UI → Redis knowledge repo → LangChain `/v1/knowledge` ingest
-  - LangChain orchestrator (FastAPI) calling OpenAI + Astra DB vector store
-  - Vector DB (DataStax Astra DB w/ clinic + global partitions)
-  - Retrieval wiring feeding LangChain prompts (Go worker sends history via `/v1/conversations/respond`)
+  - Knowledge intake UI + Redis knowledge repo + Go-based MemoryRAG store
+  - Embeddings generated via OpenAI + stored per clinic inside Redis
+  - Retrieval wiring feeds the last snippets directly into GPT prompts
 
 [Booking + Payments]
   - EMR adapters (Boulevard, Aesthetic Record, PatientNow)
@@ -163,7 +161,7 @@ graph TB
 **Primary managed services**
 - Router: `chi` (Go 1.24.9)
 - Data: AWS RDS Postgres, AWS ElastiCache Redis, DataStax Astra DB (vector store)
-- AI: ChatGPT-5-mini via LangChain orchestration, MemoryRAG fallback, Astra DB vectors
+- AI: ChatGPT-4o-mini via direct API calls with Redis MemoryRAG fallback (LangChain removed)
 - Messaging: Telnyx Hosted SMS/MMS + delivery receipts
 - Async: Amazon SQS for conversations + reminders
 
@@ -370,9 +368,9 @@ roi = total_monthly_impact / platform_cost
 - **Temporal / worker pool (Go)** - Async EMR sync + reconciliation
 
 ### **AI/NLP**
-- **OpenAI GPT-5** - Conversational engine
-- **Langchain** - Conversation memory management
-- **Embeddings DB** - Service knowledge base
+- **OpenAI GPT-4o-mini** - Conversational engine (direct Go client)
+- **Redis MemoryRAG** - Conversation memory + knowledge base
+- **Embeddings DB** - Redis-backed snippets seeded per clinic
 
 ### **Infrastructure**
 - **AWS ECS/Fargate** - Always-on API + worker services
@@ -490,3 +488,5 @@ curl -X POST http://localhost:8000/conversations/start \
 ---
 
 *Version: 3.0.0 | Focus: Lean, AI-First, Revenue-Driven | Last Updated: 2025-01-27*
+
+

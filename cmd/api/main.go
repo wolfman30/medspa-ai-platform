@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -20,11 +20,12 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
+	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
+	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
-	"github.com/wolfman30/medspa-ai-platform/internal/langchain"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
@@ -82,17 +83,37 @@ func main() {
 	if dbPool != nil {
 		msgStore = messaging.NewStore(dbPool)
 	}
-	awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
-	if err != nil {
-		logger.Error("failed to load AWS config", "error", err)
-		os.Exit(1)
-	}
+	var (
+		conversationPublisher *conversation.Publisher
+		jobRecorder           conversation.JobRecorder
+		jobUpdater            conversation.JobUpdater
+		memoryQueue           *conversation.MemoryQueue
+	)
 
-	sqsClient := sqs.NewFromConfig(awsCfg)
-	conversationQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
-	conversationPublisher := conversation.NewPublisher(conversationQueue, logger)
-	dynamoClient := dynamodb.NewFromConfig(awsCfg)
-	jobStore := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
+	if cfg.UseMemoryQueue {
+		if dbPool == nil {
+			logger.Error("USE_MEMORY_QUEUE requires DATABASE_URL for job persistence")
+			os.Exit(1)
+		}
+		memoryQueue = conversation.NewMemoryQueue(1024)
+		pgStore := conversation.NewPGJobStore(dbPool)
+		jobRecorder = pgStore
+		jobUpdater = pgStore
+		conversationPublisher = conversation.NewPublisher(memoryQueue, logger)
+	} else {
+		awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
+		if err != nil {
+			logger.Error("failed to load AWS config", "error", err)
+			os.Exit(1)
+		}
+		sqsClient := sqs.NewFromConfig(awsCfg)
+		sqsQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
+		conversationPublisher = conversation.NewPublisher(sqsQueue, logger)
+		dynamoClient := dynamodb.NewFromConfig(awsCfg)
+		store := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
+		jobRecorder = store
+		jobUpdater = store
+	}
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
@@ -160,34 +181,57 @@ func main() {
 
 	var knowledgeRepo conversation.KnowledgeRepository
 	var ragIngestor conversation.RAGIngestor
-	if cfg.RedisAddr != "" && (cfg.OpenAIEmbeddingModel != "" || cfg.LangChainBaseURL != "") {
+	if cfg.RedisAddr != "" && cfg.OpenAIEmbeddingModel != "" && cfg.OpenAIAPIKey != "" {
 		redisClient := redis.NewClient(&redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
 		})
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
 
-		if cfg.LangChainBaseURL != "" {
-			client, err := langchain.NewClient(langchain.Config{
-				BaseURL: cfg.LangChainBaseURL,
-				APIKey:  cfg.LangChainAPIKey,
-				Timeout: cfg.LangChainTimeout,
-			})
-			if err != nil {
-				logger.Error("failed to initialize langchain client", "error", err)
-				os.Exit(1)
-			}
-			ragIngestor = conversation.NewLangChainIngestor(client)
-		} else if cfg.OpenAIAPIKey != "" && cfg.OpenAIEmbeddingModel != "" {
-			openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
-			if cfg.OpenAIBaseURL != "" {
-				openaiCfg.BaseURL = cfg.OpenAIBaseURL
-			}
-			openaiClient := openai.NewClientWithConfig(openaiCfg)
-			ragIngestor = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
+		openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
+		if cfg.OpenAIBaseURL != "" {
+			openaiCfg.BaseURL = cfg.OpenAIBaseURL
 		}
+		openaiClient := openai.NewClientWithConfig(openaiCfg)
+		ragIngestor = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
 	}
-	conversationHandler := conversation.NewHandler(conversationPublisher, jobStore, knowledgeRepo, ragIngestor, logger)
+	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, ragIngestor, logger)
+
+	var inlineWorker *conversation.Worker
+	if cfg.UseMemoryQueue {
+		processor, err := appbootstrap.BuildConversationService(appCtx, cfg, logger)
+		if err != nil {
+			logger.Error("failed to configure inline conversation service", "error", err)
+			os.Exit(1)
+		}
+
+		var messenger conversation.ReplyMessenger
+		if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
+			messenger = messaging.NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger)
+		} else {
+			logger.Warn("twilio credentials missing; SMS replies disabled for inline workers")
+		}
+
+		var bookingBridge conversation.BookingServiceAdapter
+		if dbPool != nil {
+			repo := bookings.NewRepository(dbPool)
+			bookingBridge = conversation.BookingServiceAdapter{
+				Service: bookings.NewService(repo, logger),
+			}
+		}
+
+		inlineWorker = conversation.NewWorker(
+			processor,
+			memoryQueue,
+			jobUpdater,
+			messenger,
+			bookingBridge,
+			logger,
+			conversation.WithWorkerCount(cfg.WorkerCount),
+		)
+		inlineWorker.Start(appCtx)
+		logger.Info("inline conversation workers started", "count", cfg.WorkerCount)
+	}
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
@@ -253,6 +297,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
+	stop()
 	logger.Info("shutting down server...")
 
 	// Graceful shutdown with timeout
@@ -262,6 +307,23 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("server forced to shutdown", "error", err)
 		os.Exit(1)
+	}
+
+	if inlineWorker != nil {
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer waitCancel()
+		done := make(chan struct{})
+		go func() {
+			inlineWorker.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			logger.Info("inline conversation workers stopped")
+		case <-waitCtx.Done():
+			logger.Warn("inline conversation workers shutdown timed out", "error", waitCtx.Err())
+		}
 	}
 
 	logger.Info("server stopped")
