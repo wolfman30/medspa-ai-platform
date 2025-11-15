@@ -45,6 +45,11 @@ func main() {
 		"env", cfg.Env,
 		"port", cfg.Port,
 	)
+	logger.Debug("telnyx config loaded",
+		"has_api_key", cfg.TelnyxAPIKey != "",
+		"has_profile_id", cfg.TelnyxMessagingProfileID != "",
+		"has_webhook_secret", cfg.TelnyxWebhookSecret != "",
+	)
 
 	registry := prometheus.NewRegistry()
 	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
@@ -131,6 +136,7 @@ func main() {
 
 	var telnyxClient *telnyxclient.Client
 	if cfg.TelnyxAPIKey != "" {
+		logger.Debug("creating telnyx client", "profile_id", cfg.TelnyxMessagingProfileID)
 		client, err := telnyxclient.New(telnyxclient.Config{
 			APIKey:        cfg.TelnyxAPIKey,
 			WebhookSecret: cfg.TelnyxWebhookSecret,
@@ -142,6 +148,9 @@ func main() {
 			os.Exit(1)
 		}
 		telnyxClient = client
+		logger.Debug("telnyx client created successfully")
+	} else {
+		logger.Debug("telnyx client not created: API key empty")
 	}
 
 	var quietHours compliance.QuietHours
@@ -245,7 +254,13 @@ func main() {
 	}
 
 	var telnyxWebhookHandler *handlers.TelnyxWebhookHandler
+	logger.Debug("checking telnyx webhook handler prerequisites",
+		"msgStore", msgStore != nil,
+		"telnyxClient", telnyxClient != nil,
+		"processedStore", processedStore != nil,
+	)
 	if msgStore != nil && telnyxClient != nil && processedStore != nil {
+		logger.Debug("creating telnyx webhook handler")
 		telnyxWebhookHandler = handlers.NewTelnyxWebhookHandler(handlers.TelnyxWebhookConfig{
 			Store:            msgStore,
 			Processed:        processedStore,
@@ -257,6 +272,9 @@ func main() {
 			HelpAck:          cfg.TelnyxHelpReply,
 			Metrics:          messagingMetrics,
 		})
+		logger.Info("telnyx webhook handler initialized", "profile_id", cfg.TelnyxMessagingProfileID)
+	} else {
+		logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
 	}
 
 	// Setup router

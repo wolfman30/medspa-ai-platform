@@ -30,7 +30,28 @@ func TestNewLevels(t *testing.T) {
 
 func TestDefaultLogger(t *testing.T) {
 	logger := Default()
-	if logger == nil {
-		t.Fatal("expected default logger")
+
+	// Test 1: Verify the logger is functional by actually using it
+	// (Won't panic if properly initialized)
+	logger.Info("test message", "key", "value")
+
+	// Test 2: Verify the default level is "info"
+	ctx := context.Background()
+	if !logger.Enabled(ctx, slog.LevelInfo) {
+		t.Error("Default() should enable info level")
+	}
+	if logger.Enabled(ctx, slog.LevelDebug) {
+		t.Error("Default() should not enable debug level (info is higher)")
+	}
+
+	// Test 3: Verify the underlying slog.Logger is properly initialized
+	if logger.Logger == nil {
+		t.Fatal("Default() returned Logger with nil slog.Logger (should be impossible)")
+	}
+
+	// Test 4: Verify Default() returns a new instance each time (not a singleton)
+	logger2 := Default()
+	if logger == logger2 {
+		t.Error("Default() returned the same instance twice - expected new instances")
 	}
 }

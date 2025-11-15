@@ -61,5 +61,10 @@ terraform.rc
 # Temporary files
 /tmp/
 
+# ngrok files
+ngrok/
+ngrok.zip
+*.ngrok
+
 #Cached python files
 __pycache__/
