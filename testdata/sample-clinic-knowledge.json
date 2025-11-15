@@ -1,0 +1,56 @@
+{
+  "clinic_id": "demo-radiance-medspa",
+  "clinic_name": "Radiance Medical Spa",
+  "documents": [
+    {
+      "title": "Services & Pricing - Injectables",
+      "category": "services",
+      "content": "BOTOX COSMETIC:\n- Price: $12 per unit\n- Typical areas require 20-50 units\n- Common treatment areas: Forehead lines (10-30 units), Frown lines (10-25 units), Crow's feet (5-15 units per side)\n- Results last 3-4 months\n- Treatment time: 10-15 minutes\n- No downtime required\n\nDERMAL FILLERS:\n- Juvederm: $650 per syringe\n- Restylane: $650 per syringe\n- Sculptra: $850 per vial\n- Common areas: Lips (1-2 syringes), Cheeks (2-3 syringes), Nasolabial folds (1-2 syringes)\n- Results last 6-18 months depending on product\n- Treatment time: 30-45 minutes\n\nLIP FILLER:\n- Price: $650 per syringe\n- Most clients need 1 syringe for subtle enhancement, 2 for dramatic results\n- Includes numbing for comfort\n- Results immediate, last 6-12 months"
+    },
+    {
+      "title": "Services & Pricing - Skin Treatments",
+      "category": "services",
+      "content": "LASER HAIR REMOVAL:\n- Small area (upper lip, chin): $75 per session\n- Medium area (underarms, bikini): $150 per session\n- Large area (legs, back): $300 per session\n- Package of 6 sessions: 15% discount\n- Results typically require 6-8 sessions\n- Sessions spaced 4-6 weeks apart\n\nCHEMICAL PEELS:\n- Light peel: $150\n- Medium peel: $250\n- Deep peel: $400\n- Treats fine lines, sun damage, acne scars, uneven tone\n- Downtime: 3-7 days depending on depth\n\nMICRONEEDLING:\n- Face: $350 per session\n- Face + Neck: $450 per session\n- Series of 3: $900 (save $150)\n- Improves texture, scars, fine lines, and pores\n- Results improve over 3-6 months\n- Minimal downtime (1-2 days redness)\n\nHYDRAFACIAL:\n- Signature HydraFacial: $199\n- Deluxe (includes booster): $250\n- Platinum (includes LED therapy): $325\n- No downtime, immediate glow\n- Recommended monthly for best results"
+    },
+    {
+      "title": "Services & Pricing - Body Contouring",
+      "category": "services",
+      "content": "COOLSCULPTING:\n- Small area (chin, arms): $750 per cycle\n- Medium area (abdomen, flanks): $1,200 per cycle\n- Large area (thighs, back): $1,500 per cycle\n- Free consultation to determine number of cycles needed\n- Results appear in 2-3 months\n- Non-invasive, no downtime\n\nEMSCULPT:\n- Abdomen: $3,000 for 4 sessions\n- Buttocks: $3,000 for 4 sessions\n- Arms: $2,000 for 4 sessions\n- Builds muscle and burns fat\n- Each session is 30 minutes\n- Sessions scheduled 2-3 days apart"
+    },
+    {
+      "title": "Booking Policies & Payment",
+      "category": "policies",
+      "content": "DEPOSIT POLICY:\n- New clients: $50 deposit required to secure appointment\n- Returning clients: No deposit required\n- Deposits are refundable and applied to service cost\n- Deposits can be paid via credit card, debit card, or Venmo\n\nCANCELLATION POLICY:\n- Must cancel or reschedule at least 24 hours in advance\n- Cancellations with less than 24 hours notice forfeit deposit\n- No-shows forfeit deposit and may be required to prepay for future appointments\n- We understand emergencies happen - please call us to discuss\n\nPAYMENT OPTIONS:\n- Credit/debit cards accepted (Visa, MasterCard, Amex, Discover)\n- HSA/FSA cards accepted for eligible treatments\n- Financing available through CareCredit and Cherry\n- Payment plans available for treatments over $1,000\n- Cash discount: 5% off for cash payments over $500\n\nFIRST-TIME CLIENT SPECIALS:\n- New clients receive 10% off first Botox or filler treatment\n- Complimentary skin consultation with any facial treatment\n- Refer a friend and both receive $50 credit toward next visit"
+    },
+    {
+      "title": "Provider Information",
+      "category": "providers",
+      "content": "DR. SARAH CHEN, MD\n- Board-certified dermatologist\n- 12 years of experience in aesthetic medicine\n- Specializes in: Botox, fillers, laser treatments, chemical peels\n- Schedule: Monday, Wednesday, Friday 9am-5pm; Saturday 9am-2pm\n- Known for natural-looking results and conservative approach\n\nJESSICA MARTINEZ, NP\n- Nurse Practitioner with 8 years aesthetic experience\n- Certified in advanced injection techniques\n- Specializes in: Lip filler, facial contouring, Botox, PDO threads\n- Schedule: Tuesday, Thursday 10am-7pm; Saturday 10am-4pm\n- Known for artistic eye and ability to enhance natural beauty\n\nAMANDA WILSON, RN\n- Registered Nurse with 6 years in medical aesthetics\n- Certified laser specialist\n- Specializes in: Laser hair removal, HydraFacial, microneedling, chemical peels\n- Schedule: Monday-Friday 9am-6pm\n- Known for gentle technique and making clients feel comfortable"
+    },
+    {
+      "title": "Location, Hours & Contact",
+      "category": "general",
+      "content": "LOCATION:\nRadiance Medical Spa\n123 Beauty Boulevard, Suite 200\nScottsdale, AZ 85251\n\nEasy to find in the Scottsdale Quarter shopping center, next to Starbucks. Free parking available in covered garage (entrance on Main Street).\n\nHOURS:\n- Monday: 9am-6pm\n- Tuesday: 10am-7pm\n- Wednesday: 9am-6pm\n- Thursday: 10am-7pm\n- Friday: 9am-5pm\n- Saturday: 9am-4pm\n- Sunday: Closed\n\nCONTACT:\n- Phone: (480) 555-GLOW (4569)\n- Text: (480) 555-4569 (preferred for quick questions)\n- Email: hello@radiancemedspa.com\n- Instagram: @radiancemedspa\n- Website: www.radiancemedspa.com\n\nPARKING:\n- Free covered parking in Scottsdale Quarter garage\n- Entrance on Main Street between 1st and 2nd Avenue\n- Validate parking at front desk for 3 hours free\n- Handicap accessible entrance on ground floor"
+    },
+    {
+      "title": "Frequently Asked Questions - Botox",
+      "category": "faq",
+      "content": "Q: Does Botox hurt?\nA: Most clients describe it as a small pinch. We use very fine needles and can apply numbing cream if you're sensitive. The entire treatment takes only 10-15 minutes.\n\nQ: When will I see results from Botox?\nA: You'll start seeing results in 3-5 days, with full results visible at 2 weeks. Results typically last 3-4 months.\n\nQ: Will Botox make me look frozen or fake?\nA: Not at all! Our providers are trained in natural-looking results. You'll still have facial expressions, just smoother skin. We can always start conservative and add more at your 2-week follow-up if needed.\n\nQ: What should I avoid after Botox?\nA: Avoid lying down for 4 hours, intense exercise for 24 hours, and rubbing the treated area for 24 hours. You can return to normal activities immediately otherwise.\n\nQ: How much does Botox cost?\nA: Botox is $12 per unit. Most clients need 20-50 units depending on the areas treated. We'll give you an exact quote during your consultation.\n\nQ: Can I get Botox if I'm pregnant or breastfeeding?\nA: We recommend waiting until after pregnancy and breastfeeding to be safe, as there are no studies on Botox during this time."
+    },
+    {
+      "title": "Frequently Asked Questions - Fillers",
+      "category": "faq",
+      "content": "Q: How long do lip fillers last?\nA: Lip fillers typically last 6-12 months depending on the product used and your metabolism. Juvederm and Restylane are our most popular options.\n\nQ: Will lip filler look natural?\nA: Absolutely! We specialize in natural-looking enhancement. Most clients want a subtle improvement, not an overdone look. We can show you before/after photos and discuss your goals.\n\nQ: Does lip filler hurt?\nA: We use numbing cream and our fillers contain lidocaine for comfort. Most clients say it's less painful than they expected. You may feel pressure but minimal pain.\n\nQ: What's the recovery time for fillers?\nA: Most clients have minor swelling for 2-3 days and possibly some bruising. You can go back to work the same day. We recommend avoiding big events for a week to allow swelling to fully resolve.\n\nQ: Can filler be dissolved if I don't like it?\nA: Yes! Hyaluronic acid fillers (like Juvederm and Restylane) can be dissolved with an enzyme injection if needed. This is rare but gives you peace of mind.\n\nQ: How much filler do I need?\nA: This varies by person and goals. For lips, most clients need 1 syringe for subtle enhancement or 2 for more dramatic results. We'll assess your needs during the consultation."
+    },
+    {
+      "title": "Frequently Asked Questions - General",
+      "category": "faq",
+      "content": "Q: Do I need a consultation before booking a treatment?\nA: For most treatments, we can discuss your goals during your first appointment. For complex treatments (like CoolSculpting or Sculptra), we recommend a complimentary consultation first.\n\nQ: Do you offer financing?\nA: Yes! We partner with CareCredit and Cherry for financing options. You can apply online and get approved in minutes. We also offer in-house payment plans for treatments over $1,000.\n\nQ: Are your treatments safe?\nA: Absolutely. All our providers are licensed medical professionals (MD, NP, or RN) with extensive training in aesthetic treatments. We use FDA-approved products and follow strict safety protocols.\n\nQ: How do I prepare for my appointment?\nA: Arrive with a clean face (no makeup for facial treatments). Avoid alcohol and blood thinners (like aspirin or ibuprofen) for 24 hours before injections to minimize bruising. Bring photos of desired results if you have them!\n\nQ: What if I'm not happy with my results?\nA: Your satisfaction is our priority. We offer complimentary follow-up appointments to address any concerns. For injectable treatments, we can add more product or adjust as needed.\n\nQ: Do you see men?\nA: Yes! About 30% of our clients are men. Botox and fillers are increasingly popular for men looking to maintain a youthful, refreshed appearance.\n\nQ: What's your cancellation policy?\nA: Please give us 24 hours notice to cancel or reschedule. New clients have a $50 deposit that is forfeited for late cancellations but applied to your service if you keep your appointment."
+    },
+    {
+      "title": "Special Promotions & Packages",
+      "category": "specials",
+      "content": "CURRENT PROMOTIONS:\n\nNEW CLIENT SPECIAL:\n- 10% off your first Botox or filler treatment\n- Complimentary skin analysis (normally $50)\n- Valid for first-time clients only\n\nMONTHLY MEMBERSHIPS:\n- Diamond Membership: $299/month includes 1 HydraFacial + 10% off all services\n- Platinum Membership: $199/month includes 1 dermaplaning treatment + 10% off products\n- Gold Membership: $99/month includes 15% off all services and products\n\nPACKAGE DEALS:\n- Botox & Filler Combo: Save $100 when booking both same day\n- Laser Hair Removal: Buy 6 sessions, get 7th free\n- Microneedling Series: 3 treatments for $900 (save $150)\n- HydraFacial Maintenance: Prepay for 4 treatments, get 1 free\n\nREFERRAL PROGRAM:\n- Refer a friend and you both get $50 credit\n- No limit on referrals\n- Credit never expires\n\nBIRTHDAY SPECIAL:\n- 20% off any treatment during your birthday month\n- Complimentary gift with visit\n- Must mention birthday when booking\n\nSEASONAL SPECIALS:\n- Check our Instagram @radiancemedspa for monthly flash sales\n- Sign up for our email list for exclusive VIP offers"
+    }
+  ]
+}

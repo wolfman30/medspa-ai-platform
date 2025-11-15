@@ -9,6 +9,7 @@ services:
     env_file:
       - .env
     environment:
+      PORT: "8081"
       USE_MEMORY_QUEUE: "true"
       WORKER_COUNT: ${WORKER_COUNT:-2}
       DATABASE_URL: ${DATABASE_URL}
@@ -27,4 +28,5 @@ services:
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "8081:8081"
