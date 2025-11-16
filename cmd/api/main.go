@@ -215,10 +215,14 @@ func main() {
 		}
 
 		var messenger conversation.ReplyMessenger
-		if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
+		if cfg.TelnyxAPIKey != "" && cfg.TelnyxMessagingProfileID != "" {
+			messenger = messaging.NewTelnyxSender(cfg.TelnyxAPIKey, cfg.TelnyxMessagingProfileID, logger)
+			logger.Info("telnyx sms sender initialized for inline workers")
+		} else if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
 			messenger = messaging.NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger)
+			logger.Info("twilio sms sender initialized for inline workers")
 		} else {
-			logger.Warn("twilio credentials missing; SMS replies disabled for inline workers")
+			logger.Warn("no sms credentials configured; SMS replies disabled for inline workers")
 		}
 
 		var bookingBridge conversation.BookingServiceAdapter
