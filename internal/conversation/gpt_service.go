@@ -130,7 +130,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				ConversationID: req.ConversationID,
 				LeadID:         req.LeadID,
 				ClinicID:       req.ClinicID,
-				Message:        req.Message,
+				Intro:          req.Message,
 				Channel:        req.Channel,
 				From:           req.From,
 				To:             req.To,
