@@ -342,6 +342,7 @@ type telnyxEvent struct {
 }
 
 func parseTelnyxEvent(body []byte) (telnyxEvent, error) {
+	// Try event-driven format first (with data wrapper)
 	var wrapper struct {
 		Data struct {
 			ID         string          `json:"id"`
@@ -350,14 +351,39 @@ func parseTelnyxEvent(body []byte) (telnyxEvent, error) {
 			Payload    json.RawMessage `json:"payload"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &wrapper); err != nil {
+	if err := json.Unmarshal(body, &wrapper); err == nil && wrapper.Data.ID != "" {
+		return telnyxEvent{
+			ID:         wrapper.Data.ID,
+			EventType:  wrapper.Data.EventType,
+			OccurredAt: wrapper.Data.OccurredAt,
+			Payload:    wrapper.Data.Payload,
+		}, nil
+	}
+
+	// Try message record format (no wrapper)
+	var record struct {
+		ID         string    `json:"id"`
+		RecordType string    `json:"record_type"`
+		ReceivedAt time.Time `json:"received_at"`
+		Direction  string    `json:"direction"`
+	}
+	if err := json.Unmarshal(body, &record); err != nil {
 		return telnyxEvent{}, err
 	}
+
+	// Convert to event format
+	eventType := ""
+	if record.RecordType == "message" && record.Direction == "inbound" {
+		eventType = "message.received"
+	} else if record.RecordType == "message" && record.Direction == "outbound" {
+		eventType = "message.delivery_status"
+	}
+
 	return telnyxEvent{
-		ID:         wrapper.Data.ID,
-		EventType:  wrapper.Data.EventType,
-		OccurredAt: wrapper.Data.OccurredAt,
-		Payload:    wrapper.Data.Payload,
+		ID:         record.ID,
+		EventType:  eventType,
+		OccurredAt: record.ReceivedAt,
+		Payload:    body, // Use the whole body as payload
 	}, nil
 }
 
