@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -57,11 +57,30 @@ func main() {
 		logger.Error("failed to configure conversation service", "error", err)
 		os.Exit(1)
 	}
-	var messenger conversation.ReplyMessenger
-	if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
-		messenger = messaging.NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger)
+	var (
+		messenger         conversation.ReplyMessenger
+		messengerProvider string
+		messengerReason   string
+	)
+	messengerCfg := messaging.ProviderSelectionConfig{
+		Preference:       cfg.SMSProvider,
+		TelnyxAPIKey:     cfg.TelnyxAPIKey,
+		TelnyxProfileID:  cfg.TelnyxMessagingProfileID,
+		TwilioAccountSID: cfg.TwilioAccountSID,
+		TwilioAuthToken:  cfg.TwilioAuthToken,
+		TwilioFromNumber: cfg.TwilioFromNumber,
+	}
+	messenger, messengerProvider, messengerReason = messaging.BuildReplyMessenger(messengerCfg, logger)
+	if messenger != nil {
+		logger.Info("sms messenger initialized for async workers",
+			"provider", messengerProvider,
+			"preference", cfg.SMSProvider,
+		)
 	} else {
-		logger.Warn("twilio credentials missing; SMS replies disabled")
+		logger.Warn("sms replies disabled for async workers",
+			"preference", cfg.SMSProvider,
+			"reason", messengerReason,
+		)
 	}
 
 	var bookingBridge conversation.BookingServiceAdapter

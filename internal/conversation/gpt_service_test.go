@@ -109,21 +109,43 @@ func TestGPTService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
 	}
 }
 
-func TestGPTService_ProcessMessage_UnknownConversation(t *testing.T) {
+func TestGPTService_ProcessMessage_UnknownConversationBootstraps(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	service := NewGPTService(&stubChatClient{}, client, nil, "gpt-5-mini", logging.Default())
+	mockOpenAI := &stubChatClient{
+		response: openai.ChatCompletionResponse{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Content: "Welcome back!"}},
+			},
+		},
+	}
+	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default())
 
-	_, err := service.ProcessMessage(context.Background(), MessageRequest{
+	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
 		ConversationID: "conv_missing",
 		Message:        "hello",
 		Channel:        ChannelSMS,
 		OrgID:          "org-1",
 	})
-	if err == nil || !strings.Contains(err.Error(), "unknown conversation") {
-		t.Fatalf("expected unknown conversation error, got %v", err)
+	if err != nil {
+		t.Fatalf("expected new conversation to start, got error %v", err)
+	}
+	if resp == nil || resp.Message != "Welcome back!" {
+		t.Fatalf("unexpected response: %#v", resp)
+	}
+
+	raw, err := mr.DB(0).Get(conversationKey("conv_missing"))
+	if err != nil {
+		t.Fatalf("expected conversation history to persist: %v", err)
+	}
+	var history []openai.ChatCompletionMessage
+	if err := json.Unmarshal([]byte(raw), &history); err != nil {
+		t.Fatalf("failed to decode history: %v", err)
+	}
+	if got := history[len(history)-1].Content; got != "Welcome back!" {
+		t.Fatalf("expected assistant reply to be stored, got %s", got)
 	}
 }
 

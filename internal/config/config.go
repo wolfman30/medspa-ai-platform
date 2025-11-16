@@ -1,8 +1,9 @@
-﻿package config
+package config
 
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	UseMemoryQueue           bool
 	WorkerCount              int
 	DatabaseURL              string
+	SMSProvider              string
 	TelnyxAPIKey             string
 	TelnyxMessagingProfileID string
 	TelnyxWebhookSecret      string
@@ -61,6 +63,7 @@ func Load() *Config {
 		UseMemoryQueue:           getEnvAsBool("USE_MEMORY_QUEUE", false),
 		WorkerCount:              getEnvAsInt("WORKER_COUNT", 2),
 		DatabaseURL:              getEnv("DATABASE_URL", ""),
+		SMSProvider:              strings.ToLower(strings.TrimSpace(getEnv("SMS_PROVIDER", "auto"))),
 		TelnyxAPIKey:             getEnv("TELNYX_API_KEY", ""),
 		TelnyxMessagingProfileID: getEnv("TELNYX_MESSAGING_PROFILE_ID", ""),
 		TelnyxWebhookSecret:      getEnv("TELNYX_WEBHOOK_SECRET", ""),

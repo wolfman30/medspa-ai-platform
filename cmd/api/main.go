@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -132,7 +132,11 @@ func main() {
 		logger.Warn("TWILIO_ORG_MAP_JSON empty; SMS webhooks will be rejected unless numbers are configured")
 	}
 	resolver := messaging.NewStaticOrgResolver(orgRouting)
-	messagingHandler := messaging.NewHandler(cfg.TwilioWebhookSecret, conversationPublisher, resolver, logger)
+	twilioWebhookSecret := cfg.TwilioWebhookSecret
+	if twilioWebhookSecret == "" {
+		twilioWebhookSecret = cfg.TwilioAuthToken
+	}
+	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, logger)
 
 	var telnyxClient *telnyxclient.Client
 	if cfg.TelnyxAPIKey != "" {
@@ -214,15 +218,30 @@ func main() {
 			os.Exit(1)
 		}
 
-		var messenger conversation.ReplyMessenger
-		if cfg.TelnyxAPIKey != "" && cfg.TelnyxMessagingProfileID != "" {
-			messenger = messaging.NewTelnyxSender(cfg.TelnyxAPIKey, cfg.TelnyxMessagingProfileID, logger)
-			logger.Info("telnyx sms sender initialized for inline workers")
-		} else if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
-			messenger = messaging.NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger)
-			logger.Info("twilio sms sender initialized for inline workers")
+		var (
+			messenger         conversation.ReplyMessenger
+			messengerProvider string
+			messengerReason   string
+		)
+		messengerCfg := messaging.ProviderSelectionConfig{
+			Preference:       cfg.SMSProvider,
+			TelnyxAPIKey:     cfg.TelnyxAPIKey,
+			TelnyxProfileID:  cfg.TelnyxMessagingProfileID,
+			TwilioAccountSID: cfg.TwilioAccountSID,
+			TwilioAuthToken:  cfg.TwilioAuthToken,
+			TwilioFromNumber: cfg.TwilioFromNumber,
+		}
+		messenger, messengerProvider, messengerReason = messaging.BuildReplyMessenger(messengerCfg, logger)
+		if messenger != nil {
+			logger.Info("sms messenger initialized for inline workers",
+				"provider", messengerProvider,
+				"preference", cfg.SMSProvider,
+			)
 		} else {
-			logger.Warn("no sms credentials configured; SMS replies disabled for inline workers")
+			logger.Warn("no sms credentials configured; SMS replies disabled for inline workers",
+				"preference", cfg.SMSProvider,
+				"reason", messengerReason,
+			)
 		}
 
 		var bookingBridge conversation.BookingServiceAdapter

@@ -10,7 +10,9 @@
       "media_urls": [],
       "status": "received",
       "from": { "phone_number": "+15550001111" },
-      "to": { "phone_number": "+15559998888" }
+      "to": [
+        { "phone_number": "+15559998888" }
+      ]
     }
   }
 }
