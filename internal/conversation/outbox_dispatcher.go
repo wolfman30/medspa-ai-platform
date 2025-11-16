@@ -26,8 +26,10 @@ func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry)
 		}
 		req := MessageRequest{
 			ClinicID: evt.ClinicID,
-			UserE164: evt.FromE164,
-			Text:     evt.Body,
+			From:     evt.FromE164,
+			To:       evt.ToE164,
+			Message:  evt.Body,
+			Channel:  ChannelSMS,
 		}
 		return d.publisher.EnqueueMessage(ctx, evt.CorrelationID, req)
 	case "payment_succeeded.v1":
