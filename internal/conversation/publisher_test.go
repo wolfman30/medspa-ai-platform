@@ -10,7 +10,8 @@ import (
 
 func TestPublisher_EnqueueStart(t *testing.T) {
 	queue := &stubQueue{}
-	publisher := NewPublisher(queue, logging.Default())
+	jobs := &stubJobRecorder{}
+	publisher := NewPublisher(queue, jobs, logging.Default())
 
 	jobID := "job-123"
 	if err := publisher.EnqueueStart(context.Background(), jobID, StartRequest{LeadID: "lead-1"}); err != nil {
@@ -40,7 +41,8 @@ func TestPublisher_EnqueueStart(t *testing.T) {
 
 func TestPublisher_WithoutJobTracking(t *testing.T) {
 	queue := &stubQueue{}
-	publisher := NewPublisher(queue, logging.Default())
+	jobs := &stubJobRecorder{}
+	publisher := NewPublisher(queue, jobs, logging.Default())
 
 	if err := publisher.EnqueueMessage(context.Background(), "", MessageRequest{ConversationID: "conv-1"}, WithoutJobTracking()); err != nil {
 		t.Fatalf("enqueue returned error: %v", err)
@@ -70,4 +72,22 @@ func (s *stubQueue) Receive(ctx context.Context, maxMessages int, waitSeconds in
 
 func (s *stubQueue) Delete(ctx context.Context, receiptHandle string) error {
 	return nil
+}
+
+type stubJobRecorder struct {
+	jobs []*JobRecord
+}
+
+func (s *stubJobRecorder) PutPending(ctx context.Context, job *JobRecord) error {
+	s.jobs = append(s.jobs, job)
+	return nil
+}
+
+func (s *stubJobRecorder) GetJob(ctx context.Context, jobID string) (*JobRecord, error) {
+	for _, job := range s.jobs {
+		if job.JobID == jobID {
+			return job, nil
+		}
+	}
+	return nil, ErrJobNotFound
 }
