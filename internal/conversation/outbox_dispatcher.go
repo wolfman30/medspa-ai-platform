@@ -20,9 +20,18 @@ func NewOutboxDispatcher(publisher *Publisher) *OutboxDispatcher {
 func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry) error {
 	switch entry.EventType {
 	case "messaging.message.received.v1":
-		var evt events.MessageReceivedV1
-		if err := json.Unmarshal(entry.Payload, &evt); err != nil {
+		// Unwrap the nested payload structure
+		var wrapper struct {
+			Payload       events.MessageReceivedV1 `json:"payload"`
+			CorrelationID string                   `json:"correlation_id"`
+		}
+		if err := json.Unmarshal(entry.Payload, &wrapper); err != nil {
 			return fmt.Errorf("conversation: decode message event: %w", err)
+		}
+		evt := wrapper.Payload
+		correlationID := wrapper.CorrelationID
+		if correlationID == "" {
+			correlationID = evt.CorrelationID
 		}
 		req := MessageRequest{
 			OrgID:          evt.ClinicID,
@@ -34,7 +43,7 @@ func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry)
 			Message:        evt.Body,
 			Channel:        ChannelSMS,
 		}
-		return d.publisher.EnqueueMessage(ctx, evt.CorrelationID, req)
+		return d.publisher.EnqueueMessage(ctx, correlationID, req)
 	case "payment_succeeded.v1":
 		var evt events.PaymentSucceededV1
 		if err := json.Unmarshal(entry.Payload, &evt); err != nil {
