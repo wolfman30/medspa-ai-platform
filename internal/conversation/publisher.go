@@ -11,19 +11,24 @@ import (
 // Publisher enqueues conversation jobs for asynchronous processing.
 type Publisher struct {
 	queue  queueClient
+	jobs   JobRecorder
 	logger *logging.Logger
 }
 
 // NewPublisher creates a queue-backed publisher.
-func NewPublisher(queue queueClient, logger *logging.Logger) *Publisher {
+func NewPublisher(queue queueClient, jobs JobRecorder, logger *logging.Logger) *Publisher {
 	if queue == nil {
 		panic("conversation: queue cannot be nil")
+	}
+	if jobs == nil {
+		panic("conversation: jobs cannot be nil")
 	}
 	if logger == nil {
 		logger = logging.Default()
 	}
 	return &Publisher{
 		queue:  queue,
+		jobs:   jobs,
 		logger: logger,
 	}
 }
@@ -72,6 +77,24 @@ func (p *Publisher) enqueue(ctx context.Context, payload queuePayload, opts ...P
 	payload, body, err := encodePayload(payload)
 	if err != nil {
 		return err
+	}
+
+	// Create job record in database before sending to queue
+	if payload.TrackStatus {
+		jobRecord := &JobRecord{
+			JobID:       payload.ID,
+			RequestType: payload.Kind,
+		}
+		switch payload.Kind {
+		case jobTypeStart:
+			jobRecord.StartRequest = &payload.Start
+		case jobTypeMessage:
+			jobRecord.MessageRequest = &payload.Message
+		}
+		if err := p.jobs.PutPending(ctx, jobRecord); err != nil {
+			return fmt.Errorf("conversation: failed to create job record: %w", err)
+		}
+		p.logger.Debug("conversation job record created", "job_id", payload.ID, "kind", payload.Kind)
 	}
 
 	if err := p.queue.Send(ctx, body); err != nil {

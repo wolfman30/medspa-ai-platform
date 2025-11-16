@@ -104,7 +104,7 @@ func main() {
 		pgStore := conversation.NewPGJobStore(dbPool)
 		jobRecorder = pgStore
 		jobUpdater = pgStore
-		conversationPublisher = conversation.NewPublisher(memoryQueue, logger)
+		conversationPublisher = conversation.NewPublisher(memoryQueue, pgStore, logger)
 	} else {
 		awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
 		if err != nil {
@@ -113,11 +113,11 @@ func main() {
 		}
 		sqsClient := sqs.NewFromConfig(awsCfg)
 		sqsQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
-		conversationPublisher = conversation.NewPublisher(sqsQueue, logger)
 		dynamoClient := dynamodb.NewFromConfig(awsCfg)
 		store := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
 		jobRecorder = store
 		jobUpdater = store
+		conversationPublisher = conversation.NewPublisher(sqsQueue, store, logger)
 	}
 
 	// Initialize handlers
