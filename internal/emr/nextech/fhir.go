@@ -36,14 +36,14 @@ type FHIRAppointment struct {
 
 // FHIRSlot represents a FHIR Slot resource
 type FHIRSlot struct {
-	ResourceType string          `json:"resourceType"`
-	ID           string          `json:"id"`
-	Schedule     FHIRReference   `json:"schedule"` // Reference to Schedule resource
-	Status       string          `json:"status"`   // free, busy, busy-unavailable, busy-tentative
-	Start        string          `json:"start"`    // RFC3339 datetime
-	End          string          `json:"end"`      // RFC3339 datetime
-	ServiceType  []FHIRCoding    `json:"serviceType,omitempty"`
-	Meta         *FHIRMeta       `json:"meta,omitempty"`
+	ResourceType string        `json:"resourceType"`
+	ID           string        `json:"id"`
+	Schedule     FHIRReference `json:"schedule"` // Reference to Schedule resource
+	Status       string        `json:"status"`   // free, busy, busy-unavailable, busy-tentative
+	Start        string        `json:"start"`    // RFC3339 datetime
+	End          string        `json:"end"`      // RFC3339 datetime
+	ServiceType  []FHIRCoding  `json:"serviceType,omitempty"`
+	Meta         *FHIRMeta     `json:"meta,omitempty"`
 }
 
 // FHIRPatient represents a FHIR Patient resource
@@ -51,7 +51,7 @@ type FHIRPatient struct {
 	ResourceType string             `json:"resourceType"`
 	ID           string             `json:"id,omitempty"`
 	Name         []FHIRHumanName    `json:"name"`
-	Gender       string             `json:"gender,omitempty"` // male, female, other, unknown
+	Gender       string             `json:"gender,omitempty"`    // male, female, other, unknown
 	BirthDate    string             `json:"birthDate,omitempty"` // YYYY-MM-DD
 	Telecom      []FHIRContactPoint `json:"telecom,omitempty"`
 	Address      []FHIRAddress      `json:"address,omitempty"`

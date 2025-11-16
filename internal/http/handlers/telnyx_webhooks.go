@@ -88,12 +88,11 @@ func (h *TelnyxWebhookHandler) HandleMessages(w http.ResponseWriter, r *http.Req
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	// TODO: Fix Telnyx V2 public key signature verification
-	// Temporarily disabled for testing
-	// if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
-	// 	http.Error(w, "invalid signature", http.StatusUnauthorized)
-	// 	return
-	// }
+	if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
+		h.logger.Warn("invalid telnyx webhook signature", "error", err)
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
+	}
 	evt, err := parseTelnyxEvent(body)
 	if err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -146,12 +145,11 @@ func (h *TelnyxWebhookHandler) HandleHosted(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	// TODO: Fix Telnyx V2 public key signature verification
-	// Temporarily disabled for testing
-	// if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
-	// 	http.Error(w, "invalid signature", http.StatusUnauthorized)
-	// 	return
-	// }
+	if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
+		h.logger.Warn("invalid telnyx hosted signature", "error", err)
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
+	}
 	evt, err := parseTelnyxEvent(body)
 	if err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)

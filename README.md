@@ -99,12 +99,13 @@ Run `task --list` to see all available tasks:
 - `PORT` - HTTP server port (default: 8080)
 - `ENV` - Environment name (development, staging, production)
 - `LOG_LEVEL` - Logging level (debug, info, warn, error)
+- `SMS_PROVIDER` - `auto` (default), `telnyx`, or `twilio`; forces which outbound SMS provider workers should use when multiple credentials exist
 - `DATABASE_URL` - PostgreSQL connection string
 - `TELNYX_API_KEY` / `TELNYX_MESSAGING_PROFILE_ID` / `TELNYX_WEBHOOK_SECRET` - Telnyx Hosted Messaging creds
 - `TELNYX_STOP_REPLY` / `TELNYX_HELP_REPLY` - Templates for STOP/HELP autoresponses
 - `TELNYX_RETRY_MAX_ATTEMPTS` / `TELNYX_RETRY_BASE_DELAY` - Retry policy for the messaging worker
 - `TELNYX_HOSTED_POLL_INTERVAL` - Poll cadence for hosted number orders
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_SECRET` - Existing Twilio integration (legacy inbound)
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_SECRET` - Existing Twilio integration (legacy inbound); leave `TWILIO_WEBHOOK_SECRET` empty to reuse the Auth Token for webhook validation
 - `PAYMENT_PROVIDER_KEY` - Payment provider API key
 
 ### Architecture Reference
@@ -147,6 +148,8 @@ GitHub Actions automatically:
 - `POST /leads/web` - Capture web form lead submission
 
 ### Messaging (Telnyx)
+
+Set `SMS_PROVIDER=twilio` to temporarily run outbound replies through your Twilio toll-free test number while keeping Telnyx credentials in place. Switch back to `telnyx` (or the default `auto` preference) once 10DLC registration is approved so hosted customer numbers are used in production.
 
 - `POST /admin/hosted/orders` – start a hosted messaging order for a clinic (requires admin JWT)
 - `POST /admin/10dlc/brands` / `/admin/10dlc/campaigns` – onboard 10DLC brand + campaign metadata
