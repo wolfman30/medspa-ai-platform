@@ -25,11 +25,14 @@ func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry)
 			return fmt.Errorf("conversation: decode message event: %w", err)
 		}
 		req := MessageRequest{
-			ClinicID: evt.ClinicID,
-			From:     evt.FromE164,
-			To:       evt.ToE164,
-			Message:  evt.Body,
-			Channel:  ChannelSMS,
+			OrgID:          evt.ClinicID,
+			LeadID:         fmt.Sprintf("%s:%s", evt.ClinicID, evt.FromE164),
+			ConversationID: fmt.Sprintf("sms:%s:%s", evt.ClinicID, evt.FromE164),
+			ClinicID:       evt.ClinicID,
+			From:           evt.FromE164,
+			To:             evt.ToE164,
+			Message:        evt.Body,
+			Channel:        ChannelSMS,
 		}
 		return d.publisher.EnqueueMessage(ctx, evt.CorrelationID, req)
 	case "payment_succeeded.v1":
