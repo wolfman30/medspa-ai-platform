@@ -107,6 +107,7 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 }
 
 // ProcessMessage continues an existing conversation with Redis-backed context.
+// If the conversation doesn't exist, it automatically starts a new one.
 func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
 	if strings.TrimSpace(req.ConversationID) == "" {
 		return nil, errors.New("conversation: conversationID required")
@@ -122,6 +123,20 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 	history, err := s.history.Load(ctx, req.ConversationID)
 	if err != nil {
+		// If conversation doesn't exist, start a new one
+		if strings.Contains(err.Error(), "unknown conversation") {
+			return s.StartConversation(ctx, StartRequest{
+				OrgID:          req.OrgID,
+				ConversationID: req.ConversationID,
+				LeadID:         req.LeadID,
+				ClinicID:       req.ClinicID,
+				Message:        req.Message,
+				Channel:        req.Channel,
+				From:           req.From,
+				To:             req.To,
+				Metadata:       req.Metadata,
+			})
+		}
 		span.RecordError(err)
 		return nil, err
 	}
