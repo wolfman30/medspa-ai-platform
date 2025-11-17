@@ -185,7 +185,13 @@ func (s *GPTService) generateResponse(ctx context.Context, history []openai.Chat
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	start := time.Now()
 	resp, err := s.client.CreateChatCompletion(callCtx, req)
+	latency := time.Since(start)
+	if span.IsRecording() {
+		span.SetAttributes(attribute.Float64("medspa.openai.latency_ms", float64(latency.Milliseconds())))
+	}
+	s.logger.Info("openai completion finished", "model", s.model, "latency_ms", latency.Milliseconds())
 	if err != nil {
 		span.RecordError(err)
 		return "", fmt.Errorf("conversation: openai completion failed: %w", err)
