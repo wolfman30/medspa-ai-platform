@@ -155,9 +155,16 @@ func buildAbsoluteURL(r *http.Request) string {
 	if r.URL.Scheme != "" {
 		return r.URL.String()
 	}
-	scheme := "https"
-	if r.TLS == nil {
-		scheme = "http"
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "https"
+		if r.TLS == nil {
+			scheme = "http"
+		}
 	}
-	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.RequestURI())
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, host, r.URL.RequestURI())
 }
