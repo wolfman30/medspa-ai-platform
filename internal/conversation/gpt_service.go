@@ -15,7 +15,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const defaultOpenAISystemPrompt = "You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa. Keep responses short, actionable, and compliant with HIPAA. Never invent medical advice. Guide leads toward booking by clarifying needs, suggesting available services, and offering to reserve time with a provider."
+const (
+	defaultOpenAISystemPrompt = "You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa. Keep responses short, actionable, and compliant with HIPAA. Never invent medical advice. Guide leads toward booking by clarifying needs, suggesting available services, and offering to reserve time with a provider."
+	maxHistoryMessages        = 12
+)
 
 var gptTracer = otel.Tracer("medspa.internal.conversation.gpt")
 
@@ -94,6 +97,7 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 		Content: reply,
 	})
 
+	history = trimHistory(history, maxHistoryMessages)
 	if err := s.history.Save(ctx, conversationID, history); err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -156,6 +160,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		Content: reply,
 	})
 
+	history = trimHistory(history, maxHistoryMessages)
 	if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -172,9 +177,10 @@ func (s *GPTService) generateResponse(ctx context.Context, history []openai.Chat
 	ctx, span := gptTracer.Start(ctx, "conversation.openai")
 	defer span.End()
 
+	trimmed := trimHistory(history, maxHistoryMessages)
 	req := openai.ChatCompletionRequest{
 		Model:    s.model,
-		Messages: history,
+		Messages: trimmed,
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -250,4 +256,30 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 		Content: builder.String(),
 	})
 	return history
+}
+
+func trimHistory(history []openai.ChatCompletionMessage, limit int) []openai.ChatCompletionMessage {
+	if limit <= 0 || len(history) <= limit {
+		return history
+	}
+	if len(history) == 0 {
+		return history
+	}
+
+	var result []openai.ChatCompletionMessage
+	system := history[0]
+	if system.Role == openai.ChatMessageRoleSystem {
+		result = append(result, system)
+		remaining := limit - 1
+		if remaining <= 0 {
+			return result
+		}
+		start := len(history) - remaining
+		if start < 1 {
+			start = 1
+		}
+		result = append(result, history[start:]...)
+		return result
+	}
+	return history[len(history)-limit:]
 }
