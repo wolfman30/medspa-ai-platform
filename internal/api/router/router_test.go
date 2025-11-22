@@ -25,7 +25,7 @@ func newTestRouter(t *testing.T) http.Handler {
 	resolver := messaging.NewStaticOrgResolver(map[string]string{
 		"+10000000000": "org-test",
 	})
-	messagingHandler := messaging.NewHandler("", publisher, resolver, logger)
+	messagingHandler := messaging.NewHandler("", publisher, resolver, nil, logger)
 
 	cfg := &Config{
 		Logger:           logger,
@@ -120,6 +120,10 @@ func TestRouterMessagingWebhookEndpoint(t *testing.T) {
 }
 
 type noopPublisher struct{}
+
+func (noopPublisher) EnqueueStart(ctx context.Context, jobID string, req conversation.StartRequest, opts ...conversation.PublishOption) error {
+	return nil
+}
 
 func (noopPublisher) EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error {
 	return nil

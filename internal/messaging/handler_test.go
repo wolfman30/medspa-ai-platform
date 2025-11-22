@@ -243,10 +243,18 @@ func TestHealthCheck(t *testing.T) {
 }
 
 type stubPublisher struct {
-	called  bool
-	lastJob string
-	lastReq conversation.MessageRequest
-	err     error
+	called     bool
+	lastJob    string
+	lastReq    conversation.MessageRequest
+	lastStart  conversation.StartRequest
+	startJobID string
+	err        error
+}
+
+func (s *stubPublisher) EnqueueStart(ctx context.Context, jobID string, req conversation.StartRequest, opts ...conversation.PublishOption) error {
+	s.startJobID = jobID
+	s.lastStart = req
+	return s.err
 }
 
 func (s *stubPublisher) EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error {
@@ -264,7 +272,7 @@ func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResol
 			"+15551234567": "org-test",
 		})
 	}
-	handler := NewHandler(secret, pub, resolver, logging.Default())
+	handler := NewHandler(secret, pub, resolver, nil, logging.Default())
 	return handler, pub
 }
 

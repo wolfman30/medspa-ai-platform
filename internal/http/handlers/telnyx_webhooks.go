@@ -247,6 +247,7 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	} else if help {
 		h.sendAutoReply(context.Background(), to, from, h.helpAck)
 	} else {
+		h.sendAutoReply(context.Background(), to, from, messaging.InstantAckMessage)
 		h.dispatchConversation(context.Background(), evt, payload, clinicID)
 	}
 	return nil
