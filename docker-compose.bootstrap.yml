@@ -13,7 +13,7 @@ services:
       USE_MEMORY_QUEUE: "true"
       WORKER_COUNT: ${WORKER_COUNT:-2}
       DATABASE_URL: ${DATABASE_URL}
-      REDIS_ADDR: ${REDIS_ADDR:-127.0.0.1:6379}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL}
@@ -27,6 +27,15 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+    depends_on:
+      - redis
     ports:
       - "8080:8081"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    expose:
+      - "6379"
     restart: unless-stopped
