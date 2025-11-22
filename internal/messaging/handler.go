@@ -51,7 +51,7 @@ func NewHandler(webhookSecret string, publisher conversationPublisher, resolver 
 		orgResolver:   resolver,
 		messenger:     messenger,
 		logger:        logger,
-		twimlAck:      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>` + InstantAckMessage + `</Message></Response>`,
+		twimlAck:      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>` + SmsAckMessage + `</Message></Response>`,
 	}
 }
 
