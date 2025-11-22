@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -21,6 +22,22 @@ const (
 )
 
 var gptTracer = otel.Tracer("medspa.internal.conversation.gpt")
+
+var openaiLatency = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Namespace: "medspa",
+		Subsystem: "conversation",
+		Name:      "openai_latency_seconds",
+		Help:      "Latency of OpenAI chat completions",
+		// Focus on sub-10s buckets with a few higher ones for visibility.
+		Buckets: []float64{0.25, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30},
+	},
+	[]string{"model", "status"},
+)
+
+func init() {
+	prometheus.MustRegister(openaiLatency)
+}
 
 type chatClient interface {
 	CreateChatCompletion(ctx context.Context, request openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error)
@@ -188,6 +205,11 @@ func (s *GPTService) generateResponse(ctx context.Context, history []openai.Chat
 	start := time.Now()
 	resp, err := s.client.CreateChatCompletion(callCtx, req)
 	latency := time.Since(start)
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	openaiLatency.WithLabelValues(s.model, status).Observe(latency.Seconds())
 	if span.IsRecording() {
 		span.SetAttributes(attribute.Float64("medspa.openai.latency_ms", float64(latency.Milliseconds())))
 	}
