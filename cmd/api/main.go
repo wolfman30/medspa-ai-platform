@@ -239,11 +239,10 @@ func main() {
 		}
 
 		var (
-			messenger         conversation.ReplyMessenger
-			messengerProvider string
-			messengerReason   string
+			messenger       conversation.ReplyMessenger
+			messengerReason string
 		)
-		messenger, messengerProvider, messengerReason = webhookMessenger, webhookMessengerProvider, webhookMessengerReason
+		messenger, _, messengerReason = webhookMessenger, webhookMessengerProvider, webhookMessengerReason
 		if messenger == nil {
 			logger.Warn("no sms credentials configured; SMS replies disabled for inline workers",
 				"preference", cfg.SMSProvider,
