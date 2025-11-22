@@ -136,7 +136,27 @@ func main() {
 	if twilioWebhookSecret == "" {
 		twilioWebhookSecret = cfg.TwilioAuthToken
 	}
-	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, logger)
+	messengerCfg := messaging.ProviderSelectionConfig{
+		Preference:       cfg.SMSProvider,
+		TelnyxAPIKey:     cfg.TelnyxAPIKey,
+		TelnyxProfileID:  cfg.TelnyxMessagingProfileID,
+		TwilioAccountSID: cfg.TwilioAccountSID,
+		TwilioAuthToken:  cfg.TwilioAuthToken,
+		TwilioFromNumber: cfg.TwilioFromNumber,
+	}
+	webhookMessenger, webhookMessengerProvider, webhookMessengerReason := messaging.BuildReplyMessenger(messengerCfg, logger)
+	if webhookMessenger != nil {
+		logger.Info("sms messenger initialized for webhooks",
+			"provider", webhookMessengerProvider,
+			"preference", cfg.SMSProvider,
+		)
+	} else {
+		logger.Warn("sms replies disabled for webhooks",
+			"preference", cfg.SMSProvider,
+			"reason", webhookMessengerReason,
+		)
+	}
+	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, webhookMessenger, logger)
 
 	var telnyxClient *telnyxclient.Client
 	if cfg.TelnyxAPIKey != "" {
@@ -223,21 +243,8 @@ func main() {
 			messengerProvider string
 			messengerReason   string
 		)
-		messengerCfg := messaging.ProviderSelectionConfig{
-			Preference:       cfg.SMSProvider,
-			TelnyxAPIKey:     cfg.TelnyxAPIKey,
-			TelnyxProfileID:  cfg.TelnyxMessagingProfileID,
-			TwilioAccountSID: cfg.TwilioAccountSID,
-			TwilioAuthToken:  cfg.TwilioAuthToken,
-			TwilioFromNumber: cfg.TwilioFromNumber,
-		}
-		messenger, messengerProvider, messengerReason = messaging.BuildReplyMessenger(messengerCfg, logger)
-		if messenger != nil {
-			logger.Info("sms messenger initialized for inline workers",
-				"provider", messengerProvider,
-				"preference", cfg.SMSProvider,
-			)
-		} else {
+		messenger, messengerProvider, messengerReason = webhookMessenger, webhookMessengerProvider, webhookMessengerReason
+		if messenger == nil {
 			logger.Warn("no sms credentials configured; SMS replies disabled for inline workers",
 				"preference", cfg.SMSProvider,
 				"reason", messengerReason,

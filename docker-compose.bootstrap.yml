@@ -27,5 +27,6 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+    ports:
+      - "8080:8081"
     restart: unless-stopped
-    network_mode: host

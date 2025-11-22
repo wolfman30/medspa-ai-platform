@@ -48,6 +48,9 @@ func New(cfg *Config) http.Handler {
 		public.Route("/messaging", func(r chi.Router) {
 			r.Post("/twilio/webhook", cfg.MessagingHandler.TwilioWebhook)
 		})
+		public.Route("/webhooks/twilio", func(r chi.Router) {
+			r.Post("/voice", cfg.MessagingHandler.TwilioVoiceWebhook)
+		})
 		if cfg.SquareWebhook != nil {
 			public.Post("/webhooks/square", cfg.SquareWebhook.Handle)
 		}
