@@ -28,6 +28,8 @@ type checkoutRequest struct {
 	LeadID          string `json:"lead_id"`
 	AmountCents     int32  `json:"amount_cents"`
 	BookingIntentID string `json:"booking_intent_id,omitempty"`
+	SuccessURL      string `json:"success_url,omitempty"`
+	CancelURL       string `json:"cancel_url,omitempty"`
 }
 
 type checkoutResponse struct {
@@ -104,6 +106,8 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 		AmountCents:     req.AmountCents,
 		BookingIntentID: paymentID,
 		Description:     "MedSpa Deposit",
+		SuccessURL:      req.SuccessURL,
+		CancelURL:       req.CancelURL,
 	})
 	if err != nil {
 		h.logger.Error("square checkout failed", "error", err)

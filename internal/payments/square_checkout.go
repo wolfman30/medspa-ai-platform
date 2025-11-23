@@ -36,6 +36,8 @@ type CheckoutParams struct {
 	AmountCents     int32
 	BookingIntentID uuid.UUID
 	Description     string
+	SuccessURL      string
+	CancelURL       string
 }
 
 type CheckoutResponse struct {
@@ -70,6 +72,11 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		attribute.Int("medspa.amount_cents", int(params.AmountCents)),
 	)
 
+	successURL := params.SuccessURL
+	if successURL == "" {
+		successURL = s.successURL
+	}
+
 	idempotency := buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
 	body := map[string]any{
 		"idempotency_key": idempotency,
@@ -79,7 +86,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 			"location_id": s.locationID,
 		},
 		"checkout_options": map[string]any{
-			"redirect_url":             s.successURL,
+			"redirect_url":             successURL,
 			"ask_for_shipping_address": false,
 		},
 		"metadata": map[string]string{
