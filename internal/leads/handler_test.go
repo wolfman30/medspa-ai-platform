@@ -121,6 +121,10 @@ func (f failingRepository) GetByID(context.Context, string, string) (*Lead, erro
 	return nil, ErrLeadNotFound
 }
 
+func (f failingRepository) GetOrCreateByPhone(context.Context, string, string, string, string) (*Lead, error) {
+	return nil, errors.New("boom")
+}
+
 func TestCreateWebLead_RepositoryError(t *testing.T) {
 	logger := logging.Default()
 	handler := NewHandler(failingRepository{}, logger)

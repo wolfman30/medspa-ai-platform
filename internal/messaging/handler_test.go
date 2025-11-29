@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -272,7 +273,7 @@ func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResol
 			"+15551234567": "org-test",
 		})
 	}
-	handler := NewHandler(secret, pub, resolver, nil, logging.Default())
+	handler := NewHandler(secret, pub, resolver, nil, leads.NewInMemoryRepository(), logging.Default())
 	return handler, pub
 }
 

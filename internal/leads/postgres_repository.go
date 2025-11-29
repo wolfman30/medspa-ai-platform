@@ -3,6 +3,7 @@ package leads
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,4 +86,47 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		return nil, fmt.Errorf("leads: select failed: %w", err)
 	}
 	return &lead, nil
+}
+
+// GetOrCreateByPhone finds the most recent lead for an org/phone or creates a new one.
+func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*Lead, error) {
+	phone = strings.TrimSpace(phone)
+	orgID = strings.TrimSpace(orgID)
+	if phone == "" || orgID == "" {
+		return nil, fmt.Errorf("leads: org and phone are required")
+	}
+	query := `
+		SELECT id, org_id, name, email, phone, message, source, created_at
+		FROM leads
+		WHERE org_id = $1 AND phone = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var lead Lead
+	if err := r.pool.QueryRow(ctx, query, orgID, phone).Scan(
+		&lead.ID,
+		&lead.OrgID,
+		&lead.Name,
+		&lead.Email,
+		&lead.Phone,
+		&lead.Message,
+		&lead.Source,
+		&lead.CreatedAt,
+	); err == nil {
+		return &lead, nil
+	} else if err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("leads: lookup by phone failed: %w", err)
+	}
+
+	name := strings.TrimSpace(defaultName)
+	if name == "" {
+		name = phone
+	}
+	req := &CreateLeadRequest{
+		OrgID:  orgID,
+		Name:   name,
+		Phone:  phone,
+		Source: source,
+	}
+	return r.Create(ctx, req)
 }
