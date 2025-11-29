@@ -221,6 +221,16 @@ func (s *stubLeadRepo) GetByID(ctx context.Context, orgID string, id string) (*l
 	return s.lead, nil
 }
 
+func (s *stubLeadRepo) GetOrCreateByPhone(context.Context, string, string, string, string) (*leads.Lead, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.lead == nil {
+		return nil, leads.ErrLeadNotFound
+	}
+	return s.lead, nil
+}
+
 type stubProcessedTracker struct {
 	already bool
 	marked  bool
