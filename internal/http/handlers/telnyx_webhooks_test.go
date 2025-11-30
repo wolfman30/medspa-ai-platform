@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	pgxmock "github.com/pashagolub/pgxmock/v4"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -81,11 +82,13 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	defer mock.Close()
 	store := messaging.NewStore(mock)
 	conv := &stubConversationPublisher{}
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: "lead-abc", OrgID: "org-x"}}
 	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
 		Store:            store,
 		Processed:        &stubProcessedTracker{},
 		Telnyx:           &testTelnyxClient{},
 		Conversation:     conv,
+		Leads:            leadRepo,
 		Logger:           logging.Default(),
 		MessagingProfile: "profile",
 	})
@@ -115,6 +118,12 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	}
 	if conv.calls != 1 {
 		t.Fatalf("expected conversation publisher to be invoked once, got %d", conv.calls)
+	}
+	if !leadRepo.called {
+		t.Fatalf("expected lead repo to be invoked")
+	}
+	if conv.last.LeadID != "lead-abc" {
+		t.Fatalf("expected lead id from repo to propagate, got %s", conv.last.LeadID)
 	}
 	if conv.last.Metadata["telnyx_message_id"] != "msg_inbound" {
 		t.Fatalf("expected telnyx metadata to propagate")

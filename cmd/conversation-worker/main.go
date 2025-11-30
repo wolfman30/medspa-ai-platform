@@ -15,7 +15,9 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
+	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -61,6 +63,7 @@ func main() {
 		messenger         conversation.ReplyMessenger
 		messengerProvider string
 		messengerReason   string
+		depositSender     conversation.DepositSender
 	)
 	messengerCfg := messaging.ProviderSelectionConfig{
 		Preference:       cfg.SMSProvider,
@@ -89,6 +92,12 @@ func main() {
 		bookingBridge = conversation.BookingServiceAdapter{
 			Service: bookings.NewService(repo, logger),
 		}
+		if cfg.SquareAccessToken != "" && cfg.SquareLocationID != "" {
+			payRepo := payments.NewRepository(dbPool)
+			outbox := events.NewOutboxStore(dbPool)
+			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+			depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outbox, messenger, logger)
+		}
 	}
 
 	worker := conversation.NewWorker(
@@ -99,6 +108,7 @@ func main() {
 		bookingBridge,
 		logger,
 		conversation.WithWorkerCount(cfg.WorkerCount),
+		conversation.WithDepositSender(depositSender),
 	)
 
 	worker.Start(ctx)

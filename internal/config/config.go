@@ -32,6 +32,7 @@ type Config struct {
 	PaymentProviderKey       string
 	SquareAccessToken        string
 	SquareLocationID         string
+	SquareBaseURL            string
 	SquareWebhookKey         string
 	SquareSuccessURL         string
 	SquareCancelURL          string
@@ -80,6 +81,7 @@ func Load() *Config {
 		PaymentProviderKey:       getEnv("PAYMENT_PROVIDER_KEY", ""),
 		SquareAccessToken:        getEnv("SQUARE_ACCESS_TOKEN", ""),
 		SquareLocationID:         getEnv("SQUARE_LOCATION_ID", ""),
+		SquareBaseURL:            getEnv("SQUARE_BASE_URL", ""),
 		SquareWebhookKey:         getEnv("SQUARE_WEBHOOK_SIGNATURE_KEY", ""),
 		SquareSuccessURL:         getEnv("SQUARE_SUCCESS_URL", ""),
 		SquareCancelURL:          getEnv("SQUARE_CANCEL_URL", ""),

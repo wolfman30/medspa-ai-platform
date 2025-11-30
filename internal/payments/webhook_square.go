@@ -3,7 +3,7 @@ package payments
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -21,6 +21,7 @@ import (
 
 type paymentStatusStore interface {
 	UpdateStatusByID(ctx context.Context, id uuid.UUID, status, providerRef string) (*paymentsql.Payment, error)
+	GetByProviderRef(ctx context.Context, providerRef string) (*paymentsql.Payment, error)
 }
 
 type processedTracker interface {
@@ -39,10 +40,11 @@ type SquareWebhookHandler struct {
 	processed    processedTracker
 	outbox       outboxWriter
 	numbers      OrgNumberResolver
+	orders       orderMetadataFetcher
 	logger       *logging.Logger
 }
 
-func NewSquareWebhookHandler(sigKey string, payments paymentStatusStore, leadsRepo leads.Repository, processed processedTracker, outbox outboxWriter, numbers OrgNumberResolver, logger *logging.Logger) *SquareWebhookHandler {
+func NewSquareWebhookHandler(sigKey string, payments paymentStatusStore, leadsRepo leads.Repository, processed processedTracker, outbox outboxWriter, numbers OrgNumberResolver, orders orderMetadataFetcher, logger *logging.Logger) *SquareWebhookHandler {
 	if logger == nil {
 		logger = logging.Default()
 	}
@@ -53,6 +55,7 @@ func NewSquareWebhookHandler(sigKey string, payments paymentStatusStore, leadsRe
 		processed:    processed,
 		outbox:       outbox,
 		numbers:      numbers,
+		orders:       orders,
 		logger:       logger,
 	}
 }
@@ -98,9 +101,41 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	orgID := metadata["org_id"]
 	leadID := metadata["lead_id"]
 	intentID := metadata["booking_intent_id"]
-	if orgID == "" || leadID == "" {
-		http.Error(w, "missing metadata", http.StatusBadRequest)
-		return
+	paymentID := evt.Data.Object.Payment.ID
+	orderID := evt.Data.Object.Payment.OrderID
+	if orgID == "" || leadID == "" || intentID == "" {
+		// Fallback: try to resolve via provider ref if metadata is missing (observed in some webhook payloads).
+		if paymentID == "" {
+			http.Error(w, "missing metadata", http.StatusBadRequest)
+			return
+		}
+		paymentRow, perr := h.payments.GetByProviderRef(r.Context(), paymentID)
+		if perr != nil || paymentRow == nil {
+			// If payment lookup fails, attempt to hydrate metadata via order lookup.
+			if h.orders != nil && orderID != "" {
+				if orderMeta, oerr := h.orders.FetchMetadata(r.Context(), orderID); oerr == nil && len(orderMeta) > 0 {
+					orgID = orderMeta["org_id"]
+					leadID = orderMeta["lead_id"]
+					intentID = orderMeta["booking_intent_id"]
+				} else {
+					h.logger.Warn("square webhook missing metadata and payment/order lookup failed", "payment_err", perr, "order_err", oerr, "payment_id", paymentID, "order_id", orderID)
+					w.WriteHeader(http.StatusOK) // acknowledge to avoid retries; cannot progress workflow
+					return
+				}
+			} else {
+				h.logger.Warn("square webhook missing metadata and payment lookup failed", "error", perr, "payment_id", paymentID)
+				w.WriteHeader(http.StatusOK) // acknowledge to avoid retries; cannot progress workflow
+				return
+			}
+		}
+		orgID = paymentRow.OrgID
+		if paymentRow.LeadID.Valid {
+			leadUUID, _ := uuid.FromBytes(paymentRow.LeadID.Bytes[:])
+			leadID = leadUUID.String()
+		}
+		if paymentRow.ID.Valid {
+			intentID = uuid.UUID(paymentRow.ID.Bytes).String()
+		}
 	}
 	if evt.Data.Object.Payment.Status != "COMPLETED" {
 		w.WriteHeader(http.StatusOK)
@@ -176,7 +211,7 @@ func verifySquareSignature(key, url string, body []byte, header string) bool {
 		return false
 	}
 	message := url + string(body)
-	mac := hmac.New(sha256.New, []byte(key))
+	mac := hmac.New(sha1.New, []byte(key))
 	mac.Write([]byte(message))
 	expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(header), []byte(expected))
@@ -192,6 +227,7 @@ type squarePaymentEvent struct {
 			Payment struct {
 				ID          string            `json:"id"`
 				Status      string            `json:"status"`
+				OrderID     string            `json:"order_id"`
 				AmountMoney squareMoney       `json:"amount_money"`
 				Metadata    map[string]string `json:"metadata"`
 			} `json:"payment"`
@@ -209,8 +245,14 @@ func buildAbsoluteURL(r *http.Request) string {
 		return ""
 	}
 	scheme := "https"
-	if r.TLS == nil {
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else if r.TLS == nil {
 		scheme = "http"
 	}
-	return fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.RequestURI())
+	host := r.Host
+	if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
+		host = fwd
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, host, r.URL.RequestURI())
 }
