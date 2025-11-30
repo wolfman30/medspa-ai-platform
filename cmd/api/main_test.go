@@ -67,7 +67,7 @@ func TestSetupInlineWorkerDisabled(t *testing.T) {
 	logger := logging.New("error")
 	cfg := &appconfig.Config{UseMemoryQueue: false}
 
-	worker := setupInlineWorker(context.Background(), cfg, logger, nil, "none", stubJobUpdater{}, nil, nil)
+	worker := setupInlineWorker(context.Background(), cfg, logger, nil, "none", stubJobUpdater{}, nil, nil, nil)
 	if worker != nil {
 		t.Fatalf("expected no worker when memory queue is disabled")
 	}
@@ -84,7 +84,7 @@ func TestSetupInlineWorkerStartsAndStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	worker := setupInlineWorker(ctx, cfg, logger, stubMessenger{}, "no credentials", stubJobUpdater{}, memoryQueue, nil)
+	worker := setupInlineWorker(ctx, cfg, logger, stubMessenger{}, "no credentials", stubJobUpdater{}, memoryQueue, nil, nil)
 	if worker == nil {
 		t.Fatalf("expected worker when memory queue is enabled")
 	}

@@ -114,7 +114,8 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	store := &stubJobUpdater{}
 	messenger := &stubMessenger{}
 	bookings := &stubBookingConfirmer{}
-	worker := NewWorker(service, queue, store, messenger, bookings, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+	deposits := &stubDepositSender{}
+	worker := NewWorker(service, queue, store, messenger, bookings, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0), WithDepositSender(deposits))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,6 +153,58 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	}
 	if messenger.lastReply().To != event.LeadPhone {
 		t.Fatalf("expected sms to lead, got %s", messenger.lastReply().To)
+	}
+}
+
+func TestWorkerDispatchesDepositIntent(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &replyService{
+		deposit: &DepositIntent{
+			AmountCents: 5000,
+			SuccessURL:  "http://success",
+			CancelURL:   "http://cancel",
+			Description: "Test deposit",
+		},
+	}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	deposits := &stubDepositSender{}
+
+	worker := NewWorker(service, queue, store, messenger, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0), WithDepositSender(deposits))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-deposit",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "please book",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-deposit", Body: string(body), ReceiptHandle: "rh-deposit"})
+
+	waitFor(func() bool {
+		return deposits.called
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if !deposits.called {
+		t.Fatalf("expected deposit sender to be called")
+	}
+	if deposits.lastMsg.OrgID != "org-1" || deposits.lastMsg.LeadID != "lead-1" {
+		t.Fatalf("unexpected deposit msg: %#v", deposits.lastMsg)
 	}
 }
 
@@ -281,7 +334,9 @@ func (r *recordingService) messageCount() int {
 	return r.messageCalls
 }
 
-type replyService struct{}
+type replyService struct {
+	deposit *DepositIntent
+}
 
 func (r *replyService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
 	return &Response{}, nil
@@ -291,6 +346,7 @@ func (r *replyService) ProcessMessage(ctx context.Context, req MessageRequest) (
 	return &Response{
 		ConversationID: req.ConversationID,
 		Message:        "auto-reply",
+		DepositIntent:  r.deposit,
 	}, nil
 }
 
@@ -405,6 +461,19 @@ func (s *stubMessenger) lastReply() OutboundReply {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.last
+}
+
+type stubDepositSender struct {
+	called  bool
+	lastMsg MessageRequest
+	lastRes *Response
+}
+
+func (s *stubDepositSender) SendDeposit(ctx context.Context, msg MessageRequest, resp *Response) error {
+	s.called = true
+	s.lastMsg = msg
+	s.lastRes = resp
+	return nil
 }
 
 type stubBookingConfirmer struct {

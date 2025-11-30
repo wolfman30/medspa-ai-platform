@@ -171,14 +171,16 @@ func main() {
 		jobUpdater,
 		memoryQueue,
 		dbPool,
+		outboxStore,
 	)
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
 	if paymentsRepo != nil && processedStore != nil && outboxStore != nil {
-		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger)
+		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+		orderClient := payments.NewSquareOrdersClient(cfg.SquareAccessToken, cfg.SquareBaseURL, logger)
 		checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, squareSvc, logger, int32(cfg.DepositAmountCents))
-		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, logger)
+		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, orderClient, logger)
 		dispatcher := conversation.NewOutboxDispatcher(conversationPublisher)
 		deliverer := events.NewDeliverer(outboxStore, dispatcher, logger)
 		go deliverer.Start(appCtx)
@@ -268,6 +270,7 @@ func main() {
 func setupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
 	registry := prometheus.NewRegistry()
 	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
+	conversation.RegisterMetrics(registry)
 	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	return metricsHandler, messagingMetrics
 }
@@ -340,6 +343,7 @@ func setupInlineWorker(
 	jobUpdater conversation.JobUpdater,
 	memoryQueue *conversation.MemoryQueue,
 	dbPool *pgxpool.Pool,
+	outboxStore *events.OutboxStore,
 ) *conversation.Worker {
 	if !cfg.UseMemoryQueue || memoryQueue == nil {
 		return nil
@@ -366,6 +370,13 @@ func setupInlineWorker(
 		}
 	}
 
+	var depositSender conversation.DepositSender
+	if dbPool != nil && outboxStore != nil && cfg.SquareAccessToken != "" && cfg.SquareLocationID != "" {
+		payRepo := payments.NewRepository(dbPool)
+		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+		depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outboxStore, messenger, logger)
+	}
+
 	worker := conversation.NewWorker(
 		processor,
 		memoryQueue,
@@ -374,6 +385,7 @@ func setupInlineWorker(
 		bookingBridge,
 		logger,
 		conversation.WithWorkerCount(cfg.WorkerCount),
+		conversation.WithDepositSender(depositSender),
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)

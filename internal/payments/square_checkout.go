@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"strings"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -26,6 +27,7 @@ type SquareCheckoutService struct {
 	locationID  string
 	successURL  string
 	cancelURL   string
+	baseURL     string
 	httpClient  *http.Client
 	logger      *logging.Logger
 }
@@ -50,14 +52,25 @@ func NewSquareCheckoutService(accessToken, locationID, successURL, cancelURL str
 		logger = logging.Default()
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
+	baseURL := "https://connect.squareup.com"
 	return &SquareCheckoutService{
 		accessToken: accessToken,
 		locationID:  locationID,
 		successURL:  successURL,
 		cancelURL:   cancelURL,
+		baseURL:     baseURL,
 		httpClient:  client,
 		logger:      logger,
 	}
+}
+
+// WithBaseURL overrides the Square API host (e.g., sandbox).
+func (s *SquareCheckoutService) WithBaseURL(baseURL string) *SquareCheckoutService {
+	if baseURL == "" {
+		return s
+	}
+	s.baseURL = strings.TrimRight(baseURL, "/")
+	return s
 }
 
 func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params CheckoutParams) (*CheckoutResponse, error) {
@@ -77,7 +90,13 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		successURL = s.successURL
 	}
 
-	idempotency := buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
+	idempotency := ""
+	if params.BookingIntentID != uuid.Nil {
+		idempotency = params.BookingIntentID.String()
+	}
+	if idempotency == "" {
+		idempotency = buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
+	}
 	body := map[string]any{
 		"idempotency_key": idempotency,
 		"quick_pay": map[string]any{
@@ -101,7 +120,8 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		return nil, fmt.Errorf("payments: square payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://connect.squareup.com/v2/online-checkout/payment-links", bytes.NewReader(reqBody))
+	apiURL := s.baseURL + "/v2/online-checkout/payment-links"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("payments: square request: %w", err)
 	}
@@ -139,7 +159,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 }
 
 func buildIdempotencyKey(orgID, leadID string, amount int32) string {
-	input := fmt.Sprintf("%s:%s:%d:%s", orgID, leadID, amount, time.Now().UTC().Format("2006-01-02"))
+	input := fmt.Sprintf("%s:%s:%d:%s", orgID, leadID, amount, time.Now().UTC().Format("2006-01-02T15"))
 	sum := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(sum[:])
 }

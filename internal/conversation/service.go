@@ -47,11 +47,20 @@ type MessageRequest struct {
 	Metadata       map[string]string
 }
 
+// Deposit intent for payment processing.
+type DepositIntent struct {
+	AmountCents  int32
+	SuccessURL   string
+	CancelURL    string
+	Description  string
+}
+
 // Response is a simple DTO returned to the API layer.
 type Response struct {
 	ConversationID string
 	Message        string
 	Timestamp      time.Time
+	DepositIntent  *DepositIntent
 }
 
 // StubService is a placeholder implementation used until the real engine is ready.
