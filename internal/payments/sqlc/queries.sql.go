@@ -12,7 +12,7 @@ import (
 )
 
 const getPaymentByID = `-- name: GetPaymentByID :one
-SELECT id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, created_at FROM payments
+SELECT id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at FROM payments
 WHERE id = $1
 `
 
@@ -28,13 +28,14 @@ func (q *Queries) GetPaymentByID(ctx context.Context, id pgtype.UUID) (Payment, 
 		&i.BookingIntentID,
 		&i.AmountCents,
 		&i.Status,
+		&i.ScheduledFor,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getPaymentByProviderRef = `-- name: GetPaymentByProviderRef :one
-SELECT id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, created_at FROM payments
+SELECT id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at FROM payments
 WHERE provider_ref = $1
 `
 
@@ -50,6 +51,7 @@ func (q *Queries) GetPaymentByProviderRef(ctx context.Context, providerRef pgtyp
 		&i.BookingIntentID,
 		&i.AmountCents,
 		&i.Status,
+		&i.ScheduledFor,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -64,10 +66,11 @@ INSERT INTO payments (
     provider_ref,
     booking_intent_id,
     amount_cents,
-    status
+    status,
+    scheduled_for
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, created_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at
 `
 
 type InsertPaymentParams struct {
@@ -79,6 +82,7 @@ type InsertPaymentParams struct {
 	BookingIntentID pgtype.UUID
 	AmountCents     int32
 	Status          string
+	ScheduledFor    pgtype.Timestamptz
 }
 
 func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) (Payment, error) {
@@ -91,6 +95,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) (P
 		arg.BookingIntentID,
 		arg.AmountCents,
 		arg.Status,
+		arg.ScheduledFor,
 	)
 	var i Payment
 	err := row.Scan(
@@ -102,6 +107,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) (P
 		&i.BookingIntentID,
 		&i.AmountCents,
 		&i.Status,
+		&i.ScheduledFor,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -112,7 +118,7 @@ UPDATE payments
 SET status = $2,
     provider_ref = COALESCE($3, provider_ref)
 WHERE id = $1
-RETURNING id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, created_at
+RETURNING id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at
 `
 
 type UpdatePaymentStatusByIDParams struct {
@@ -133,6 +139,7 @@ func (q *Queries) UpdatePaymentStatusByID(ctx context.Context, arg UpdatePayment
 		&i.BookingIntentID,
 		&i.AmountCents,
 		&i.Status,
+		&i.ScheduledFor,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -143,7 +150,7 @@ UPDATE payments
 SET status = $2,
     provider_ref = COALESCE($3, provider_ref)
 WHERE provider_ref = $1
-RETURNING id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, created_at
+RETURNING id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at
 `
 
 type UpdatePaymentStatusByProviderRefParams struct {
@@ -164,6 +171,7 @@ func (q *Queries) UpdatePaymentStatusByProviderRef(ctx context.Context, arg Upda
 		&i.BookingIntentID,
 		&i.AmountCents,
 		&i.Status,
+		&i.ScheduledFor,
 		&i.CreatedAt,
 	)
 	return i, err

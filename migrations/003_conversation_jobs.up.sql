@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS conversation_jobs (
+CREATE TABLE IF NOT EXISTS conversation_jobs (
     job_id TEXT PRIMARY KEY,
     status TEXT NOT NULL,
     request_type TEXT NOT NULL,
