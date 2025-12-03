@@ -54,7 +54,18 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, logger
 	}
 
 	logger.Info("using GPT conversation service", "model", cfg.OpenAIModel, "redis", cfg.RedisAddr)
-	return conversation.NewGPTService(openaiClient, redisClient, rag, cfg.OpenAIModel, logger), nil
+	return conversation.NewGPTService(
+		openaiClient,
+		redisClient,
+		rag,
+		cfg.OpenAIModel,
+		logger,
+		conversation.WithDepositConfig(conversation.DepositConfig{
+			DefaultAmountCents: int32(cfg.DepositAmountCents),
+			SuccessURL:         cfg.SquareSuccessURL,
+			CancelURL:          cfg.SquareCancelURL,
+		}),
+	), nil
 }
 
 func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowledgeRepository) error {

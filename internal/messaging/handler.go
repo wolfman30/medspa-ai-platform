@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -29,13 +30,14 @@ type Handler struct {
 	publisher     conversationPublisher
 	orgResolver   OrgResolver
 	messenger     conversation.ReplyMessenger
+	leads         leads.Repository
 	logger        *logging.Logger
 
 	twimlAck string
 }
 
 // NewHandler creates a new messaging handler.
-func NewHandler(webhookSecret string, publisher conversationPublisher, resolver OrgResolver, messenger conversation.ReplyMessenger, logger *logging.Logger) *Handler {
+func NewHandler(webhookSecret string, publisher conversationPublisher, resolver OrgResolver, messenger conversation.ReplyMessenger, leadsRepo leads.Repository, logger *logging.Logger) *Handler {
 	if logger == nil {
 		logger = logging.Default()
 	}
@@ -50,6 +52,7 @@ func NewHandler(webhookSecret string, publisher conversationPublisher, resolver 
 		publisher:     publisher,
 		orgResolver:   resolver,
 		messenger:     messenger,
+		leads:         leadsRepo,
 		logger:        logger,
 		twimlAck:      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>` + SmsAckMessage + `</Message></Response>`,
 	}
@@ -77,13 +80,15 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		return
 	}
+	from := NormalizeE164(webhook.From)
+	to := NormalizeE164(webhook.To)
 	span.SetAttributes(
 		attribute.String("medspa.twilio.message_sid", webhook.MessageSid),
-		attribute.String("medspa.twilio.from", webhook.From),
-		attribute.String("medspa.twilio.to", webhook.To),
+		attribute.String("medspa.twilio.from", from),
+		attribute.String("medspa.twilio.to", to),
 	)
 
-	if webhook.MessageSid == "" || webhook.From == "" || webhook.Body == "" {
+	if webhook.MessageSid == "" || from == "" || webhook.Body == "" {
 		err := errors.New("missing required twilio fields")
 		h.logger.Error("invalid twilio payload", "error", err)
 		http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -101,8 +106,14 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("medspa.org_id", orgID))
 
 	jobID := webhook.MessageSid
-	leadID := deterministicLeadID(orgID, webhook.From)
-	conversationID := deterministicConversationID(orgID, webhook.From)
+	leadID, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
+	if err != nil {
+		h.logger.Error("failed to persist lead", "error", err, "org_id", orgID, "from", from)
+		http.Error(w, "Failed to persist lead", http.StatusInternalServerError)
+		span.RecordError(err)
+		return
+	}
+	conversationID := deterministicConversationID(orgID, from)
 
 	msgReq := conversation.MessageRequest{
 		OrgID:          orgID,
@@ -110,8 +121,8 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 		ConversationID: conversationID,
 		Message:        webhook.Body,
 		Channel:        conversation.ChannelSMS,
-		From:           webhook.From,
-		To:             webhook.To,
+		From:           from,
+		To:             to,
 		Metadata: map[string]string{
 			"twilio_message_sid": webhook.MessageSid,
 			"twilio_account_sid": webhook.AccountSid,
@@ -156,8 +167,8 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 
 	callSid := strings.TrimSpace(r.FormValue("CallSid"))
 	callStatus := strings.ToLower(strings.TrimSpace(r.FormValue("CallStatus")))
-	from := strings.TrimSpace(r.FormValue("From"))
-	to := strings.TrimSpace(r.FormValue("To"))
+	from := NormalizeE164(r.FormValue("From"))
+	to := NormalizeE164(r.FormValue("To"))
 	if callSid == "" || from == "" || to == "" {
 		err := errors.New("missing required twilio voice fields")
 		h.logger.Error("invalid twilio voice payload", "error", err)
@@ -185,7 +196,13 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		attribute.String("medspa.twilio.call_status", callStatus),
 	)
 
-	leadID := deterministicLeadID(orgID, from)
+	leadID, err := h.ensureLead(r.Context(), orgID, from, "twilio_voice")
+	if err != nil {
+		h.logger.Error("failed to persist lead", "error", err, "org_id", orgID, "from", from)
+		http.Error(w, "Failed to persist lead", http.StatusInternalServerError)
+		span.RecordError(err)
+		return
+	}
 	conversationID := deterministicConversationID(orgID, from)
 
 	startReq := conversation.StartRequest{
@@ -272,6 +289,21 @@ func deterministicLeadID(orgID, from string) string {
 
 func deterministicConversationID(orgID, from string) string {
 	return fmt.Sprintf("sms:%s:%s", orgID, sanitizePhone(from))
+}
+
+func (h *Handler) ensureLead(ctx context.Context, orgID, phone, source string) (string, error) {
+	normalized := NormalizeE164(phone)
+	if normalized == "" {
+		normalized = phone
+	}
+	if h.leads == nil {
+		return deterministicLeadID(orgID, normalized), nil
+	}
+	lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, normalized, source, normalized)
+	if err != nil {
+		return "", err
+	}
+	return lead.ID, nil
 }
 
 func buildAbsoluteURL(r *http.Request) string {

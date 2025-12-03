@@ -32,6 +32,7 @@ type Config struct {
 	PaymentProviderKey       string
 	SquareAccessToken        string
 	SquareLocationID         string
+	SquareBaseURL            string
 	SquareWebhookKey         string
 	SquareSuccessURL         string
 	SquareCancelURL          string
@@ -80,6 +81,7 @@ func Load() *Config {
 		PaymentProviderKey:       getEnv("PAYMENT_PROVIDER_KEY", ""),
 		SquareAccessToken:        getEnv("SQUARE_ACCESS_TOKEN", ""),
 		SquareLocationID:         getEnv("SQUARE_LOCATION_ID", ""),
+		SquareBaseURL:            getEnv("SQUARE_BASE_URL", ""),
 		SquareWebhookKey:         getEnv("SQUARE_WEBHOOK_SIGNATURE_KEY", ""),
 		SquareSuccessURL:         getEnv("SQUARE_SUCCESS_URL", ""),
 		SquareCancelURL:          getEnv("SQUARE_CANCEL_URL", ""),
@@ -95,7 +97,7 @@ func Load() *Config {
 		ConversationQueueURL:     getEnv("CONVERSATION_QUEUE_URL", "http://localhost:4566/000000000000/conversation-events"),
 		ConversationJobsTable:    getEnv("CONVERSATION_JOBS_TABLE", "conversation_jobs"),
 		OpenAIAPIKey:             getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-5-mini"),
 		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", ""),
 		OpenAIEmbeddingModel:     getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),

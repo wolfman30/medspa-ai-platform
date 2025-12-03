@@ -32,7 +32,7 @@ type Store struct {
 
 func NewStore(pool PgxPool) *Store {
 	if pool == nil {
-		panic("messaging: store requires pgx pool")
+		return nil
 	}
 	return &Store{pool: pool}
 }

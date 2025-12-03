@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
 )
 
@@ -114,4 +115,29 @@ func (s *stubConversationPublisher) EnqueueMessage(ctx context.Context, jobID st
 	s.lastJob = jobID
 	s.last = req
 	return nil
+}
+
+type stubLeadsRepo struct {
+	called bool
+	lead   *leads.Lead
+	err    error
+}
+
+func (s *stubLeadsRepo) Create(context.Context, *leads.CreateLeadRequest) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) GetByID(context.Context, string, string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*leads.Lead, error) {
+	s.called = true
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.lead != nil {
+		return s.lead, nil
+	}
+	return &leads.Lead{ID: "lead-stub", OrgID: orgID, Phone: phone, Source: source}, nil
 }

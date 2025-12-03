@@ -51,74 +51,23 @@ func main() {
 		"has_webhook_secret", cfg.TelnyxWebhookSecret != "",
 	)
 
-	registry := prometheus.NewRegistry()
-	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
-	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	metricsHandler, messagingMetrics := setupMessagingMetrics()
 
+	// Setup application context
 	appCtx, stop := context.WithCancel(context.Background())
 	defer stop()
 
-	var dbPool *pgxpool.Pool
-	if cfg.DatabaseURL != "" {
-		ctx, cancel := context.WithTimeout(appCtx, 5*time.Second)
-		defer cancel()
-		pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
-		if err != nil {
-			logger.Error("failed to connect to postgres", "error", err)
-			os.Exit(1)
-		}
-		if err := pool.Ping(ctx); err != nil {
-			logger.Error("failed to ping postgres", "error", err)
-			os.Exit(1)
-		}
-		dbPool = pool
+	dbPool := connectPostgresPool(appCtx, cfg.DatabaseURL, logger)
+	if dbPool != nil {
 		defer dbPool.Close()
-		logger.Info("connected to postgres")
 	}
 
 	// Initialize repositories and services
-	var leadsRepo leads.Repository
-	if dbPool != nil {
-		leadsRepo = leads.NewPostgresRepository(dbPool)
-	} else {
-		leadsRepo = leads.NewInMemoryRepository()
-	}
+	leadsRepo := initializeLeadsRepository(dbPool)
 
-	var msgStore *messaging.Store
-	if dbPool != nil {
-		msgStore = messaging.NewStore(dbPool)
-	}
-	var (
-		conversationPublisher *conversation.Publisher
-		jobRecorder           conversation.JobRecorder
-		jobUpdater            conversation.JobUpdater
-		memoryQueue           *conversation.MemoryQueue
-	)
+	msgStore := messaging.NewStore(dbPool)
 
-	if cfg.UseMemoryQueue {
-		if dbPool == nil {
-			logger.Error("USE_MEMORY_QUEUE requires DATABASE_URL for job persistence")
-			os.Exit(1)
-		}
-		memoryQueue = conversation.NewMemoryQueue(1024)
-		pgStore := conversation.NewPGJobStore(dbPool)
-		jobRecorder = pgStore
-		jobUpdater = pgStore
-		conversationPublisher = conversation.NewPublisher(memoryQueue, pgStore, logger)
-	} else {
-		awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
-		if err != nil {
-			logger.Error("failed to load AWS config", "error", err)
-			os.Exit(1)
-		}
-		sqsClient := sqs.NewFromConfig(awsCfg)
-		sqsQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
-		dynamoClient := dynamodb.NewFromConfig(awsCfg)
-		store := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
-		jobRecorder = store
-		jobUpdater = store
-		conversationPublisher = conversation.NewPublisher(sqsQueue, store, logger)
-	}
+	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := setupConversation(appCtx, cfg, dbPool, logger)
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
@@ -156,26 +105,9 @@ func main() {
 			"reason", webhookMessengerReason,
 		)
 	}
-	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, webhookMessenger, logger)
+	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, webhookMessenger, leadsRepo, logger)
 
-	var telnyxClient *telnyxclient.Client
-	if cfg.TelnyxAPIKey != "" {
-		logger.Debug("creating telnyx client", "profile_id", cfg.TelnyxMessagingProfileID)
-		client, err := telnyxclient.New(telnyxclient.Config{
-			APIKey:        cfg.TelnyxAPIKey,
-			WebhookSecret: cfg.TelnyxWebhookSecret,
-			Timeout:       10 * time.Second,
-			Logger:        logger.Logger,
-		})
-		if err != nil {
-			logger.Error("failed to configure telnyx client", "error", err)
-			os.Exit(1)
-		}
-		telnyxClient = client
-		logger.Debug("telnyx client created successfully")
-	} else {
-		logger.Debug("telnyx client not created: API key empty")
-	}
+	telnyxClient := setupTelnyxClient(cfg, logger)
 
 	var quietHours compliance.QuietHours
 	quietHoursEnabled := false
@@ -230,53 +162,25 @@ func main() {
 	}
 	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, ragIngestor, logger)
 
-	var inlineWorker *conversation.Worker
-	if cfg.UseMemoryQueue {
-		processor, err := appbootstrap.BuildConversationService(appCtx, cfg, logger)
-		if err != nil {
-			logger.Error("failed to configure inline conversation service", "error", err)
-			os.Exit(1)
-		}
-
-		var (
-			messenger       conversation.ReplyMessenger
-			messengerReason string
-		)
-		messenger, _, messengerReason = webhookMessenger, webhookMessengerProvider, webhookMessengerReason
-		if messenger == nil {
-			logger.Warn("no sms credentials configured; SMS replies disabled for inline workers",
-				"preference", cfg.SMSProvider,
-				"reason", messengerReason,
-			)
-		}
-
-		var bookingBridge conversation.BookingServiceAdapter
-		if dbPool != nil {
-			repo := bookings.NewRepository(dbPool)
-			bookingBridge = conversation.BookingServiceAdapter{
-				Service: bookings.NewService(repo, logger),
-			}
-		}
-
-		inlineWorker = conversation.NewWorker(
-			processor,
-			memoryQueue,
-			jobUpdater,
-			messenger,
-			bookingBridge,
-			logger,
-			conversation.WithWorkerCount(cfg.WorkerCount),
-		)
-		inlineWorker.Start(appCtx)
-		logger.Info("inline conversation workers started", "count", cfg.WorkerCount)
-	}
+	inlineWorker := setupInlineWorker(
+		appCtx,
+		cfg,
+		logger,
+		webhookMessenger,
+		webhookMessengerReason,
+		jobUpdater,
+		memoryQueue,
+		dbPool,
+		outboxStore,
+	)
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
 	if paymentsRepo != nil && processedStore != nil && outboxStore != nil {
-		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger)
+		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+		orderClient := payments.NewSquareOrdersClient(cfg.SquareAccessToken, cfg.SquareBaseURL, logger)
 		checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, squareSvc, logger, int32(cfg.DepositAmountCents))
-		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, logger)
+		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, orderClient, logger)
 		dispatcher := conversation.NewOutboxDispatcher(conversationPublisher)
 		deliverer := events.NewDeliverer(outboxStore, dispatcher, logger)
 		go deliverer.Start(appCtx)
@@ -295,6 +199,7 @@ func main() {
 			Processed:        processedStore,
 			Telnyx:           telnyxClient,
 			Conversation:     conversationPublisher,
+			Leads:            leadsRepo,
 			Logger:           logger,
 			MessagingProfile: cfg.TelnyxMessagingProfileID,
 			StopAck:          cfg.TelnyxStopReply,
@@ -356,23 +261,183 @@ func main() {
 		os.Exit(1)
 	}
 
-	if inlineWorker != nil {
-		waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer waitCancel()
-		done := make(chan struct{})
-		go func() {
-			inlineWorker.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			logger.Info("inline conversation workers stopped")
-		case <-waitCtx.Done():
-			logger.Warn("inline conversation workers shutdown timed out", "error", waitCtx.Err())
-		}
-	}
+	waitForInlineWorker(inlineWorker, logger)
 
 	logger.Info("server stopped")
 	fmt.Println("Server exited gracefully")
+}
+
+func setupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
+	registry := prometheus.NewRegistry()
+	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
+	conversation.RegisterMetrics(registry)
+	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	return metricsHandler, messagingMetrics
+}
+
+func connectPostgresPool(ctx context.Context, dbURL string, logger *logging.Logger) *pgxpool.Pool {
+	if dbURL == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		logger.Error("failed to connect to postgres", "error", err)
+		os.Exit(1)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		logger.Error("failed to ping postgres", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("connected to postgres")
+	return pool
+}
+
+func setupConversation(
+	ctx context.Context,
+	cfg *appconfig.Config,
+	dbPool *pgxpool.Pool,
+	logger *logging.Logger,
+) (*conversation.Publisher, conversation.JobRecorder, conversation.JobUpdater, *conversation.MemoryQueue) {
+	var (
+		publisher   *conversation.Publisher
+		recorder    conversation.JobRecorder
+		updater     conversation.JobUpdater
+		memoryQueue *conversation.MemoryQueue
+	)
+
+	if cfg.UseMemoryQueue {
+		if dbPool == nil {
+			logger.Error("USE_MEMORY_QUEUE requires DATABASE_URL for job persistence")
+			os.Exit(1)
+		}
+		memoryQueue = conversation.NewMemoryQueue(1024)
+		pgStore := conversation.NewPGJobStore(dbPool)
+		recorder, updater = pgStore, pgStore
+		publisher = conversation.NewPublisher(memoryQueue, pgStore, logger)
+		return publisher, recorder, updater, memoryQueue
+	}
+
+	awsCfg, err := mainconfig.LoadAWSConfig(ctx, cfg)
+	if err != nil {
+		logger.Error("failed to load AWS config", "error", err)
+		os.Exit(1)
+	}
+	sqsClient := sqs.NewFromConfig(awsCfg)
+	sqsQueue := conversation.NewSQSQueue(sqsClient, cfg.ConversationQueueURL)
+	dynamoClient := dynamodb.NewFromConfig(awsCfg)
+	store := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
+	recorder, updater = store, store
+	publisher = conversation.NewPublisher(sqsQueue, store, logger)
+	return publisher, recorder, updater, memoryQueue
+}
+
+func setupInlineWorker(
+	ctx context.Context,
+	cfg *appconfig.Config,
+	logger *logging.Logger,
+	messenger conversation.ReplyMessenger,
+	messengerReason string,
+	jobUpdater conversation.JobUpdater,
+	memoryQueue *conversation.MemoryQueue,
+	dbPool *pgxpool.Pool,
+	outboxStore *events.OutboxStore,
+) *conversation.Worker {
+	if !cfg.UseMemoryQueue || memoryQueue == nil {
+		return nil
+	}
+
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, logger)
+	if err != nil {
+		logger.Error("failed to configure inline conversation service", "error", err)
+		os.Exit(1)
+	}
+
+	if messenger == nil {
+		logger.Warn("no sms credentials configured; SMS replies disabled for inline workers",
+			"preference", cfg.SMSProvider,
+			"reason", messengerReason,
+		)
+	}
+
+	var bookingBridge conversation.BookingServiceAdapter
+	if dbPool != nil {
+		repo := bookings.NewRepository(dbPool)
+		bookingBridge = conversation.BookingServiceAdapter{
+			Service: bookings.NewService(repo, logger),
+		}
+	}
+
+	var depositSender conversation.DepositSender
+	if dbPool != nil && outboxStore != nil && cfg.SquareAccessToken != "" && cfg.SquareLocationID != "" {
+		payRepo := payments.NewRepository(dbPool)
+		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+		depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outboxStore, messenger, logger)
+	}
+
+	worker := conversation.NewWorker(
+		processor,
+		memoryQueue,
+		jobUpdater,
+		messenger,
+		bookingBridge,
+		logger,
+		conversation.WithWorkerCount(cfg.WorkerCount),
+		conversation.WithDepositSender(depositSender),
+	)
+	worker.Start(ctx)
+	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)
+	return worker
+}
+
+func waitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logger) {
+	if inlineWorker == nil {
+		return
+	}
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer waitCancel()
+
+	done := make(chan struct{})
+	go func() {
+		inlineWorker.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		logger.Info("inline conversation workers stopped")
+	case <-waitCtx.Done():
+		logger.Warn("inline conversation workers shutdown timed out", "error", waitCtx.Err())
+	}
+}
+
+func setupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxclient.Client {
+	if cfg.TelnyxAPIKey == "" {
+		logger.Debug("telnyx client not created: API key empty")
+		return nil
+	}
+
+	logger.Debug("creating telnyx client", "profile_id", cfg.TelnyxMessagingProfileID)
+	client, err := telnyxclient.New(telnyxclient.Config{
+		APIKey:        cfg.TelnyxAPIKey,
+		WebhookSecret: cfg.TelnyxWebhookSecret,
+		Timeout:       10 * time.Second,
+		Logger:        logger.Logger,
+	})
+	if err != nil {
+		logger.Error("failed to configure telnyx client", "error", err)
+		os.Exit(1)
+	}
+	logger.Debug("telnyx client created successfully")
+	return client
+}
+
+func initializeLeadsRepository(dbPool *pgxpool.Pool) leads.Repository {
+	if dbPool != nil {
+		return leads.NewPostgresRepository(dbPool)
+	}
+	return leads.NewInMemoryRepository()
 }
