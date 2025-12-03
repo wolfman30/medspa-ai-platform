@@ -8,6 +8,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("ENV", "")
 	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("OPENAI_MODEL", "")
 	cfg := Load()
 	if cfg.Port != "8080" {
 		t.Fatalf("expected default port, got %s", cfg.Port)
@@ -15,7 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Env != "development" {
 		t.Fatalf("expected default env, got %s", cfg.Env)
 	}
-	if cfg.OpenAIModel != "gpt-4o-mini" {
+	if cfg.OpenAIModel != "gpt-5-mini" {
 		t.Fatalf("unexpected default model %s", cfg.OpenAIModel)
 	}
 }

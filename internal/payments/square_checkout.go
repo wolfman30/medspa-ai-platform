@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -40,6 +40,7 @@ type CheckoutParams struct {
 	Description     string
 	SuccessURL      string
 	CancelURL       string
+	ScheduledFor    *time.Time
 }
 
 type CheckoutResponse struct {
@@ -90,29 +91,49 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		successURL = s.successURL
 	}
 
-	idempotency := ""
-	if params.BookingIntentID != uuid.Nil {
-		idempotency = params.BookingIntentID.String()
-	}
-	if idempotency == "" {
+	idempotency := params.BookingIntentID.String()
+	if params.BookingIntentID == uuid.Nil {
 		idempotency = buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
 	}
+	name := params.Description
+	if strings.TrimSpace(name) == "" {
+		name = "Deposit"
+	}
+	var scheduledStr string
+	if params.ScheduledFor != nil {
+		scheduledStr = params.ScheduledFor.UTC().Format(time.RFC3339)
+	}
+	meta := map[string]string{
+		"org_id":            params.OrgID,
+		"lead_id":           params.LeadID,
+		"booking_intent_id": params.BookingIntentID.String(),
+	}
+	if scheduledStr != "" {
+		meta["scheduled_for"] = scheduledStr
+	}
+
 	body := map[string]any{
 		"idempotency_key": idempotency,
-		"quick_pay": map[string]any{
-			"name":        params.Description,
-			"price_money": map[string]any{"amount": params.AmountCents, "currency": "USD"},
+		"order": map[string]any{
 			"location_id": s.locationID,
+			"metadata":   meta,
+			"line_items": []map[string]any{
+				{
+					"name":     name,
+					"quantity": "1",
+					"base_price_money": map[string]any{
+						"amount":   params.AmountCents,
+						"currency": "USD",
+					},
+				},
+			},
 		},
 		"checkout_options": map[string]any{
 			"redirect_url":             successURL,
 			"ask_for_shipping_address": false,
 		},
-		"metadata": map[string]string{
-			"org_id":            params.OrgID,
-			"lead_id":           params.LeadID,
-			"booking_intent_id": params.BookingIntentID.String(),
-		},
+		// Redundant metadata on the link for completeness.
+		"metadata": meta,
 	}
 
 	reqBody, err := json.Marshal(body)

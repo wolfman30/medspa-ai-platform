@@ -66,6 +66,45 @@ func TestSquareWebhookHandler_Success(t *testing.T) {
 	}
 }
 
+func TestSquareWebhookHandler_ScheduledFor(t *testing.T) {
+	orgID := uuid.New().String()
+	leadID := uuid.New().String()
+	intentID := uuid.New().String()
+	sched := time.Date(2025, 12, 1, 15, 0, 0, 0, time.UTC)
+
+	payments := &stubPaymentStore{}
+	leadsRepo := &stubLeadRepo{
+		lead: &leads.Lead{ID: leadID, OrgID: orgID, Phone: "+15550000000"},
+	}
+	processed := &stubProcessedTracker{}
+	outbox := &stubOutboxWriter{}
+
+	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, nil, nil, logging.Default())
+
+	body := buildSquarePayload(t, "evt-123", "pay-123", "COMPLETED", map[string]string{
+		"org_id":            orgID,
+		"lead_id":           leadID,
+		"booking_intent_id": intentID,
+		"scheduled_for":     sched.Format(time.RFC3339),
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body))
+	req.Host = "example.com"
+	sign(req, "secret", body)
+
+	rr := httptest.NewRecorder()
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(outbox.inserted) != 1 {
+		t.Fatalf("expected outbox insert, got %d", len(outbox.inserted))
+	}
+	if outbox.inserted[0].ScheduledFor == nil || !outbox.inserted[0].ScheduledFor.Equal(sched) {
+		t.Fatalf("expected scheduled_for %v, got %+v", sched, outbox.inserted[0].ScheduledFor)
+	}
+}
+
 func TestSquareWebhookHandler_AlreadyProcessed(t *testing.T) {
 	orgID := uuid.New().String()
 	leadID := uuid.New().String()
@@ -198,8 +237,8 @@ func computeSignature(key, url string, body []byte) string {
 
 func samplePayment(id uuid.UUID, providerRef string) *paymentsql.Payment {
 	return &paymentsql.Payment{
-		ID: pgtype.UUID{Bytes: [16]byte(id), Valid: id != uuid.Nil},
-		OrgID: uuid.New().String(),
+		ID:     pgtype.UUID{Bytes: [16]byte(id), Valid: id != uuid.Nil},
+		OrgID:  uuid.New().String(),
 		LeadID: pgtype.UUID{Bytes: [16]byte(uuid.New()), Valid: true},
 		ProviderRef: pgtype.Text{
 			String: providerRef,

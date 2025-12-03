@@ -75,4 +75,3 @@ func (c *squareOrdersClient) FetchMetadata(ctx context.Context, orderID string) 
 	}
 	return payload.Order.Metadata, nil
 }
-
