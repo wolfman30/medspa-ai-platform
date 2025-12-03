@@ -123,6 +123,7 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 
 	orgID := uuid.New()
 	leadID := uuid.New()
+	when := time.Now().Add(48 * time.Hour).UTC()
 	event := events.PaymentSucceededV1{
 		EventID:     "evt-123",
 		OrgID:       orgID.String(),
@@ -131,6 +132,7 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 		FromNumber:  "+15550000000",
 		AmountCents: 5000,
 		OccurredAt:  time.Now().UTC(),
+		ScheduledFor: &when,
 	}
 	payload := queuePayload{
 		ID:          "job-payment",
@@ -150,6 +152,9 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 
 	if bookings.callCount() != 1 {
 		t.Fatalf("expected booking confirm call, got %d", bookings.callCount())
+	}
+	if sched := bookings.firstScheduled(); sched == nil || sched.Unix() != when.Unix() {
+		t.Fatalf("expected scheduled time passed to booking confirmer")
 	}
 	if messenger.lastReply().To != event.LeadPhone {
 		t.Fatalf("expected sms to lead, got %s", messenger.lastReply().To)
@@ -478,8 +483,9 @@ func (s *stubDepositSender) SendDeposit(ctx context.Context, msg MessageRequest,
 
 type stubBookingConfirmer struct {
 	calls []struct {
-		org  uuid.UUID
-		lead uuid.UUID
+		org        uuid.UUID
+		lead       uuid.UUID
+		scheduled  *time.Time
 	}
 	mu sync.Mutex
 }
@@ -487,9 +493,10 @@ type stubBookingConfirmer struct {
 func (s *stubBookingConfirmer) ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error {
 	s.mu.Lock()
 	s.calls = append(s.calls, struct {
-		org  uuid.UUID
-		lead uuid.UUID
-	}{org: orgID, lead: leadID})
+		org       uuid.UUID
+		lead      uuid.UUID
+		scheduled *time.Time
+	}{org: orgID, lead: leadID, scheduled: scheduledFor})
 	s.mu.Unlock()
 	return nil
 }
@@ -498,4 +505,13 @@ func (s *stubBookingConfirmer) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.calls)
+}
+
+func (s *stubBookingConfirmer) firstScheduled() *time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.calls) == 0 {
+		return nil
+	}
+	return s.calls[0].scheduled
 }

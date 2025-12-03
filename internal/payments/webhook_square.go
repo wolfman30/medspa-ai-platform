@@ -103,20 +103,24 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	intentID := metadata["booking_intent_id"]
 	paymentID := evt.Data.Object.Payment.ID
 	orderID := evt.Data.Object.Payment.OrderID
+	scheduledStr := metadata["scheduled_for"]
 	if orgID == "" || leadID == "" || intentID == "" {
 		// Fallback: try to resolve via provider ref if metadata is missing (observed in some webhook payloads).
 		if paymentID == "" {
 			http.Error(w, "missing metadata", http.StatusBadRequest)
 			return
 		}
+		var orderMeta map[string]string
 		paymentRow, perr := h.payments.GetByProviderRef(r.Context(), paymentID)
 		if perr != nil || paymentRow == nil {
 			// If payment lookup fails, attempt to hydrate metadata via order lookup.
 			if h.orders != nil && orderID != "" {
-				if orderMeta, oerr := h.orders.FetchMetadata(r.Context(), orderID); oerr == nil && len(orderMeta) > 0 {
+				if ometa, oerr := h.orders.FetchMetadata(r.Context(), orderID); oerr == nil && len(ometa) > 0 {
+					orderMeta = ometa
 					orgID = orderMeta["org_id"]
 					leadID = orderMeta["lead_id"]
 					intentID = orderMeta["booking_intent_id"]
+					scheduledStr = orderMeta["scheduled_for"]
 				} else {
 					h.logger.Warn("square webhook missing metadata and payment/order lookup failed", "payment_err", perr, "order_err", oerr, "payment_id", paymentID, "order_id", orderID)
 					w.WriteHeader(http.StatusOK) // acknowledge to avoid retries; cannot progress workflow
@@ -128,13 +132,23 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		orgID = paymentRow.OrgID
-		if paymentRow.LeadID.Valid {
-			leadUUID, _ := uuid.FromBytes(paymentRow.LeadID.Bytes[:])
-			leadID = leadUUID.String()
+		if paymentRow != nil {
+			orgID = paymentRow.OrgID
+			if paymentRow.LeadID.Valid {
+				leadUUID, _ := uuid.FromBytes(paymentRow.LeadID.Bytes[:])
+				leadID = leadUUID.String()
+			}
+			if paymentRow.ID.Valid {
+				intentID = uuid.UUID(paymentRow.ID.Bytes).String()
+			}
 		}
-		if paymentRow.ID.Valid {
-			intentID = uuid.UUID(paymentRow.ID.Bytes).String()
+	}
+	var scheduledFor *time.Time
+	if scheduledStr != "" {
+		if parsed, err := time.Parse(time.RFC3339, scheduledStr); err == nil {
+			scheduledFor = &parsed
+		} else {
+			h.logger.Warn("square webhook scheduled_for parse failed", "error", err, "value", scheduledStr)
 		}
 	}
 	if evt.Data.Object.Payment.Status != "COMPLETED" {
@@ -190,6 +204,7 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		AmountCents:     evt.Data.Object.Payment.AmountMoney.Amount,
 		OccurredAt:      evt.CreatedAt,
 		LeadPhone:       lead.Phone,
+		ScheduledFor:    scheduledFor,
 	}
 	if h.numbers != nil {
 		event.FromNumber = h.numbers.DefaultFromNumber(orgID)
