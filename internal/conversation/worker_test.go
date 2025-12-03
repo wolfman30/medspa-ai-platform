@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -122,14 +123,16 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 
 	orgID := uuid.New()
 	leadID := uuid.New()
+	scheduled := time.Now().Add(24 * time.Hour).UTC()
 	event := events.PaymentSucceededV1{
-		EventID:     "evt-123",
-		OrgID:       orgID.String(),
-		LeadID:      leadID.String(),
-		LeadPhone:   "+19998887777",
-		FromNumber:  "+15550000000",
-		AmountCents: 5000,
-		OccurredAt:  time.Now().UTC(),
+		EventID:      "evt-123",
+		OrgID:        orgID.String(),
+		LeadID:       leadID.String(),
+		LeadPhone:    "+19998887777",
+		FromNumber:   "+15550000000",
+		AmountCents:  5000,
+		OccurredAt:   time.Now().UTC(),
+		ScheduledFor: &scheduled,
 	}
 	payload := queuePayload{
 		ID:          "job-payment",
@@ -152,6 +155,13 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	}
 	if messenger.lastReply().To != event.LeadPhone {
 		t.Fatalf("expected sms to lead, got %s", messenger.lastReply().To)
+	}
+	call := bookings.lastCall()
+	if call == nil || call.scheduled == nil || !call.scheduled.Equal(scheduled) {
+		t.Fatalf("expected scheduled time to propagate, got %#v", call)
+	}
+	if !strings.Contains(messenger.lastReply().Body, scheduled.Format(time.RFC1123)) {
+		t.Fatalf("expected scheduled time in confirmation sms, got %q", messenger.lastReply().Body)
 	}
 }
 
@@ -409,8 +419,9 @@ func (s *stubMessenger) lastReply() OutboundReply {
 
 type stubBookingConfirmer struct {
 	calls []struct {
-		org  uuid.UUID
-		lead uuid.UUID
+		org       uuid.UUID
+		lead      uuid.UUID
+		scheduled *time.Time
 	}
 	mu sync.Mutex
 }
@@ -418,9 +429,10 @@ type stubBookingConfirmer struct {
 func (s *stubBookingConfirmer) ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error {
 	s.mu.Lock()
 	s.calls = append(s.calls, struct {
-		org  uuid.UUID
-		lead uuid.UUID
-	}{org: orgID, lead: leadID})
+		org       uuid.UUID
+		lead      uuid.UUID
+		scheduled *time.Time
+	}{org: orgID, lead: leadID, scheduled: scheduledFor})
 	s.mu.Unlock()
 	return nil
 }
@@ -429,4 +441,17 @@ func (s *stubBookingConfirmer) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.calls)
+}
+
+func (s *stubBookingConfirmer) lastCall() *struct {
+	org       uuid.UUID
+	lead      uuid.UUID
+	scheduled *time.Time
+} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.calls) == 0 {
+		return nil
+	}
+	return &s.calls[len(s.calls)-1]
 }

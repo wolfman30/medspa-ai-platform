@@ -47,6 +47,7 @@ type Payment struct {
 	BookingIntentID pgtype.UUID
 	AmountCents     int32
 	Status          string
+	ScheduledFor    pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 }
 

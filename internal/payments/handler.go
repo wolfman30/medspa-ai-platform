@@ -3,6 +3,7 @@ package payments
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -30,6 +31,7 @@ type checkoutRequest struct {
 	BookingIntentID string `json:"booking_intent_id,omitempty"`
 	SuccessURL      string `json:"success_url,omitempty"`
 	CancelURL       string `json:"cancel_url,omitempty"`
+	ScheduledFor    string `json:"scheduled_for,omitempty"`
 }
 
 type checkoutResponse struct {
@@ -69,6 +71,15 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 	if req.AmountCents <= 0 {
 		req.AmountCents = h.minAmount
 	}
+	var scheduledFor *time.Time
+	if req.ScheduledFor != "" {
+		parsed, err := time.Parse(time.RFC3339, req.ScheduledFor)
+		if err != nil {
+			http.Error(w, "invalid scheduled_for format", http.StatusBadRequest)
+			return
+		}
+		scheduledFor = &parsed
+	}
 
 	lead, err := h.leads.GetByID(r.Context(), orgID, req.LeadID)
 	if err != nil {
@@ -87,7 +98,7 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid org id", http.StatusBadRequest)
 		return
 	}
-	intent, err := h.payments.CreateIntent(r.Context(), orgUUID, leadUUID, "square", uuid.Nil, req.AmountCents, "deposit_pending")
+	intent, err := h.payments.CreateIntent(r.Context(), orgUUID, leadUUID, "square", uuid.Nil, req.AmountCents, "deposit_pending", scheduledFor)
 	if err != nil {
 		h.logger.Error("failed to persist payment intent", "error", err)
 		http.Error(w, "failed to create payment intent", http.StatusInternalServerError)
@@ -108,6 +119,7 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 		Description:     "MedSpa Deposit",
 		SuccessURL:      req.SuccessURL,
 		CancelURL:       req.CancelURL,
+		ScheduledFor:    scheduledFor,
 	})
 	if err != nil {
 		h.logger.Error("square checkout failed", "error", err)

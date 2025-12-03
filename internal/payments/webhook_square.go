@@ -98,6 +98,15 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	orgID := metadata["org_id"]
 	leadID := metadata["lead_id"]
 	intentID := metadata["booking_intent_id"]
+	var scheduledFor *time.Time
+	if scheduled := metadata["scheduled_for"]; scheduled != "" {
+		parsed, err := time.Parse(time.RFC3339, scheduled)
+		if err != nil {
+			h.logger.Warn("invalid scheduled_for metadata", "value", scheduled, "error", err)
+		} else {
+			scheduledFor = &parsed
+		}
+	}
 	if orgID == "" || leadID == "" {
 		http.Error(w, "missing metadata", http.StatusBadRequest)
 		return
@@ -155,6 +164,7 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		AmountCents:     evt.Data.Object.Payment.AmountMoney.Amount,
 		OccurredAt:      evt.CreatedAt,
 		LeadPhone:       lead.Phone,
+		ScheduledFor:    scheduledFor,
 	}
 	if h.numbers != nil {
 		event.FromNumber = h.numbers.DefaultFromNumber(orgID)

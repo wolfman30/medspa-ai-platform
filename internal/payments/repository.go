@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,7 +35,7 @@ func NewRepositoryWithQuerier(q paymentsql.Querier) *Repository {
 }
 
 // CreateIntent persists a payment intent in deposit pending status.
-func (r *Repository) CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string) (*paymentsql.Payment, error) {
+func (r *Repository) CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string, scheduledFor *time.Time) (*paymentsql.Payment, error) {
 	arg := paymentsql.InsertPaymentParams{
 		ID:              toPGUUID(uuid.New()),
 		OrgID:           orgID.String(),
@@ -44,6 +45,7 @@ func (r *Repository) CreateIntent(ctx context.Context, orgID uuid.UUID, leadID u
 		BookingIntentID: toPGUUID(bookingIntent),
 		AmountCents:     amountCents,
 		Status:          status,
+		ScheduledFor:    toPGNullableTime(scheduledFor),
 	}
 	row, err := r.queries.InsertPayment(ctx, arg)
 	if err != nil {
@@ -113,6 +115,16 @@ func toPGUUID(id uuid.UUID) pgtype.UUID {
 	}
 	return pgtype.UUID{
 		Bytes: [16]byte(id),
+		Valid: true,
+	}
+}
+
+func toPGNullableTime(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{
+		Time:  *t,
 		Valid: true,
 	}
 }

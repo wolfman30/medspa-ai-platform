@@ -25,6 +25,7 @@ func TestSquareWebhookHandler_Success(t *testing.T) {
 	orgID := uuid.New().String()
 	leadID := uuid.New().String()
 	intentID := uuid.New().String()
+	scheduled := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
 
 	payments := &stubPaymentStore{}
 	leadsRepo := &stubLeadRepo{
@@ -40,6 +41,7 @@ func TestSquareWebhookHandler_Success(t *testing.T) {
 		"org_id":            orgID,
 		"lead_id":           leadID,
 		"booking_intent_id": intentID,
+		"scheduled_for":     scheduled.Format(time.RFC3339),
 	})
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body))
 	req.Host = "example.com"
@@ -62,6 +64,9 @@ func TestSquareWebhookHandler_Success(t *testing.T) {
 	}
 	if outbox.inserted[0].FromNumber != "+19998887777" {
 		t.Fatalf("expected from number injection")
+	}
+	if outbox.inserted[0].ScheduledFor == nil || !outbox.inserted[0].ScheduledFor.Equal(scheduled) {
+		t.Fatalf("expected scheduled_for to propagate, got %#v", outbox.inserted[0].ScheduledFor)
 	}
 }
 

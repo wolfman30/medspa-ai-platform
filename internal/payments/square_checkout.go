@@ -38,6 +38,7 @@ type CheckoutParams struct {
 	Description     string
 	SuccessURL      string
 	CancelURL       string
+	ScheduledFor    *time.Time
 }
 
 type CheckoutResponse struct {
@@ -78,6 +79,14 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	}
 
 	idempotency := buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
+	metadata := map[string]string{
+		"org_id":            params.OrgID,
+		"lead_id":           params.LeadID,
+		"booking_intent_id": params.BookingIntentID.String(),
+	}
+	if params.ScheduledFor != nil {
+		metadata["scheduled_for"] = params.ScheduledFor.UTC().Format(time.RFC3339)
+	}
 	body := map[string]any{
 		"idempotency_key": idempotency,
 		"quick_pay": map[string]any{
@@ -89,11 +98,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 			"redirect_url":             successURL,
 			"ask_for_shipping_address": false,
 		},
-		"metadata": map[string]string{
-			"org_id":            params.OrgID,
-			"lead_id":           params.LeadID,
-			"booking_intent_id": params.BookingIntentID.String(),
-		},
+		"metadata": metadata,
 	}
 
 	reqBody, err := json.Marshal(body)
