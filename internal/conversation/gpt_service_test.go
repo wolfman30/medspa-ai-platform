@@ -163,6 +163,60 @@ func TestGPTService_StartConversation_OpenAIError(t *testing.T) {
 	}
 }
 
+func TestGPTService_ProcessMessage_ExtractsDepositIntent(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	scripted := &scriptedChatClient{
+		responses: []openai.ChatCompletionResponse{
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Hello!"}}}},
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Let's lock this in. I can send a quick deposit link."}}}},
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`}}}},
+		},
+	}
+
+	service := NewGPTService(scripted, client, nil, "gpt-5-mini", logging.Default(), WithDepositConfig(DepositConfig{
+		DefaultAmountCents: 5000,
+		SuccessURL:         "http://default-success",
+		CancelURL:          "http://default-cancel",
+	}))
+
+	start, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-deposit",
+		LeadID:         "lead-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: start.ConversationID,
+		Message:        "Happy to pay a deposit for Friday",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("process message failed: %v", err)
+	}
+
+	if resp.DepositIntent == nil {
+		t.Fatalf("expected deposit intent to be set")
+	}
+	if resp.DepositIntent.AmountCents != 7500 {
+		t.Fatalf("unexpected deposit amount: %d", resp.DepositIntent.AmountCents)
+	}
+	if resp.DepositIntent.SuccessURL != "http://ok" || resp.DepositIntent.CancelURL != "http://cancel" {
+		t.Fatalf("unexpected deposit URLs: %#v", resp.DepositIntent)
+	}
+	if resp.DepositIntent.Description != "Hold your spot" {
+		t.Fatalf("unexpected deposit description: %s", resp.DepositIntent.Description)
+	}
+}
+
 type stubChatClient struct {
 	response openai.ChatCompletionResponse
 	err      error
@@ -191,6 +245,29 @@ func (s *stubRAG) Query(ctx context.Context, clinicID string, query string, topK
 		return nil, s.err
 	}
 	return s.contexts, nil
+}
+
+type scriptedChatClient struct {
+	responses []openai.ChatCompletionResponse
+	errs      []error
+	calls     int
+	lastReq   openai.ChatCompletionRequest
+}
+
+func (s *scriptedChatClient) CreateChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error) {
+	s.lastReq = req
+	if s.calls < len(s.errs) && s.errs[s.calls] != nil {
+		err := s.errs[s.calls]
+		s.calls++
+		return openai.ChatCompletionResponse{}, err
+	}
+	if s.calls >= len(s.responses) {
+		s.calls++
+		return openai.ChatCompletionResponse{}, errors.New("no scripted response")
+	}
+	resp := s.responses[s.calls]
+	s.calls++
+	return resp, nil
 }
 
 func TestGPTService_UsesRAGContext(t *testing.T) {

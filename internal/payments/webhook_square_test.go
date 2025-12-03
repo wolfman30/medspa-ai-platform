@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -35,7 +36,7 @@ func TestSquareWebhookHandler_Success(t *testing.T) {
 	outbox := &stubOutboxWriter{}
 	numbers := stubNumberResolver("+19998887777")
 
-	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, numbers, logging.Default())
+	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, numbers, nil, logging.Default())
 
 	body := buildSquarePayload(t, "evt-123", "pay-123", "COMPLETED", map[string]string{
 		"org_id":            orgID,
@@ -70,6 +71,45 @@ func TestSquareWebhookHandler_Success(t *testing.T) {
 	}
 }
 
+func TestSquareWebhookHandler_ScheduledFor(t *testing.T) {
+	orgID := uuid.New().String()
+	leadID := uuid.New().String()
+	intentID := uuid.New().String()
+	sched := time.Date(2025, 12, 1, 15, 0, 0, 0, time.UTC)
+
+	payments := &stubPaymentStore{}
+	leadsRepo := &stubLeadRepo{
+		lead: &leads.Lead{ID: leadID, OrgID: orgID, Phone: "+15550000000"},
+	}
+	processed := &stubProcessedTracker{}
+	outbox := &stubOutboxWriter{}
+
+	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, nil, nil, logging.Default())
+
+	body := buildSquarePayload(t, "evt-123", "pay-123", "COMPLETED", map[string]string{
+		"org_id":            orgID,
+		"lead_id":           leadID,
+		"booking_intent_id": intentID,
+		"scheduled_for":     sched.Format(time.RFC3339),
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body))
+	req.Host = "example.com"
+	sign(req, "secret", body)
+
+	rr := httptest.NewRecorder()
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(outbox.inserted) != 1 {
+		t.Fatalf("expected outbox insert, got %d", len(outbox.inserted))
+	}
+	if outbox.inserted[0].ScheduledFor == nil || !outbox.inserted[0].ScheduledFor.Equal(sched) {
+		t.Fatalf("expected scheduled_for %v, got %+v", sched, outbox.inserted[0].ScheduledFor)
+	}
+}
+
 func TestSquareWebhookHandler_AlreadyProcessed(t *testing.T) {
 	orgID := uuid.New().String()
 	leadID := uuid.New().String()
@@ -81,6 +121,7 @@ func TestSquareWebhookHandler_AlreadyProcessed(t *testing.T) {
 		&stubLeadRepo{},
 		&stubProcessedTracker{already: true},
 		&stubOutboxWriter{},
+		nil,
 		nil,
 		logging.Default(),
 	)
@@ -103,7 +144,7 @@ func TestSquareWebhookHandler_AlreadyProcessed(t *testing.T) {
 }
 
 func TestSquareWebhookHandler_InvalidSignature(t *testing.T) {
-	handler := NewSquareWebhookHandler("secret", &stubPaymentStore{}, &stubLeadRepo{}, &stubProcessedTracker{}, &stubOutboxWriter{}, nil, logging.Default())
+	handler := NewSquareWebhookHandler("secret", &stubPaymentStore{}, &stubLeadRepo{}, &stubProcessedTracker{}, &stubOutboxWriter{}, nil, nil, logging.Default())
 	body := buildSquarePayload(t, "evt", "pay", "COMPLETED", map[string]string{
 		"org_id":            uuid.New().String(),
 		"lead_id":           uuid.New().String(),
@@ -121,23 +162,24 @@ func TestSquareWebhookHandler_InvalidSignature(t *testing.T) {
 }
 
 func TestSquareWebhookHandler_MissingMetadata(t *testing.T) {
-	handler := NewSquareWebhookHandler("secret", &stubPaymentStore{}, &stubLeadRepo{}, &stubProcessedTracker{}, &stubOutboxWriter{}, nil, logging.Default())
-	body := buildSquarePayload(t, "evt", "pay", "COMPLETED", map[string]string{
-		"org_id": uuid.New().String(),
-	})
+	pay := samplePayment(uuid.New(), "pay")
+	handler := NewSquareWebhookHandler("secret", &stubPaymentStore{pay: pay}, &stubLeadRepo{
+		lead: &leads.Lead{ID: uuid.New().String(), OrgID: pay.OrgID, Phone: "+15550000000"},
+	}, &stubProcessedTracker{}, &stubOutboxWriter{}, nil, nil, logging.Default())
+	body := buildSquarePayload(t, "evt", "pay", "COMPLETED", map[string]string{})
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body))
 	req.Host = "example.com"
 	sign(req, "secret", body)
 	rr := httptest.NewRecorder()
 
 	handler.Handle(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing metadata, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 with provider ref fallback, got %d", rr.Code)
 	}
 }
 
 func TestSquareWebhookHandler_NonCompletedStatus(t *testing.T) {
-	handler := NewSquareWebhookHandler("secret", &stubPaymentStore{}, &stubLeadRepo{}, &stubProcessedTracker{}, &stubOutboxWriter{}, nil, logging.Default())
+	handler := NewSquareWebhookHandler("secret", &stubPaymentStore{}, &stubLeadRepo{}, &stubProcessedTracker{}, &stubOutboxWriter{}, nil, nil, logging.Default())
 	body := buildSquarePayload(t, "evt", "pay", "PENDING", map[string]string{
 		"org_id":            uuid.New().String(),
 		"lead_id":           uuid.New().String(),
@@ -193,18 +235,41 @@ func sign(req *http.Request, key string, body []byte) {
 }
 
 func computeSignature(key, url string, body []byte) string {
-	mac := hmac.New(sha256.New, []byte(key))
+	mac := hmac.New(sha1.New, []byte(key))
 	mac.Write([]byte(url + string(body)))
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
+func samplePayment(id uuid.UUID, providerRef string) *paymentsql.Payment {
+	return &paymentsql.Payment{
+		ID:     pgtype.UUID{Bytes: [16]byte(id), Valid: id != uuid.Nil},
+		OrgID:  uuid.New().String(),
+		LeadID: pgtype.UUID{Bytes: [16]byte(uuid.New()), Valid: true},
+		ProviderRef: pgtype.Text{
+			String: providerRef,
+			Valid:  providerRef != "",
+		},
+	}
+}
+
 type stubPaymentStore struct {
 	called bool
+	pay    *paymentsql.Payment
 }
 
 func (s *stubPaymentStore) UpdateStatusByID(ctx context.Context, id uuid.UUID, status, providerRef string) (*paymentsql.Payment, error) {
 	s.called = true
-	return &paymentsql.Payment{}, nil
+	if s.pay != nil {
+		return s.pay, nil
+	}
+	return samplePayment(id, providerRef), nil
+}
+
+func (s *stubPaymentStore) GetByProviderRef(ctx context.Context, providerRef string) (*paymentsql.Payment, error) {
+	if s.pay != nil {
+		return s.pay, nil
+	}
+	return samplePayment(uuid.New(), providerRef), nil
 }
 
 type stubLeadRepo struct {
@@ -217,6 +282,16 @@ func (s *stubLeadRepo) Create(context.Context, *leads.CreateLeadRequest) (*leads
 }
 
 func (s *stubLeadRepo) GetByID(ctx context.Context, orgID string, id string) (*leads.Lead, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.lead == nil {
+		return nil, leads.ErrLeadNotFound
+	}
+	return s.lead, nil
+}
+
+func (s *stubLeadRepo) GetOrCreateByPhone(context.Context, string, string, string, string) (*leads.Lead, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

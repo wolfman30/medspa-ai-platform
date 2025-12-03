@@ -21,6 +21,7 @@ type Worker struct {
 	jobs      JobUpdater
 	messenger ReplyMessenger
 	bookings  bookingConfirmer
+	deposits  DepositSender
 	logger    *logging.Logger
 
 	cfg workerConfig
@@ -31,6 +32,7 @@ type workerConfig struct {
 	workers          int
 	receiveWaitSecs  int
 	receiveBatchSize int
+	deposit          DepositSender
 }
 
 const (
@@ -80,9 +82,20 @@ func WithReceiveBatchSize(size int) WorkerOption {
 	}
 }
 
+// WithDepositSender wires a deposit dispatcher used when responses include a deposit intent.
+func WithDepositSender(sender DepositSender) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.deposit = sender
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
+}
+
+type DepositSender interface {
+	SendDeposit(ctx context.Context, msg MessageRequest, resp *Response) error
 }
 
 func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger ReplyMessenger, bookings bookingConfirmer, logger *logging.Logger, opts ...WorkerOption) *Worker {
@@ -114,6 +127,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		jobs:      jobs,
 		messenger: messenger,
 		bookings:  bookings,
+		deposits:  cfg.deposit,
 		logger:    logger,
 		cfg:       cfg,
 	}
@@ -212,6 +226,7 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		}
 		if payload.Kind == jobTypeMessage {
 			w.sendReply(ctx, payload, resp)
+			w.handleDepositIntent(ctx, payload.Message, resp)
 		}
 	}
 
@@ -263,6 +278,15 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 	}
 }
 
+func (w *Worker) handleDepositIntent(ctx context.Context, msg MessageRequest, resp *Response) {
+	if w.deposits == nil || resp == nil || resp.DepositIntent == nil {
+		return
+	}
+	if err := w.deposits.SendDeposit(ctx, msg, resp); err != nil {
+		w.logger.Error("failed to send deposit intent", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
+	}
+}
+
 func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucceededV1) error {
 	if evt == nil {
 		return errors.New("conversation: missing payment payload")
@@ -282,7 +306,7 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		return fmt.Errorf("conversation: confirm booking failed: %w", err)
 	}
 	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
-		body := "Your appointment is confirmed! We'll share final details shortly."
+		body := fmt.Sprintf("Payment of $%.2f received. Your appointment is confirmed! We'll share final details shortly.", float64(evt.AmountCents)/100)
 		if evt.ScheduledFor != nil {
 			body = fmt.Sprintf("Your appointment on %s is confirmed. See you soon!", evt.ScheduledFor.Format(time.RFC1123))
 		}

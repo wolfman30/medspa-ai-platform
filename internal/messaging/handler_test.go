@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -264,6 +266,37 @@ func (s *stubPublisher) EnqueueMessage(ctx context.Context, jobID string, req co
 	return s.err
 }
 
+type stubLeadsRepo struct {
+	called    bool
+	lastOrg   string
+	lastPhone string
+	lastSrc   string
+	lead      *leads.Lead
+	err       error
+}
+
+func (s *stubLeadsRepo) Create(context.Context, *leads.CreateLeadRequest) (*leads.Lead, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubLeadsRepo) GetByID(context.Context, string, string) (*leads.Lead, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubLeadsRepo) GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*leads.Lead, error) {
+	s.called = true
+	s.lastOrg = orgID
+	s.lastPhone = phone
+	s.lastSrc = source
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.lead != nil {
+		return s.lead, nil
+	}
+	return &leads.Lead{ID: "lead-stub", OrgID: orgID, Phone: phone, Source: source}, nil
+}
+
 func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResolver) (*Handler, *stubPublisher) {
 	t.Helper()
 	pub := &stubPublisher{err: pubErr}
@@ -272,7 +305,7 @@ func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResol
 			"+15551234567": "org-test",
 		})
 	}
-	handler := NewHandler(secret, pub, resolver, nil, logging.Default())
+	handler := NewHandler(secret, pub, resolver, nil, leads.NewInMemoryRepository(), logging.Default())
 	return handler, pub
 }
 
@@ -283,5 +316,40 @@ func TestStaticResolverDefaultNumber(t *testing.T) {
 	num := res.DefaultFromNumber("org-a")
 	if num != "+5551234567" {
 		t.Fatalf("expected normalized e164, got %s", num)
+	}
+}
+
+func TestTwilioWebhook_UpsertsLead(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{
+		"+15550001111": "org-test",
+	})
+	pub := &stubPublisher{}
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: "lead-123", OrgID: "org-test"}}
+	handler := NewHandler("", pub, resolver, nil, leadRepo, logging.Default())
+
+	formData := url.Values{}
+	formData.Set("MessageSid", "SM123")
+	formData.Set("AccountSid", "AC123")
+	formData.Set("From", "+15559998888")
+	formData.Set("To", "+15550001111")
+	formData.Set("Body", "Hi there")
+
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if !leadRepo.called {
+		t.Fatalf("expected lead repo to be invoked")
+	}
+	if leadRepo.lastOrg != "org-test" || leadRepo.lastPhone != "+15559998888" || leadRepo.lastSrc != "twilio_sms" {
+		t.Fatalf("unexpected lead args org=%s phone=%s src=%s", leadRepo.lastOrg, leadRepo.lastPhone, leadRepo.lastSrc)
+	}
+	if pub.lastReq.LeadID != "lead-123" {
+		t.Fatalf("expected conversation lead id to match repo result, got %s", pub.lastReq.LeadID)
 	}
 }

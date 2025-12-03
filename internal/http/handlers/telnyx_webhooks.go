@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
@@ -38,6 +39,7 @@ type TelnyxWebhookHandler struct {
 	processed        processedTracker
 	telnyx           telnyxClient
 	conversation     conversationPublisher
+	leads            leads.Repository
 	logger           *logging.Logger
 	messagingProfile string
 	stopAck          string
@@ -51,6 +53,7 @@ type TelnyxWebhookConfig struct {
 	Processed        processedTracker
 	Telnyx           telnyxClient
 	Conversation     conversationPublisher
+	Leads            leads.Repository
 	Logger           *logging.Logger
 	MessagingProfile string
 	StopAck          string
@@ -67,6 +70,7 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		processed:        cfg.Processed,
 		telnyx:           cfg.Telnyx,
 		conversation:     cfg.Conversation,
+		leads:            cfg.Leads,
 		logger:           cfg.Logger,
 		messagingProfile: cfg.MessagingProfile,
 		stopAck:          defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
@@ -443,9 +447,20 @@ func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt tel
 	if from == "" || to == "" || strings.TrimSpace(payload.Text) == "" {
 		return
 	}
+	leadID := fmt.Sprintf("%s:%s", orgID, from)
+	if h.leads != nil {
+		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_sms", from)
+		if err != nil {
+			h.logger.Error("failed to persist lead for telnyx inbound", "error", err, "org_id", orgID, "from", from)
+			return
+		}
+		if lead != nil && lead.ID != "" {
+			leadID = lead.ID
+		}
+	}
 	req := conversation.MessageRequest{
 		OrgID:          orgID,
-		LeadID:         fmt.Sprintf("%s:%s", orgID, from),
+		LeadID:         leadID,
 		ConversationID: fmt.Sprintf("sms:%s:%s", orgID, from),
 		Message:        payload.Text,
 		Channel:        conversation.ChannelSMS,

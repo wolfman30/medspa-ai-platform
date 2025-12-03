@@ -115,7 +115,8 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	store := &stubJobUpdater{}
 	messenger := &stubMessenger{}
 	bookings := &stubBookingConfirmer{}
-	worker := NewWorker(service, queue, store, messenger, bookings, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+	deposits := &stubDepositSender{}
+	worker := NewWorker(service, queue, store, messenger, bookings, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0), WithDepositSender(deposits))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -123,6 +124,7 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 
 	orgID := uuid.New()
 	leadID := uuid.New()
+<<<<<<< HEAD
 	scheduled := time.Now().Add(24 * time.Hour).UTC()
 	event := events.PaymentSucceededV1{
 		EventID:      "evt-123",
@@ -133,6 +135,18 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 		AmountCents:  5000,
 		OccurredAt:   time.Now().UTC(),
 		ScheduledFor: &scheduled,
+=======
+	when := time.Now().Add(48 * time.Hour).UTC()
+	event := events.PaymentSucceededV1{
+		EventID:     "evt-123",
+		OrgID:       orgID.String(),
+		LeadID:      leadID.String(),
+		LeadPhone:   "+19998887777",
+		FromNumber:  "+15550000000",
+		AmountCents: 5000,
+		OccurredAt:  time.Now().UTC(),
+		ScheduledFor: &when,
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 	payload := queuePayload{
 		ID:          "job-payment",
@@ -153,6 +167,9 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	if bookings.callCount() != 1 {
 		t.Fatalf("expected booking confirm call, got %d", bookings.callCount())
 	}
+	if sched := bookings.firstScheduled(); sched == nil || sched.Unix() != when.Unix() {
+		t.Fatalf("expected scheduled time passed to booking confirmer")
+	}
 	if messenger.lastReply().To != event.LeadPhone {
 		t.Fatalf("expected sms to lead, got %s", messenger.lastReply().To)
 	}
@@ -162,6 +179,58 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	}
 	if !strings.Contains(messenger.lastReply().Body, scheduled.Format(time.RFC1123)) {
 		t.Fatalf("expected scheduled time in confirmation sms, got %q", messenger.lastReply().Body)
+	}
+}
+
+func TestWorkerDispatchesDepositIntent(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &replyService{
+		deposit: &DepositIntent{
+			AmountCents: 5000,
+			SuccessURL:  "http://success",
+			CancelURL:   "http://cancel",
+			Description: "Test deposit",
+		},
+	}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	deposits := &stubDepositSender{}
+
+	worker := NewWorker(service, queue, store, messenger, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0), WithDepositSender(deposits))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-deposit",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "please book",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-deposit", Body: string(body), ReceiptHandle: "rh-deposit"})
+
+	waitFor(func() bool {
+		return deposits.called
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if !deposits.called {
+		t.Fatalf("expected deposit sender to be called")
+	}
+	if deposits.lastMsg.OrgID != "org-1" || deposits.lastMsg.LeadID != "lead-1" {
+		t.Fatalf("unexpected deposit msg: %#v", deposits.lastMsg)
 	}
 }
 
@@ -291,7 +360,9 @@ func (r *recordingService) messageCount() int {
 	return r.messageCalls
 }
 
-type replyService struct{}
+type replyService struct {
+	deposit *DepositIntent
+}
 
 func (r *replyService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
 	return &Response{}, nil
@@ -301,6 +372,7 @@ func (r *replyService) ProcessMessage(ctx context.Context, req MessageRequest) (
 	return &Response{
 		ConversationID: req.ConversationID,
 		Message:        "auto-reply",
+		DepositIntent:  r.deposit,
 	}, nil
 }
 
@@ -417,11 +489,30 @@ func (s *stubMessenger) lastReply() OutboundReply {
 	return s.last
 }
 
+type stubDepositSender struct {
+	called  bool
+	lastMsg MessageRequest
+	lastRes *Response
+}
+
+func (s *stubDepositSender) SendDeposit(ctx context.Context, msg MessageRequest, resp *Response) error {
+	s.called = true
+	s.lastMsg = msg
+	s.lastRes = resp
+	return nil
+}
+
 type stubBookingConfirmer struct {
 	calls []struct {
+<<<<<<< HEAD
 		org       uuid.UUID
 		lead      uuid.UUID
 		scheduled *time.Time
+=======
+		org        uuid.UUID
+		lead       uuid.UUID
+		scheduled  *time.Time
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 	mu sync.Mutex
 }
@@ -443,15 +534,23 @@ func (s *stubBookingConfirmer) callCount() int {
 	return len(s.calls)
 }
 
+<<<<<<< HEAD
 func (s *stubBookingConfirmer) lastCall() *struct {
 	org       uuid.UUID
 	lead      uuid.UUID
 	scheduled *time.Time
 } {
+=======
+func (s *stubBookingConfirmer) firstScheduled() *time.Time {
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.calls) == 0 {
 		return nil
 	}
+<<<<<<< HEAD
 	return &s.calls[len(s.calls)-1]
+=======
+	return s.calls[0].scheduled
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 }

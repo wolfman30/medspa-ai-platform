@@ -20,12 +20,13 @@ func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 
 	logger := logging.Default()
-	leadsHandler := leads.NewHandler(leads.NewInMemoryRepository(), logger)
+	leadRepo := leads.NewInMemoryRepository()
+	leadsHandler := leads.NewHandler(leadRepo, logger)
 	publisher := &noopPublisher{}
 	resolver := messaging.NewStaticOrgResolver(map[string]string{
 		"+10000000000": "org-test",
 	})
-	messagingHandler := messaging.NewHandler("", publisher, resolver, nil, logger)
+	messagingHandler := messaging.NewHandler("", publisher, resolver, nil, leadRepo, logger)
 
 	cfg := &Config{
 		Logger:           logger,

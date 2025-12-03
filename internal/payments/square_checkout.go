@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,7 @@ type SquareCheckoutService struct {
 	locationID  string
 	successURL  string
 	cancelURL   string
+	baseURL     string
 	httpClient  *http.Client
 	logger      *logging.Logger
 }
@@ -51,14 +53,25 @@ func NewSquareCheckoutService(accessToken, locationID, successURL, cancelURL str
 		logger = logging.Default()
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
+	baseURL := "https://connect.squareup.com"
 	return &SquareCheckoutService{
 		accessToken: accessToken,
 		locationID:  locationID,
 		successURL:  successURL,
 		cancelURL:   cancelURL,
+		baseURL:     baseURL,
 		httpClient:  client,
 		logger:      logger,
 	}
+}
+
+// WithBaseURL overrides the Square API host (e.g., sandbox).
+func (s *SquareCheckoutService) WithBaseURL(baseURL string) *SquareCheckoutService {
+	if baseURL == "" {
+		return s
+	}
+	s.baseURL = strings.TrimRight(baseURL, "/")
+	return s
 }
 
 func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params CheckoutParams) (*CheckoutResponse, error) {
@@ -78,27 +91,64 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		successURL = s.successURL
 	}
 
+<<<<<<< HEAD
 	idempotency := buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
 	metadata := map[string]string{
+=======
+	idempotency := params.BookingIntentID.String()
+	if params.BookingIntentID == uuid.Nil {
+		idempotency = buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
+	}
+	name := params.Description
+	if strings.TrimSpace(name) == "" {
+		name = "Deposit"
+	}
+	var scheduledStr string
+	if params.ScheduledFor != nil {
+		scheduledStr = params.ScheduledFor.UTC().Format(time.RFC3339)
+	}
+	meta := map[string]string{
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 		"org_id":            params.OrgID,
 		"lead_id":           params.LeadID,
 		"booking_intent_id": params.BookingIntentID.String(),
 	}
+<<<<<<< HEAD
 	if params.ScheduledFor != nil {
 		metadata["scheduled_for"] = params.ScheduledFor.UTC().Format(time.RFC3339)
 	}
+=======
+	if scheduledStr != "" {
+		meta["scheduled_for"] = scheduledStr
+	}
+
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	body := map[string]any{
 		"idempotency_key": idempotency,
-		"quick_pay": map[string]any{
-			"name":        params.Description,
-			"price_money": map[string]any{"amount": params.AmountCents, "currency": "USD"},
+		"order": map[string]any{
 			"location_id": s.locationID,
+			"metadata":   meta,
+			"line_items": []map[string]any{
+				{
+					"name":     name,
+					"quantity": "1",
+					"base_price_money": map[string]any{
+						"amount":   params.AmountCents,
+						"currency": "USD",
+					},
+				},
+			},
 		},
 		"checkout_options": map[string]any{
 			"redirect_url":             successURL,
 			"ask_for_shipping_address": false,
 		},
+<<<<<<< HEAD
 		"metadata": metadata,
+=======
+		// Redundant metadata on the link for completeness.
+		"metadata": meta,
+>>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 
 	reqBody, err := json.Marshal(body)
@@ -106,7 +156,8 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		return nil, fmt.Errorf("payments: square payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://connect.squareup.com/v2/online-checkout/payment-links", bytes.NewReader(reqBody))
+	apiURL := s.baseURL + "/v2/online-checkout/payment-links"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("payments: square request: %w", err)
 	}
@@ -144,7 +195,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 }
 
 func buildIdempotencyKey(orgID, leadID string, amount int32) string {
-	input := fmt.Sprintf("%s:%s:%d:%s", orgID, leadID, amount, time.Now().UTC().Format("2006-01-02"))
+	input := fmt.Sprintf("%s:%s:%d:%s", orgID, leadID, amount, time.Now().UTC().Format("2006-01-02T15"))
 	sum := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(sum[:])
 }
