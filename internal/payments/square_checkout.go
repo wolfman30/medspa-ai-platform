@@ -91,10 +91,6 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		successURL = s.successURL
 	}
 
-<<<<<<< HEAD
-	idempotency := buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
-	metadata := map[string]string{
-=======
 	idempotency := params.BookingIntentID.String()
 	if params.BookingIntentID == uuid.Nil {
 		idempotency = buildIdempotencyKey(params.OrgID, params.LeadID, params.AmountCents)
@@ -108,26 +104,19 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		scheduledStr = params.ScheduledFor.UTC().Format(time.RFC3339)
 	}
 	meta := map[string]string{
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 		"org_id":            params.OrgID,
 		"lead_id":           params.LeadID,
 		"booking_intent_id": params.BookingIntentID.String(),
 	}
-<<<<<<< HEAD
-	if params.ScheduledFor != nil {
-		metadata["scheduled_for"] = params.ScheduledFor.UTC().Format(time.RFC3339)
-	}
-=======
 	if scheduledStr != "" {
 		meta["scheduled_for"] = scheduledStr
 	}
 
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	body := map[string]any{
 		"idempotency_key": idempotency,
 		"order": map[string]any{
 			"location_id": s.locationID,
-			"metadata":   meta,
+			"metadata":    meta,
 			"line_items": []map[string]any{
 				{
 					"name":     name,
@@ -143,12 +132,8 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 			"redirect_url":             successURL,
 			"ask_for_shipping_address": false,
 		},
-<<<<<<< HEAD
-		"metadata": metadata,
-=======
 		// Redundant metadata on the link for completeness.
 		"metadata": meta,
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 
 	reqBody, err := json.Marshal(body)

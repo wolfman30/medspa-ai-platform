@@ -122,7 +122,7 @@ type stubPaymentRepo struct {
 	hasDeposit bool
 }
 
-func (s *stubPaymentRepo) CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string) (*paymentsql.Payment, error) {
+func (s *stubPaymentRepo) CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string, scheduledFor *time.Time) (*paymentsql.Payment, error) {
 	s.called = true
 	return &paymentsql.Payment{
 		ID:          pgtype.UUID{Bytes: [16]byte(uuid.New()), Valid: true},
@@ -136,6 +136,7 @@ func (s *stubPaymentRepo) CreateIntent(ctx context.Context, orgID uuid.UUID, lea
 func (s *stubPaymentRepo) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error) {
 	return s.hasDeposit, nil
 }
+
 type stubCheckout struct {
 	called bool
 	resp   *payments.CheckoutResponse
