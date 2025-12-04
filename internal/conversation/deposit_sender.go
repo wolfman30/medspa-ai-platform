@@ -28,7 +28,7 @@ type outboxWriter interface {
 }
 
 type paymentIntentCreator interface {
-	CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string) (*paymentsql.Payment, error)
+	CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string, scheduledFor *time.Time) (*paymentsql.Payment, error)
 }
 
 type paymentLinkCreator interface {
@@ -91,7 +91,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		}
 	}
 
-	paymentRow, err := d.payments.CreateIntent(ctx, orgUUID, leadUUID, "square", uuid.Nil, intent.AmountCents, "deposit_pending")
+	paymentRow, err := d.payments.CreateIntent(ctx, orgUUID, leadUUID, "square", uuid.Nil, intent.AmountCents, "deposit_pending", intent.ScheduledFor)
 	if err != nil {
 		return fmt.Errorf("deposit: create intent: %w", err)
 	}

@@ -101,20 +101,6 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	orgID := metadata["org_id"]
 	leadID := metadata["lead_id"]
 	intentID := metadata["booking_intent_id"]
-<<<<<<< HEAD
-	var scheduledFor *time.Time
-	if scheduled := metadata["scheduled_for"]; scheduled != "" {
-		parsed, err := time.Parse(time.RFC3339, scheduled)
-		if err != nil {
-			h.logger.Warn("invalid scheduled_for metadata", "value", scheduled, "error", err)
-		} else {
-			scheduledFor = &parsed
-		}
-	}
-	if orgID == "" || leadID == "" {
-		http.Error(w, "missing metadata", http.StatusBadRequest)
-		return
-=======
 	paymentID := evt.Data.Object.Payment.ID
 	orderID := evt.Data.Object.Payment.OrderID
 	scheduledStr := metadata["scheduled_for"]
@@ -164,7 +150,6 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		} else {
 			h.logger.Warn("square webhook scheduled_for parse failed", "error", err, "value", scheduledStr)
 		}
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 	if evt.Data.Object.Payment.Status != "COMPLETED" {
 		w.WriteHeader(http.StatusOK)

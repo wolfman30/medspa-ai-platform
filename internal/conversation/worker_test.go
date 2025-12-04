@@ -124,7 +124,6 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 
 	orgID := uuid.New()
 	leadID := uuid.New()
-<<<<<<< HEAD
 	scheduled := time.Now().Add(24 * time.Hour).UTC()
 	event := events.PaymentSucceededV1{
 		EventID:      "evt-123",
@@ -135,18 +134,6 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 		AmountCents:  5000,
 		OccurredAt:   time.Now().UTC(),
 		ScheduledFor: &scheduled,
-=======
-	when := time.Now().Add(48 * time.Hour).UTC()
-	event := events.PaymentSucceededV1{
-		EventID:     "evt-123",
-		OrgID:       orgID.String(),
-		LeadID:      leadID.String(),
-		LeadPhone:   "+19998887777",
-		FromNumber:  "+15550000000",
-		AmountCents: 5000,
-		OccurredAt:  time.Now().UTC(),
-		ScheduledFor: &when,
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 	payload := queuePayload{
 		ID:          "job-payment",
@@ -167,7 +154,7 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	if bookings.callCount() != 1 {
 		t.Fatalf("expected booking confirm call, got %d", bookings.callCount())
 	}
-	if sched := bookings.firstScheduled(); sched == nil || sched.Unix() != when.Unix() {
+	if sched := bookings.firstScheduled(); sched == nil || sched.Unix() != scheduled.Unix() {
 		t.Fatalf("expected scheduled time passed to booking confirmer")
 	}
 	if messenger.lastReply().To != event.LeadPhone {
@@ -504,15 +491,9 @@ func (s *stubDepositSender) SendDeposit(ctx context.Context, msg MessageRequest,
 
 type stubBookingConfirmer struct {
 	calls []struct {
-<<<<<<< HEAD
 		org       uuid.UUID
 		lead      uuid.UUID
 		scheduled *time.Time
-=======
-		org        uuid.UUID
-		lead       uuid.UUID
-		scheduled  *time.Time
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	}
 	mu sync.Mutex
 }
@@ -534,23 +515,24 @@ func (s *stubBookingConfirmer) callCount() int {
 	return len(s.calls)
 }
 
-<<<<<<< HEAD
 func (s *stubBookingConfirmer) lastCall() *struct {
 	org       uuid.UUID
 	lead      uuid.UUID
 	scheduled *time.Time
 } {
-=======
-func (s *stubBookingConfirmer) firstScheduled() *time.Time {
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.calls) == 0 {
 		return nil
 	}
-<<<<<<< HEAD
 	return &s.calls[len(s.calls)-1]
-=======
+}
+
+func (s *stubBookingConfirmer) firstScheduled() *time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.calls) == 0 {
+		return nil
+	}
 	return s.calls[0].scheduled
->>>>>>> f49fe8f715cf54e0b031ced9bad3dbc3c33ef556
 }
