@@ -141,3 +141,11 @@ func (s *stubLeadsRepo) GetOrCreateByPhone(ctx context.Context, orgID string, ph
 	}
 	return &leads.Lead{ID: "lead-stub", OrgID: orgID, Phone: phone, Source: source}, nil
 }
+
+func (s *stubLeadsRepo) UpdateSchedulingPreferences(context.Context, string, leads.SchedulingPreferences) error {
+	return nil
+}
+
+func (s *stubLeadsRepo) UpdateDepositStatus(context.Context, string, string, string) error {
+	return nil
+}

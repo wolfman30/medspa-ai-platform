@@ -16,6 +16,7 @@ import (
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -54,7 +55,12 @@ func main() {
 	dynamoClient := dynamodb.NewFromConfig(awsConfig)
 	jobStore := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
 
-	processor, err := appbootstrap.BuildConversationService(ctx, cfg, logger)
+	var leadsRepo leads.Repository
+	if dbPool != nil {
+		leadsRepo = leads.NewPostgresRepository(dbPool)
+	}
+
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, logger)
 	if err != nil {
 		logger.Error("failed to configure conversation service", "error", err)
 		os.Exit(1)

@@ -16,7 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Env != "development" {
 		t.Fatalf("expected default env, got %s", cfg.Env)
 	}
-	if cfg.OpenAIModel != "gpt-5-mini" {
+	if cfg.OpenAIModel != "gpt-4o-mini" {
 		t.Fatalf("unexpected default model %s", cfg.OpenAIModel)
 	}
 }

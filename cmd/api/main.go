@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -36,6 +37,9 @@ import (
 )
 
 func main() {
+	// Load .env file if it exists
+	_ = godotenv.Load()
+
 	// Load configuration
 	cfg := appconfig.Load()
 
@@ -349,7 +353,8 @@ func setupInlineWorker(
 		return nil
 	}
 
-	processor, err := appbootstrap.BuildConversationService(ctx, cfg, logger)
+	leadsRepo := initializeLeadsRepository(dbPool)
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, logger)
 	if err != nil {
 		logger.Error("failed to configure inline conversation service", "error", err)
 		os.Exit(1)
@@ -375,6 +380,9 @@ func setupInlineWorker(
 		payRepo := payments.NewRepository(dbPool)
 		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
 		depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outboxStore, messenger, logger)
+		logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID)
+	} else {
+		logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "")
 	}
 
 	worker := conversation.NewWorker(

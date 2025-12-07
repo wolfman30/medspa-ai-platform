@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,6 +56,41 @@ func TestHandler_Start_AcceptsJob(t *testing.T) {
 	}
 }
 
+func TestHandler_Start_PropagatesScheduledFor(t *testing.T) {
+	enqueuer := &stubEnqueuer{}
+	store := &stubJobStore{}
+	handler := NewHandler(enqueuer, store, nil, nil, logging.Default())
+
+	scheduled := "2025-12-01T15:00:00Z"
+	body := []byte(fmt.Sprintf(`{"lead_id":"lead-123","intro":"Hi","scheduled_for":"%s"}`, scheduled))
+
+	req := httptest.NewRequest(http.MethodPost, "/conversations/start", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Start(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected %d, got %d", http.StatusAccepted, w.Code)
+	}
+	if enqueuer.lastStartReq.Metadata["scheduled_for"] != scheduled {
+		t.Fatalf("expected scheduled_for to be set, got %q", enqueuer.lastStartReq.Metadata["scheduled_for"])
+	}
+}
+
+func TestHandler_Start_InvalidScheduledFor(t *testing.T) {
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, nil, nil, logging.Default())
+
+	body := []byte(`{"lead_id":"lead-123","intro":"Hi","scheduled_for":"not-a-time"}`)
+	req := httptest.NewRequest(http.MethodPost, "/conversations/start", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Start(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid scheduled_for, got %d", w.Code)
+	}
+}
+
 func TestHandler_Message_AcceptsJob(t *testing.T) {
 	enqueuer := &stubEnqueuer{}
 	store := &stubJobStore{}
@@ -92,6 +128,41 @@ func TestHandler_Message_AcceptsJob(t *testing.T) {
 
 	if enqueuer.lastMessageJobID != resp.JobID {
 		t.Fatalf("expected enqueuer to receive jobID %s, got %s", resp.JobID, enqueuer.lastMessageJobID)
+	}
+}
+
+func TestHandler_Message_PropagatesScheduledFor(t *testing.T) {
+	enqueuer := &stubEnqueuer{}
+	store := &stubJobStore{}
+	handler := NewHandler(enqueuer, store, nil, nil, logging.Default())
+
+	scheduled := "2025-12-01T15:00:00Z"
+	body := []byte(fmt.Sprintf(`{"conversation_id":"conv-123","message":"Hi","scheduled_for":"%s"}`, scheduled))
+
+	req := httptest.NewRequest(http.MethodPost, "/conversations/message", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Message(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected %d, got %d", http.StatusAccepted, w.Code)
+	}
+	if enqueuer.lastMessageReq.Metadata["scheduled_for"] != scheduled {
+		t.Fatalf("expected scheduled_for to be set, got %q", enqueuer.lastMessageReq.Metadata["scheduled_for"])
+	}
+}
+
+func TestHandler_Message_InvalidScheduledFor(t *testing.T) {
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, nil, nil, logging.Default())
+
+	body := []byte(`{"conversation_id":"conv","message":"Hi","scheduled_for":"not-a-time"}`)
+	req := httptest.NewRequest(http.MethodPost, "/conversations/message", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Message(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid scheduled_for, got %d", w.Code)
 	}
 }
 

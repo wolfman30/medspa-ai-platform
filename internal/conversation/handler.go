@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -41,11 +42,27 @@ func NewHandler(enqueuer Enqueuer, jobs JobRecorder, knowledge KnowledgeReposito
 
 // Start handles POST /conversations/start.
 func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
-	var req StartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var payload struct {
+		StartRequest
+		ScheduledFor string `json:"scheduled_for,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		h.logger.Error("failed to decode start request", "error", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+	req := payload.StartRequest
+	if strings.TrimSpace(payload.ScheduledFor) != "" {
+		when, err := time.Parse(time.RFC3339, payload.ScheduledFor)
+		if err != nil {
+			http.Error(w, "invalid scheduled_for format", http.StatusBadRequest)
+			return
+		}
+		if req.Metadata == nil {
+			req.Metadata = map[string]string{}
+		}
+		req.Metadata["scheduled_for"] = when.UTC().Format(time.RFC3339)
+		req.Metadata["scheduledFor"] = when.UTC().Format(time.RFC3339)
 	}
 
 	jobID := uuid.NewString()
@@ -67,11 +84,27 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 
 // Message handles POST /conversations/message.
 func (h *Handler) Message(w http.ResponseWriter, r *http.Request) {
-	var req MessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var payload struct {
+		MessageRequest
+		ScheduledFor string `json:"scheduled_for,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		h.logger.Error("failed to decode message request", "error", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+	req := payload.MessageRequest
+	if strings.TrimSpace(payload.ScheduledFor) != "" {
+		when, err := time.Parse(time.RFC3339, payload.ScheduledFor)
+		if err != nil {
+			http.Error(w, "invalid scheduled_for format", http.StatusBadRequest)
+			return
+		}
+		if req.Metadata == nil {
+			req.Metadata = map[string]string{}
+		}
+		req.Metadata["scheduled_for"] = when.UTC().Format(time.RFC3339)
+		req.Metadata["scheduledFor"] = when.UTC().Format(time.RFC3339)
 	}
 
 	jobID := uuid.NewString()

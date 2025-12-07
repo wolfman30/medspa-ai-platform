@@ -196,6 +196,45 @@ func TestSquareWebhookHandler_NonCompletedStatus(t *testing.T) {
 	}
 }
 
+func TestSquareWebhookHandler_FallbacksScheduledForFromPaymentRow(t *testing.T) {
+	orgID := uuid.New().String()
+	leadID := uuid.New().String()
+	intentID := uuid.New().String()
+	scheduled := time.Now().Add(3 * time.Hour).UTC().Truncate(time.Second)
+
+	pay := samplePaymentWithSchedule(uuid.MustParse(intentID), "pay-fallback", scheduled)
+	payments := &stubPaymentStore{pay: pay}
+	leadsRepo := &stubLeadRepo{
+		lead: &leads.Lead{ID: leadID, OrgID: orgID, Phone: "+15550000000"},
+	}
+	processed := &stubProcessedTracker{}
+	outbox := &stubOutboxWriter{}
+
+	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, nil, nil, logging.Default())
+
+	body := buildSquarePayload(t, "evt-fallback", pay.ProviderRef.String, "COMPLETED", map[string]string{
+		"org_id": orgID,
+		// intentionally omit scheduled_for to trigger fallback from DB row
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body))
+	req.Host = "example.com"
+	sign(req, "secret", body)
+
+	rr := httptest.NewRecorder()
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(outbox.inserted) != 1 {
+		t.Fatalf("expected outbox insert, got %d", len(outbox.inserted))
+	}
+	got := outbox.inserted[0].ScheduledFor
+	if got == nil || !got.Equal(scheduled) {
+		t.Fatalf("expected scheduled_for from payment row, got %v", got)
+	}
+}
+
 func TestVerifySquareSignature(t *testing.T) {
 	body := []byte(`{"ping":true}`)
 	url := "http://example.com/webhooks/square"
@@ -252,6 +291,22 @@ func samplePayment(id uuid.UUID, providerRef string) *paymentsql.Payment {
 	}
 }
 
+func samplePaymentWithSchedule(id uuid.UUID, providerRef string, scheduled time.Time) *paymentsql.Payment {
+	return &paymentsql.Payment{
+		ID:     pgtype.UUID{Bytes: [16]byte(id), Valid: id != uuid.Nil},
+		OrgID:  uuid.New().String(),
+		LeadID: pgtype.UUID{Bytes: [16]byte(uuid.New()), Valid: true},
+		ProviderRef: pgtype.Text{
+			String: providerRef,
+			Valid:  providerRef != "",
+		},
+		ScheduledFor: pgtype.Timestamptz{
+			Time:  scheduled,
+			Valid: true,
+		},
+	}
+}
+
 type stubPaymentStore struct {
 	called bool
 	pay    *paymentsql.Payment
@@ -299,6 +354,14 @@ func (s *stubLeadRepo) GetOrCreateByPhone(context.Context, string, string, strin
 		return nil, leads.ErrLeadNotFound
 	}
 	return s.lead, nil
+}
+
+func (s *stubLeadRepo) UpdateSchedulingPreferences(context.Context, string, leads.SchedulingPreferences) error {
+	return nil
+}
+
+func (s *stubLeadRepo) UpdateDepositStatus(context.Context, string, string, string) error {
+	return nil
 }
 
 type stubProcessedTracker struct {

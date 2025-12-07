@@ -63,11 +63,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			intent.ScheduledFor = scheduled
 		}
 	}
-	if intent.ScheduledFor == nil {
-		// Require a confirmed slot before sending a deposit link.
-		d.logger.Info("deposit: skipping link because scheduled time missing", "org_id", msg.OrgID, "lead_id", msg.LeadID)
-		return nil
-	}
+	// Allow deposit link without scheduled time - clinic will confirm later
 	if d.payments == nil || d.checkout == nil {
 		return fmt.Errorf("deposit: missing payments or checkout dependency")
 	}
@@ -84,7 +80,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 	// Avoid duplicate deposits if a pending/succeeded intent already exists.
 	if checker, ok := d.payments.(paymentIntentChecker); ok {
 		if has, cerr := checker.HasOpenDeposit(ctx, orgUUID, leadUUID); cerr != nil {
-			return fmt.Errorf("deposit: check existing intent: %w", cerr)
+			d.logger.Warn("deposit: could not check for existing deposit, proceeding anyway", "error", cerr)
 		} else if has {
 			d.logger.Info("deposit: existing deposit intent found; skipping new link", "org_id", msg.OrgID, "lead_id", msg.LeadID)
 			return nil
