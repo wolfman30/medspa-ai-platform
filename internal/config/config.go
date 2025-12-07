@@ -53,6 +53,11 @@ type Config struct {
 	OpenAIEmbeddingModel     string
 	RedisAddr                string
 	RedisPassword            string
+
+	// Nextech EMR Configuration
+	NextechBaseURL      string
+	NextechClientID     string
+	NextechClientSecret string
 }
 
 // Load reads configuration from environment variables
@@ -97,11 +102,16 @@ func Load() *Config {
 		ConversationQueueURL:     getEnv("CONVERSATION_QUEUE_URL", "http://localhost:4566/000000000000/conversation-events"),
 		ConversationJobsTable:    getEnv("CONVERSATION_JOBS_TABLE", "conversation_jobs"),
 		OpenAIAPIKey:             getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-5-mini"),
+		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", ""),
 		OpenAIEmbeddingModel:     getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:            getEnv("REDIS_PASSWORD", ""),
+
+		// Nextech EMR Configuration
+		NextechBaseURL:      getEnv("NEXTECH_BASE_URL", ""),
+		NextechClientID:     getEnv("NEXTECH_CLIENT_ID", ""),
+		NextechClientSecret: getEnv("NEXTECH_CLIENT_SECRET", ""),
 	}
 }
 

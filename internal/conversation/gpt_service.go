@@ -12,14 +12,74 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
-	defaultOpenAISystemPrompt = "You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa. Keep responses short, actionable, and compliant with HIPAA. Never invent medical advice. Guide leads toward booking by clarifying needs, suggesting available services, and offering to reserve time with a provider. Do not promise to send payment links; the platform sends those automatically via SMS. If a deposit is already collected, thank them and confirm the hold—do not say you'll send another link."
-	maxHistoryMessages        = 12
+	defaultOpenAISystemPrompt = `You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa.
+
+🚨 STEP 1 - READ THE USER'S MESSAGE CAREFULLY:
+Parse EVERY word for scheduling information:
+- "weekdays" or "weekday" = day preference is WEEKDAYS ✓
+- "weekends" or "weekend" = day preference is WEEKENDS ✓
+- "mornings" or "morning" = time preference is MORNINGS ✓
+- "afternoons" or "afternoon" = time preference is AFTERNOONS ✓
+- "evenings" or "evening" = time preference is EVENINGS ✓
+- "weekday afternoons" = BOTH day (weekdays) AND time (afternoons) ✓✓
+
+🚨 STEP 2 - CHECK CONVERSATION HISTORY:
+Look through ALL previous messages for day/time preferences already mentioned.
+
+🚨 STEP 3 - RESPOND BASED ON WHAT YOU HAVE:
+IF you have BOTH day AND time (from current message OR history):
+  → "Perfect! I've noted [day] [time] for your [service]. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
+
+IF you have day but NOT time:
+  → "Got it, [day] works great! Do you prefer mornings, afternoons, or evenings?"
+
+IF you have time but NOT day:
+  → "Great, [time] it is! Do weekdays or weekends work better for you?"
+
+IF you have NEITHER:
+  → "I'd love to help! What days work best - weekdays or weekends?"
+
+CRITICAL - YOU DO NOT HAVE ACCESS TO THE CLINIC'S CALENDAR:
+- NEVER claim to know specific available times or dates
+- The clinic team will call to confirm an actual available slot
+
+DEPOSIT MESSAGING:
+- Deposits are FULLY REFUNDABLE if no mutually agreeable time is found
+- Deposit holders get PRIORITY scheduling - called back first
+- The deposit applies toward their treatment cost
+- Never pressure - always give the option to skip the deposit and wait for a callback
+- DO NOT mention "call within 24 hours" or callback timeframes UNTIL AFTER they complete the deposit
+- When offering deposit, just say "Would you like to proceed?" - the payment link is sent automatically
+
+AFTER CUSTOMER AGREES TO DEPOSIT:
+- Say: "Great! You'll receive a secure payment link shortly. Once that's complete, you're all set!"
+- DO NOT say the team will call within 24 hours yet - that message comes after payment confirmation
+
+COMMUNICATION STYLE:
+- Keep responses short (2-3 sentences max), friendly, and actionable
+- Be HIPAA-compliant: never discuss specific medical conditions or give medical advice
+- Do not promise to send payment links; the platform sends those automatically via SMS
+- If a deposit is already collected, thank them and confirm priority status
+
+SAMPLE CONVERSATION:
+Customer: "I want to book Botox"
+You: "I'd love to help! What days typically work best for you - weekdays or weekends?"
+Customer: "Weekdays, maybe afternoons"
+You: "Perfect! I've noted weekday afternoons. To get you priority scheduling, we collect a small $50 refundable deposit. Would you like to proceed?"
+Customer: "Yes"
+You: "Great! You'll receive a secure payment link shortly. Once that's complete, you're all set!"
+
+WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
+- "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
+- "Let me get your preferred times and the clinic will reach out with available options that match."`
+	maxHistoryMessages = 12
 )
 
 var gptTracer = otel.Tracer("medspa.internal.conversation.gpt")
@@ -81,6 +141,20 @@ func WithDepositConfig(cfg DepositConfig) GPTOption {
 	}
 }
 
+// WithEMR configures an EMR adapter for real-time availability lookup.
+func WithEMR(emr *EMRAdapter) GPTOption {
+	return func(s *GPTService) {
+		s.emr = emr
+	}
+}
+
+// WithLeadsRepo configures the leads repository for saving scheduling preferences.
+func WithLeadsRepo(repo leads.Repository) GPTOption {
+	return func(s *GPTService) {
+		s.leadsRepo = repo
+	}
+}
+
 type depositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -90,12 +164,14 @@ type depositConfig struct {
 
 // GPTService produces conversation responses using OpenAI and stores context in Redis.
 type GPTService struct {
-	client  chatClient
-	rag     RAGRetriever
-	model   string
-	logger  *logging.Logger
-	history *historyStore
-	deposit depositConfig
+	client    chatClient
+	rag       RAGRetriever
+	emr       *EMRAdapter
+	model     string
+	logger    *logging.Logger
+	history   *historyStore
+	deposit   depositConfig
+	leadsRepo leads.Repository
 }
 
 // NewGPTService returns a GPT-backed Service implementation.
@@ -110,10 +186,7 @@ func NewGPTService(client chatClient, redisClient *redis.Client, rag RAGRetrieve
 		logger = logging.Default()
 	}
 	if model == "" {
-		model = "gpt-5-mini"
-	}
-	if logger == nil {
-		logger = logging.Default()
+		model = "gpt-4o-mini"
 	}
 
 	service := &GPTService{
@@ -248,6 +321,18 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	depositIntent, derr := s.extractDepositIntent(ctx, history)
 	if derr != nil {
 		span.RecordError(derr)
+		s.logger.Warn("deposit intent extraction failed", "error", derr)
+	} else if depositIntent != nil {
+		s.logger.Info("deposit intent extracted", "amount_cents", depositIntent.AmountCents)
+	} else {
+		s.logger.Debug("no deposit intent detected")
+	}
+
+	// Extract and save scheduling preferences if lead ID is provided
+	if req.LeadID != "" && s.leadsRepo != nil {
+		if err := s.extractAndSavePreferences(ctx, req.LeadID, history); err != nil {
+			s.logger.Warn("failed to save scheduling preferences", "lead_id", req.LeadID, "error", err)
+		}
 	}
 
 	return &Response{
@@ -332,26 +417,51 @@ func formatIntroMessage(req StartRequest, conversationID string) string {
 }
 
 func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, clinicID, query string) []openai.ChatCompletionMessage {
-	if s.rag == nil || strings.TrimSpace(query) == "" {
-		return history
-	}
-	snippets, err := s.rag.Query(ctx, clinicID, query, 3)
-	if err != nil || len(snippets) == 0 {
+	// Append RAG context if available
+	if s.rag != nil && strings.TrimSpace(query) != "" {
+		snippets, err := s.rag.Query(ctx, clinicID, query, 3)
 		if err != nil {
 			s.logger.Error("failed to retrieve RAG context", "error", err)
+		} else if len(snippets) > 0 {
+			builder := strings.Builder{}
+			builder.WriteString("Relevant clinic context:\n")
+			for i, snippet := range snippets {
+				builder.WriteString(fmt.Sprintf("%d. %s\n", i+1, snippet))
+			}
+			history = append(history, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: builder.String(),
+			})
 		}
-		return history
 	}
-	builder := strings.Builder{}
-	builder.WriteString("Relevant clinic context:\n")
-	for i, snippet := range snippets {
-		builder.WriteString(fmt.Sprintf("%d. %s\n", i+1, snippet))
+
+	// Append real-time availability if EMR is configured and query mentions booking/appointment
+	if s.emr != nil && s.emr.IsConfigured() && containsBookingIntent(query) {
+		slots, err := s.emr.GetUpcomingAvailability(ctx, 7, "")
+		if err != nil {
+			s.logger.Warn("failed to fetch EMR availability", "error", err)
+		} else if len(slots) > 0 {
+			availabilityContext := FormatSlotsForGPT(slots, 5)
+			history = append(history, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: "Real-time appointment availability from clinic calendar:\n" + availabilityContext,
+			})
+		}
 	}
-	history = append(history, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleSystem,
-		Content: builder.String(),
-	})
+
 	return history
+}
+
+// containsBookingIntent checks if the user message suggests they want to book.
+func containsBookingIntent(msg string) bool {
+	msg = strings.ToLower(msg)
+	keywords := []string{"book", "appointment", "schedule", "available", "availability", "when can", "open slot", "time slot"}
+	for _, kw := range keywords {
+		if strings.Contains(msg, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func trimHistory(history []openai.ChatCompletionMessage, limit int) []openai.ChatCompletionMessage {
@@ -392,17 +502,31 @@ func (s *GPTService) extractDepositIntent(ctx context.Context, history []openai.
 
 	// Focus on the most recent turns to keep the prompt small.
 	transcript := summarizeHistory(history, 8)
-	prompt := fmt.Sprintf(`You are a decision agent for MedSpa AI. Decide if we should send a payment link to collect a deposit to secure an appointment. Return ONLY JSON with the keys: collect (boolean), amount_cents (integer), description (string), success_url (string), cancel_url (string). Use %d cents as the default deposit if unsure. If no deposit is appropriate, return collect:false and zeros/empty strings.`,
-		s.deposit.DefaultAmountCents,
-	)
+	prompt := fmt.Sprintf(`You are a decision agent for MedSpa AI. Analyze this conversation and decide if we should send a payment link to collect a deposit.
+
+CRITICAL: Return ONLY a JSON object, nothing else. No markdown, no code fences, no explanation.
+
+Return this exact format:
+{"collect": true, "amount_cents": 5000, "description": "Refundable deposit", "success_url": "", "cancel_url": ""}
+
+Rules:
+- If customer agreed to deposit: set collect=true
+- If customer declined or hasn't been asked: set collect=false
+- Default amount: %d cents
+- For success_url and cancel_url: use empty strings
+
+Conversation:
+%s`, s.deposit.DefaultAmountCents, transcript)
 
 	req := openai.ChatCompletionRequest{
 		Model: s.model,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: prompt},
-			{Role: openai.ChatMessageRoleUser, Content: transcript},
 		},
 		Temperature: 0,
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+		},
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
@@ -500,4 +624,74 @@ func (s *GPTService) maybeLogDepositClassifierError(raw string, err error) {
 func (s *GPTService) shouldSampleDepositLog() bool {
 	// 10% sampling to avoid noisy logs.
 	return time.Now().UnixNano()%10 == 0
+}
+
+// extractAndSavePreferences extracts scheduling preferences from conversation history and saves them
+func (s *GPTService) extractAndSavePreferences(ctx context.Context, leadID string, history []openai.ChatCompletionMessage) error {
+	prefs := leads.SchedulingPreferences{}
+	hasPreferences := false
+
+	// Scan the conversation for scheduling-related keywords
+	conversation := strings.ToLower(summarizeHistory(history, 8))
+
+	// Only extract if conversation contains booking-related intent
+	hasBookingIntent := strings.Contains(conversation, "book") ||
+		strings.Contains(conversation, "appointment") ||
+		strings.Contains(conversation, "schedule") ||
+		strings.Contains(conversation, "available")
+
+	if !hasBookingIntent {
+		return nil // Don't extract preferences if there's no booking intent
+	}
+
+	// Extract service interest
+	services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
+	for _, service := range services {
+		if strings.Contains(conversation, service) {
+			prefs.ServiceInterest = service
+			hasPreferences = true
+			break
+		}
+	}
+
+	// Extract preferred days (only from user messages to avoid confusion with business hours)
+	userMessages := ""
+	for _, msg := range history {
+		if msg.Role == openai.ChatMessageRoleUser {
+			userMessages += strings.ToLower(msg.Content) + " "
+		}
+	}
+
+	if strings.Contains(userMessages, "weekday") {
+		prefs.PreferredDays = "weekdays"
+		hasPreferences = true
+	} else if strings.Contains(userMessages, "weekend") {
+		prefs.PreferredDays = "weekends"
+		hasPreferences = true
+	} else if strings.Contains(userMessages, "any day") || strings.Contains(userMessages, "flexible") {
+		prefs.PreferredDays = "any"
+		hasPreferences = true
+	}
+
+	// Extract preferred times (only from user messages)
+	if strings.Contains(userMessages, "morning") {
+		prefs.PreferredTimes = "morning"
+		hasPreferences = true
+	} else if strings.Contains(userMessages, "afternoon") {
+		prefs.PreferredTimes = "afternoon"
+		hasPreferences = true
+	} else if strings.Contains(userMessages, "evening") {
+		prefs.PreferredTimes = "evening"
+		hasPreferences = true
+	}
+
+	// Only save if we found any preferences
+	if !hasPreferences {
+		return nil
+	}
+
+	// Add conversation notes for context
+	prefs.Notes = fmt.Sprintf("Auto-extracted from conversation at %s", time.Now().Format(time.RFC3339))
+
+	return s.leadsRepo.UpdateSchedulingPreferences(ctx, leadID, prefs)
 }

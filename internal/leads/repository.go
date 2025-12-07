@@ -9,11 +9,21 @@ import (
 	"github.com/google/uuid"
 )
 
+// SchedulingPreferences captures the customer's availability preferences from conversation
+type SchedulingPreferences struct {
+	ServiceInterest string // e.g., "Botox", "Filler", "Consultation"
+	PreferredDays   string // e.g., "weekdays", "weekends", "any"
+	PreferredTimes  string // e.g., "morning", "afternoon", "evening"
+	Notes           string // free-form notes from conversation
+}
+
 // Repository defines the interface for lead storage
 type Repository interface {
 	Create(ctx context.Context, req *CreateLeadRequest) (*Lead, error)
 	GetByID(ctx context.Context, orgID string, id string) (*Lead, error)
 	GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*Lead, error)
+	UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error
+	UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error
 }
 
 // InMemoryRepository is a stub implementation of Repository using in-memory storage
@@ -108,4 +118,36 @@ func (r *InMemoryRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 	}
 	r.leads[lead.ID] = lead
 	return lead, nil
+}
+
+// UpdateSchedulingPreferences updates a lead's scheduling preferences
+func (r *InMemoryRepository) UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lead, ok := r.leads[leadID]
+	if !ok {
+		return ErrLeadNotFound
+	}
+
+	lead.ServiceInterest = prefs.ServiceInterest
+	lead.PreferredDays = prefs.PreferredDays
+	lead.PreferredTimes = prefs.PreferredTimes
+	lead.SchedulingNotes = prefs.Notes
+	return nil
+}
+
+// UpdateDepositStatus updates a lead's deposit status and priority
+func (r *InMemoryRepository) UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lead, ok := r.leads[leadID]
+	if !ok {
+		return ErrLeadNotFound
+	}
+
+	lead.DepositStatus = status
+	lead.PriorityLevel = priority
+	return nil
 }

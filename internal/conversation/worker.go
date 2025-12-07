@@ -306,9 +306,9 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		return fmt.Errorf("conversation: confirm booking failed: %w", err)
 	}
 	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
-		body := fmt.Sprintf("Payment of $%.2f received. Your appointment is confirmed! We'll share final details shortly.", float64(evt.AmountCents)/100)
+		body := fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", float64(evt.AmountCents)/100)
 		if evt.ScheduledFor != nil {
-			body = fmt.Sprintf("Your appointment on %s is confirmed. See you soon!", evt.ScheduledFor.Format(time.RFC1123))
+			body = fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
 		}
 		reply := OutboundReply{
 			OrgID:          evt.OrgID,

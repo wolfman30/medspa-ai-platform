@@ -1,11 +1,13 @@
 package payments
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	paymentsql "github.com/wolfman30/medspa-ai-platform/internal/payments/sqlc"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
@@ -19,8 +21,8 @@ type OrgNumberResolver interface {
 
 type CheckoutHandler struct {
 	leads     leads.Repository
-	payments  *Repository
-	square    *SquareCheckoutService
+	payments  paymentIntentCreator
+	square    checkoutLinkCreator
 	logger    *logging.Logger
 	minAmount int32
 }
@@ -39,9 +41,23 @@ type checkoutResponse struct {
 	Provider    string `json:"provider"`
 }
 
-func NewCheckoutHandler(leadsRepo leads.Repository, paymentsRepo *Repository, square *SquareCheckoutService, logger *logging.Logger, minAmount int32) *CheckoutHandler {
+type paymentIntentCreator interface {
+	CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string, scheduledFor *time.Time) (*paymentsql.Payment, error)
+}
+
+type checkoutLinkCreator interface {
+	CreatePaymentLink(ctx context.Context, params CheckoutParams) (*CheckoutResponse, error)
+}
+
+func NewCheckoutHandler(leadsRepo leads.Repository, paymentsRepo paymentIntentCreator, square checkoutLinkCreator, logger *logging.Logger, minAmount int32) *CheckoutHandler {
 	if logger == nil {
 		logger = logging.Default()
+	}
+	if paymentsRepo == nil {
+		panic("payments: repository required")
+	}
+	if square == nil {
+		panic("payments: checkout service required")
 	}
 	return &CheckoutHandler{
 		leads:     leadsRepo,
@@ -98,7 +114,17 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid org id", http.StatusBadRequest)
 		return
 	}
-	intent, err := h.payments.CreateIntent(r.Context(), orgUUID, leadUUID, "square", uuid.Nil, req.AmountCents, "deposit_pending", scheduledFor)
+	bookingIntent := uuid.Nil
+	if req.BookingIntentID != "" {
+		if parsed, err := uuid.Parse(req.BookingIntentID); err == nil {
+			bookingIntent = parsed
+		} else {
+			http.Error(w, "invalid booking_intent_id format", http.StatusBadRequest)
+			return
+		}
+	}
+
+	intent, err := h.payments.CreateIntent(r.Context(), orgUUID, leadUUID, "square", bookingIntent, req.AmountCents, "deposit_pending", scheduledFor)
 	if err != nil {
 		h.logger.Error("failed to persist payment intent", "error", err)
 		http.Error(w, "failed to create payment intent", http.StatusInternalServerError)
@@ -109,6 +135,9 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 		paymentID = uuid.UUID(intent.ID.Bytes)
 	} else {
 		paymentID = uuid.New()
+	}
+	if bookingIntent != uuid.Nil {
+		paymentID = bookingIntent
 	}
 
 	link, err := h.square.CreatePaymentLink(r.Context(), CheckoutParams{

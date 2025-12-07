@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Lead represents a lead submission from a web form
+// Lead represents a lead submission from a web form or conversation
 type Lead struct {
 	ID        string    `json:"id"`
 	OrgID     string    `json:"org_id"`
@@ -15,6 +15,14 @@ type Lead struct {
 	Message   string    `json:"message"`
 	Source    string    `json:"source"`
 	CreatedAt time.Time `json:"created_at"`
+
+	// Scheduling preferences (captured during AI conversation)
+	ServiceInterest string `json:"service_interest,omitempty"` // e.g., "Botox", "Filler", "Consultation"
+	PreferredDays   string `json:"preferred_days,omitempty"`   // e.g., "weekdays", "weekends", "any"
+	PreferredTimes  string `json:"preferred_times,omitempty"`  // e.g., "morning", "afternoon", "evening"
+	SchedulingNotes string `json:"scheduling_notes,omitempty"` // free-form notes from conversation
+	DepositStatus   string `json:"deposit_status,omitempty"`   // "pending", "paid", "refunded"
+	PriorityLevel   string `json:"priority_level,omitempty"`   // "normal", "priority" (deposit paid)
 }
 
 // CreateLeadRequest represents the request body for creating a lead

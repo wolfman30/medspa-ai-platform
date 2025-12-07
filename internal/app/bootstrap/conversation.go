@@ -3,17 +3,20 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
 
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/emr/nextech"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
 // BuildConversationService wires Redis-backed GPT conversation services from config.
-func BuildConversationService(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) (conversation.Service, error) {
+func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsRepo leads.Repository, logger *logging.Logger) (conversation.Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("bootstrap: config is required")
 	}
@@ -53,6 +56,28 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, logger
 		rag = ragStore
 	}
 
+	// Build GPT service options
+	opts := []conversation.GPTOption{
+		conversation.WithDepositConfig(conversation.DepositConfig{
+			DefaultAmountCents: int32(cfg.DepositAmountCents),
+			SuccessURL:         cfg.SquareSuccessURL,
+			CancelURL:          cfg.SquareCancelURL,
+		}),
+	}
+
+	// Configure EMR integration if credentials are provided
+	emrAdapter := buildEMRAdapter(cfg, logger)
+	if emrAdapter != nil {
+		opts = append(opts, conversation.WithEMR(emrAdapter))
+		logger.Info("EMR integration enabled", "provider", "nextech")
+	}
+
+	// Wire in leads repository for preference capture
+	if leadsRepo != nil {
+		opts = append(opts, conversation.WithLeadsRepo(leadsRepo))
+		logger.Info("leads repository wired into conversation service")
+	}
+
 	logger.Info("using GPT conversation service", "model", cfg.OpenAIModel, "redis", cfg.RedisAddr)
 	return conversation.NewGPTService(
 		openaiClient,
@@ -60,12 +85,30 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, logger
 		rag,
 		cfg.OpenAIModel,
 		logger,
-		conversation.WithDepositConfig(conversation.DepositConfig{
-			DefaultAmountCents: int32(cfg.DepositAmountCents),
-			SuccessURL:         cfg.SquareSuccessURL,
-			CancelURL:          cfg.SquareCancelURL,
-		}),
+		opts...,
 	), nil
+}
+
+// buildEMRAdapter creates an EMR adapter if Nextech credentials are configured.
+func buildEMRAdapter(cfg *appconfig.Config, logger *logging.Logger) *conversation.EMRAdapter {
+	if cfg.NextechBaseURL == "" || cfg.NextechClientID == "" || cfg.NextechClientSecret == "" {
+		logger.Info("nextech EMR not configured; skipping EMR integration")
+		return nil
+	}
+
+	client, err := nextech.New(nextech.Config{
+		BaseURL:      cfg.NextechBaseURL,
+		ClientID:     cfg.NextechClientID,
+		ClientSecret: cfg.NextechClientSecret,
+		Timeout:      30 * time.Second,
+	})
+	if err != nil {
+		logger.Error("failed to create nextech client", "error", err)
+		return nil
+	}
+
+	// Use empty clinicID as default; can be overridden per-org in the future
+	return conversation.NewEMRAdapter(client, "")
 }
 
 func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowledgeRepository) error {

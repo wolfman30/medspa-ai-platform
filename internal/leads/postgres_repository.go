@@ -130,3 +130,47 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 	}
 	return r.Create(ctx, req)
 }
+
+// UpdateSchedulingPreferences updates a lead's scheduling preferences
+func (r *PostgresRepository) UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error {
+	query := `
+		UPDATE leads
+		SET service_interest = $2,
+		    preferred_days = $3,
+		    preferred_times = $4,
+		    scheduling_notes = $5
+		WHERE id = $1
+	`
+	result, err := r.pool.Exec(ctx, query,
+		leadID,
+		prefs.ServiceInterest,
+		prefs.PreferredDays,
+		prefs.PreferredTimes,
+		prefs.Notes,
+	)
+	if err != nil {
+		return fmt.Errorf("leads: update preferences failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrLeadNotFound
+	}
+	return nil
+}
+
+// UpdateDepositStatus updates a lead's deposit status and priority level
+func (r *PostgresRepository) UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error {
+	query := `
+		UPDATE leads
+		SET deposit_status = $2,
+		    priority_level = $3
+		WHERE id = $1
+	`
+	result, err := r.pool.Exec(ctx, query, leadID, status, priority)
+	if err != nil {
+		return fmt.Errorf("leads: update deposit status failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrLeadNotFound
+	}
+	return nil
+}
