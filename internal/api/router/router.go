@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	httpmiddleware "github.com/wolfman30/medspa-ai-platform/internal/http/middleware"
@@ -24,6 +25,7 @@ type Config struct {
 	SquareWebhook       *payments.SquareWebhookHandler
 	AdminMessaging      *handlers.AdminMessagingHandler
 	TelnyxWebhooks      *handlers.TelnyxWebhookHandler
+	ClinicHandler       *clinic.Handler
 	AdminAuthSecret     string
 	MetricsHandler      http.Handler
 }
@@ -63,13 +65,19 @@ func New(cfg *Config) http.Handler {
 		}
 	})
 
-	if cfg.AdminMessaging != nil && cfg.AdminAuthSecret != "" {
+	// Admin routes (protected by JWT)
+	if cfg.AdminAuthSecret != "" {
 		r.Route("/admin", func(admin chi.Router) {
 			admin.Use(httpmiddleware.AdminJWT(cfg.AdminAuthSecret))
-			admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)
-			admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
-			admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
-			admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
+			if cfg.AdminMessaging != nil {
+				admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)
+				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
+				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
+				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
+			}
+			if cfg.ClinicHandler != nil {
+				admin.Mount("/clinics", cfg.ClinicHandler.Routes())
+			}
 		})
 	}
 

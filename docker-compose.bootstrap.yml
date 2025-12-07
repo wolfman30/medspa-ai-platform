@@ -30,6 +30,7 @@
       TWILIO_WEBHOOK_SECRET: ""
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
       TWILIO_ORG_MAP_JSON: ${TWILIO_ORG_MAP_JSON}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-secret-key}
     depends_on:
       postgres:
         condition: service_healthy
