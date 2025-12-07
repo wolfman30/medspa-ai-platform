@@ -49,10 +49,10 @@ type MessageRequest struct {
 
 // Deposit intent for payment processing.
 type DepositIntent struct {
-	AmountCents int32
-	SuccessURL  string
-	CancelURL   string
-	Description string
+	AmountCents  int32
+	SuccessURL   string
+	CancelURL    string
+	Description  string
 	ScheduledFor *time.Time
 }
 
