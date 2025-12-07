@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/nextech"
@@ -77,6 +78,11 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		opts = append(opts, conversation.WithLeadsRepo(leadsRepo))
 		logger.Info("leads repository wired into conversation service")
 	}
+
+	// Wire in clinic config store for business hours awareness
+	clinicStore := clinic.NewStore(redisClient)
+	opts = append(opts, conversation.WithClinicStore(clinicStore))
+	logger.Info("clinic config store wired into conversation service")
 
 	logger.Info("using GPT conversation service", "model", cfg.OpenAIModel, "redis", cfg.RedisAddr)
 	return conversation.NewGPTService(
