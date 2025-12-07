@@ -23,6 +23,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -148,13 +149,24 @@ func main() {
 		processedStore = events.NewProcessedStore(dbPool)
 	}
 
-	var knowledgeRepo conversation.KnowledgeRepository
-	var ragIngestor conversation.RAGIngestor
-	if cfg.RedisAddr != "" && cfg.OpenAIEmbeddingModel != "" && cfg.OpenAIAPIKey != "" {
-		redisClient := redis.NewClient(&redis.Options{
+	// Create Redis client for knowledge repo and clinic config
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisClient = redis.NewClient(&redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
 		})
+	}
+
+	var clinicHandler *clinic.Handler
+	if redisClient != nil {
+		clinicStore := clinic.NewStore(redisClient)
+		clinicHandler = clinic.NewHandler(clinicStore, logger)
+	}
+
+	var knowledgeRepo conversation.KnowledgeRepository
+	var ragIngestor conversation.RAGIngestor
+	if redisClient != nil && cfg.OpenAIEmbeddingModel != "" && cfg.OpenAIAPIKey != "" {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
 
 		openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
@@ -225,6 +237,7 @@ func main() {
 		SquareWebhook:       squareWebhookHandler,
 		AdminMessaging:      adminMessagingHandler,
 		TelnyxWebhooks:      telnyxWebhookHandler,
+		ClinicHandler:       clinicHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
 		MetricsHandler:      metricsHandler,
 	}

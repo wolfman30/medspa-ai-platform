@@ -7,22 +7,22 @@ import (
 
 func TestIsOpenAt(t *testing.T) {
 	cfg := DefaultConfig("test-org")
-	
+
 	// Use the clinic's timezone
 	loc, _ := time.LoadLocation("America/New_York")
-	
+
 	// Monday 10 AM EST - should be open
 	monday10am := time.Date(2025, 12, 8, 10, 0, 0, 0, loc) // Monday
 	if !cfg.IsOpenAt(monday10am) {
 		t.Error("expected clinic to be open Monday 10 AM")
 	}
-	
+
 	// Saturday 10 AM EST - should be closed
 	saturday := time.Date(2025, 12, 13, 10, 0, 0, 0, loc)
 	if cfg.IsOpenAt(saturday) {
 		t.Error("expected clinic to be closed Saturday")
 	}
-	
+
 	// Monday 7 AM EST - before opening
 	monday7am := time.Date(2025, 12, 8, 7, 0, 0, 0, loc)
 	if cfg.IsOpenAt(monday7am) {
