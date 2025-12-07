@@ -15,7 +15,7 @@ services:
       DATABASE_URL: postgresql://medspa:medspa@postgres:5432/medspa?sslmode=disable
       REDIS_ADDR: redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       TELNYX_API_KEY: ""
