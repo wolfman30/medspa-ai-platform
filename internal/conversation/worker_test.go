@@ -164,7 +164,8 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	if call == nil || call.scheduled == nil || !call.scheduled.Equal(scheduled) {
 		t.Fatalf("expected scheduled time to propagate, got %#v", call)
 	}
-	if !strings.Contains(messenger.lastReply().Body, scheduled.Format(time.RFC1123)) {
+	// Confirmation SMS uses human-friendly format "Monday, January 2 at 3:04 PM"
+	if !strings.Contains(messenger.lastReply().Body, scheduled.Format("Monday, January 2 at 3:04 PM")) {
 		t.Fatalf("expected scheduled time in confirmation sms, got %q", messenger.lastReply().Body)
 	}
 }

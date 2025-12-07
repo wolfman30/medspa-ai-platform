@@ -52,7 +52,8 @@ func TestDepositDispatcherMissingDeps(t *testing.T) {
 	}
 }
 
-func TestDepositDispatcherSkipsWithoutSchedule(t *testing.T) {
+func TestDepositDispatcherProceedsWithoutSchedule(t *testing.T) {
+	// Deposit should proceed even without scheduled_for - clinic will confirm time later
 	payRepo := &stubPaymentRepo{}
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
@@ -65,8 +66,9 @@ func TestDepositDispatcherSkipsWithoutSchedule(t *testing.T) {
 	if err := dispatcher.SendDeposit(context.Background(), msg, resp); err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
-	if payRepo.called || checkout.called || sms.called || outbox.called {
-		t.Fatalf("expected no actions when scheduled_for missing")
+	// Now we expect deposit to be sent even without scheduled time
+	if !payRepo.called || !checkout.called || !sms.called {
+		t.Fatalf("expected deposit actions when scheduled_for missing")
 	}
 }
 
