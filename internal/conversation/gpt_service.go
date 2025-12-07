@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 	"go.opentelemetry.io/otel"
@@ -155,6 +156,13 @@ func WithLeadsRepo(repo leads.Repository) GPTOption {
 	}
 }
 
+// WithClinicStore configures the clinic config store for business hours awareness.
+func WithClinicStore(store *clinic.Store) GPTOption {
+	return func(s *GPTService) {
+		s.clinicStore = store
+	}
+}
+
 type depositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -164,14 +172,15 @@ type depositConfig struct {
 
 // GPTService produces conversation responses using OpenAI and stores context in Redis.
 type GPTService struct {
-	client    chatClient
-	rag       RAGRetriever
-	emr       *EMRAdapter
-	model     string
-	logger    *logging.Logger
-	history   *historyStore
-	deposit   depositConfig
-	leadsRepo leads.Repository
+	client      chatClient
+	rag         RAGRetriever
+	emr         *EMRAdapter
+	model       string
+	logger      *logging.Logger
+	history     *historyStore
+	deposit     depositConfig
+	leadsRepo   leads.Repository
+	clinicStore *clinic.Store
 }
 
 // NewGPTService returns a GPT-backed Service implementation.
@@ -233,7 +242,7 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 	history := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: defaultOpenAISystemPrompt},
 	}
-	history = s.appendContext(ctx, history, req.ClinicID, req.Intro)
+	history = s.appendContext(ctx, history, req.OrgID, req.ClinicID, req.Intro)
 	history = append(history, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: formatIntroMessage(req, conversationID),
@@ -297,7 +306,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return nil, err
 	}
 
-	history = s.appendContext(ctx, history, req.ClinicID, req.Message)
+	history = s.appendContext(ctx, history, req.OrgID, req.ClinicID, req.Message)
 	history = append(history, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: req.Message,
@@ -416,7 +425,21 @@ func formatIntroMessage(req StartRequest, conversationID string) string {
 	return builder.String()
 }
 
-func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, clinicID, query string) []openai.ChatCompletionMessage {
+func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, orgID, clinicID, query string) []openai.ChatCompletionMessage {
+	// Append clinic business hours context if available
+	if s.clinicStore != nil && orgID != "" {
+		cfg, err := s.clinicStore.Get(ctx, orgID)
+		if err != nil {
+			s.logger.Warn("failed to fetch clinic config", "org_id", orgID, "error", err)
+		} else if cfg != nil {
+			hoursContext := cfg.BusinessHoursContext(time.Now())
+			history = append(history, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: hoursContext,
+			})
+		}
+	}
+
 	// Append RAG context if available
 	if s.rag != nil && strings.TrimSpace(query) != "" {
 		snippets, err := s.rag.Query(ctx, clinicID, query, 3)
