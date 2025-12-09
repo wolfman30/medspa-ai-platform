@@ -9,9 +9,9 @@ import (
 
 // TokenRefreshWorker periodically refreshes Square OAuth tokens before they expire.
 type TokenRefreshWorker struct {
-	oauthService *SquareOAuthService
-	logger       *logging.Logger
-	interval     time.Duration
+	oauthService  *SquareOAuthService
+	logger        *logging.Logger
+	interval      time.Duration
 	refreshBefore time.Duration // Refresh tokens this long before they expire
 }
 
@@ -23,8 +23,8 @@ func NewTokenRefreshWorker(oauthService *SquareOAuthService, logger *logging.Log
 	return &TokenRefreshWorker{
 		oauthService:  oauthService,
 		logger:        logger,
-		interval:      1 * time.Hour,       // Check every hour
-		refreshBefore: 7 * 24 * time.Hour,  // Refresh 7 days before expiry
+		interval:      1 * time.Hour,      // Check every hour
+		refreshBefore: 7 * 24 * time.Hour, // Refresh 7 days before expiry
 	}
 }
 
