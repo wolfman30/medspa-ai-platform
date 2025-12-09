@@ -183,7 +183,7 @@ func main() {
 	}
 	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, ragIngestor, logger)
 
-	inlineWorker := setupInlineWorker(
+	inlineWorker, conversationService := setupInlineWorker(
 		appCtx,
 		cfg,
 		logger,
@@ -194,6 +194,9 @@ func main() {
 		dbPool,
 		outboxStore,
 	)
+	if conversationService != nil {
+		conversationHandler.SetService(conversationService)
+	}
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
@@ -400,9 +403,9 @@ func setupInlineWorker(
 	memoryQueue *conversation.MemoryQueue,
 	dbPool *pgxpool.Pool,
 	outboxStore *events.OutboxStore,
-) *conversation.Worker {
+) (*conversation.Worker, conversation.Service) {
 	if !cfg.UseMemoryQueue || memoryQueue == nil {
-		return nil
+		return nil, nil
 	}
 
 	leadsRepo := initializeLeadsRepository(dbPool)
@@ -449,7 +452,7 @@ func setupInlineWorker(
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)
-	return worker
+	return worker, processor
 }
 
 func waitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logger) {

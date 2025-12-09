@@ -26,6 +26,7 @@ type Handler struct {
 	jobs      JobRecorder
 	knowledge KnowledgeRepository
 	rag       RAGIngestor
+	service   Service
 	logger    *logging.Logger
 }
 
@@ -38,6 +39,11 @@ func NewHandler(enqueuer Enqueuer, jobs JobRecorder, knowledge KnowledgeReposito
 		rag:       rag,
 		logger:    logger,
 	}
+}
+
+// SetService attaches the conversation service for transcript lookups.
+func (h *Handler) SetService(s Service) {
+	h.service = s
 }
 
 // Start handles POST /conversations/start.
@@ -442,3 +448,49 @@ const knowledgeFormHTML = `<!doctype html>
   </script>
 </body>
 </html>`
+
+// TranscriptResponse is the response for GET /admin/clinics/{orgID}/conversations/{phone}
+type TranscriptResponse struct {
+	ConversationID string    `json:"conversation_id"`
+	Messages       []Message `json:"messages"`
+}
+
+// GetTranscript handles GET /admin/clinics/{orgID}/conversations/{phone}
+// Returns the conversation transcript for a given phone number.
+func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgID")
+	phone := chi.URLParam(r, "phone")
+
+	if orgID == "" || phone == "" {
+		http.Error(w, "missing org_id or phone", http.StatusBadRequest)
+		return
+	}
+
+	if h.service == nil {
+		http.Error(w, "transcript service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Conversation ID is typically orgID:phone
+	conversationID := fmt.Sprintf("%s:%s", orgID, phone)
+
+	messages, err := h.service.GetHistory(r.Context(), conversationID)
+	if err != nil {
+		// Check if it's a "not found" error
+		if strings.Contains(err.Error(), "unknown conversation") {
+			http.Error(w, "conversation not found", http.StatusNotFound)
+			return
+		}
+		h.logger.Error("failed to get transcript", "error", err, "conversation_id", conversationID)
+		http.Error(w, "failed to retrieve transcript", http.StatusInternalServerError)
+		return
+	}
+
+	resp := TranscriptResponse{
+		ConversationID: conversationID,
+		Messages:       messages,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}

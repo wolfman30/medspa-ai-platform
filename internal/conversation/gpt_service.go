@@ -366,6 +366,27 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	}, nil
 }
 
+// GetHistory retrieves the conversation history for a given conversation ID.
+func (s *GPTService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	history, err := s.history.Load(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert openai messages to our Message type, filtering out system messages
+	var messages []Message
+	for _, msg := range history {
+		if msg.Role == openai.ChatMessageRoleSystem {
+			continue // Don't expose system prompts
+		}
+		messages = append(messages, Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+	return messages, nil
+}
+
 func (s *GPTService) generateResponse(ctx context.Context, history []openai.ChatCompletionMessage) (string, error) {
 	ctx, span := gptTracer.Start(ctx, "conversation.openai")
 	defer span.End()
