@@ -149,3 +149,7 @@ func (s *stubLeadsRepo) UpdateSchedulingPreferences(context.Context, string, lea
 func (s *stubLeadsRepo) UpdateDepositStatus(context.Context, string, string, string) error {
 	return nil
 }
+
+func (s *stubLeadsRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter) ([]*leads.Lead, error) {
+	return nil, nil
+}

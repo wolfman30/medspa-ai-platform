@@ -364,6 +364,10 @@ func (s *stubLeadRepo) UpdateDepositStatus(context.Context, string, string, stri
 	return nil
 }
 
+func (s *stubLeadRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter) ([]*leads.Lead, error) {
+	return nil, nil
+}
+
 type stubProcessedTracker struct {
 	already bool
 	marked  bool
