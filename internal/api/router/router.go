@@ -23,6 +23,7 @@ type Config struct {
 	ConversationHandler *conversation.Handler
 	PaymentsHandler     *payments.CheckoutHandler
 	SquareWebhook       *payments.SquareWebhookHandler
+	SquareOAuth         *payments.OAuthHandler
 	AdminMessaging      *handlers.AdminMessagingHandler
 	TelnyxWebhooks      *handlers.TelnyxWebhookHandler
 	ClinicHandler       *clinic.Handler
@@ -63,6 +64,10 @@ func New(cfg *Config) http.Handler {
 		if cfg.MetricsHandler != nil {
 			public.Handle("/metrics", cfg.MetricsHandler)
 		}
+		// OAuth callback (public, no auth required)
+		if cfg.SquareOAuth != nil {
+			public.Mount("/oauth", cfg.SquareOAuth.Routes())
+		}
 	})
 
 	// Admin routes (protected by JWT)
@@ -77,6 +82,10 @@ func New(cfg *Config) http.Handler {
 			}
 			if cfg.ClinicHandler != nil {
 				admin.Mount("/clinics", cfg.ClinicHandler.Routes())
+			}
+			// Square OAuth admin routes (connect/disconnect)
+			if cfg.SquareOAuth != nil {
+				admin.Mount("/clinics", cfg.SquareOAuth.AdminRoutes())
 			}
 		})
 	}

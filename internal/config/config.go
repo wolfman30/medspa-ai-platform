@@ -36,6 +36,11 @@ type Config struct {
 	SquareWebhookKey         string
 	SquareSuccessURL         string
 	SquareCancelURL          string
+	SquareClientID           string
+	SquareClientSecret       string
+	SquareOAuthRedirectURI   string
+	SquareOAuthSuccessURL    string
+	SquareSandbox            bool
 	DepositAmountCents       int
 	AdminJWTSecret           string
 	QuietHoursStart          string
@@ -90,6 +95,11 @@ func Load() *Config {
 		SquareWebhookKey:         getEnv("SQUARE_WEBHOOK_SIGNATURE_KEY", ""),
 		SquareSuccessURL:         getEnv("SQUARE_SUCCESS_URL", ""),
 		SquareCancelURL:          getEnv("SQUARE_CANCEL_URL", ""),
+		SquareClientID:           getEnv("SQUARE_CLIENT_ID", ""),
+		SquareClientSecret:       getEnv("SQUARE_CLIENT_SECRET", ""),
+		SquareOAuthRedirectURI:   getEnv("SQUARE_OAUTH_REDIRECT_URI", ""),
+		SquareOAuthSuccessURL:    getEnv("SQUARE_OAUTH_SUCCESS_URL", ""),
+		SquareSandbox:            getEnvAsBool("SQUARE_SANDBOX", true),
 		DepositAmountCents:       getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
 		AdminJWTSecret:           getEnv("ADMIN_JWT_SECRET", ""),
 		QuietHoursStart:          getEnv("QUIET_HOURS_START", ""),
