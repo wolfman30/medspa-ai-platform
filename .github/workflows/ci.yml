@@ -14,7 +14,7 @@ jobs:
       contents: read
     
     env:
-      GOTOOLCHAIN: go1.24.9
+      GOTOOLCHAIN: go1.24.11
 
     steps:
     - name: Checkout code
@@ -23,7 +23,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24.9'
+        go-version: '1.24.11'
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -65,7 +65,7 @@ jobs:
       contents: read
 
     env:
-      GOTOOLCHAIN: go1.24.9
+      GOTOOLCHAIN: go1.24.11
 
     steps:
     - name: Checkout code
@@ -97,9 +97,9 @@ jobs:
     needs: [test]
     permissions:
       contents: read
-    
+
     env:
-      GOTOOLCHAIN: go1.24.9
+      GOTOOLCHAIN: go1.24.11
 
     steps:
     - name: Checkout code
@@ -108,7 +108,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24.9'
+        go-version: '1.24.11'
 
     - name: Build
       run: |
