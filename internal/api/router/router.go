@@ -80,13 +80,19 @@ func New(cfg *Config) http.Handler {
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
 			}
-			if cfg.ClinicHandler != nil {
-				admin.Mount("/clinics", cfg.ClinicHandler.Routes())
-			}
-			// Square OAuth admin routes (connect/disconnect)
-			if cfg.SquareOAuth != nil {
-				admin.Mount("/clinics", cfg.SquareOAuth.AdminRoutes())
-			}
+			// Clinic routes (config + Square OAuth)
+			admin.Route("/clinics/{orgID}", func(clinicRoutes chi.Router) {
+				if cfg.ClinicHandler != nil {
+					clinicRoutes.Get("/config", cfg.ClinicHandler.GetConfig)
+					clinicRoutes.Put("/config", cfg.ClinicHandler.UpdateConfig)
+					clinicRoutes.Post("/config", cfg.ClinicHandler.UpdateConfig)
+				}
+				if cfg.SquareOAuth != nil {
+					clinicRoutes.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
+					clinicRoutes.Get("/square/status", cfg.SquareOAuth.HandleStatus)
+					clinicRoutes.Delete("/square/disconnect", cfg.SquareOAuth.HandleDisconnect)
+				}
+			})
 		})
 	}
 
