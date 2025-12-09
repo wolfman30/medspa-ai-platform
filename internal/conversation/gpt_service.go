@@ -94,7 +94,7 @@ You: "Great! You'll receive a secure payment link shortly. Once that's complete,
 WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 - "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
 - "Let me get your preferred times and the clinic will reach out with available options that match."`
-	maxHistoryMessages = 12
+	maxHistoryMessages = 24
 )
 
 var gptTracer = otel.Tracer("medspa.internal.conversation.gpt")
