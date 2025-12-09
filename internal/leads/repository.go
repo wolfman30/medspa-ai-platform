@@ -12,6 +12,7 @@ import (
 // SchedulingPreferences captures the customer's availability preferences from conversation
 type SchedulingPreferences struct {
 	ServiceInterest string // e.g., "Botox", "Filler", "Consultation"
+	PatientType     string // "new" or "existing"
 	PreferredDays   string // e.g., "weekdays", "weekends", "any"
 	PreferredTimes  string // e.g., "morning", "afternoon", "evening"
 	Notes           string // free-form notes from conversation
@@ -131,6 +132,7 @@ func (r *InMemoryRepository) UpdateSchedulingPreferences(ctx context.Context, le
 	}
 
 	lead.ServiceInterest = prefs.ServiceInterest
+	lead.PatientType = prefs.PatientType
 	lead.PreferredDays = prefs.PreferredDays
 	lead.PreferredTimes = prefs.PreferredTimes
 	lead.SchedulingNotes = prefs.Notes

@@ -68,3 +68,5 @@ ngrok.zip
 
 #Cached python files
 __pycache__/
+"medspa-api.tar"  
+"medspa-api.tar.gz"  
