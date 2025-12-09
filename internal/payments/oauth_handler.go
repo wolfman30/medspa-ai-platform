@@ -52,6 +52,7 @@ func (h *OAuthHandler) AdminRoutes() chi.Router {
 	r.Get("/{orgID}/square/status", h.HandleStatus)
 	r.Delete("/{orgID}/square/disconnect", h.HandleDisconnect)
 	r.Post("/{orgID}/square/sync-location", h.HandleSyncLocation)
+	r.Put("/{orgID}/phone", h.HandleUpdatePhone)
 	return r
 }
 
@@ -220,6 +221,7 @@ func (h *OAuthHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		"org_id":           orgID,
 		"merchant_id":      creds.MerchantID,
 		"location_id":      creds.LocationID,
+		"phone_number":     creds.PhoneNumber,
 		"token_expires_at": creds.TokenExpiresAt,
 		"connected_at":     creds.CreatedAt,
 	})
@@ -290,6 +292,55 @@ func (h *OAuthHandler) HandleSyncLocation(w http.ResponseWriter, r *http.Request
 		"org_id":      orgID,
 		"location_id": locationID,
 		"message":     "Location synced successfully",
+	})
+}
+
+// HandleUpdatePhone updates the SMS from number for a clinic.
+// PUT /admin/clinics/{orgID}/phone
+func (h *OAuthHandler) HandleUpdatePhone(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgID")
+	if orgID == "" {
+		http.Error(w, `{"error": "org_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.PhoneNumber == "" {
+		http.Error(w, `{"error": "phone_number required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Normalize phone number to E.164 format if not already
+	phone := req.PhoneNumber
+	if !strings.HasPrefix(phone, "+") {
+		phone = "+" + phone
+	}
+
+	if err := h.oauthService.UpdatePhoneNumber(r.Context(), orgID, phone); err != nil {
+		if strings.Contains(err.Error(), "no credentials found") {
+			http.Error(w, `{"error": "clinic not found or Square not connected"}`, http.StatusNotFound)
+			return
+		}
+		h.logger.Error("update phone failed", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "failed to update phone number"}`, http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("updated clinic phone", "org_id", orgID, "phone", phone)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":      true,
+		"org_id":       orgID,
+		"phone_number": phone,
+		"message":      "Phone number updated successfully",
 	})
 }
 

@@ -30,6 +30,7 @@ type SquareCredentials struct {
 	RefreshToken   string
 	TokenExpiresAt time.Time
 	LocationID     string
+	PhoneNumber    string // E.164 format, used as "from" number for SMS confirmations
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -234,7 +235,9 @@ func (s *SquareOAuthService) SaveCredentials(ctx context.Context, orgID string, 
 func (s *SquareOAuthService) GetCredentials(ctx context.Context, orgID string) (*SquareCredentials, error) {
 	query := `
 		SELECT org_id, merchant_id, access_token, refresh_token, token_expires_at, 
-		       COALESCE(location_id, '') as location_id, created_at, updated_at
+		       COALESCE(location_id, '') as location_id, 
+		       COALESCE(phone_number, '') as phone_number,
+		       created_at, updated_at
 		FROM clinic_square_credentials
 		WHERE org_id = $1
 	`
@@ -247,6 +250,7 @@ func (s *SquareOAuthService) GetCredentials(ctx context.Context, orgID string) (
 		&creds.RefreshToken,
 		&creds.TokenExpiresAt,
 		&creds.LocationID,
+		&creds.PhoneNumber,
 		&creds.CreatedAt,
 		&creds.UpdatedAt,
 	)
@@ -261,7 +265,9 @@ func (s *SquareOAuthService) GetCredentials(ctx context.Context, orgID string) (
 func (s *SquareOAuthService) GetExpiringCredentials(ctx context.Context, within time.Duration) ([]SquareCredentials, error) {
 	query := `
 		SELECT org_id, merchant_id, access_token, refresh_token, token_expires_at,
-		       COALESCE(location_id, '') as location_id, created_at, updated_at
+		       COALESCE(location_id, '') as location_id,
+		       COALESCE(phone_number, '') as phone_number,
+		       created_at, updated_at
 		FROM clinic_square_credentials
 		WHERE token_expires_at < $1
 		ORDER BY token_expires_at ASC
@@ -284,6 +290,7 @@ func (s *SquareOAuthService) GetExpiringCredentials(ctx context.Context, within 
 			&creds.RefreshToken,
 			&creds.TokenExpiresAt,
 			&creds.LocationID,
+			&creds.PhoneNumber,
 			&creds.CreatedAt,
 			&creds.UpdatedAt,
 		); err != nil {
@@ -317,6 +324,32 @@ func (s *SquareOAuthService) UpdateLocationID(ctx context.Context, orgID, locati
 		return fmt.Errorf("no credentials found for org %s", orgID)
 	}
 	return nil
+}
+
+// UpdatePhoneNumber sets the SMS from number for a clinic.
+func (s *SquareOAuthService) UpdatePhoneNumber(ctx context.Context, orgID, phoneNumber string) error {
+	query := `UPDATE clinic_square_credentials SET phone_number = $2, updated_at = NOW() WHERE org_id = $1`
+	result, err := s.db.Exec(ctx, query, orgID, phoneNumber)
+	if err != nil {
+		return fmt.Errorf("update phone number: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("no credentials found for org %s", orgID)
+	}
+	s.logger.Info("updated clinic phone number", "org_id", orgID, "phone", phoneNumber)
+	return nil
+}
+
+// GetPhoneNumber retrieves the SMS from number for a clinic.
+// Returns empty string if not found or not configured.
+func (s *SquareOAuthService) GetPhoneNumber(ctx context.Context, orgID string) (string, error) {
+	query := `SELECT COALESCE(phone_number, '') FROM clinic_square_credentials WHERE org_id = $1`
+	var phone string
+	err := s.db.QueryRow(ctx, query, orgID).Scan(&phone)
+	if err != nil {
+		return "", fmt.Errorf("get phone number: %w", err)
+	}
+	return phone, nil
 }
 
 // ParseState extracts orgID and random state from the combined state parameter.
