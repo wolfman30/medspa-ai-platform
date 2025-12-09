@@ -199,6 +199,9 @@ func main() {
 
 		// Square OAuth service for per-clinic payment connections
 		var oauthSvc *payments.SquareOAuthService
+		// Number resolver for webhook handler - defaults to static, wrapped with DB lookup
+		var numberResolver payments.OrgNumberResolver = resolver
+
 		if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
 			oauthSvc = payments.NewSquareOAuthService(
 				payments.SquareOAuthConfig{
@@ -219,10 +222,13 @@ func main() {
 			// Start token refresh worker
 			tokenRefreshWorker := payments.NewTokenRefreshWorker(oauthSvc, logger)
 			go tokenRefreshWorker.Start(appCtx)
+
+			// Wrap static resolver with DB lookup for phone numbers
+			numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 		}
 
 		checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, squareSvc, logger, int32(cfg.DepositAmountCents))
-		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, orderClient, logger)
+		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, numberResolver, orderClient, logger)
 		dispatcher := conversation.NewOutboxDispatcher(conversationPublisher)
 		deliverer := events.NewDeliverer(outboxStore, dispatcher, logger)
 		go deliverer.Start(appCtx)
