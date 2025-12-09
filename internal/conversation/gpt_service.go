@@ -568,8 +568,12 @@ Return this exact format:
 {"collect": true, "amount_cents": 5000, "description": "Refundable deposit", "success_url": "", "cancel_url": ""}
 
 Rules:
-- If customer agreed to deposit: set collect=true
-- If customer declined or hasn't been asked: set collect=false
+- ONLY set collect=true if the customer EXPLICITLY agreed to the deposit with words like "yes", "sure", "ok", "proceed", "let's do it", "I'll pay", etc.
+- Set collect=false if:
+  - Customer hasn't been asked about the deposit yet
+  - Customer was just offered the deposit but hasn't responded yet
+  - Customer declined or said "no", "not now", "maybe later", etc.
+  - The assistant just asked "Would you like to proceed?" - WAIT for their response
 - Default amount: %d cents
 - For success_url and cancel_url: use empty strings
 
