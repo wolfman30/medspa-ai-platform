@@ -18,6 +18,13 @@ type SchedulingPreferences struct {
 	Notes           string // free-form notes from conversation
 }
 
+// ListLeadsFilter defines filtering options for listing leads
+type ListLeadsFilter struct {
+	DepositStatus string // "pending", "paid", "failed", or "" for all
+	Limit         int    // max results, default 50
+	Offset        int    // pagination offset
+}
+
 // Repository defines the interface for lead storage
 type Repository interface {
 	Create(ctx context.Context, req *CreateLeadRequest) (*Lead, error)
@@ -25,6 +32,7 @@ type Repository interface {
 	GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*Lead, error)
 	UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error
 	UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error
+	ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error)
 }
 
 // InMemoryRepository is a stub implementation of Repository using in-memory storage
@@ -152,4 +160,46 @@ func (r *InMemoryRepository) UpdateDepositStatus(ctx context.Context, leadID str
 	lead.DepositStatus = status
 	lead.PriorityLevel = priority
 	return nil
+}
+
+// ListByOrg retrieves leads for an organization with optional filtering
+func (r *InMemoryRepository) ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var results []*Lead
+	for _, l := range r.leads {
+		if l.OrgID != orgID {
+			continue
+		}
+		if filter.DepositStatus != "" && l.DepositStatus != filter.DepositStatus {
+			continue
+		}
+		results = append(results, l)
+	}
+
+	// Sort by created_at descending (newest first)
+	for i := 0; i < len(results)-1; i++ {
+		for j := i + 1; j < len(results); j++ {
+			if results[j].CreatedAt.After(results[i].CreatedAt) {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
+
+	// Apply pagination
+	if filter.Offset >= len(results) {
+		return []*Lead{}, nil
+	}
+	results = results[filter.Offset:]
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	return results, nil
 }
