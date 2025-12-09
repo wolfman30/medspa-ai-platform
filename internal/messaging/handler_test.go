@@ -305,6 +305,10 @@ func (s *stubLeadsRepo) UpdateDepositStatus(context.Context, string, string, str
 	return nil
 }
 
+func (s *stubLeadsRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter) ([]*leads.Lead, error) {
+	return nil, nil
+}
+
 func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResolver) (*Handler, *stubPublisher) {
 	t.Helper()
 	pub := &stubPublisher{err: pubErr}
