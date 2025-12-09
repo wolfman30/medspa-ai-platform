@@ -67,9 +67,13 @@ func (s *SquareOAuthService) AuthorizationURL(orgID, state string) string {
 	params := url.Values{
 		"client_id":    {s.config.ClientID},
 		"scope":        {"PAYMENTS_WRITE PAYMENTS_READ ORDERS_WRITE ORDERS_READ MERCHANT_PROFILE_READ"},
-		"session":      {"false"},
 		"state":        {state},
 		"redirect_uri": {s.config.RedirectURI},
+	}
+
+	// Note: session=false is not supported in Sandbox environment
+	if !s.config.Sandbox {
+		params.Set("session", "false")
 	}
 
 	// Encode org_id in state for retrieval on callback
@@ -322,4 +326,77 @@ func ParseState(state string) (orgID, randomState string, err error) {
 		return "", "", fmt.Errorf("invalid state format")
 	}
 	return parts[0], parts[1], nil
+}
+
+// squareLocationsResponse represents the response from Square's locations endpoint.
+type squareLocationsResponse struct {
+	Locations []squareLocation `json:"locations"`
+}
+
+type squareLocation struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Status   string `json:"status"` // ACTIVE, INACTIVE
+	Type     string `json:"type"`   // PHYSICAL, MOBILE
+	Timezone string `json:"timezone"`
+}
+
+// FetchLocations retrieves all locations for a merchant from Square.
+func (s *SquareOAuthService) FetchLocations(ctx context.Context, accessToken string) ([]squareLocation, error) {
+	locationsURL := fmt.Sprintf("%s/v2/locations", s.baseURL())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", locationsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create locations request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Square-Version", "2024-01-18")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("locations request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read locations response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		s.logger.Error("square locations fetch failed", "status", resp.StatusCode, "body", string(body))
+		return nil, fmt.Errorf("locations fetch failed: status %d", resp.StatusCode)
+	}
+
+	var locResp squareLocationsResponse
+	if err := json.Unmarshal(body, &locResp); err != nil {
+		return nil, fmt.Errorf("parse locations response: %w", err)
+	}
+
+	return locResp.Locations, nil
+}
+
+// GetDefaultLocation returns the first active location for a merchant.
+func (s *SquareOAuthService) GetDefaultLocation(ctx context.Context, accessToken string) (string, error) {
+	locations, err := s.FetchLocations(ctx, accessToken)
+	if err != nil {
+		return "", err
+	}
+
+	// Return the first ACTIVE location
+	for _, loc := range locations {
+		if loc.Status == "ACTIVE" {
+			s.logger.Info("found active square location", "location_id", loc.ID, "name", loc.Name)
+			return loc.ID, nil
+		}
+	}
+
+	// If no active, return first available
+	if len(locations) > 0 {
+		s.logger.Warn("no active square locations, using first available", "location_id", locations[0].ID)
+		return locations[0].ID, nil
+	}
+
+	return "", fmt.Errorf("no locations found for merchant")
 }

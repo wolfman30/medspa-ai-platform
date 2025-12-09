@@ -51,6 +51,7 @@ func (h *OAuthHandler) AdminRoutes() chi.Router {
 	r.Get("/{orgID}/square/connect", h.HandleConnect)
 	r.Get("/{orgID}/square/status", h.HandleStatus)
 	r.Delete("/{orgID}/square/disconnect", h.HandleDisconnect)
+	r.Post("/{orgID}/square/sync-location", h.HandleSyncLocation)
 	return r
 }
 
@@ -156,7 +157,19 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("square oauth completed", "org_id", orgID, "merchant_id", creds.MerchantID)
+	// Fetch and save the default location ID
+	locationID, err := h.oauthService.GetDefaultLocation(r.Context(), creds.AccessToken)
+	if err != nil {
+		h.logger.Warn("failed to fetch location, payments may not work", "org_id", orgID, "error", err)
+	} else if locationID != "" {
+		if err := h.oauthService.UpdateLocationID(r.Context(), orgID, locationID); err != nil {
+			h.logger.Warn("failed to save location_id", "org_id", orgID, "error", err)
+		} else {
+			h.logger.Info("saved square location", "org_id", orgID, "location_id", locationID)
+		}
+	}
+
+	h.logger.Info("square oauth completed", "org_id", orgID, "merchant_id", creds.MerchantID, "location_id", locationID)
 
 	// Redirect to success URL or return JSON
 	if h.successURL != "" {
@@ -171,6 +184,7 @@ func (h *OAuthHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		"success":     true,
 		"org_id":      orgID,
 		"merchant_id": creds.MerchantID,
+		"location_id": locationID,
 		"message":     "Square account connected successfully",
 	})
 }
@@ -233,6 +247,49 @@ func (h *OAuthHandler) HandleDisconnect(w http.ResponseWriter, r *http.Request) 
 		"success": true,
 		"org_id":  orgID,
 		"message": "Square account disconnected",
+	})
+}
+
+// HandleSyncLocation fetches and updates the location ID for a clinic.
+// POST /admin/clinics/{orgID}/square/sync-location
+func (h *OAuthHandler) HandleSyncLocation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgID")
+	if orgID == "" {
+		http.Error(w, `{"error": "org_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Get current credentials
+	creds, err := h.oauthService.GetCredentials(r.Context(), orgID)
+	if err != nil {
+		h.logger.Error("get credentials failed", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "not connected to Square"}`, http.StatusNotFound)
+		return
+	}
+
+	// Fetch location from Square
+	locationID, err := h.oauthService.GetDefaultLocation(r.Context(), creds.AccessToken)
+	if err != nil {
+		h.logger.Error("fetch location failed", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "failed to fetch location from Square"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Update location in database
+	if err := h.oauthService.UpdateLocationID(r.Context(), orgID, locationID); err != nil {
+		h.logger.Error("update location failed", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "failed to save location"}`, http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("synced square location", "org_id", orgID, "location_id", locationID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"org_id":      orgID,
+		"location_id": locationID,
+		"message":     "Location synced successfully",
 	})
 }
 
