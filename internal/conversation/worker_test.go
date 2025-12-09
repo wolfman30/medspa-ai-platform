@@ -336,6 +336,10 @@ func (r *recordingService) ProcessMessage(ctx context.Context, req MessageReques
 	return &Response{}, nil
 }
 
+func (r *recordingService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	return []Message{}, nil
+}
+
 func (r *recordingService) startCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -362,6 +366,10 @@ func (r *replyService) ProcessMessage(ctx context.Context, req MessageRequest) (
 		Message:        "auto-reply",
 		DepositIntent:  r.deposit,
 	}, nil
+}
+
+func (r *replyService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	return []Message{}, nil
 }
 
 type scriptedQueue struct {

@@ -10,6 +10,13 @@ import (
 type Service interface {
 	StartConversation(ctx context.Context, req StartRequest) (*Response, error)
 	ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error)
+	GetHistory(ctx context.Context, conversationID string) ([]Message, error)
+}
+
+// Message represents a single message in a conversation transcript.
+type Message struct {
+	Role    string `json:"role"` // "user" or "assistant"
+	Content string `json:"content"`
 }
 
 // Channel identifies which transport the conversation is happening on.
@@ -92,4 +99,9 @@ func (s *StubService) ProcessMessage(ctx context.Context, req MessageRequest) (*
 		Message:        fmt.Sprintf("You said: %s. A full AI response will arrive soon.", req.Message),
 		Timestamp:      time.Now().UTC(),
 	}, nil
+}
+
+// GetHistory returns empty history for stub service.
+func (s *StubService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	return []Message{}, nil
 }
