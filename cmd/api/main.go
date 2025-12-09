@@ -192,9 +192,35 @@ func main() {
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
+	var squareOAuthHandler *payments.OAuthHandler
 	if paymentsRepo != nil && processedStore != nil && outboxStore != nil {
 		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
 		orderClient := payments.NewSquareOrdersClient(cfg.SquareAccessToken, cfg.SquareBaseURL, logger)
+
+		// Square OAuth service for per-clinic payment connections
+		var oauthSvc *payments.SquareOAuthService
+		if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
+			oauthSvc = payments.NewSquareOAuthService(
+				payments.SquareOAuthConfig{
+					ClientID:     cfg.SquareClientID,
+					ClientSecret: cfg.SquareClientSecret,
+					RedirectURI:  cfg.SquareOAuthRedirectURI,
+					Sandbox:      cfg.SquareSandbox,
+				},
+				dbPool,
+				logger,
+			)
+			// Wire per-org credentials into checkout service
+			squareSvc = squareSvc.WithCredentialsProvider(oauthSvc)
+
+			squareOAuthHandler = payments.NewOAuthHandler(oauthSvc, cfg.SquareOAuthSuccessURL, logger)
+			logger.Info("square oauth handler initialized", "redirect_uri", cfg.SquareOAuthRedirectURI, "sandbox", cfg.SquareSandbox)
+
+			// Start token refresh worker
+			tokenRefreshWorker := payments.NewTokenRefreshWorker(oauthSvc, logger)
+			go tokenRefreshWorker.Start(appCtx)
+		}
+
 		checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, squareSvc, logger, int32(cfg.DepositAmountCents))
 		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, resolver, orderClient, logger)
 		dispatcher := conversation.NewOutboxDispatcher(conversationPublisher)
@@ -235,6 +261,7 @@ func main() {
 		ConversationHandler: conversationHandler,
 		PaymentsHandler:     checkoutHandler,
 		SquareWebhook:       squareWebhookHandler,
+		SquareOAuth:         squareOAuthHandler,
 		AdminMessaging:      adminMessagingHandler,
 		TelnyxWebhooks:      telnyxWebhookHandler,
 		ClinicHandler:       clinicHandler,

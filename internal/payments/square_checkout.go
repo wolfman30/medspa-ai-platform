@@ -21,8 +21,14 @@ import (
 
 var squareTracer = otel.Tracer("medspa.internal.payments.square")
 
+// CredentialsProvider retrieves Square credentials for a specific org.
+type CredentialsProvider interface {
+	GetCredentials(ctx context.Context, orgID string) (*SquareCredentials, error)
+}
+
 // SquareCheckoutService creates hosted payment links for deposits.
 type SquareCheckoutService struct {
+	// Fallback credentials (used when no per-org credentials exist)
 	accessToken string
 	locationID  string
 	successURL  string
@@ -30,6 +36,8 @@ type SquareCheckoutService struct {
 	baseURL     string
 	httpClient  *http.Client
 	logger      *logging.Logger
+	// Per-org credentials provider (optional)
+	credsProvider CredentialsProvider
 }
 
 type CheckoutParams struct {
@@ -74,10 +82,49 @@ func (s *SquareCheckoutService) WithBaseURL(baseURL string) *SquareCheckoutServi
 	return s
 }
 
-func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params CheckoutParams) (*CheckoutResponse, error) {
-	if s.accessToken == "" || s.locationID == "" {
-		return nil, fmt.Errorf("payments: square not configured")
+// WithCredentialsProvider sets a per-org credentials provider.
+func (s *SquareCheckoutService) WithCredentialsProvider(provider CredentialsProvider) *SquareCheckoutService {
+	s.credsProvider = provider
+	return s
+}
+
+// getCredentialsForOrg retrieves credentials for a specific org, falling back to default if not found.
+func (s *SquareCheckoutService) getCredentialsForOrg(ctx context.Context, orgID string) (accessToken, locationID string, err error) {
+	// Try per-org credentials first
+	if s.credsProvider != nil && orgID != "" {
+		creds, err := s.credsProvider.GetCredentials(ctx, orgID)
+		if err == nil && creds != nil && creds.AccessToken != "" {
+			locationID := creds.LocationID
+			if locationID == "" {
+				// If no location ID stored, we'd need to fetch it from Square
+				// For now, log a warning
+				s.logger.Warn("no location_id for org, payment may fail", "org_id", orgID)
+			}
+			return creds.AccessToken, locationID, nil
+		}
+		// Log but don't fail - fall through to default credentials
+		if err != nil {
+			s.logger.Debug("no per-org square credentials, using default", "org_id", orgID, "error", err)
+		}
 	}
+
+	// Fall back to default credentials
+	if s.accessToken == "" {
+		return "", "", fmt.Errorf("payments: no square credentials configured")
+	}
+	return s.accessToken, s.locationID, nil
+}
+
+func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params CheckoutParams) (*CheckoutResponse, error) {
+	// Get credentials for this org (or fallback to default)
+	accessToken, locationID, err := s.getCredentialsForOrg(ctx, params.OrgID)
+	if err != nil {
+		return nil, err
+	}
+	if locationID == "" {
+		return nil, fmt.Errorf("payments: no location_id configured for org %s", params.OrgID)
+	}
+
 	ctx, span := squareTracer.Start(ctx, "square.create_link")
 	defer span.End()
 	span.SetAttributes(
@@ -115,7 +162,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	body := map[string]any{
 		"idempotency_key": idempotency,
 		"order": map[string]any{
-			"location_id": s.locationID,
+			"location_id": locationID,
 			"metadata":    meta,
 			"line_items": []map[string]any{
 				{
@@ -146,7 +193,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	if err != nil {
 		return nil, fmt.Errorf("payments: square request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.accessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.httpClient.Do(req)
