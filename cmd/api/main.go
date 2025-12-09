@@ -159,9 +159,14 @@ func main() {
 	}
 
 	var clinicHandler *clinic.Handler
+	var clinicStatsHandler *clinic.StatsHandler
 	if redisClient != nil {
 		clinicStore := clinic.NewStore(redisClient)
 		clinicHandler = clinic.NewHandler(clinicStore, logger)
+	}
+	if dbPool != nil {
+		statsRepo := clinic.NewStatsRepository(dbPool)
+		clinicStatsHandler = clinic.NewStatsHandler(statsRepo, logger)
 	}
 
 	var knowledgeRepo conversation.KnowledgeRepository
@@ -271,6 +276,7 @@ func main() {
 		AdminMessaging:      adminMessagingHandler,
 		TelnyxWebhooks:      telnyxWebhookHandler,
 		ClinicHandler:       clinicHandler,
+		ClinicStatsHandler:  clinicStatsHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
 		MetricsHandler:      metricsHandler,
 	}
