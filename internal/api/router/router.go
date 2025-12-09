@@ -27,6 +27,7 @@ type Config struct {
 	AdminMessaging      *handlers.AdminMessagingHandler
 	TelnyxWebhooks      *handlers.TelnyxWebhookHandler
 	ClinicHandler       *clinic.Handler
+	ClinicStatsHandler  *clinic.StatsHandler
 	AdminAuthSecret     string
 	MetricsHandler      http.Handler
 }
@@ -86,6 +87,9 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Get("/config", cfg.ClinicHandler.GetConfig)
 					clinicRoutes.Put("/config", cfg.ClinicHandler.UpdateConfig)
 					clinicRoutes.Post("/config", cfg.ClinicHandler.UpdateConfig)
+				}
+				if cfg.ClinicStatsHandler != nil {
+					clinicRoutes.Get("/stats", cfg.ClinicStatsHandler.GetStats)
 				}
 				if cfg.SquareOAuth != nil {
 					clinicRoutes.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
