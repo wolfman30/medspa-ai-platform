@@ -136,14 +136,16 @@ func (r *PostgresRepository) UpdateSchedulingPreferences(ctx context.Context, le
 	query := `
 		UPDATE leads
 		SET service_interest = $2,
-		    preferred_days = $3,
-		    preferred_times = $4,
-		    scheduling_notes = $5
+		    patient_type = $3,
+		    preferred_days = $4,
+		    preferred_times = $5,
+		    scheduling_notes = $6
 		WHERE id = $1
 	`
 	result, err := r.pool.Exec(ctx, query,
 		leadID,
 		prefs.ServiceInterest,
+		prefs.PatientType,
 		prefs.PreferredDays,
 		prefs.PreferredTimes,
 		prefs.Notes,
