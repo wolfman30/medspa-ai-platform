@@ -91,6 +91,7 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
 					clinicRoutes.Get("/square/status", cfg.SquareOAuth.HandleStatus)
 					clinicRoutes.Delete("/square/disconnect", cfg.SquareOAuth.HandleDisconnect)
+					clinicRoutes.Post("/square/sync-location", cfg.SquareOAuth.HandleSyncLocation)
 				}
 			})
 		})
