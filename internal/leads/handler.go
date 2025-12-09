@@ -3,7 +3,9 @@ package leads
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -51,4 +53,60 @@ func (h *Handler) CreateWebLead(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(lead)
+}
+
+// ListLeadsResponse is the response for listing leads
+type ListLeadsResponse struct {
+	Leads  []*Lead `json:"leads"`
+	Count  int     `json:"count"`
+	Offset int     `json:"offset"`
+	Limit  int     `json:"limit"`
+}
+
+// ListLeads handles GET /admin/clinics/{orgID}/leads requests
+func (h *Handler) ListLeads(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgID")
+	if orgID == "" {
+		http.Error(w, "missing org_id", http.StatusBadRequest)
+		return
+	}
+
+	// Parse query params
+	filter := ListLeadsFilter{
+		Limit:  50,
+		Offset: 0,
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 100 {
+			filter.Limit = limit
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+			filter.Offset = offset
+		}
+	}
+
+	if status := r.URL.Query().Get("deposit_status"); status != "" {
+		filter.DepositStatus = status
+	}
+
+	leads, err := h.repo.ListByOrg(r.Context(), orgID, filter)
+	if err != nil {
+		h.logger.Error("failed to list leads", "error", err, "org_id", orgID)
+		http.Error(w, "failed to list leads", http.StatusInternalServerError)
+		return
+	}
+
+	response := ListLeadsResponse{
+		Leads:  leads,
+		Count:  len(leads),
+		Offset: filter.Offset,
+		Limit:  filter.Limit,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

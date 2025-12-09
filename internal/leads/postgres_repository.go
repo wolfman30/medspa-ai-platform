@@ -176,3 +176,80 @@ func (r *PostgresRepository) UpdateDepositStatus(ctx context.Context, leadID str
 	}
 	return nil
 }
+
+// ListByOrg retrieves leads for an organization with optional filtering
+func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error) {
+	// Build query with optional filter
+	query := `
+		SELECT id, org_id, name, email, phone, message, source, created_at,
+		       COALESCE(service_interest, '') as service_interest,
+		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(preferred_days, '') as preferred_days,
+		       COALESCE(preferred_times, '') as preferred_times,
+		       COALESCE(scheduling_notes, '') as scheduling_notes,
+		       COALESCE(deposit_status, '') as deposit_status,
+		       COALESCE(priority_level, '') as priority_level
+		FROM leads
+		WHERE org_id = $1
+	`
+	args := []any{orgID}
+	argNum := 2
+
+	if filter.DepositStatus != "" {
+		query += fmt.Sprintf(" AND deposit_status = $%d", argNum)
+		args = append(args, filter.DepositStatus)
+		argNum++
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	query += fmt.Sprintf(" LIMIT $%d", argNum)
+	args = append(args, limit)
+	argNum++
+
+	if filter.Offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", argNum)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("leads: list query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*Lead
+	for rows.Next() {
+		var lead Lead
+		if err := rows.Scan(
+			&lead.ID,
+			&lead.OrgID,
+			&lead.Name,
+			&lead.Email,
+			&lead.Phone,
+			&lead.Message,
+			&lead.Source,
+			&lead.CreatedAt,
+			&lead.ServiceInterest,
+			&lead.PatientType,
+			&lead.PreferredDays,
+			&lead.PreferredTimes,
+			&lead.SchedulingNotes,
+			&lead.DepositStatus,
+			&lead.PriorityLevel,
+		); err != nil {
+			return nil, fmt.Errorf("leads: scan failed: %w", err)
+		}
+		results = append(results, &lead)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("leads: rows error: %w", err)
+	}
+
+	return results, nil
+}

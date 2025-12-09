@@ -91,6 +91,9 @@ func New(cfg *Config) http.Handler {
 				if cfg.ClinicStatsHandler != nil {
 					clinicRoutes.Get("/stats", cfg.ClinicStatsHandler.GetStats)
 				}
+				if cfg.LeadsHandler != nil {
+					clinicRoutes.Get("/leads", cfg.LeadsHandler.ListLeads)
+				}
 				if cfg.SquareOAuth != nil {
 					clinicRoutes.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
 					clinicRoutes.Get("/square/status", cfg.SquareOAuth.HandleStatus)
