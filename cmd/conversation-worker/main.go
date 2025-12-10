@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -92,17 +94,49 @@ func main() {
 		)
 	}
 
+	orgRouting := map[string]string{}
+	if raw := strings.TrimSpace(cfg.TwilioOrgMapJSON); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &orgRouting); err != nil {
+			logger.Warn("failed to parse TWILIO_ORG_MAP_JSON", "error", err)
+		}
+	}
+	numberResolver := messaging.NewStaticOrgResolver(orgRouting)
+
 	var bookingBridge conversation.BookingServiceAdapter
+	var oauthSvc *payments.SquareOAuthService
 	if dbPool != nil {
 		repo := bookings.NewRepository(dbPool)
 		bookingBridge = conversation.BookingServiceAdapter{
 			Service: bookings.NewService(repo, logger),
 		}
-		if cfg.SquareAccessToken != "" && cfg.SquareLocationID != "" {
+
+		var squareSvc *payments.SquareCheckoutService
+		if cfg.SquareAccessToken != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "") {
+			squareSvc = payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+		}
+		if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
+			oauthSvc = payments.NewSquareOAuthService(
+				payments.SquareOAuthConfig{
+					ClientID:     cfg.SquareClientID,
+					ClientSecret: cfg.SquareClientSecret,
+					RedirectURI:  cfg.SquareOAuthRedirectURI,
+					Sandbox:      cfg.SquareSandbox,
+				},
+				dbPool,
+				logger,
+			)
+			squareSvc = squareSvc.WithCredentialsProvider(oauthSvc)
+			numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, numberResolver)
+			refreshWorker := payments.NewTokenRefreshWorker(oauthSvc, logger)
+			go refreshWorker.Start(ctx)
+		}
+		if squareSvc != nil {
 			payRepo := payments.NewRepository(dbPool)
 			outbox := events.NewOutboxStore(dbPool)
-			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
-			depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outbox, messenger, logger)
+			depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outbox, messenger, numberResolver, logger)
+			logger.Info("deposit sender initialized for async workers", "has_oauth", oauthSvc != nil, "square_location_id", cfg.SquareLocationID)
+		} else {
+			logger.Warn("deposit sender NOT initialized for async workers", "has_square_token", cfg.SquareAccessToken != "", "has_oauth", oauthSvc != nil)
 		}
 	}
 

@@ -20,6 +20,7 @@ type depositDispatcher struct {
 	checkout paymentLinkCreator
 	outbox   outboxWriter
 	sms      ReplyMessenger
+	numbers  payments.OrgNumberResolver
 	logger   *logging.Logger
 }
 
@@ -40,7 +41,7 @@ type paymentIntentChecker interface {
 }
 
 // NewDepositDispatcher wires a deposit sender with the required dependencies.
-func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, logger *logging.Logger) DepositSender {
+func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, logger *logging.Logger) DepositSender {
 	if logger == nil {
 		logger = logging.Default()
 	}
@@ -49,6 +50,7 @@ func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLin
 		checkout: checkout,
 		outbox:   outbox,
 		sms:      sms,
+		numbers:  numbers,
 		logger:   logger,
 	}
 }
@@ -118,9 +120,15 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 	)
 
 	if d.sms != nil && link.URL != "" {
+		fromNumber := msg.To
+		if d.numbers != nil {
+			if resolved := d.numbers.DefaultFromNumber(msg.OrgID); strings.TrimSpace(resolved) != "" {
+				fromNumber = resolved
+			}
+		}
 		d.logger.Info("deposit: sending sms with checkout link",
 			"to", msg.From,
-			"from", msg.To,
+			"from", fromNumber,
 			"payment_id", paymentID,
 		)
 		body := fmt.Sprintf("Please secure your spot with a deposit: %s", link.URL)
@@ -131,7 +139,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			LeadID:         msg.LeadID,
 			ConversationID: resp.ConversationID,
 			To:             msg.From,
-			From:           msg.To,
+			From:           fromNumber,
 			Body:           body,
 			Metadata: map[string]string{
 				"provider":   "square",

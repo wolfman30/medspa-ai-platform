@@ -133,6 +133,58 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	}
 }
 
+func TestTelnyxVoiceMissedCallStartsConversation(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+	defer mock.Close()
+	store := messaging.NewStore(mock)
+	conv := &stubConversationPublisher{}
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: "lead-voice", OrgID: "org-x"}}
+	telnyxStub := &testTelnyxClient{}
+	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
+		Store:            store,
+		Processed:        &stubProcessedTracker{},
+		Telnyx:           telnyxStub,
+		Conversation:     conv,
+		Leads:            leadRepo,
+		Logger:           logging.Default(),
+		MessagingProfile: "profile",
+	})
+
+	clinicID := uuid.New()
+	mock.ExpectQuery("SELECT clinic_id").
+		WithArgs("+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/voice", bytes.NewReader(loadFixture(t, "telnyx_voice_missed.json")))
+	req.Header.Set("Telnyx-Timestamp", "123")
+	req.Header.Set("Telnyx-Signature", "abc")
+	rec := httptest.NewRecorder()
+
+	handler.HandleVoice(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if conv.startCalls != 1 {
+		t.Fatalf("expected start conversation to be enqueued once, got %d", conv.startCalls)
+	}
+	if conv.lastStart.Source != "telnyx_voice" {
+		t.Fatalf("expected source telnyx_voice, got %s", conv.lastStart.Source)
+	}
+	if conv.lastStart.LeadID != "lead-voice" {
+		t.Fatalf("expected lead id from repo, got %s", conv.lastStart.LeadID)
+	}
+	if telnyxStub.lastSendReq == nil || telnyxStub.lastSendReq.To != "+15550002222" || telnyxStub.lastSendReq.From != "+15559998888" {
+		t.Fatalf("expected missed-call ack to be sent via telnyx")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestTelnyxDeliveryStatus(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {
