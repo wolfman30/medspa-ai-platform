@@ -47,7 +47,10 @@ func (r *Repository) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID
 	query := `
 		SELECT status
 		FROM payments
-		WHERE org_id = $1 AND lead_id = $2 AND status IN ('deposit_pending', 'succeeded')
+		WHERE org_id = $1
+		  AND lead_id = $2
+		  AND status IN ('deposit_pending', 'succeeded')
+		  AND created_at >= now() - interval '72 hours'
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
