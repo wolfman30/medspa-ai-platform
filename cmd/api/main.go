@@ -411,7 +411,11 @@ func setupInlineWorker(
 	}
 
 	leadsRepo := initializeLeadsRepository(dbPool)
-	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, logger)
+	var paymentChecker *payments.Repository
+	if dbPool != nil {
+		paymentChecker = payments.NewRepository(dbPool)
+	}
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, logger)
 	if err != nil {
 		logger.Error("failed to configure inline conversation service", "error", err)
 		os.Exit(1)
@@ -433,11 +437,10 @@ func setupInlineWorker(
 	}
 
 	var depositSender conversation.DepositSender
-	if dbPool != nil && outboxStore != nil {
+	if dbPool != nil && outboxStore != nil && paymentChecker != nil {
 		if cfg.SquareAccessToken == "" && cfg.SquareClientID == "" && cfg.SquareClientSecret == "" {
 			logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
 		} else {
-			payRepo := payments.NewRepository(dbPool)
 			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
 			numberResolver := resolver
 			if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
@@ -455,7 +458,7 @@ func setupInlineWorker(
 				numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 				logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
 			}
-			depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outboxStore, messenger, numberResolver, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, logger)
 			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "")
 		}
 	} else {

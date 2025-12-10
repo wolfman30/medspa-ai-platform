@@ -58,11 +58,13 @@ func main() {
 	jobStore := conversation.NewJobStore(dynamoClient, cfg.ConversationJobsTable, logger)
 
 	var leadsRepo leads.Repository
+	var paymentChecker *payments.Repository
 	if dbPool != nil {
 		leadsRepo = leads.NewPostgresRepository(dbPool)
+		paymentChecker = payments.NewRepository(dbPool)
 	}
 
-	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, logger)
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, logger)
 	if err != nil {
 		logger.Error("failed to configure conversation service", "error", err)
 		os.Exit(1)
@@ -131,9 +133,8 @@ func main() {
 			go refreshWorker.Start(ctx)
 		}
 		if squareSvc != nil {
-			payRepo := payments.NewRepository(dbPool)
 			outbox := events.NewOutboxStore(dbPool)
-			depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outbox, messenger, numberResolver, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, logger)
 			logger.Info("deposit sender initialized for async workers", "has_oauth", oauthSvc != nil, "square_location_id", cfg.SquareLocationID)
 		} else {
 			logger.Warn("deposit sender NOT initialized for async workers", "has_square_token", cfg.SquareAccessToken != "", "has_oauth", oauthSvc != nil)

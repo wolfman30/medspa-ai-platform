@@ -17,7 +17,7 @@ import (
 )
 
 // BuildConversationService wires Redis-backed GPT conversation services from config.
-func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsRepo leads.Repository, logger *logging.Logger) (conversation.Service, error) {
+func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsRepo leads.Repository, paymentChecker conversation.PaymentStatusChecker, logger *logging.Logger) (conversation.Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("bootstrap: config is required")
 	}
@@ -83,6 +83,12 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	clinicStore := clinic.NewStore(redisClient)
 	opts = append(opts, conversation.WithClinicStore(clinicStore))
 	logger.Info("clinic config store wired into conversation service")
+
+	// Wire in payment checker for deposit status awareness
+	if paymentChecker != nil {
+		opts = append(opts, conversation.WithPaymentChecker(paymentChecker))
+		logger.Info("payment checker wired into conversation service")
+	}
 
 	logger.Info("using GPT conversation service", "model", cfg.OpenAIModel, "redis", cfg.RedisAddr)
 	return conversation.NewGPTService(
