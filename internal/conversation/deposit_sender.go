@@ -81,12 +81,19 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 
 	// Avoid duplicate deposits if a pending/succeeded intent already exists.
 	if checker, ok := d.payments.(paymentIntentChecker); ok {
-		if has, cerr := checker.HasOpenDeposit(ctx, orgUUID, leadUUID); cerr != nil {
-			d.logger.Warn("deposit: could not check for existing deposit, proceeding anyway", "error", cerr)
-		} else if has {
+		has, cerr := checker.HasOpenDeposit(ctx, orgUUID, leadUUID)
+		if cerr != nil {
+			// If we can't verify, don't send a duplicate - fail safe
+			d.logger.Error("deposit: could not check for existing deposit, skipping to avoid duplicate", "error", cerr, "org_id", msg.OrgID, "lead_id", msg.LeadID)
+			return fmt.Errorf("deposit: unable to verify existing deposit status: %w", cerr)
+		}
+		if has {
 			d.logger.Info("deposit: existing deposit intent found; skipping new link", "org_id", msg.OrgID, "lead_id", msg.LeadID)
 			return nil
 		}
+	} else {
+		d.logger.Warn("deposit: payments repo does not support HasOpenDeposit check, skipping to avoid duplicate", "org_id", msg.OrgID, "lead_id", msg.LeadID)
+		return fmt.Errorf("deposit: cannot verify existing deposit - payments repo missing HasOpenDeposit")
 	}
 
 	paymentRow, err := d.payments.CreateIntent(ctx, orgUUID, leadUUID, "square", uuid.Nil, intent.AmountCents, "deposit_pending", intent.ScheduledFor)

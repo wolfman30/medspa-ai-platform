@@ -37,31 +37,18 @@ func NewRepositoryWithQuerier(q paymentsql.Querier) *Repository {
 
 // HasOpenDeposit returns true if a deposit intent already exists for the lead/org in pending or succeeded state.
 func (r *Repository) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error) {
-	qr, ok := r.queries.(interface {
-		QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	})
-	if !ok {
-		return false, fmt.Errorf("payments: querier does not support QueryRow")
+	arg := paymentsql.GetOpenDepositByOrgAndLeadParams{
+		OrgID:  orgID.String(),
+		LeadID: toPGUUID(leadID),
 	}
-
-	query := `
-		SELECT status
-		FROM payments
-		WHERE org_id = $1
-		  AND lead_id = $2
-		  AND status IN ('deposit_pending', 'succeeded')
-		  AND created_at >= now() - interval '72 hours'
-		ORDER BY created_at DESC
-		LIMIT 1
-	`
-	var status string
-	if err := qr.QueryRow(ctx, query, orgID.String(), toPGUUID(leadID)).Scan(&status); err != nil {
+	payment, err := r.queries.GetOpenDepositByOrgAndLead(ctx, arg)
+	if err != nil {
 		if err == pgx.ErrNoRows {
 			return false, nil
 		}
 		return false, fmt.Errorf("payments: check deposit by lead: %w", err)
 	}
-	return status == "deposit_pending" || status == "succeeded", nil
+	return payment.Status == "deposit_pending" || payment.Status == "succeeded", nil
 }
 
 // CreateIntent persists a payment intent in deposit pending status.

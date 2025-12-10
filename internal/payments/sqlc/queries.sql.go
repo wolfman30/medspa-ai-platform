@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getOpenDepositByOrgAndLead = `-- name: GetOpenDepositByOrgAndLead :one
+SELECT id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at FROM payments
+WHERE org_id = $1
+  AND lead_id = $2
+  AND status IN ('deposit_pending', 'succeeded')
+  AND created_at >= now() - interval '72 hours'
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetOpenDepositByOrgAndLeadParams struct {
+	OrgID  string
+	LeadID pgtype.UUID
+}
+
+func (q *Queries) GetOpenDepositByOrgAndLead(ctx context.Context, arg GetOpenDepositByOrgAndLeadParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, getOpenDepositByOrgAndLead, arg.OrgID, arg.LeadID)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.LeadID,
+		&i.Provider,
+		&i.ProviderRef,
+		&i.BookingIntentID,
+		&i.AmountCents,
+		&i.Status,
+		&i.ScheduledFor,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getPaymentByID = `-- name: GetPaymentByID :one
 SELECT id, org_id, lead_id, provider, provider_ref, booking_intent_id, amount_cents, status, scheduled_for, created_at FROM payments
 WHERE id = $1
