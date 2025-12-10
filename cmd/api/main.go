@@ -193,6 +193,7 @@ func main() {
 		memoryQueue,
 		dbPool,
 		outboxStore,
+		resolver,
 	)
 	if conversationService != nil {
 		conversationHandler.SetService(conversationService)
@@ -403,6 +404,7 @@ func setupInlineWorker(
 	memoryQueue *conversation.MemoryQueue,
 	dbPool *pgxpool.Pool,
 	outboxStore *events.OutboxStore,
+	resolver payments.OrgNumberResolver,
 ) (*conversation.Worker, conversation.Service) {
 	if !cfg.UseMemoryQueue || memoryQueue == nil {
 		return nil, nil
@@ -431,11 +433,31 @@ func setupInlineWorker(
 	}
 
 	var depositSender conversation.DepositSender
-	if dbPool != nil && outboxStore != nil && cfg.SquareAccessToken != "" && cfg.SquareLocationID != "" {
-		payRepo := payments.NewRepository(dbPool)
-		squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
-		depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outboxStore, messenger, logger)
-		logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID)
+	if dbPool != nil && outboxStore != nil {
+		if cfg.SquareAccessToken == "" && cfg.SquareClientID == "" && cfg.SquareClientSecret == "" {
+			logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
+		} else {
+			payRepo := payments.NewRepository(dbPool)
+			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+			numberResolver := resolver
+			if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
+				oauthSvc := payments.NewSquareOAuthService(
+					payments.SquareOAuthConfig{
+						ClientID:     cfg.SquareClientID,
+						ClientSecret: cfg.SquareClientSecret,
+						RedirectURI:  cfg.SquareOAuthRedirectURI,
+						Sandbox:      cfg.SquareSandbox,
+					},
+					dbPool,
+					logger,
+				)
+				squareSvc = squareSvc.WithCredentialsProvider(oauthSvc)
+				numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
+				logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
+			}
+			depositSender = conversation.NewDepositDispatcher(payRepo, squareSvc, outboxStore, messenger, numberResolver, logger)
+			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "")
+		}
 	} else {
 		logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "")
 	}

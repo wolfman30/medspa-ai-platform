@@ -61,6 +61,7 @@ func New(cfg *Config) http.Handler {
 		if cfg.TelnyxWebhooks != nil {
 			public.Post("/webhooks/telnyx/messages", cfg.TelnyxWebhooks.HandleMessages)
 			public.Post("/webhooks/telnyx/hosted", cfg.TelnyxWebhooks.HandleHosted)
+			public.Post("/webhooks/telnyx/voice", cfg.TelnyxWebhooks.HandleVoice)
 		}
 		if cfg.MetricsHandler != nil {
 			public.Handle("/metrics", cfg.MetricsHandler)
