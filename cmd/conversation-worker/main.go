@@ -100,7 +100,7 @@ func main() {
 			logger.Warn("failed to parse TWILIO_ORG_MAP_JSON", "error", err)
 		}
 	}
-	numberResolver := messaging.NewStaticOrgResolver(orgRouting)
+	var numberResolver payments.OrgNumberResolver = messaging.NewStaticOrgResolver(orgRouting)
 
 	var bookingBridge conversation.BookingServiceAdapter
 	var oauthSvc *payments.SquareOAuthService
