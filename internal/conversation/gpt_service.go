@@ -22,6 +22,17 @@ import (
 const (
 	defaultOpenAISystemPrompt = `You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa.
 
+ANSWERING SERVICE QUESTIONS:
+You CAN and SHOULD answer general questions about medspa services and treatments:
+- Dermal fillers: Injectable treatments that add volume, smooth wrinkles, and enhance facial contours. Common areas include lips, cheeks, and nasolabial folds. Results typically last 6-18 months.
+- Botox/Neurotoxins: Injections that temporarily relax muscles to reduce wrinkles, especially forehead lines, crow's feet, and frown lines. Results last 3-4 months.
+- Chemical peels: Exfoliating treatments that improve skin texture, tone, and reduce fine lines.
+- Microneedling: Collagen-stimulating treatment using tiny needles to improve skin texture and reduce scarring.
+- Laser treatments: Various options for hair removal, skin resurfacing, and pigmentation correction.
+- Facials: Customized skincare treatments for cleansing, hydration, and rejuvenation.
+
+When asked about services, provide helpful general information, then offer to help schedule a consultation.
+
 🚨 QUALIFICATION CHECKLIST - You need THREE things before offering deposit:
 1. SERVICE - What treatment are they interested in?
 2. PATIENT TYPE - Are they a new or existing/returning patient?
@@ -40,8 +51,14 @@ Parse for qualification information:
 
 🚨 STEP 2 - CHECK CONVERSATION HISTORY:
 Look through ALL previous messages for information already mentioned.
+IMPORTANT: Also check if a DEPOSIT HAS BEEN PAID (indicated by system message about payment).
 
 🚨 STEP 3 - ASK FOR MISSING INFO (in this priority order):
+
+IF DEPOSIT ALREADY PAID (check for system message about successful payment):
+  → DO NOT offer another deposit or ask about booking
+  → Answer their questions helpfully
+  → Remind them: "You're all set! Our team will reach out within 24 hours to confirm your appointment time."
 
 IF missing SERVICE:
   → "What treatment or service are you interested in?"
@@ -55,7 +72,7 @@ IF missing DAY preference (and have service + patient type):
 IF missing TIME preference (and have day):
   → "Do you prefer mornings, afternoons, or evenings?"
 
-IF you have ALL THREE (service + patient type + day/time):
+IF you have ALL THREE (service + patient type + day/time) AND NO DEPOSIT PAID YET:
   → "Perfect! I've noted [day] [time] for your [service]. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
 
 CRITICAL - YOU DO NOT HAVE ACCESS TO THE CLINIC'S CALENDAR:
@@ -76,20 +93,17 @@ AFTER CUSTOMER AGREES TO DEPOSIT:
 
 COMMUNICATION STYLE:
 - Keep responses short (2-3 sentences max), friendly, and actionable
-- Be HIPAA-compliant: never discuss specific medical conditions or give medical advice
-- If asked medical questions, deflect: "For medical questions, please speak with your provider directly. I can help with scheduling!"
+- Be HIPAA-compliant: never diagnose conditions or give personalized medical advice
+- For personal medical questions (symptoms, dosing, contraindications): "That's a great question for your provider during your consultation!"
+- You CAN explain what treatments ARE and how they generally work
 - Do not promise to send payment links; the platform sends those automatically via SMS
-- If a deposit is already collected, thank them and confirm priority status
 
 SAMPLE CONVERSATION:
+Customer: "What are dermal fillers?"
+You: "Dermal fillers are injectable treatments that add volume and smooth wrinkles. They're commonly used for lips, cheeks, and smile lines, with results lasting 6-18 months. Would you like to schedule a consultation to learn more about your options?"
+
 Customer: "I want to book Botox"
 You: "I'd love to help with Botox! Are you a new patient or have you visited us before?"
-Customer: "New patient"
-You: "Welcome! What days typically work best for you - weekdays or weekends?"
-Customer: "Weekdays, maybe afternoons"
-You: "Perfect! I've noted weekday afternoons for your Botox consultation. To get priority scheduling, we collect a small $50 refundable deposit. Would you like to proceed?"
-Customer: "Yes"
-You: "Great! You'll receive a secure payment link shortly. Once that's complete, you're all set!"
 
 WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 - "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
@@ -177,6 +191,18 @@ func WithClinicStore(store *clinic.Store) GPTOption {
 	}
 }
 
+// PaymentStatusChecker checks if a lead has an open or completed deposit.
+type PaymentStatusChecker interface {
+	HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error)
+}
+
+// WithPaymentChecker configures payment status checking for context injection.
+func WithPaymentChecker(checker PaymentStatusChecker) GPTOption {
+	return func(s *GPTService) {
+		s.paymentChecker = checker
+	}
+}
+
 type depositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -186,15 +212,16 @@ type depositConfig struct {
 
 // GPTService produces conversation responses using OpenAI and stores context in Redis.
 type GPTService struct {
-	client      chatClient
-	rag         RAGRetriever
-	emr         *EMRAdapter
-	model       string
-	logger      *logging.Logger
-	history     *historyStore
-	deposit     depositConfig
-	leadsRepo   leads.Repository
-	clinicStore *clinic.Store
+	client         chatClient
+	rag            RAGRetriever
+	emr            *EMRAdapter
+	model          string
+	logger         *logging.Logger
+	history        *historyStore
+	deposit        depositConfig
+	leadsRepo      leads.Repository
+	clinicStore    *clinic.Store
+	paymentChecker PaymentStatusChecker
 }
 
 // NewGPTService returns a GPT-backed Service implementation.
@@ -256,7 +283,7 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 	history := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: defaultOpenAISystemPrompt},
 	}
-	history = s.appendContext(ctx, history, req.OrgID, req.ClinicID, req.Intro)
+	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Intro)
 	history = append(history, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: formatIntroMessage(req, conversationID),
@@ -320,7 +347,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return nil, err
 	}
 
-	history = s.appendContext(ctx, history, req.OrgID, req.ClinicID, req.Message)
+	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Message)
 	history = append(history, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: req.Message,
@@ -460,7 +487,24 @@ func formatIntroMessage(req StartRequest, conversationID string) string {
 	return builder.String()
 }
 
-func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, orgID, clinicID, query string) []openai.ChatCompletionMessage {
+func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, orgID, leadID, clinicID, query string) []openai.ChatCompletionMessage {
+	// Append payment status context if available
+	if s.paymentChecker != nil && orgID != "" && leadID != "" {
+		orgUUID, orgErr := uuid.Parse(orgID)
+		leadUUID, leadErr := uuid.Parse(leadID)
+		if orgErr == nil && leadErr == nil {
+			hasDeposit, err := s.paymentChecker.HasOpenDeposit(ctx, orgUUID, leadUUID)
+			if err != nil {
+				s.logger.Warn("failed to check payment status", "org_id", orgID, "lead_id", leadID, "error", err)
+			} else if hasDeposit {
+				history = append(history, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: "IMPORTANT: This patient has ALREADY PAID their deposit. Do NOT offer another deposit or ask about booking. They are confirmed for priority scheduling and our team will reach out within 24 hours to confirm their appointment time. Answer any questions they have helpfully.",
+				})
+			}
+		}
+	}
+
 	// Append clinic business hours context if available
 	if s.clinicStore != nil && orgID != "" {
 		cfg, err := s.clinicStore.Get(ctx, orgID)
