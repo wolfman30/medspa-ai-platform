@@ -59,3 +59,7 @@ func (*stubPaymentQuerier) UpdatePaymentStatusByID(ctx context.Context, arg paym
 func (*stubPaymentQuerier) UpdatePaymentStatusByProviderRef(ctx context.Context, arg paymentsql.UpdatePaymentStatusByProviderRefParams) (paymentsql.Payment, error) {
 	return paymentsql.Payment{}, nil
 }
+
+func (*stubPaymentQuerier) GetOpenDepositByOrgAndLead(ctx context.Context, arg paymentsql.GetOpenDepositByOrgAndLeadParams) (paymentsql.Payment, error) {
+	return paymentsql.Payment{}, nil
+}

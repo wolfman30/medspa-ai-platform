@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	GetOpenDepositByOrgAndLead(ctx context.Context, arg GetOpenDepositByOrgAndLeadParams) (Payment, error)
 	GetPaymentByID(ctx context.Context, id pgtype.UUID) (Payment, error)
 	GetPaymentByProviderRef(ctx context.Context, providerRef pgtype.Text) (Payment, error)
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) (Payment, error)
