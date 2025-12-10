@@ -134,12 +134,23 @@ func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowled
 }
 
 func hydrateRAGFromRedis(ctx context.Context, repo conversation.KnowledgeRepository, rag conversation.RAGIngestor, logger *logging.Logger) error {
-	if rag == nil {
+	if rag == nil || repo == nil {
 		return nil
 	}
 	docsByClinic, err := repo.LoadAll(ctx)
 	if err != nil {
 		return err
+	}
+	if len(docsByClinic) == 0 {
+		if redisRepo, ok := repo.(*conversation.RedisKnowledgeRepository); ok {
+			if err := ensureDefaultKnowledge(ctx, redisRepo); err != nil && logger != nil {
+				logger.Warn("failed to seed default knowledge before rag hydration", "error", err)
+			}
+			docsByClinic, err = repo.LoadAll(ctx)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	for clinicID, docs := range docsByClinic {
 		if err := rag.AddDocuments(ctx, clinicID, docs); err != nil {
