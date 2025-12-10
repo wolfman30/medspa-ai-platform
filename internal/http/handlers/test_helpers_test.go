@@ -105,15 +105,24 @@ type recordedMessage struct {
 }
 
 type stubConversationPublisher struct {
-	calls   int
-	lastJob string
-	last    conversation.MessageRequest
+	calls      int
+	startCalls int
+	lastJob    string
+	last       conversation.MessageRequest
+	lastStart  conversation.StartRequest
 }
 
 func (s *stubConversationPublisher) EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error {
 	s.calls++
 	s.lastJob = jobID
 	s.last = req
+	return nil
+}
+
+func (s *stubConversationPublisher) EnqueueStart(ctx context.Context, jobID string, req conversation.StartRequest, opts ...conversation.PublishOption) error {
+	s.startCalls++
+	s.lastJob = jobID
+	s.lastStart = req
 	return nil
 }
 

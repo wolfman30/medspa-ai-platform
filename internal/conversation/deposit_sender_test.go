@@ -21,7 +21,7 @@ func TestDepositDispatcherHappyPath(t *testing.T) {
 	sms := &stubReplyMessenger{}
 	logger := logging.Default()
 
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, logger)
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logger)
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+2"}
 	now := time.Now()
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test", ScheduledFor: &now}}
@@ -44,7 +44,7 @@ func TestDepositDispatcherHappyPath(t *testing.T) {
 }
 
 func TestDepositDispatcherMissingDeps(t *testing.T) {
-	dispatcher := NewDepositDispatcher(nil, nil, nil, nil, logging.Default())
+	dispatcher := NewDepositDispatcher(nil, nil, nil, nil, nil, logging.Default())
 	msg := MessageRequest{OrgID: "org-1", LeadID: uuid.New().String()}
 	resp := &Response{DepositIntent: &DepositIntent{AmountCents: 1000, ScheduledFor: ptrTime(time.Now())}}
 	if err := dispatcher.SendDeposit(context.Background(), msg, resp); err == nil {
@@ -58,7 +58,7 @@ func TestDepositDispatcherProceedsWithoutSchedule(t *testing.T) {
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logging.Default())
 
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+2"}
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "No time"}}
@@ -77,7 +77,7 @@ func TestDepositDispatcherSkipsDuplicate(t *testing.T) {
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logging.Default())
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+2"}
 	now := time.Now()
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test", ScheduledFor: &now}}
@@ -95,7 +95,7 @@ func TestDepositDispatcherUsesMetadataSchedule(t *testing.T) {
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logging.Default())
 
 	when := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
 	msg := MessageRequest{
@@ -115,6 +115,25 @@ func TestDepositDispatcherUsesMetadataSchedule(t *testing.T) {
 	}
 	if !payRepo.called || !checkout.called || !sms.called || !outbox.called {
 		t.Fatalf("expected all dependencies invoked when schedule provided via metadata")
+	}
+}
+
+func TestDepositDispatcherUsesResolverFromNumber(t *testing.T) {
+	payRepo := &stubPaymentRepo{}
+	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
+	outbox := &stubOutbox{}
+	sms := &stubReplyMessenger{}
+	resolver := &stubNumberResolver{from: "+18885550100"}
+
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, logging.Default())
+	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+19998887777"}
+	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test"}}
+
+	if err := dispatcher.SendDeposit(context.Background(), msg, resp); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if sms.last.From != resolver.from {
+		t.Fatalf("expected from number %s, got %s", resolver.from, sms.last.From)
 	}
 }
 
@@ -166,11 +185,21 @@ func (s *stubOutbox) Insert(ctx context.Context, orgID string, eventType string,
 
 type stubReplyMessenger struct {
 	called bool
+	last   OutboundReply
 }
 
 func (s *stubReplyMessenger) SendReply(ctx context.Context, reply OutboundReply) error {
 	s.called = true
+	s.last = reply
 	return nil
+}
+
+type stubNumberResolver struct {
+	from string
+}
+
+func (s *stubNumberResolver) DefaultFromNumber(orgID string) string {
+	return s.from
 }
 
 // helper to satisfy repository expectations

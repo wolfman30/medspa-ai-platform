@@ -1,0 +1,18 @@
+{
+  "clinic_id": "demo-radiance-medspa",
+  "clinic_name": "Radiance Medical Spa",
+  "documents": [
+    {
+      "title": "Services & Pricing - Injectables",
+      "content": "Botox: $12/unit (most foreheads 20-40 units). Lip filler: $650/syringe for subtle enhancement. Cheek filler: 2-3 syringes recommended for lift. Results aim for natural, not over-filled."
+    },
+    {
+      "title": "Booking & Deposit Policies",
+      "content": "New clients place a $50 refundable deposit that is applied to treatment. Reschedule with 24 hours notice to keep the deposit. Same-day cancellations or no-shows forfeit the deposit."
+    },
+    {
+      "title": "Hours & Location",
+      "content": "Location: 123 Beauty Blvd, Suite 200, Scottsdale, AZ. Hours: Mon 9-6, Tue 10-7, Wed 9-6, Thu 10-7, Fri 9-5, Sat 9-4. Free covered parking in the attached garage."
+    }
+  ]
+}

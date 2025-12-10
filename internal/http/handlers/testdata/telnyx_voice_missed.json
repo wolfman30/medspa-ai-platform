@@ -1,0 +1,16 @@
+{
+  "data": {
+    "id": "evt_voice",
+    "event_type": "call.hangup",
+    "occurred_at": "2024-10-01T12:05:00Z",
+    "payload": {
+      "id": "call_123",
+      "status": "no_answer",
+      "hangup_cause": "no_answer",
+      "from": { "phone_number": "+15550002222" },
+      "to": [
+        { "phone_number": "+15559998888" }
+      ]
+    }
+  }
+}

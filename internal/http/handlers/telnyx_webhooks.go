@@ -23,6 +23,7 @@ import (
 )
 
 type conversationPublisher interface {
+	EnqueueStart(ctx context.Context, jobID string, req conversation.StartRequest, opts ...conversation.PublishOption) error
 	EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error
 }
 
@@ -174,6 +175,50 @@ func (h *TelnyxWebhookHandler) HandleHosted(w http.ResponseWriter, r *http.Reque
 	}
 	if _, err := h.processed.MarkProcessed(r.Context(), "telnyx", evt.ID); err != nil {
 		h.logger.Error("failed to mark telnyx event processed", "error", err, "event_id", evt.ID)
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// HandleVoice processes Telnyx hosted voice webhooks for missed-call triggers.
+func (h *TelnyxWebhookHandler) HandleVoice(w http.ResponseWriter, r *http.Request) {
+	if h.telnyx == nil {
+		http.Error(w, "telnyx client not configured", http.StatusServiceUnavailable)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
+		h.logger.Warn("invalid telnyx voice signature", "error", err)
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
+	}
+	evt, err := parseTelnyxEvent(body)
+	if err != nil {
+		http.Error(w, "invalid payload", http.StatusBadRequest)
+		return
+	}
+	if processed, err := h.processed.AlreadyProcessed(r.Context(), "telnyx", evt.ID); err != nil {
+		h.logger.Error("processed lookup failed", "error", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	} else if processed {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if err := h.handleVoice(r.Context(), evt); err != nil {
+		if errors.Is(err, errClinicNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		h.logger.Error("telnyx voice handling failed", "error", err, "event_type", evt.EventType)
+		http.Error(w, "processing error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.processed.MarkProcessed(r.Context(), "telnyx", evt.ID); err != nil {
+		h.logger.Error("failed to mark telnyx voice processed", "error", err, "event_id", evt.ID)
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -429,6 +474,36 @@ type telnyxDeliveryPayload struct {
 	Status    string `json:"status"`
 }
 
+type telnyxCallPayload struct {
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	HangupCause string `json:"hangup_cause"`
+	From        struct {
+		PhoneNumber string `json:"phone_number"`
+	} `json:"from"`
+	To []struct {
+		PhoneNumber string `json:"phone_number"`
+	} `json:"to"`
+	FromNumberRaw string `json:"from_number"`
+	ToNumberRaw   string `json:"to_number"`
+}
+
+func (p telnyxCallPayload) FromNumber() string {
+	if v := strings.TrimSpace(p.From.PhoneNumber); v != "" {
+		return v
+	}
+	return strings.TrimSpace(p.FromNumberRaw)
+}
+
+func (p telnyxCallPayload) ToNumber() string {
+	if len(p.To) > 0 {
+		if v := strings.TrimSpace(p.To[0].PhoneNumber); v != "" {
+			return v
+		}
+	}
+	return strings.TrimSpace(p.ToNumberRaw)
+}
+
 type telnyxHostedPayload struct {
 	ID          string `json:"id"`
 	ClinicID    string `json:"clinic_id"`
@@ -478,4 +553,76 @@ func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt tel
 	if err := h.conversation.EnqueueMessage(publishCtx, jobID, req, conversation.WithoutJobTracking()); err != nil {
 		h.logger.Error("failed to enqueue telnyx conversation job", "error", err, "job_id", jobID)
 	}
+}
+
+func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent) error {
+	var payload telnyxCallPayload
+	if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+		return fmt.Errorf("decode voice payload: %w", err)
+	}
+	from := messaging.NormalizeE164(payload.FromNumber())
+	to := messaging.NormalizeE164(payload.ToNumber())
+	if from == "" || to == "" {
+		return errors.New("missing phone numbers in payload")
+	}
+	if !isTelnyxMissedCall(evt.EventType, payload.Status, payload.HangupCause) {
+		return nil
+	}
+	clinicID, err := h.store.LookupClinicByNumber(ctx, to)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: %s", errClinicNotFound, to)
+		}
+		return fmt.Errorf("lookup clinic for %s: %w", to, err)
+	}
+	orgID := clinicID.String()
+	leadID := fmt.Sprintf("%s:%s", orgID, from)
+	if h.leads != nil {
+		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_voice", from)
+		if err != nil {
+			return fmt.Errorf("persist lead: %w", err)
+		}
+		if lead != nil && lead.ID != "" {
+			leadID = lead.ID
+		}
+	}
+	conversationID := fmt.Sprintf("sms:%s:%s", orgID, from)
+	startReq := conversation.StartRequest{
+		OrgID:          orgID,
+		LeadID:         leadID,
+		ConversationID: conversationID,
+		Intro:          "We just missed your call. I can help you book an appointment or answer quick questions by text.",
+		Source:         "telnyx_voice",
+		Channel:        conversation.ChannelSMS,
+		From:           from,
+		To:             to,
+		Metadata: map[string]string{
+			"telnyx_event_id": evt.ID,
+			"telnyx_call_id":  payload.ID,
+			"telnyx_status":   payload.Status,
+		},
+	}
+	jobID := fmt.Sprintf("telnyx:voice:%s", payload.ID)
+	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, conversation.WithoutJobTracking()); err != nil {
+		return fmt.Errorf("enqueue missed-call start: %w", err)
+	}
+	h.sendAutoReply(context.Background(), to, from, messaging.InstantAckMessage)
+	return nil
+}
+
+func isTelnyxMissedCall(eventType, status, hangup string) bool {
+	status = strings.ToLower(status)
+	hangup = strings.ToLower(hangup)
+	switch status {
+	case "no-answer", "no_answer", "busy", "failed", "canceled", "cancelled", "not_answered", "timeout", "voicemail":
+		return true
+	}
+	switch hangup {
+	case "no-answer", "no_answer", "busy", "cancel", "canceled", "timeout", "declined":
+		return true
+	}
+	et := strings.ToLower(eventType)
+	return strings.Contains(et, "hangup") || strings.Contains(et, "no_answer")
 }
