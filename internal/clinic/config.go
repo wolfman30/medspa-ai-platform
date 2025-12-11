@@ -39,7 +39,7 @@ type NotificationPrefs struct {
 	SMSRecipient string `json:"sms_recipient,omitempty"` // Operator's cell phone
 
 	// What to notify about
-	NotifyOnPayment bool `json:"notify_on_payment"` // When deposit is paid
+	NotifyOnPayment bool `json:"notify_on_payment"`  // When deposit is paid
 	NotifyOnNewLead bool `json:"notify_on_new_lead"` // When new lead comes in
 }
 
