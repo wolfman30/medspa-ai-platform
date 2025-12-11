@@ -32,8 +32,6 @@ type Handler struct {
 	messenger     conversation.ReplyMessenger
 	leads         leads.Repository
 	logger        *logging.Logger
-
-	twimlAck string
 }
 
 // NewHandler creates a new messaging handler.
@@ -54,7 +52,6 @@ func NewHandler(webhookSecret string, publisher conversationPublisher, resolver 
 		messenger:     messenger,
 		leads:         leadsRepo,
 		logger:        logger,
-		twimlAck:      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>` + SmsAckMessage + `</Message></Response>`,
 	}
 }
 
@@ -106,7 +103,7 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("medspa.org_id", orgID))
 
 	jobID := webhook.MessageSid
-	leadID, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
+	leadID, isNewLead, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
 	if err != nil {
 		h.logger.Error("failed to persist lead", "error", err, "org_id", orgID, "from", from)
 		http.Error(w, "Failed to persist lead", http.StatusInternalServerError)
@@ -139,9 +136,11 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("twilio webhook accepted", "org_id", orgID, "lead_id", leadID, "conversation_id", conversationID)
+	ackMsg := GetSmsAckMessage(isNewLead)
+	twimlAck := `<?xml version="1.0" encoding="UTF-8"?><Response><Message>` + ackMsg + `</Message></Response>`
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(h.twimlAck))
+	_, _ = w.Write([]byte(twimlAck))
 }
 
 // TwilioVoiceWebhook handles POST /webhooks/twilio/voice for missed-call detection.
@@ -196,7 +195,7 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		attribute.String("medspa.twilio.call_status", callStatus),
 	)
 
-	leadID, err := h.ensureLead(r.Context(), orgID, from, "twilio_voice")
+	leadID, _, err := h.ensureLead(r.Context(), orgID, from, "twilio_voice")
 	if err != nil {
 		h.logger.Error("failed to persist lead", "error", err, "org_id", orgID, "from", from)
 		http.Error(w, "Failed to persist lead", http.StatusInternalServerError)
@@ -291,19 +290,22 @@ func deterministicConversationID(orgID, from string) string {
 	return fmt.Sprintf("sms:%s:%s", orgID, sanitizePhone(from))
 }
 
-func (h *Handler) ensureLead(ctx context.Context, orgID, phone, source string) (string, error) {
+// ensureLead returns (leadID, isNewLead, error)
+func (h *Handler) ensureLead(ctx context.Context, orgID, phone, source string) (string, bool, error) {
 	normalized := NormalizeE164(phone)
 	if normalized == "" {
 		normalized = phone
 	}
 	if h.leads == nil {
-		return deterministicLeadID(orgID, normalized), nil
+		return deterministicLeadID(orgID, normalized), true, nil
 	}
 	lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, normalized, source, normalized)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return lead.ID, nil
+	// Check if lead was just created (created_at within last few seconds indicates new)
+	isNew := !lead.CreatedAt.IsZero() && time.Since(lead.CreatedAt) < 5*time.Second
+	return lead.ID, isNew, nil
 }
 
 func buildAbsoluteURL(r *http.Request) string {
