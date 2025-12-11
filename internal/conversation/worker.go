@@ -14,6 +14,11 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+// PaymentNotifier sends notifications when payments are received.
+type PaymentNotifier interface {
+	NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSucceededV1) error
+}
+
 // Worker consumes conversation jobs from the queue and invokes the processor.
 type Worker struct {
 	processor Service
@@ -22,6 +27,7 @@ type Worker struct {
 	messenger ReplyMessenger
 	bookings  bookingConfirmer
 	deposits  DepositSender
+	notifier  PaymentNotifier
 	logger    *logging.Logger
 
 	cfg workerConfig
@@ -33,6 +39,7 @@ type workerConfig struct {
 	receiveWaitSecs  int
 	receiveBatchSize int
 	deposit          DepositSender
+	notifier         PaymentNotifier
 }
 
 const (
@@ -89,6 +96,13 @@ func WithDepositSender(sender DepositSender) WorkerOption {
 	}
 }
 
+// WithPaymentNotifier wires a notifier to alert clinic operators on payment success.
+func WithPaymentNotifier(notifier PaymentNotifier) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.notifier = notifier
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -128,6 +142,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		messenger: messenger,
 		bookings:  bookings,
 		deposits:  cfg.deposit,
+		notifier:  cfg.notifier,
 		logger:    logger,
 		cfg:       cfg,
 	}
@@ -305,6 +320,15 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	if err := w.bookings.ConfirmBooking(ctx, orgID, leadID, evt.ScheduledFor); err != nil {
 		return fmt.Errorf("conversation: confirm booking failed: %w", err)
 	}
+
+	// Notify clinic operators about the payment (non-blocking)
+	if w.notifier != nil {
+		if err := w.notifier.NotifyPaymentSuccess(ctx, *evt); err != nil {
+			w.logger.Error("failed to send payment notification to clinic", "error", err, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+			// Don't fail the payment flow if notification fails
+		}
+	}
+
 	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
 		body := fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", float64(evt.AmountCents)/100)
 		if evt.ScheduledFor != nil {

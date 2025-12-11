@@ -59,6 +59,11 @@ type Config struct {
 	RedisAddr                string
 	RedisPassword            string
 
+	// SendGrid Email Configuration
+	SendGridAPIKey    string
+	SendGridFromEmail string
+	SendGridFromName  string
+
 	// Nextech EMR Configuration
 	NextechBaseURL      string
 	NextechClientID     string
@@ -117,6 +122,11 @@ func Load() *Config {
 		OpenAIEmbeddingModel:     getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:            getEnv("REDIS_PASSWORD", ""),
+
+		// SendGrid Email Configuration
+		SendGridAPIKey:    getEnv("SENDGRID_API_KEY", ""),
+		SendGridFromEmail: getEnv("SENDGRID_FROM_EMAIL", ""),
+		SendGridFromName:  getEnv("SENDGRID_FROM_NAME", "MedSpa AI"),
 
 		// Nextech EMR Configuration
 		NextechBaseURL:      getEnv("NEXTECH_BASE_URL", ""),

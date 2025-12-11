@@ -32,6 +32,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
+	"github.com/wolfman30/medspa-ai-platform/internal/notify"
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -194,6 +195,7 @@ func main() {
 		dbPool,
 		outboxStore,
 		resolver,
+		redisClient,
 	)
 	if conversationService != nil {
 		conversationHandler.SetService(conversationService)
@@ -405,6 +407,7 @@ func setupInlineWorker(
 	dbPool *pgxpool.Pool,
 	outboxStore *events.OutboxStore,
 	resolver payments.OrgNumberResolver,
+	redisClient *redis.Client,
 ) (*conversation.Worker, conversation.Service) {
 	if !cfg.UseMemoryQueue || memoryQueue == nil {
 		return nil, nil
@@ -465,6 +468,47 @@ func setupInlineWorker(
 		logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "")
 	}
 
+	// Initialize notification service for clinic operator alerts
+	var notifier conversation.PaymentNotifier
+	if redisClient != nil {
+		clinicStore := clinic.NewStore(redisClient)
+
+		// Setup email sender
+		var emailSender notify.EmailSender
+		if cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
+			emailSender = notify.NewSendGridSender(notify.SendGridConfig{
+				APIKey:    cfg.SendGridAPIKey,
+				FromEmail: cfg.SendGridFromEmail,
+				FromName:  cfg.SendGridFromName,
+			}, logger)
+			logger.Info("sendgrid email sender initialized for inline workers")
+		} else {
+			emailSender = notify.NewStubEmailSender(logger)
+			logger.Warn("email notifications disabled for inline workers (SENDGRID_API_KEY or SENDGRID_FROM_EMAIL not set)")
+		}
+
+		// Setup SMS sender for operator notifications
+		var smsSender notify.SMSSender
+		if messenger != nil && cfg.TwilioFromNumber != "" {
+			smsSender = notify.NewSimpleSMSSender(cfg.TwilioFromNumber, func(ctx context.Context, to, from, body string) error {
+				return messenger.SendReply(ctx, conversation.OutboundReply{
+					To:   to,
+					From: from,
+					Body: body,
+				})
+			}, logger)
+			logger.Info("sms sender initialized for operator notifications (inline workers)")
+		} else {
+			smsSender = notify.NewStubSMSSender(logger)
+			logger.Warn("operator SMS notifications disabled for inline workers (messenger not available)")
+		}
+
+		notifier = notify.NewService(emailSender, smsSender, clinicStore, leadsRepo, logger)
+		logger.Info("notification service initialized for inline workers")
+	} else {
+		logger.Warn("notification service NOT initialized (redis not configured)")
+	}
+
 	worker := conversation.NewWorker(
 		processor,
 		memoryQueue,
@@ -474,6 +518,7 @@ func setupInlineWorker(
 		logger,
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
+		conversation.WithPaymentNotifier(notifier),
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)

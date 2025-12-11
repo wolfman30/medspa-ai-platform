@@ -28,15 +28,31 @@ type BusinessHours struct {
 	Sunday    *DayHours `json:"sunday,omitempty"`
 }
 
+// NotificationPrefs holds notification preferences for a clinic.
+type NotificationPrefs struct {
+	// Email notifications
+	EmailEnabled    bool     `json:"email_enabled"`
+	EmailRecipients []string `json:"email_recipients,omitempty"` // e.g., ["owner@clinic.com"]
+
+	// SMS notifications to operator
+	SMSEnabled   bool   `json:"sms_enabled"`
+	SMSRecipient string `json:"sms_recipient,omitempty"` // Operator's cell phone
+
+	// What to notify about
+	NotifyOnPayment bool `json:"notify_on_payment"` // When deposit is paid
+	NotifyOnNewLead bool `json:"notify_on_new_lead"` // When new lead comes in
+}
+
 // Config holds clinic-specific configuration.
 type Config struct {
-	OrgID              string        `json:"org_id"`
-	Name               string        `json:"name"`
-	Timezone           string        `json:"timezone"` // e.g., "America/New_York"
-	BusinessHours      BusinessHours `json:"business_hours"`
-	CallbackSLAHours   int           `json:"callback_sla_hours"`   // e.g., 12
-	DepositAmountCents int           `json:"deposit_amount_cents"` // e.g., 5000
-	Services           []string      `json:"services,omitempty"`   // e.g., ["Botox", "Fillers"]
+	OrgID              string            `json:"org_id"`
+	Name               string            `json:"name"`
+	Timezone           string            `json:"timezone"` // e.g., "America/New_York"
+	BusinessHours      BusinessHours     `json:"business_hours"`
+	CallbackSLAHours   int               `json:"callback_sla_hours"`   // e.g., 12
+	DepositAmountCents int               `json:"deposit_amount_cents"` // e.g., 5000
+	Services           []string          `json:"services,omitempty"`   // e.g., ["Botox", "Fillers"]
+	Notifications      NotificationPrefs `json:"notifications"`
 }
 
 // DefaultConfig returns a sensible default configuration.
@@ -57,6 +73,12 @@ func DefaultConfig(orgID string) *Config {
 		CallbackSLAHours:   12,
 		DepositAmountCents: 5000,
 		Services:           []string{"Botox", "Fillers", "Laser Treatments"},
+		Notifications: NotificationPrefs{
+			EmailEnabled:    false, // Disabled by default until configured
+			SMSEnabled:      false,
+			NotifyOnPayment: true, // When enabled, notify on payment by default
+			NotifyOnNewLead: false,
+		},
 	}
 }
 
