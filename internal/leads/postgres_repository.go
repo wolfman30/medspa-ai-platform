@@ -133,13 +133,15 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 
 // UpdateSchedulingPreferences updates a lead's scheduling preferences
 func (r *PostgresRepository) UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error {
+	// Build dynamic query - only update name if provided (don't overwrite with empty)
 	query := `
 		UPDATE leads
-		SET service_interest = $2,
-		    patient_type = $3,
-		    preferred_days = $4,
-		    preferred_times = $5,
-		    scheduling_notes = $6
+		SET service_interest = COALESCE(NULLIF($2, ''), service_interest),
+		    patient_type = COALESCE(NULLIF($3, ''), patient_type),
+		    preferred_days = COALESCE(NULLIF($4, ''), preferred_days),
+		    preferred_times = COALESCE(NULLIF($5, ''), preferred_times),
+		    scheduling_notes = COALESCE(NULLIF($6, ''), scheduling_notes),
+		    name = COALESCE(NULLIF($7, ''), name)
 		WHERE id = $1
 	`
 	result, err := r.pool.Exec(ctx, query,
@@ -149,6 +151,7 @@ func (r *PostgresRepository) UpdateSchedulingPreferences(ctx context.Context, le
 		prefs.PreferredDays,
 		prefs.PreferredTimes,
 		prefs.Notes,
+		prefs.Name,
 	)
 	if err != nil {
 		return fmt.Errorf("leads: update preferences failed: %w", err)
