@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -33,13 +34,15 @@ You CAN and SHOULD answer general questions about medspa services and treatments
 
 When asked about services, provide helpful general information, then offer to help schedule a consultation.
 
-🚨 QUALIFICATION CHECKLIST - You need THREE things before offering deposit:
-1. SERVICE - What treatment are they interested in?
-2. PATIENT TYPE - Are they a new or existing/returning patient?
-3. SCHEDULE - Day AND time preferences (weekdays/weekends + morning/afternoon/evening)
+🚨 QUALIFICATION CHECKLIST - You need FOUR things before offering deposit:
+1. NAME - The patient's first name (for personalized service)
+2. SERVICE - What treatment are they interested in?
+3. PATIENT TYPE - Are they a new or existing/returning patient?
+4. SCHEDULE - Day AND time preferences (weekdays/weekends + morning/afternoon/evening)
 
 🚨 STEP 1 - READ THE USER'S MESSAGE CAREFULLY:
 Parse for qualification information:
+- Name: Look for "my name is [Name]", "I'm [Name]", "this is [Name]", or "call me [Name]"
 - Service mentioned (Botox, filler, facial, consultation, etc.)
 - Patient type: "new", "first time", "never been" = NEW patient
 - Patient type: "returning", "been before", "existing", "come back" = EXISTING patient
@@ -61,20 +64,23 @@ IF DEPOSIT ALREADY PAID (check for system message about successful payment):
   → Do NOT repeat the confirmation message - they already know their deposit was received
   → If they ask about next steps: "Our team will call you within 24 hours to confirm a specific date and time that works for you."
 
-IF missing SERVICE:
-  → "What treatment or service are you interested in?"
+IF missing NAME (ask early to personalize the conversation):
+  → "I'd love to help! May I have your first name?"
 
-IF missing PATIENT TYPE (and have service):
+IF missing SERVICE (and have name):
+  → "Thanks, [Name]! What treatment or service are you interested in?"
+
+IF missing PATIENT TYPE (and have name + service):
   → "Are you a new patient or have you visited us before?"
 
-IF missing DAY preference (and have service + patient type):
+IF missing DAY preference (and have name + service + patient type):
   → "What days work best for you - weekdays or weekends?"
 
 IF missing TIME preference (and have day):
   → "Do you prefer mornings, afternoons, or evenings?"
 
-IF you have ALL THREE (service + patient type + day/time) AND NO DEPOSIT PAID YET:
-  → "Perfect! I've noted [day] [time] for your [service]. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
+IF you have ALL FOUR (name + service + patient type + day/time) AND NO DEPOSIT PAID YET:
+  → "Perfect, [Name]! I've noted [day] [time] for your [service]. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
 
 CRITICAL - YOU DO NOT HAVE ACCESS TO THE CLINIC'S CALENDAR:
 - NEVER claim to know specific available times or dates
@@ -747,31 +753,82 @@ func (s *GPTService) extractAndSavePreferences(ctx context.Context, leadID strin
 	// Scan the conversation for scheduling-related keywords
 	conversation := strings.ToLower(summarizeHistory(history, 8))
 
-	// Only extract if conversation contains booking-related intent
+	// Extract preferred days (only from user messages to avoid confusion with business hours)
+	userMessages := ""
+	userMessagesOriginal := "" // Keep original case for name extraction
+	for _, msg := range history {
+		if msg.Role == openai.ChatMessageRoleUser {
+			userMessages += strings.ToLower(msg.Content) + " "
+			userMessagesOriginal += msg.Content + " "
+		}
+	}
+
+	// Extract patient name from user messages
+	// Patterns: "my name is X", "I'm X", "this is X", "call me X", "it's X"
+	namePatterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)my name is\s+([A-Z][a-z]+)`),
+		regexp.MustCompile(`(?i)i'?m\s+([A-Z][a-z]+)(?:\s|,|\.|\!|$)`),
+		regexp.MustCompile(`(?i)this is\s+([A-Z][a-z]+)`),
+		regexp.MustCompile(`(?i)call me\s+([A-Z][a-z]+)`),
+		regexp.MustCompile(`(?i)it'?s\s+([A-Z][a-z]+)(?:\s|,|\.|\!|$)`),
+		regexp.MustCompile(`(?i)name'?s\s+([A-Z][a-z]+)`),
+	}
+
+	for _, pattern := range namePatterns {
+		if matches := pattern.FindStringSubmatch(userMessagesOriginal); len(matches) > 1 {
+			name := strings.TrimSpace(matches[1])
+			// Validate it looks like a name (2-20 chars, not a common word)
+			if len(name) >= 2 && len(name) <= 20 && !isCommonWord(name) {
+				prefs.Name = name
+				hasPreferences = true
+				break
+			}
+		}
+	}
+
+	// Also check for standalone name response (single capitalized word after AI asked for name)
+	if prefs.Name == "" {
+		for i, msg := range history {
+			if msg.Role == openai.ChatMessageRoleUser {
+				// Check if previous assistant message asked for name
+				if i > 0 && history[i-1].Role == openai.ChatMessageRoleAssistant {
+					prevMsg := strings.ToLower(history[i-1].Content)
+					if strings.Contains(prevMsg, "name") && (strings.Contains(prevMsg, "may i") || strings.Contains(prevMsg, "what") || strings.Contains(prevMsg, "your")) {
+						// This user message might be just their name
+						content := strings.TrimSpace(msg.Content)
+						words := strings.Fields(content)
+						if len(words) >= 1 && len(words) <= 3 {
+							// Take first word that looks like a name
+							for _, word := range words {
+								cleaned := strings.Trim(word, ".,!?")
+								if len(cleaned) >= 2 && len(cleaned) <= 20 && isCapitalized(cleaned) && !isCommonWord(cleaned) {
+									prefs.Name = cleaned
+									hasPreferences = true
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Only extract booking preferences if conversation contains booking-related intent
 	hasBookingIntent := strings.Contains(conversation, "book") ||
 		strings.Contains(conversation, "appointment") ||
 		strings.Contains(conversation, "schedule") ||
 		strings.Contains(conversation, "available")
 
-	if !hasBookingIntent {
-		return nil // Don't extract preferences if there's no booking intent
-	}
-
-	// Extract service interest
-	services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
-	for _, service := range services {
-		if strings.Contains(conversation, service) {
-			prefs.ServiceInterest = service
-			hasPreferences = true
-			break
-		}
-	}
-
-	// Extract preferred days (only from user messages to avoid confusion with business hours)
-	userMessages := ""
-	for _, msg := range history {
-		if msg.Role == openai.ChatMessageRoleUser {
-			userMessages += strings.ToLower(msg.Content) + " "
+	if hasBookingIntent {
+		// Extract service interest
+		services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
+		for _, service := range services {
+			if strings.Contains(conversation, service) {
+				prefs.ServiceInterest = service
+				hasPreferences = true
+				break
+			}
 		}
 	}
 
@@ -807,4 +864,35 @@ func (s *GPTService) extractAndSavePreferences(ctx context.Context, leadID strin
 	prefs.Notes = fmt.Sprintf("Auto-extracted from conversation at %s", time.Now().Format(time.RFC3339))
 
 	return s.leadsRepo.UpdateSchedulingPreferences(ctx, leadID, prefs)
+}
+
+// isCapitalized checks if a string starts with an uppercase letter
+func isCapitalized(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	return s[0] >= 'A' && s[0] <= 'Z'
+}
+
+// isCommonWord checks if a word is a common English word that shouldn't be treated as a name
+func isCommonWord(word string) bool {
+	common := map[string]bool{
+		"the": true, "and": true, "for": true, "are": true, "but": true,
+		"not": true, "you": true, "all": true, "can": true, "her": true,
+		"was": true, "one": true, "our": true, "out": true, "day": true,
+		"had": true, "has": true, "his": true, "how": true, "its": true,
+		"may": true, "new": true, "now": true, "old": true, "see": true,
+		"way": true, "who": true, "boy": true, "did": true, "get": true,
+		"let": true, "put": true, "say": true, "she": true, "too": true,
+		"use": true, "yes": true, "no": true, "hi": true, "hey": true,
+		"thanks": true, "thank": true, "please": true, "ok": true, "okay": true,
+		"sure": true, "good": true, "great": true, "fine": true, "well": true,
+		"just": true, "like": true, "want": true, "need": true, "have": true,
+		"interested": true, "looking": true, "book": true, "appointment": true,
+		"morning": true, "afternoon": true, "evening": true, "weekday": true,
+		"weekend": true, "available": true, "schedule": true, "time": true,
+		"botox": true, "filler": true, "facial": true, "laser": true,
+		"consultation": true, "treatment": true, "service": true,
+	}
+	return common[strings.ToLower(word)]
 }
