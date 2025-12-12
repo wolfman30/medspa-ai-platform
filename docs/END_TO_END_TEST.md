@@ -208,6 +208,15 @@ deposit_status  | (null)
 priority_level  | (null)
 ```
 
+> Re-running this flow with the same phone? Clear prior deposits first:
+> ```bash
+> # Dry run (shows what will be cleared)
+> ./scripts/clear-test-deposit.sh +15555551234
+>
+> # Execute
+> YES=1 ./scripts/clear-test-deposit.sh +15555551234
+> ```
+
 ### Step 6: Continue Conversation to Trigger Deposit
 
 ```bash
