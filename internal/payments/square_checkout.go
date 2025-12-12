@@ -195,6 +195,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Square-Version", "2024-01-18")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
