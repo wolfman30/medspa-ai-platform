@@ -125,7 +125,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		return nil, fmt.Errorf("payments: no location_id configured for org %s", params.OrgID)
 	}
 
-	ctx, span := squareTracer.Start(ctx, "square.create_link")
+	ctx, span := squareTracer.Start(ctx, "square.create_checkout")
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("medspa.org_id", params.OrgID),
@@ -159,28 +159,27 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		meta["scheduled_for"] = scheduledStr
 	}
 
+	// Use the Checkout API (more widely available than Payment Links API)
 	body := map[string]any{
 		"idempotency_key": idempotency,
 		"order": map[string]any{
-			"location_id": locationID,
-			"metadata":    meta,
-			"line_items": []map[string]any{
-				{
-					"name":     name,
-					"quantity": "1",
-					"base_price_money": map[string]any{
-						"amount":   params.AmountCents,
-						"currency": "USD",
+			"order": map[string]any{
+				"location_id": locationID,
+				"metadata":    meta,
+				"line_items": []map[string]any{
+					{
+						"name":     name,
+						"quantity": "1",
+						"base_price_money": map[string]any{
+							"amount":   params.AmountCents,
+							"currency": "USD",
+						},
 					},
 				},
 			},
 		},
-		"checkout_options": map[string]any{
-			"redirect_url":             successURL,
-			"ask_for_shipping_address": false,
-		},
-		// Redundant metadata on the link for completeness.
-		"metadata": meta,
+		"redirect_url":             successURL,
+		"ask_for_shipping_address": false,
 	}
 
 	reqBody, err := json.Marshal(body)
@@ -188,14 +187,15 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		return nil, fmt.Errorf("payments: square payload: %w", err)
 	}
 
-	apiURL := s.baseURL + "/v2/online-checkout/payment-links"
+	// Checkout API endpoint: /v2/locations/{location_id}/checkouts
+	apiURL := fmt.Sprintf("%s/v2/locations/%s/checkouts", s.baseURL, locationID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("payments: square request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Square-Version", "2024-01-18")
+	req.Header.Set("Square-Version", "2025-01-16")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -209,21 +209,21 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	}
 
 	var parsed struct {
-		PaymentLink struct {
-			ID  string `json:"id"`
-			URL string `json:"url"`
-		} `json:"payment_link"`
+		Checkout struct {
+			ID              string `json:"id"`
+			CheckoutPageURL string `json:"checkout_page_url"`
+		} `json:"checkout"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("payments: square decode: %w", err)
 	}
-	if parsed.PaymentLink.URL == "" {
-		return nil, fmt.Errorf("payments: square response missing url")
+	if parsed.Checkout.CheckoutPageURL == "" {
+		return nil, fmt.Errorf("payments: square response missing checkout_page_url")
 	}
 
 	return &CheckoutResponse{
-		URL:        parsed.PaymentLink.URL,
-		ProviderID: parsed.PaymentLink.ID,
+		URL:        parsed.Checkout.CheckoutPageURL,
+		ProviderID: parsed.Checkout.ID,
 	}, nil
 }
 
