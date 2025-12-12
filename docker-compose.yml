@@ -51,12 +51,19 @@ services:
     env_file:
       - .env
     environment:
+      # Ensure worker can reach the Compose postgres/redis by default.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://medspa:medspa@postgres:5432/medspa?sslmode=disable}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: localstack
       AWS_SECRET_ACCESS_KEY: localstack
       AWS_ENDPOINT_OVERRIDE: http://localstack:4566
     depends_on:
       localstack:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_started
 
   localstack:
