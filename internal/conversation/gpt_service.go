@@ -385,7 +385,7 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if derr != nil {
 		span.RecordError(derr)
 		s.logger.Warn("deposit intent extraction failed", "error", derr)
-	} else if depositIntent == nil && looksLikeDepositAgreement(req.Message) {
+	} else if depositIntent == nil && looksLikeDepositAgreement(req.Message, history) {
 		// Fallback heuristic: if the user explicitly agrees to a deposit in their message,
 		// send a deposit intent even if the classifier skipped.
 		depositIntent = &DepositIntent{
@@ -757,33 +757,12 @@ func (s *GPTService) shouldSampleDepositLog() bool {
 
 // looksLikeDepositAgreement returns true when a user message clearly indicates they want to pay a deposit.
 // This is used as a deterministic fallback to avoid missing deposits due to LLM classifier variance.
-func looksLikeDepositAgreement(message string) bool {
+// It supports two cases:
+// 1) The user explicitly mentions deposit/payment AND agrees.
+// 2) The user gives a generic affirmative ("yes", "sure", etc) immediately after the assistant asked for a deposit.
+func looksLikeDepositAgreement(message string, history []openai.ChatCompletionMessage) bool {
 	msg := strings.ToLower(strings.TrimSpace(message))
 	if msg == "" {
-		return false
-	}
-
-	// Must mention deposit/payment to avoid false positives on generic "yes".
-	hasDepositKeyword := strings.Contains(msg, "deposit") ||
-		strings.Contains(msg, "pay") ||
-		strings.Contains(msg, "payment") ||
-		strings.Contains(msg, "secure my spot") ||
-		strings.Contains(msg, "proceed")
-	if !hasDepositKeyword {
-		return false
-	}
-
-	// Positive intent markers.
-	hasPositive := strings.Contains(msg, "yes") ||
-		strings.Contains(msg, "sure") ||
-		strings.Contains(msg, "ok") ||
-		strings.Contains(msg, "okay") ||
-		strings.Contains(msg, "proceed") ||
-		strings.Contains(msg, "let's do it") ||
-		strings.Contains(msg, "lets do it") ||
-		strings.Contains(msg, "i'll pay") ||
-		strings.Contains(msg, "i will pay")
-	if !hasPositive {
 		return false
 	}
 
@@ -794,8 +773,74 @@ func looksLikeDepositAgreement(message string) bool {
 		strings.Contains(msg, "not paying") ||
 		strings.Contains(msg, "maybe later") ||
 		strings.Contains(msg, "skip") ||
-		strings.Contains(msg, "not now")
-	return !hasNegative
+		strings.Contains(msg, "not now") ||
+		strings.Contains(msg, "no thanks") ||
+		strings.Contains(msg, "nope")
+	if hasNegative {
+		return false
+	}
+
+	// Positive intent markers.
+	hasPositive := strings.Contains(msg, "yes") ||
+		strings.Contains(msg, "yeah") ||
+		strings.Contains(msg, "yea") ||
+		strings.Contains(msg, "sure") ||
+		strings.Contains(msg, "ok") ||
+		strings.Contains(msg, "okay") ||
+		strings.Contains(msg, "absolutely") ||
+		strings.Contains(msg, "definitely") ||
+		strings.Contains(msg, "proceed") ||
+		strings.Contains(msg, "let's do it") ||
+		strings.Contains(msg, "lets do it") ||
+		strings.Contains(msg, "i'll pay") ||
+		strings.Contains(msg, "i will pay")
+	if !hasPositive {
+		return false
+	}
+
+	// Explicit deposit/payment mention.
+	hasDepositKeyword := strings.Contains(msg, "deposit") ||
+		strings.Contains(msg, "pay") ||
+		strings.Contains(msg, "payment") ||
+		strings.Contains(msg, "secure my spot") ||
+		strings.Contains(msg, "secure your spot") ||
+		strings.Contains(msg, "hold my spot") ||
+		strings.Contains(msg, "hold your spot")
+	if hasDepositKeyword {
+		return true
+	}
+
+	// Generic affirmative only counts if the assistant just asked about a deposit.
+	return assistantAskedForDeposit(history)
+}
+
+// assistantAskedForDeposit returns true if the most recent assistant message (before the current user turn)
+// contains deposit-related language.
+func assistantAskedForDeposit(history []openai.ChatCompletionMessage) bool {
+	if len(history) < 3 {
+		return false
+	}
+
+	// Remove current user + current assistant reply.
+	prior := history
+	if len(prior) >= 2 {
+		prior = prior[:len(prior)-2]
+	}
+
+	for i := len(prior) - 1; i >= 0; i-- {
+		if prior[i].Role != openai.ChatMessageRoleAssistant {
+			continue
+		}
+		text := strings.ToLower(prior[i].Content)
+		return strings.Contains(text, "deposit") ||
+			strings.Contains(text, "refundable deposit") ||
+			strings.Contains(text, "secure your spot") ||
+			strings.Contains(text, "secure my spot") ||
+			strings.Contains(text, "hold your spot") ||
+			strings.Contains(text, "hold my spot") ||
+			strings.Contains(text, "pay a deposit")
+	}
+	return false
 }
 
 // extractAndSavePreferences extracts scheduling preferences from conversation history and saves them

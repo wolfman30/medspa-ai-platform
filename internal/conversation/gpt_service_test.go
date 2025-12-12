@@ -266,6 +266,72 @@ func TestGPTService_ProcessMessage_FallbacksToHeuristicDepositIntent(t *testing.
 	}
 }
 
+func TestGPTService_ProcessMessage_FallbacksOnGenericYesAfterDepositAsk(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	scripted := &scriptedChatClient{
+		responses: []openai.ChatCompletionResponse{
+			// StartConversation assistant reply
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Hello!"}}}},
+			// First user turn assistant reply (asks for deposit)
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "We do require a small refundable deposit to hold your spot. Would you like to proceed?"}}}},
+			// Classifier for first user turn (skip)
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`}}}},
+			// Second user turn assistant reply (any content)
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Great!"}}}},
+			// Classifier for second user turn (skip, forcing heuristic)
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`}}}},
+		},
+	}
+
+	service := NewGPTService(scripted, client, nil, "gpt-5-mini", logging.Default(), WithDepositConfig(DepositConfig{
+		DefaultAmountCents: 5000,
+		SuccessURL:         "http://default-success",
+		CancelURL:          "http://default-cancel",
+		Description:        "Appointment deposit",
+	}))
+
+	start, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-deposit-generic-yes",
+		LeadID:         "lead-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	// First user message that triggers a deposit ask, but should not infer intent yet.
+	if _, err := service.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: start.ConversationID,
+		Message:        "I want to book Botox",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	}); err != nil {
+		t.Fatalf("process first message failed: %v", err)
+	}
+
+	// Generic affirmative after deposit ask should infer intent.
+	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: start.ConversationID,
+		Message:        "Yes",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("process second message failed: %v", err)
+	}
+	if resp.DepositIntent == nil {
+		t.Fatalf("expected deposit intent to be inferred on generic yes")
+	}
+	if resp.DepositIntent.AmountCents != 5000 {
+		t.Fatalf("unexpected inferred amount: %d", resp.DepositIntent.AmountCents)
+	}
+}
+
 type stubChatClient struct {
 	response openai.ChatCompletionResponse
 	err      error
