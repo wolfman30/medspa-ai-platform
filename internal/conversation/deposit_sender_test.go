@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,12 @@ func TestDepositDispatcherHappyPath(t *testing.T) {
 	}
 	if !sms.called {
 		t.Fatalf("expected sms sent")
+	}
+	if sms.last.To != msg.From {
+		t.Fatalf("expected sms to %s, got %s", msg.From, sms.last.To)
+	}
+	if !strings.Contains(sms.last.Body, "http://pay") {
+		t.Fatalf("expected sms body to contain checkout link, got %q", sms.last.Body)
 	}
 	if !outbox.called {
 		t.Fatalf("expected outbox event inserted")
