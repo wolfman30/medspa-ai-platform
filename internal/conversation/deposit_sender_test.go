@@ -133,7 +133,27 @@ func TestDepositDispatcherUsesResolverFromNumber(t *testing.T) {
 	resolver := &stubNumberResolver{from: "+18885550100"}
 
 	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, logging.Default())
+	// When msg.To is set, it should be used as the SMS from number (same clinic number the patient texted).
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+19998887777"}
+	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test"}}
+
+	if err := dispatcher.SendDeposit(context.Background(), msg, resp); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if sms.last.From != msg.To {
+		t.Fatalf("expected from number %s, got %s", msg.To, sms.last.From)
+	}
+}
+
+func TestDepositDispatcherFallsBackToResolverFromNumber(t *testing.T) {
+	payRepo := &stubPaymentRepo{}
+	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
+	outbox := &stubOutbox{}
+	sms := &stubReplyMessenger{}
+	resolver := &stubNumberResolver{from: "+18885550100"}
+
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, logging.Default())
+	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: ""}
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test"}}
 
 	if err := dispatcher.SendDeposit(context.Background(), msg, resp); err != nil {

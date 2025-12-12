@@ -127,9 +127,12 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 	)
 
 	if d.sms != nil && link.URL != "" {
-		fromNumber := msg.To
-		if d.numbers != nil {
-			if resolved := d.numbers.DefaultFromNumber(msg.OrgID); strings.TrimSpace(resolved) != "" {
+		// Prefer the inbound destination number for this conversation (msg.To). This ensures
+		// the deposit link is sent from the same clinic number the patient texted/called.
+		// Only fall back to an org-level default when msg.To is missing (e.g. web lead flow).
+		fromNumber := strings.TrimSpace(msg.To)
+		if fromNumber == "" && d.numbers != nil {
+			if resolved := strings.TrimSpace(d.numbers.DefaultFromNumber(msg.OrgID)); resolved != "" {
 				fromNumber = resolved
 			}
 		}
