@@ -2,8 +2,10 @@ package messaging
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -93,12 +95,17 @@ func (s *TwilioSender) SendReply(ctx context.Context, msg conversation.OutboundR
 		if err != nil {
 			lastErr = err
 		} else {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				s.logger.Info("twilio sms sent", "org_id", msg.OrgID, "to", msg.To)
 				return nil
 			}
-			lastErr = fmt.Errorf("twilio send failed: status %d", resp.StatusCode)
+			lastErr = fmt.Errorf("twilio send failed: %s", formatTwilioError(resp.StatusCode, body))
+			// Don't retry non-rate-limit 4xx errors.
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
+				break
+			}
 		}
 
 		if attempt < 3 {
@@ -111,4 +118,31 @@ func (s *TwilioSender) SendReply(ctx context.Context, msg conversation.OutboundR
 		span.RecordError(lastErr)
 	}
 	return lastErr
+}
+
+type twilioAPIError struct {
+	Code     int    `json:"code"`
+	Message  string `json:"message"`
+	MoreInfo string `json:"more_info"`
+	Status   int    `json:"status"`
+}
+
+func formatTwilioError(status int, body []byte) string {
+	body = bytesTrimSpace(body)
+	if len(body) == 0 {
+		return fmt.Sprintf("status %d", status)
+	}
+	var parsed twilioAPIError
+	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Message != "" {
+		if parsed.Code != 0 {
+			return fmt.Sprintf("status %d code %d: %s", status, parsed.Code, parsed.Message)
+		}
+		return fmt.Sprintf("status %d: %s", status, parsed.Message)
+	}
+	// Fallback: return raw body (truncated by ReadAll limit).
+	return fmt.Sprintf("status %d: %s", status, string(body))
+}
+
+func bytesTrimSpace(b []byte) []byte {
+	return []byte(strings.TrimSpace(string(b)))
 }
