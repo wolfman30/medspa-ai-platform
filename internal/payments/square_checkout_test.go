@@ -97,6 +97,38 @@ func TestSquareCheckoutService_CreatePaymentLink_BuildsValidCheckoutPayload(t *t
 	}
 }
 
+func TestSquareCheckoutService_CreatePaymentLink_OmitsInvalidRedirectURL(t *testing.T) {
+	var gotBody map[string]any
+
+	locationID := "LOC123"
+	accessToken := "token-abc"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("failed to decode body: %v", err)
+		}
+		_ = r.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"checkout":{"id":"chk_123","checkout_page_url":"https://squareup.com/checkout/abc"}}`)
+	}))
+	defer srv.Close()
+
+	// localhost redirect URLs are rejected by Square; service should omit them.
+	svc := NewSquareCheckoutService(accessToken, locationID, "http://localhost:8080/success", "", nil).WithBaseURL(srv.URL)
+
+	if _, err := svc.CreatePaymentLink(context.Background(), CheckoutParams{
+		OrgID:       "org-1",
+		LeadID:      "lead-1",
+		AmountCents: 5000,
+	}); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	if _, ok := gotBody["redirect_url"]; ok {
+		t.Fatalf("expected redirect_url to be omitted for invalid default")
+	}
+}
+
 func mustMap(t *testing.T, v any) map[string]any {
 	t.Helper()
 	m, ok := v.(map[string]any)

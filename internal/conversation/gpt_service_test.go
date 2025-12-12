@@ -217,6 +217,55 @@ func TestGPTService_ProcessMessage_ExtractsDepositIntent(t *testing.T) {
 	}
 }
 
+func TestGPTService_ProcessMessage_FallbacksToHeuristicDepositIntent(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	scripted := &scriptedChatClient{
+		responses: []openai.ChatCompletionResponse{
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Hello!"}}}},
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Great, we do require a small deposit to hold your spot. Would you like to proceed?"}}}},
+			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`}}}},
+		},
+	}
+
+	service := NewGPTService(scripted, client, nil, "gpt-5-mini", logging.Default(), WithDepositConfig(DepositConfig{
+		DefaultAmountCents: 5000,
+		SuccessURL:         "http://default-success",
+		CancelURL:          "http://default-cancel",
+		Description:        "Appointment deposit",
+	}))
+
+	start, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-deposit-fallback",
+		LeadID:         "lead-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: start.ConversationID,
+		Message:        "Yes, I'd like to secure my spot with a deposit",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("process message failed: %v", err)
+	}
+
+	if resp.DepositIntent == nil {
+		t.Fatalf("expected fallback deposit intent to be set")
+	}
+	if resp.DepositIntent.AmountCents != 5000 {
+		t.Fatalf("unexpected fallback amount: %d", resp.DepositIntent.AmountCents)
+	}
+}
+
 type stubChatClient struct {
 	response openai.ChatCompletionResponse
 	err      error

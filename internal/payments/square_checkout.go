@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -137,6 +138,10 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	if successURL == "" {
 		successURL = s.successURL
 	}
+	redirectURL := sanitizeRedirectURL(successURL)
+	if redirectURL == "" && strings.TrimSpace(successURL) != "" {
+		s.logger.Warn("invalid square redirect_url; omitting from checkout request", "redirect_url", successURL, "org_id", params.OrgID)
+	}
 
 	idempotency := params.BookingIntentID.String()
 	if params.BookingIntentID == uuid.Nil {
@@ -176,8 +181,10 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 				},
 			},
 		},
-		"redirect_url":             successURL,
 		"ask_for_shipping_address": false,
+	}
+	if redirectURL != "" {
+		body["redirect_url"] = redirectURL
 	}
 
 	reqBody, err := json.Marshal(body)
@@ -229,4 +236,24 @@ func buildIdempotencyKey(orgID, leadID string, amount int32) string {
 	input := fmt.Sprintf("%s:%s:%d:%s", orgID, leadID, amount, time.Now().UTC().Format("2006-01-02T15"))
 	sum := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(sum[:])
+}
+
+func sanitizeRedirectURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "https" && scheme != "http" {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return ""
+	}
+	return value
 }
