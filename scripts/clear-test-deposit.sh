@@ -49,6 +49,19 @@ FROM payments
 WHERE lead_id IN (SELECT id FROM target_leads);
 SQL
 
+echo ""
+echo "Redis conversation keys matching digits: ${DIGITS}"
+if ${DC} exec -T redis redis-cli PING >/dev/null 2>&1; then
+  mapfile -t REDIS_KEYS < <(${DC} exec -T redis redis-cli --scan --pattern "conversation:*${DIGITS}*" || true)
+  if [[ ${#REDIS_KEYS[@]} -eq 0 ]]; then
+    echo "(none)"
+  else
+    printf '%s\n' "${REDIS_KEYS[@]}"
+  fi
+else
+  echo "(redis not running; skipping)"
+fi
+
 if [[ "${YES:-0}" != "1" ]]; then
   echo ""
   echo "Dry-run only. Re-run with YES=1 to delete matching deposits."
@@ -87,5 +100,23 @@ SELECT
   (SELECT count(*) FROM reset_leads) AS reset_leads,
   (SELECT count(*) FROM deleted_outbox) AS deleted_outbox;
 SQL
+
+echo ""
+echo "Deleting redis conversation keys..."
+if ${DC} exec -T redis redis-cli PING >/dev/null 2>&1; then
+  mapfile -t REDIS_KEYS < <(${DC} exec -T redis redis-cli --scan --pattern "conversation:*${DIGITS}*" || true)
+  if [[ ${#REDIS_KEYS[@]} -eq 0 ]]; then
+    echo "(none)"
+  else
+    for key in "${REDIS_KEYS[@]}"; do
+      if [[ -n "${key}" ]]; then
+        ${DC} exec -T redis redis-cli DEL "${key}" >/dev/null
+      fi
+    done
+    echo "Deleted ${#REDIS_KEYS[@]} key(s)."
+  fi
+else
+  echo "(redis not running; skipping)"
+fi
 
 echo "Done."
