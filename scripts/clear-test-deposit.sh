@@ -39,6 +39,11 @@ WITH target_leads AS (
 )
 SELECT * FROM target_leads ORDER BY created_at DESC;
 
+WITH target_leads AS (
+  SELECT id
+  FROM leads
+  WHERE regexp_replace(phone, '\D', '', 'g') LIKE '%' || :'digits'
+)
 SELECT count(*) AS payments_matching_phone
 FROM payments
 WHERE lead_id IN (SELECT id FROM target_leads);
@@ -54,8 +59,6 @@ echo ""
 echo "Deleting deposits and resetting lead deposit fields..."
 ${DC} exec -T postgres psql -U medspa -d medspa -v digits="${DIGITS}" <<'SQL'
 \set ON_ERROR_STOP on
-BEGIN;
-
 WITH target_leads AS (
   SELECT id
   FROM leads
@@ -72,16 +75,16 @@ reset_leads AS (
       priority_level = 'normal'
   WHERE id IN (SELECT id FROM target_leads)
   RETURNING id
-)
+),
+deleted_outbox AS (
 DELETE FROM outbox
 WHERE type LIKE 'payments.deposit.%'
   AND (payload->>'lead_id') IN (SELECT id::text FROM target_leads);
-
-COMMIT;
-
-SELECT count(*) AS deleted_payments FROM deleted_payments;
-SELECT count(*) AS reset_leads FROM reset_leads;
+)
+SELECT
+  (SELECT count(*) FROM deleted_payments) AS deleted_payments,
+  (SELECT count(*) FROM reset_leads) AS reset_leads,
+  (SELECT count(*) FROM deleted_outbox) AS deleted_outbox;
 SQL
 
 echo "Done."
-
