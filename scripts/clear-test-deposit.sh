@@ -77,9 +77,10 @@ reset_leads AS (
   RETURNING id
 ),
 deleted_outbox AS (
-DELETE FROM outbox
-WHERE type LIKE 'payments.deposit.%'
-  AND (payload->>'lead_id') IN (SELECT id::text FROM target_leads);
+  DELETE FROM outbox
+  WHERE type LIKE 'payments.deposit.%'
+    AND (payload->>'lead_id') IN (SELECT id::text FROM target_leads)
+  RETURNING id
 )
 SELECT
   (SELECT count(*) FROM deleted_payments) AS deleted_payments,
