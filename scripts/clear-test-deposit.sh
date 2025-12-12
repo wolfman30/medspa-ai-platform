@@ -78,7 +78,7 @@ reset_leads AS (
 ),
 deleted_outbox AS (
   DELETE FROM outbox
-  WHERE type LIKE 'payments.deposit.%'
+  WHERE event_type LIKE 'payments.deposit.%'
     AND (payload->>'lead_id') IN (SELECT id::text FROM target_leads)
   RETURNING id
 )
