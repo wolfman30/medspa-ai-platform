@@ -385,6 +385,16 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if derr != nil {
 		span.RecordError(derr)
 		s.logger.Warn("deposit intent extraction failed", "error", derr)
+	} else if depositIntent == nil && looksLikeDepositAgreement(req.Message) {
+		// Fallback heuristic: if the user explicitly agrees to a deposit in their message,
+		// send a deposit intent even if the classifier skipped.
+		depositIntent = &DepositIntent{
+			AmountCents: s.deposit.DefaultAmountCents,
+			Description: s.deposit.Description,
+			SuccessURL:  s.deposit.SuccessURL,
+			CancelURL:   s.deposit.CancelURL,
+		}
+		s.logger.Info("deposit intent inferred from explicit user agreement", "amount_cents", depositIntent.AmountCents)
 	} else if depositIntent != nil {
 		s.logger.Info("deposit intent extracted", "amount_cents", depositIntent.AmountCents)
 	} else {
@@ -743,6 +753,49 @@ func (s *GPTService) maybeLogDepositClassifierError(raw string, err error) {
 func (s *GPTService) shouldSampleDepositLog() bool {
 	// 10% sampling to avoid noisy logs.
 	return time.Now().UnixNano()%10 == 0
+}
+
+// looksLikeDepositAgreement returns true when a user message clearly indicates they want to pay a deposit.
+// This is used as a deterministic fallback to avoid missing deposits due to LLM classifier variance.
+func looksLikeDepositAgreement(message string) bool {
+	msg := strings.ToLower(strings.TrimSpace(message))
+	if msg == "" {
+		return false
+	}
+
+	// Must mention deposit/payment to avoid false positives on generic "yes".
+	hasDepositKeyword := strings.Contains(msg, "deposit") ||
+		strings.Contains(msg, "pay") ||
+		strings.Contains(msg, "payment") ||
+		strings.Contains(msg, "secure my spot") ||
+		strings.Contains(msg, "proceed")
+	if !hasDepositKeyword {
+		return false
+	}
+
+	// Positive intent markers.
+	hasPositive := strings.Contains(msg, "yes") ||
+		strings.Contains(msg, "sure") ||
+		strings.Contains(msg, "ok") ||
+		strings.Contains(msg, "okay") ||
+		strings.Contains(msg, "proceed") ||
+		strings.Contains(msg, "let's do it") ||
+		strings.Contains(msg, "lets do it") ||
+		strings.Contains(msg, "i'll pay") ||
+		strings.Contains(msg, "i will pay")
+	if !hasPositive {
+		return false
+	}
+
+	// Negative intent markers override.
+	hasNegative := strings.Contains(msg, "no deposit") ||
+		strings.Contains(msg, "don't want") ||
+		strings.Contains(msg, "do not want") ||
+		strings.Contains(msg, "not paying") ||
+		strings.Contains(msg, "maybe later") ||
+		strings.Contains(msg, "skip") ||
+		strings.Contains(msg, "not now")
+	return !hasNegative
 }
 
 // extractAndSavePreferences extracts scheduling preferences from conversation history and saves them
