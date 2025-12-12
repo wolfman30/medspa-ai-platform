@@ -72,10 +72,8 @@ func TestSquareCheckoutService_CreatePaymentLink_BuildsValidCheckoutPayload(t *t
 		t.Fatalf("expected redirect_url to use default success url, got %#v", gotBody["redirect_url"])
 	}
 
-	order := mustMap(t, gotBody["order"])
-	if _, hasNested := order["order"]; hasNested {
-		t.Fatalf("order should not contain nested order object")
-	}
+	createOrderReq := mustMap(t, gotBody["order"])
+	order := mustMap(t, createOrderReq["order"])
 	if order["location_id"] != locationID {
 		t.Fatalf("expected location_id %s, got %#v", locationID, order["location_id"])
 	}

@@ -168,15 +168,18 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	body := map[string]any{
 		"idempotency_key": idempotency,
 		"order": map[string]any{
-			"location_id": locationID,
-			"metadata":    meta,
-			"line_items": []map[string]any{
-				{
-					"name":     name,
-					"quantity": "1",
-					"base_price_money": map[string]any{
-						"amount":   params.AmountCents,
-						"currency": "USD",
+			// CreateCheckoutRequest expects a CreateOrderRequest, which wraps an Order payload.
+			"order": map[string]any{
+				"location_id": locationID,
+				"metadata":    meta,
+				"line_items": []map[string]any{
+					{
+						"name":     name,
+						"quantity": "1",
+						"base_price_money": map[string]any{
+							"amount":   params.AmountCents,
+							"currency": "USD",
+						},
 					},
 				},
 			},
