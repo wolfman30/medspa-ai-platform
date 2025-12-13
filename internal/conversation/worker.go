@@ -322,12 +322,19 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	if evt == nil {
 		return errors.New("conversation: missing payment payload")
 	}
-	if w.processed != nil && strings.TrimSpace(evt.EventID) != "" {
-		already, err := w.processed.AlreadyProcessed(ctx, "conversation.payment_succeeded.v1.confirmation_sms", evt.EventID)
+	idempotencyKey := strings.TrimSpace(evt.ProviderRef)
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(evt.BookingIntentID)
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(evt.EventID)
+	}
+	if w.processed != nil && idempotencyKey != "" {
+		already, err := w.processed.AlreadyProcessed(ctx, "conversation.payment_succeeded.v1", idempotencyKey)
 		if err != nil {
-			w.logger.Warn("failed to check payment confirmation idempotency", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+			w.logger.Warn("failed to check payment event idempotency", "error", err, "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
 		} else if already {
-			w.logger.Info("skipping duplicate payment confirmation", "event_id", evt.EventID, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+			w.logger.Info("skipping duplicate payment success event", "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
 			return nil
 		}
 	}
@@ -374,10 +381,11 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		defer cancel()
 		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
 			w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
-		} else if w.processed != nil && strings.TrimSpace(evt.EventID) != "" {
-			if _, err := w.processed.MarkProcessed(ctx, "conversation.payment_succeeded.v1.confirmation_sms", evt.EventID); err != nil {
-				w.logger.Warn("failed to mark payment confirmation processed", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID, "lead_id", evt.LeadID)
-			}
+		}
+	}
+	if w.processed != nil && idempotencyKey != "" {
+		if _, err := w.processed.MarkProcessed(ctx, "conversation.payment_succeeded.v1", idempotencyKey); err != nil {
+			w.logger.Warn("failed to mark payment event processed", "error", err, "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
 		}
 	}
 	return nil

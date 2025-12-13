@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,14 +98,35 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if evt.Data.Object.Payment.Status != "COMPLETED" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	metadata := evt.Data.Object.Payment.Metadata
 	orgID := metadata["org_id"]
 	leadID := metadata["lead_id"]
 	intentID := metadata["booking_intent_id"]
-	paymentID := evt.Data.Object.Payment.ID
+	paymentID := strings.TrimSpace(evt.Data.Object.Payment.ID)
 	orderID := evt.Data.Object.Payment.OrderID
 	scheduledStr := metadata["scheduled_for"]
 	var paymentRow *paymentsql.Payment
+
+	if paymentID != "" {
+		if processed, err := h.processed.AlreadyProcessed(r.Context(), "square.payment_succeeded", paymentID); err != nil {
+			h.logger.Error("processed lookup failed", "error", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		} else if processed {
+			// Best-effort: mark the individual webhook event as processed too so we don't re-check.
+			if _, err := h.processed.MarkProcessed(r.Context(), "square", eventID); err != nil {
+				h.logger.Error("failed to record processed event", "error", err)
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
 	if orgID == "" || leadID == "" || intentID == "" {
 		// Fallback: try to resolve via provider ref if metadata is missing (observed in some webhook payloads).
 		if paymentID == "" {
@@ -164,10 +186,6 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		t := paymentRow.ScheduledFor.Time
 		scheduledFor = &t
 	}
-	if evt.Data.Object.Payment.Status != "COMPLETED" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 
 	orgUUID, err := uuid.Parse(orgID)
 	if err != nil {
@@ -193,7 +211,7 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerRef := evt.Data.Object.Payment.ID
+	providerRef := paymentID
 	if _, err := h.payments.UpdateStatusByID(r.Context(), paymentUUID, "succeeded", providerRef); err != nil {
 		h.logger.Error("failed to update payment record", "error", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -227,6 +245,11 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("failed to enqueue outbox", "error", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
+	}
+	if providerRef != "" {
+		if _, err := h.processed.MarkProcessed(r.Context(), "square.payment_succeeded", providerRef); err != nil {
+			h.logger.Error("failed to record processed payment", "error", err, "provider_ref", providerRef)
+		}
 	}
 	if _, err := h.processed.MarkProcessed(r.Context(), "square", eventID); err != nil {
 		h.logger.Error("failed to record processed event", "error", err)
