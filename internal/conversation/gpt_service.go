@@ -32,7 +32,9 @@ You CAN and SHOULD answer general questions about medspa services and treatments
 - Laser treatments: Various options for hair removal, skin resurfacing, and pigmentation correction.
 - Facials: Customized skincare treatments for cleansing, hydration, and rejuvenation.
 
-When asked about services, provide helpful general information, then offer to help schedule a consultation.
+When asked about services, provide helpful general information.
+Only offer to help schedule a consultation if the customer is NOT already in the booking flow.
+If the customer IS already in the booking flow (you already collected their booking preferences, they've agreed to a deposit, or a deposit is pending/paid), do NOT restart intake or offer to schedule again. Answer their question and, for anything personalized/medical, defer to the practitioner during their consultation.
 
 🚨 QUALIFICATION CHECKLIST - You need FOUR things before offering deposit:
 1. NAME - The patient's first name (for personalized service)
@@ -513,6 +515,7 @@ func formatIntroMessage(req StartRequest, conversationID string) string {
 
 func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, orgID, leadID, clinicID, query string) []openai.ChatCompletionMessage {
 	// Append payment status context if available
+	depositContextInjected := false
 	if s.paymentChecker != nil && orgID != "" && leadID != "" {
 		orgUUID, orgErr := uuid.Parse(orgID)
 		leadUUID, leadErr := uuid.Parse(leadID)
@@ -525,17 +528,18 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 				if err != nil {
 					s.logger.Warn("failed to check payment status", "org_id", orgID, "lead_id", leadID, "error", err)
 				} else if strings.TrimSpace(status) != "" {
-					content := "IMPORTANT: This patient has an existing deposit in progress. Do NOT offer another deposit or ask about booking. Answer their questions normally."
+					content := "IMPORTANT: This patient has an existing deposit in progress. Do NOT offer another deposit. Do NOT restart intake or offer to schedule a consultation again. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation."
 					switch status {
 					case "succeeded":
-						content = "IMPORTANT: This patient has ALREADY PAID their deposit. The platform already sent a payment confirmation SMS automatically when the payment succeeded. Do NOT offer another deposit or ask about booking. Do NOT repeat the payment confirmation message. Answer their questions normally. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\""
+						content = "IMPORTANT: This patient has ALREADY PAID their deposit. The platform already sent a payment confirmation SMS automatically when the payment succeeded. Do NOT offer another deposit. Do NOT restart intake or offer to schedule a consultation again. Do NOT repeat the payment confirmation message. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\""
 					case "deposit_pending":
-						content = "IMPORTANT: This patient was already sent a deposit payment link and it is still pending. Do NOT offer another deposit or claim the deposit is already received. Answer their questions normally. If they ask about payment, tell them to use the deposit link they received."
+						content = "IMPORTANT: This patient was already sent a deposit payment link and it is still pending. Do NOT offer another deposit or claim the deposit is already received. Do NOT restart intake or offer to schedule a consultation again. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation. If they ask about payment, tell them to use the deposit link they received."
 					}
 					history = append(history, openai.ChatCompletionMessage{
 						Role:    openai.ChatMessageRoleSystem,
 						Content: content,
 					})
+					depositContextInjected = true
 				}
 			} else {
 				hasDeposit, err := s.paymentChecker.HasOpenDeposit(ctx, orgUUID, leadUUID)
@@ -544,11 +548,21 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 				} else if hasDeposit {
 					history = append(history, openai.ChatCompletionMessage{
 						Role:    openai.ChatMessageRoleSystem,
-						Content: "IMPORTANT: This patient has an existing deposit in progress (pending payment or already paid). Do NOT offer another deposit or ask about booking. Do NOT repeat any payment confirmation message. Answer their questions normally. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\"",
+						Content: "IMPORTANT: This patient has an existing deposit in progress (pending payment or already paid). Do NOT offer another deposit. Do NOT restart intake or offer to schedule a consultation again. Do NOT repeat any payment confirmation message. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\"",
 					})
+					depositContextInjected = true
 				}
 			}
 		}
+	}
+
+	// If the payment checker is unavailable (or hasn't persisted yet) but the conversation indicates
+	// the patient already agreed to a deposit, inject guardrails so we don't restart intake.
+	if !depositContextInjected && conversationHasDepositAgreement(history) {
+		history = append(history, openai.ChatCompletionMessage{
+			Role: openai.ChatMessageRoleSystem,
+			Content: "IMPORTANT: This patient already agreed to the deposit and is in the booking flow. Do NOT restart intake or offer to schedule a consultation again. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation.",
+		})
 	}
 
 	// Append clinic business hours context if available
@@ -862,6 +876,44 @@ func assistantAskedForDeposit(history []openai.ChatCompletionMessage) bool {
 			strings.Contains(text, "hold your spot") ||
 			strings.Contains(text, "hold my spot") ||
 			strings.Contains(text, "pay a deposit")
+	}
+	return false
+}
+
+func conversationHasDepositAgreement(history []openai.ChatCompletionMessage) bool {
+	for i := 0; i < len(history); i++ {
+		if history[i].Role != openai.ChatMessageRoleAssistant {
+			continue
+		}
+		assistantText := strings.ToLower(history[i].Content)
+		if !strings.Contains(assistantText, "deposit") {
+			continue
+		}
+
+		// Look ahead to the next user message (skipping system messages). If they affirm, we treat the
+		// deposit as agreed even if the payment record hasn't persisted yet.
+		for j := i + 1; j < len(history); j++ {
+			switch history[j].Role {
+			case openai.ChatMessageRoleSystem:
+				continue
+			case openai.ChatMessageRoleUser:
+				msg := strings.ToLower(strings.TrimSpace(history[j].Content))
+				if msg == "" {
+					break
+				}
+				if strings.Contains(msg, "no") || strings.Contains(msg, "not now") || strings.Contains(msg, "maybe") || strings.Contains(msg, "later") || strings.Contains(msg, "skip") {
+					break
+				}
+				if strings.Contains(msg, "yes") || strings.Contains(msg, "yeah") || strings.Contains(msg, "yea") || strings.Contains(msg, "sure") || strings.Contains(msg, "ok") || strings.Contains(msg, "okay") || strings.Contains(msg, "absolutely") || strings.Contains(msg, "definitely") || strings.Contains(msg, "proceed") || strings.Contains(msg, "let's do it") || strings.Contains(msg, "lets do it") || strings.Contains(msg, "i'll pay") || strings.Contains(msg, "i will pay") {
+					return true
+				}
+				break
+			default:
+				// Another assistant turn occurred before a user reply.
+				break
+			}
+			break
+		}
 	}
 	return false
 }
