@@ -170,6 +170,44 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	}
 }
 
+func TestWorkerProcessesPaymentEvent_IsIdempotent(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &recordingService{}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	bookings := &stubBookingConfirmer{}
+	processed := &stubProcessedStore{seen: map[string]bool{}}
+	worker := NewWorker(service, queue, store, messenger, bookings, logging.Default(), WithProcessedEventsStore(processed))
+
+	orgID := uuid.New()
+	leadID := uuid.New()
+	scheduled := time.Now().Add(24 * time.Hour).UTC()
+	event := events.PaymentSucceededV1{
+		EventID:      "evt-123",
+		OrgID:        orgID.String(),
+		LeadID:       leadID.String(),
+		LeadPhone:    "+19998887777",
+		FromNumber:   "+15550000000",
+		AmountCents:  5000,
+		OccurredAt:   time.Now().UTC(),
+		ScheduledFor: &scheduled,
+	}
+
+	if err := worker.handlePaymentEvent(context.Background(), &event); err != nil {
+		t.Fatalf("first handlePaymentEvent failed: %v", err)
+	}
+	if err := worker.handlePaymentEvent(context.Background(), &event); err != nil {
+		t.Fatalf("second handlePaymentEvent failed: %v", err)
+	}
+
+	if got := messenger.callCount(); got != 1 {
+		t.Fatalf("expected one confirmation sms, got %d", got)
+	}
+	if got := bookings.callCount(); got != 1 {
+		t.Fatalf("expected booking confirmation once, got %d", got)
+	}
+}
+
 func TestWorkerDispatchesDepositIntent(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &replyService{
@@ -461,6 +499,7 @@ func (s *stubJobUpdater) failureCount() int {
 
 type stubMessenger struct {
 	called bool
+	count  int
 	last   OutboundReply
 	mu     sync.Mutex
 }
@@ -468,6 +507,7 @@ type stubMessenger struct {
 func (s *stubMessenger) SendReply(ctx context.Context, reply OutboundReply) error {
 	s.mu.Lock()
 	s.called = true
+	s.count++
 	s.last = reply
 	s.mu.Unlock()
 	return nil
@@ -479,10 +519,38 @@ func (s *stubMessenger) wasCalled() bool {
 	return s.called
 }
 
+func (s *stubMessenger) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.count
+}
+
 func (s *stubMessenger) lastReply() OutboundReply {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.last
+}
+
+type stubProcessedStore struct {
+	seen map[string]bool
+	mu   sync.Mutex
+}
+
+func (s *stubProcessedStore) AlreadyProcessed(ctx context.Context, provider, eventID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.seen[provider+":"+eventID], nil
+}
+
+func (s *stubProcessedStore) MarkProcessed(ctx context.Context, provider, eventID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := provider + ":" + eventID
+	if s.seen[key] {
+		return false, nil
+	}
+	s.seen[key] = true
+	return true, nil
 }
 
 type stubDepositSender struct {

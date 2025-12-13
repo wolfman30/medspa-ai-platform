@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	miniredis "github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -425,5 +426,108 @@ func TestGPTService_UsesRAGContext(t *testing.T) {
 	}
 	if !foundContext {
 		t.Fatal("expected RAG context to be injected into chat history")
+	}
+}
+
+type stubOpenDepositStatusChecker struct {
+	status string
+}
+
+func (s *stubOpenDepositStatusChecker) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error) {
+	return strings.TrimSpace(s.status) != "", nil
+}
+
+func (s *stubOpenDepositStatusChecker) OpenDepositStatus(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (string, error) {
+	return s.status, nil
+}
+
+func TestGPTService_AppendsPaidDepositContext_DoesNotPromptForConfirmationRepeat(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockOpenAI := &stubChatClient{
+		response: openai.ChatCompletionResponse{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Content: "Ok!"}},
+			},
+		},
+	}
+	checker := &stubOpenDepositStatusChecker{status: "succeeded"}
+
+	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default(), WithPaymentChecker(checker))
+	orgID := uuid.New()
+	leadID := uuid.New()
+	if _, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-paid",
+		LeadID:         leadID.String(),
+		OrgID:          orgID.String(),
+		Intro:          "hi",
+		Channel:        ChannelSMS,
+	}); err != nil {
+		t.Fatalf("StartConversation returned error: %v", err)
+	}
+
+	found := false
+	for _, msg := range mockOpenAI.lastReq.Messages {
+		if msg.Role != openai.ChatMessageRoleSystem {
+			continue
+		}
+		if strings.Contains(msg.Content, "ALREADY PAID their deposit") {
+			found = true
+			if strings.Contains(strings.ToLower(msg.Content), "acknowledge") {
+				t.Fatalf("expected paid-deposit context to avoid prompting for an acknowledgment, got %q", msg.Content)
+			}
+			if !strings.Contains(msg.Content, "already sent a payment confirmation SMS") {
+				t.Fatalf("expected paid-deposit context to mention confirmation already sent, got %q", msg.Content)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected paid-deposit context to be injected")
+	}
+}
+
+func TestGPTService_AppendsPendingDepositContext_DoesNotClaimPaid(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockOpenAI := &stubChatClient{
+		response: openai.ChatCompletionResponse{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Content: "Ok!"}},
+			},
+		},
+	}
+	checker := &stubOpenDepositStatusChecker{status: "deposit_pending"}
+
+	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default(), WithPaymentChecker(checker))
+	orgID := uuid.New()
+	leadID := uuid.New()
+	if _, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-pending",
+		LeadID:         leadID.String(),
+		OrgID:          orgID.String(),
+		Intro:          "hi",
+		Channel:        ChannelSMS,
+	}); err != nil {
+		t.Fatalf("StartConversation returned error: %v", err)
+	}
+
+	found := false
+	for _, msg := range mockOpenAI.lastReq.Messages {
+		if msg.Role != openai.ChatMessageRoleSystem {
+			continue
+		}
+		if strings.Contains(msg.Content, "deposit payment link") && strings.Contains(msg.Content, "still pending") {
+			found = true
+			if strings.Contains(msg.Content, "ALREADY PAID") {
+				t.Fatalf("expected pending-deposit context to avoid claiming the deposit is paid, got %q", msg.Content)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected pending-deposit context to be injected")
 	}
 }

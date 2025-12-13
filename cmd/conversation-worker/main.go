@@ -191,6 +191,11 @@ func main() {
 		}
 	}
 
+	var processedStore *events.ProcessedStore
+	if dbPool != nil {
+		processedStore = events.NewProcessedStore(dbPool)
+	}
+
 	worker := conversation.NewWorker(
 		processor,
 		queue,
@@ -201,6 +206,7 @@ func main() {
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
 		conversation.WithPaymentNotifier(notifier),
+		conversation.WithProcessedEventsStore(processedStore),
 	)
 
 	worker.Start(ctx)

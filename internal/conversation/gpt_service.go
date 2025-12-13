@@ -99,9 +99,10 @@ AFTER CUSTOMER AGREES TO DEPOSIT:
 - DO NOT say "you're all set" - the booking is NOT confirmed until staff calls them
 - DO NOT mention the 24-hour callback yet - that message comes after payment confirmation
 
-AFTER DEPOSIT IS PAID (system will inject this context):
-- Acknowledge once: "Thank you! Your deposit has been received. Our team will call you within 24 hours to confirm a specific date and time."
-- After this ONE acknowledgment, do NOT repeat it - just answer any follow-up questions normally
+AFTER DEPOSIT IS PAID:
+- The platform automatically sends a payment receipt/confirmation SMS when the payment succeeds
+- Do NOT repeat the payment confirmation message when they text again
+- Just answer any follow-up questions normally
 - The patient is NOT "all set" - they still need the confirmation call to finalize the booking
 
 COMMUNICATION STYLE:
@@ -516,14 +517,36 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 		orgUUID, orgErr := uuid.Parse(orgID)
 		leadUUID, leadErr := uuid.Parse(leadID)
 		if orgErr == nil && leadErr == nil {
-			hasDeposit, err := s.paymentChecker.HasOpenDeposit(ctx, orgUUID, leadUUID)
-			if err != nil {
-				s.logger.Warn("failed to check payment status", "org_id", orgID, "lead_id", leadID, "error", err)
-			} else if hasDeposit {
-				history = append(history, openai.ChatCompletionMessage{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: "IMPORTANT: This patient has ALREADY PAID their deposit. Do NOT offer another deposit or ask about booking. Their deposit is received and our team will call within 24 hours to confirm a specific date and time. The booking is NOT finalized yet - they still need the confirmation call. If this is their FIRST message after paying, acknowledge the deposit ONCE. After that, just answer questions normally without repeating the confirmation.",
-				})
+			type openDepositStatusChecker interface {
+				OpenDepositStatus(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (string, error)
+			}
+			if statusChecker, ok := s.paymentChecker.(openDepositStatusChecker); ok {
+				status, err := statusChecker.OpenDepositStatus(ctx, orgUUID, leadUUID)
+				if err != nil {
+					s.logger.Warn("failed to check payment status", "org_id", orgID, "lead_id", leadID, "error", err)
+				} else if strings.TrimSpace(status) != "" {
+					content := "IMPORTANT: This patient has an existing deposit in progress. Do NOT offer another deposit or ask about booking. Answer their questions normally."
+					switch status {
+					case "succeeded":
+						content = "IMPORTANT: This patient has ALREADY PAID their deposit. The platform already sent a payment confirmation SMS automatically when the payment succeeded. Do NOT offer another deposit or ask about booking. Do NOT repeat the payment confirmation message. Answer their questions normally. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\""
+					case "deposit_pending":
+						content = "IMPORTANT: This patient was already sent a deposit payment link and it is still pending. Do NOT offer another deposit or claim the deposit is already received. Answer their questions normally. If they ask about payment, tell them to use the deposit link they received."
+					}
+					history = append(history, openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleSystem,
+						Content: content,
+					})
+				}
+			} else {
+				hasDeposit, err := s.paymentChecker.HasOpenDeposit(ctx, orgUUID, leadUUID)
+				if err != nil {
+					s.logger.Warn("failed to check payment status", "org_id", orgID, "lead_id", leadID, "error", err)
+				} else if hasDeposit {
+					history = append(history, openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleSystem,
+						Content: "IMPORTANT: This patient has an existing deposit in progress (pending payment or already paid). Do NOT offer another deposit or ask about booking. Do NOT repeat any payment confirmation message. Answer their questions normally. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\"",
+					})
+				}
 			}
 		}
 	}

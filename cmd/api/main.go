@@ -509,6 +509,11 @@ func setupInlineWorker(
 		logger.Warn("notification service NOT initialized (redis not configured)")
 	}
 
+	var processedStore *events.ProcessedStore
+	if dbPool != nil {
+		processedStore = events.NewProcessedStore(dbPool)
+	}
+
 	worker := conversation.NewWorker(
 		processor,
 		memoryQueue,
@@ -519,6 +524,7 @@ func setupInlineWorker(
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
 		conversation.WithPaymentNotifier(notifier),
+		conversation.WithProcessedEventsStore(processedStore),
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)
