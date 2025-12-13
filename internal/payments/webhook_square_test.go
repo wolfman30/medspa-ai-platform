@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -140,6 +141,55 @@ func TestSquareWebhookHandler_AlreadyProcessed(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 for duplicate, got %d", rr.Code)
+	}
+}
+
+func TestSquareWebhookHandler_DedupesByProviderRef(t *testing.T) {
+	orgID := uuid.New().String()
+	leadID := uuid.New().String()
+	intentID := uuid.New().String()
+
+	payments := &stubPaymentStore{}
+	leadsRepo := &stubLeadRepo{
+		lead: &leads.Lead{ID: leadID, OrgID: orgID, Phone: "+15550000000"},
+	}
+	processed := &stubProcessedTracker{}
+	outbox := &stubOutboxWriter{}
+	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, nil, nil, logging.Default())
+
+	body1 := buildSquarePayload(t, "evt-1", "pay-dup", "COMPLETED", map[string]string{
+		"org_id":            orgID,
+		"lead_id":           leadID,
+		"booking_intent_id": intentID,
+	})
+	req1 := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body1))
+	req1.Host = "example.com"
+	sign(req1, "secret", body1)
+	rr1 := httptest.NewRecorder()
+	handler.Handle(rr1, req1)
+	if rr1.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr1.Code)
+	}
+
+	body2 := buildSquarePayload(t, "evt-2", "pay-dup", "COMPLETED", map[string]string{
+		"org_id":            orgID,
+		"lead_id":           leadID,
+		"booking_intent_id": intentID,
+	})
+	req2 := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body2))
+	req2.Host = "example.com"
+	sign(req2, "secret", body2)
+	rr2 := httptest.NewRecorder()
+	handler.Handle(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr2.Code)
+	}
+
+	if payments.calls != 1 {
+		t.Fatalf("expected payment update once, got %d", payments.calls)
+	}
+	if len(outbox.inserted) != 1 {
+		t.Fatalf("expected one outbox insert, got %d", len(outbox.inserted))
 	}
 }
 
@@ -309,11 +359,13 @@ func samplePaymentWithSchedule(id uuid.UUID, providerRef string, scheduled time.
 
 type stubPaymentStore struct {
 	called bool
+	calls  int
 	pay    *paymentsql.Payment
 }
 
 func (s *stubPaymentStore) UpdateStatusByID(ctx context.Context, id uuid.UUID, status, providerRef string) (*paymentsql.Payment, error) {
 	s.called = true
+	s.calls++
 	if s.pay != nil {
 		return s.pay, nil
 	}
@@ -371,14 +423,35 @@ func (s *stubLeadRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter)
 type stubProcessedTracker struct {
 	already bool
 	marked  bool
+	mu      sync.Mutex
+	seen    map[string]bool
 }
 
-func (s *stubProcessedTracker) AlreadyProcessed(context.Context, string, string) (bool, error) {
-	return s.already, nil
+func (s *stubProcessedTracker) AlreadyProcessed(ctx context.Context, provider, eventID string) (bool, error) {
+	if s.already {
+		return true, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seen == nil {
+		return false, nil
+	}
+	key := provider + ":" + eventID
+	return s.seen[key], nil
 }
 
-func (s *stubProcessedTracker) MarkProcessed(context.Context, string, string) (bool, error) {
+func (s *stubProcessedTracker) MarkProcessed(ctx context.Context, provider, eventID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.marked = true
+	if s.seen == nil {
+		s.seen = map[string]bool{}
+	}
+	key := provider + ":" + eventID
+	if s.seen[key] {
+		return false, nil
+	}
+	s.seen[key] = true
 	return true, nil
 }
 

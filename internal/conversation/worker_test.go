@@ -183,9 +183,10 @@ func TestWorkerProcessesPaymentEvent_IsIdempotent(t *testing.T) {
 	leadID := uuid.New()
 	scheduled := time.Now().Add(24 * time.Hour).UTC()
 	event := events.PaymentSucceededV1{
-		EventID:      "evt-123",
+		EventID:      "evt-1",
 		OrgID:        orgID.String(),
 		LeadID:       leadID.String(),
+		ProviderRef:  "pay-123",
 		LeadPhone:    "+19998887777",
 		FromNumber:   "+15550000000",
 		AmountCents:  5000,
@@ -196,6 +197,7 @@ func TestWorkerProcessesPaymentEvent_IsIdempotent(t *testing.T) {
 	if err := worker.handlePaymentEvent(context.Background(), &event); err != nil {
 		t.Fatalf("first handlePaymentEvent failed: %v", err)
 	}
+	event.EventID = "evt-2"
 	if err := worker.handlePaymentEvent(context.Background(), &event); err != nil {
 		t.Fatalf("second handlePaymentEvent failed: %v", err)
 	}
