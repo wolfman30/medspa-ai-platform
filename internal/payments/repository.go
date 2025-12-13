@@ -51,6 +51,23 @@ func (r *Repository) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID
 	return payment.Status == "deposit_pending" || payment.Status == "succeeded", nil
 }
 
+// OpenDepositStatus returns the status of the most recent pending or succeeded deposit within 72 hours.
+// It returns an empty string when no matching deposit exists.
+func (r *Repository) OpenDepositStatus(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (string, error) {
+	arg := paymentsql.GetOpenDepositByOrgAndLeadParams{
+		OrgID:  orgID.String(),
+		LeadID: toPGUUID(leadID),
+	}
+	payment, err := r.queries.GetOpenDepositByOrgAndLead(ctx, arg)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("payments: load open deposit: %w", err)
+	}
+	return payment.Status, nil
+}
+
 // CreateIntent persists a payment intent in deposit pending status.
 func (r *Repository) CreateIntent(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, provider string, bookingIntent uuid.UUID, amountCents int32, status string, scheduledFor *time.Time) (*paymentsql.Payment, error) {
 	arg := paymentsql.InsertPaymentParams{

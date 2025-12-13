@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ type Worker struct {
 	bookings  bookingConfirmer
 	deposits  DepositSender
 	notifier  PaymentNotifier
+	processed processedEventStore
 	logger    *logging.Logger
 
 	cfg workerConfig
@@ -40,6 +42,7 @@ type workerConfig struct {
 	receiveBatchSize int
 	deposit          DepositSender
 	notifier         PaymentNotifier
+	processed        processedEventStore
 }
 
 const (
@@ -53,6 +56,11 @@ const (
 
 // WorkerOption customizes worker behavior.
 type WorkerOption func(*workerConfig)
+
+type processedEventStore interface {
+	AlreadyProcessed(ctx context.Context, provider, eventID string) (bool, error)
+	MarkProcessed(ctx context.Context, provider, eventID string) (bool, error)
+}
 
 // WithWorkerCount sets the number of concurrent consumer goroutines.
 func WithWorkerCount(count int) WorkerOption {
@@ -103,6 +111,13 @@ func WithPaymentNotifier(notifier PaymentNotifier) WorkerOption {
 	}
 }
 
+// WithProcessedEventsStore provides an idempotency store for event handling (e.g. payment confirmations).
+func WithProcessedEventsStore(store processedEventStore) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.processed = store
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -143,6 +158,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		bookings:  bookings,
 		deposits:  cfg.deposit,
 		notifier:  cfg.notifier,
+		processed: cfg.processed,
 		logger:    logger,
 		cfg:       cfg,
 	}
@@ -306,6 +322,15 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	if evt == nil {
 		return errors.New("conversation: missing payment payload")
 	}
+	if w.processed != nil && strings.TrimSpace(evt.EventID) != "" {
+		already, err := w.processed.AlreadyProcessed(ctx, "conversation.payment_succeeded.v1.confirmation_sms", evt.EventID)
+		if err != nil {
+			w.logger.Warn("failed to check payment confirmation idempotency", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+		} else if already {
+			w.logger.Info("skipping duplicate payment confirmation", "event_id", evt.EventID, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+			return nil
+		}
+	}
 	if w.bookings == nil {
 		return nil
 	}
@@ -349,6 +374,10 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		defer cancel()
 		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
 			w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+		} else if w.processed != nil && strings.TrimSpace(evt.EventID) != "" {
+			if _, err := w.processed.MarkProcessed(ctx, "conversation.payment_succeeded.v1.confirmation_sms", evt.EventID); err != nil {
+				w.logger.Warn("failed to mark payment confirmation processed", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+			}
 		}
 	}
 	return nil
