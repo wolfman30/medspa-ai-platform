@@ -10,24 +10,19 @@ import (
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-func TestGPTService_StartConversation_PersistsHistory(t *testing.T) {
+func TestLLMService_StartConversation_PersistsHistory(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mockOpenAI := &stubChatClient{
-		response: openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "Hi there!"}},
-			},
-		},
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Hi there!"},
 	}
 
-	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default())
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
 	resp, err := service.StartConversation(context.Background(), StartRequest{
 		LeadID:  "lead-123",
 		Intro:   "Need dermaplaning",
@@ -47,32 +42,28 @@ func TestGPTService_StartConversation_PersistsHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read history from redis: %v", err)
 	}
-	var history []openai.ChatCompletionMessage
+	var history []ChatMessage
 	if err := json.Unmarshal([]byte(raw), &history); err != nil {
 		t.Fatalf("failed to decode stored history: %v", err)
 	}
 	if len(history) != 3 {
 		t.Fatalf("expected 3 messages in history, got %d", len(history))
 	}
-	if history[2].Role != openai.ChatMessageRoleAssistant || history[2].Content != "Hi there!" {
+	if history[2].Role != ChatRoleAssistant || history[2].Content != "Hi there!" {
 		t.Fatalf("expected assistant reply stored, got %#v", history[2])
 	}
 }
 
-func TestGPTService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
+func TestLLMService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mockOpenAI := &stubChatClient{
-		response: openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "Sure, Friday works."}},
-			},
-		},
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Sure, Friday works."},
 	}
 
-	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default())
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
 	startResp, err := service.StartConversation(context.Background(), StartRequest{
 		LeadID:  "lead-1",
 		Intro:   "Book facial",
@@ -97,7 +88,7 @@ func TestGPTService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
 		t.Fatalf("unexpected assistant reply: %s", resp.Message)
 	}
 
-	var history []openai.ChatCompletionMessage
+	var history []ChatMessage
 	raw, err := mr.DB(0).Get(conversationKey(startResp.ConversationID))
 	if err != nil {
 		t.Fatalf("failed to fetch stored history: %v", err)
@@ -110,19 +101,15 @@ func TestGPTService_ProcessMessage_LoadsExistingHistory(t *testing.T) {
 	}
 }
 
-func TestGPTService_ProcessMessage_UnknownConversationBootstraps(t *testing.T) {
+func TestLLMService_ProcessMessage_UnknownConversationBootstraps(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mockOpenAI := &stubChatClient{
-		response: openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "Welcome back!"}},
-			},
-		},
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Welcome back!"},
 	}
-	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default())
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
 
 	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
 		ConversationID: "conv_missing",
@@ -141,7 +128,7 @@ func TestGPTService_ProcessMessage_UnknownConversationBootstraps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected conversation history to persist: %v", err)
 	}
-	var history []openai.ChatCompletionMessage
+	var history []ChatMessage
 	if err := json.Unmarshal([]byte(raw), &history); err != nil {
 		t.Fatalf("failed to decode history: %v", err)
 	}
@@ -150,34 +137,34 @@ func TestGPTService_ProcessMessage_UnknownConversationBootstraps(t *testing.T) {
 	}
 }
 
-func TestGPTService_StartConversation_OpenAIError(t *testing.T) {
+func TestLLMService_StartConversation_LLMError(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mock := &stubChatClient{err: errors.New("quota exceeded")}
-	service := NewGPTService(mock, client, nil, "gpt-5-mini", logging.Default())
+	mock := &stubLLMClient{err: errors.New("quota exceeded")}
+	service := NewLLMService(mock, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
 
 	_, err := service.StartConversation(context.Background(), StartRequest{LeadID: "lead"})
 	if err == nil || !strings.Contains(err.Error(), "quota exceeded") {
-		t.Fatalf("expected propagated OpenAI error, got %v", err)
+		t.Fatalf("expected propagated LLM error, got %v", err)
 	}
 }
 
-func TestGPTService_ProcessMessage_ExtractsDepositIntent(t *testing.T) {
+func TestLLMService_ProcessMessage_ExtractsDepositIntent(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	scripted := &scriptedChatClient{
-		responses: []openai.ChatCompletionResponse{
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Hello!"}}}},
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Let's lock this in. I can send a quick deposit link."}}}},
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`}}}},
+	scripted := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Hello!"},
+			{Text: "Let's lock this in. I can send a quick deposit link."},
+			{Text: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`},
 		},
 	}
 
-	service := NewGPTService(scripted, client, nil, "gpt-5-mini", logging.Default(), WithDepositConfig(DepositConfig{
+	service := NewLLMService(scripted, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithDepositConfig(DepositConfig{
 		DefaultAmountCents: 5000,
 		SuccessURL:         "http://default-success",
 		CancelURL:          "http://default-cancel",
@@ -218,20 +205,20 @@ func TestGPTService_ProcessMessage_ExtractsDepositIntent(t *testing.T) {
 	}
 }
 
-func TestGPTService_ProcessMessage_FallbacksToHeuristicDepositIntent(t *testing.T) {
+func TestLLMService_ProcessMessage_FallbacksToHeuristicDepositIntent(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	scripted := &scriptedChatClient{
-		responses: []openai.ChatCompletionResponse{
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Hello!"}}}},
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Great, we do require a small deposit to hold your spot. Would you like to proceed?"}}}},
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`}}}},
+	scripted := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Hello!"},
+			{Text: "Great, we do require a small deposit to hold your spot. Would you like to proceed?"},
+			{Text: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`},
 		},
 	}
 
-	service := NewGPTService(scripted, client, nil, "gpt-5-mini", logging.Default(), WithDepositConfig(DepositConfig{
+	service := NewLLMService(scripted, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithDepositConfig(DepositConfig{
 		DefaultAmountCents: 5000,
 		SuccessURL:         "http://default-success",
 		CancelURL:          "http://default-cancel",
@@ -267,27 +254,27 @@ func TestGPTService_ProcessMessage_FallbacksToHeuristicDepositIntent(t *testing.
 	}
 }
 
-func TestGPTService_ProcessMessage_FallbacksOnGenericYesAfterDepositAsk(t *testing.T) {
+func TestLLMService_ProcessMessage_FallbacksOnGenericYesAfterDepositAsk(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	scripted := &scriptedChatClient{
-		responses: []openai.ChatCompletionResponse{
+	scripted := &stubLLMClient{
+		responses: []LLMResponse{
 			// StartConversation assistant reply
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Hello!"}}}},
+			{Text: "Hello!"},
 			// First user turn assistant reply (asks for deposit)
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "We do require a small refundable deposit to hold your spot. Would you like to proceed?"}}}},
+			{Text: "We do require a small refundable deposit to hold your spot. Would you like to proceed?"},
 			// Classifier for first user turn (skip)
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`}}}},
+			{Text: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`},
 			// Second user turn assistant reply (any content)
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: "Great!"}}}},
+			{Text: "Great!"},
 			// Classifier for second user turn (skip, forcing heuristic)
-			{Choices: []openai.ChatCompletionChoice{{Message: openai.ChatCompletionMessage{Content: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`}}}},
+			{Text: `{"collect":false,"amount_cents":0,"success_url":"","cancel_url":"","description":""}`},
 		},
 	}
 
-	service := NewGPTService(scripted, client, nil, "gpt-5-mini", logging.Default(), WithDepositConfig(DepositConfig{
+	service := NewLLMService(scripted, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithDepositConfig(DepositConfig{
 		DefaultAmountCents: 5000,
 		SuccessURL:         "http://default-success",
 		CancelURL:          "http://default-cancel",
@@ -333,16 +320,164 @@ func TestGPTService_ProcessMessage_FallbacksOnGenericYesAfterDepositAsk(t *testi
 	}
 }
 
-type stubChatClient struct {
-	response openai.ChatCompletionResponse
-	err      error
-	lastReq  openai.ChatCompletionRequest
+func TestLLMService_UsesRAGContext(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Response"},
+	}
+	rag := &stubRAG{contexts: []string{"Dermaplaning removes peach fuzz"}}
+
+	service := NewLLMService(mockLLM, client, rag, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
+	_, err := service.StartConversation(context.Background(), StartRequest{
+		LeadID:   "lead-99",
+		Intro:    "dermaplaning",
+		Source:   "web",
+		Channel:  ChannelSMS,
+		OrgID:    "org-123",
+		ClinicID: "clinic-77",
+	})
+	if err != nil {
+		t.Fatalf("StartConversation returned error: %v", err)
+	}
+
+	if rag.lastClinic != "clinic-77" || rag.lastQuery != "dermaplaning" {
+		t.Fatalf("rag queried with wrong parameters: %#v", rag)
+	}
+
+	foundContext := false
+	for _, sys := range mockLLM.lastReq.System {
+		if strings.Contains(sys, "Dermaplaning removes peach fuzz") {
+			foundContext = true
+			break
+		}
+	}
+	if !foundContext {
+		t.Fatal("expected RAG context to be injected into system prompt")
+	}
 }
 
-func (s *stubChatClient) CreateChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error) {
+type stubOpenDepositStatusChecker struct {
+	status string
+}
+
+func (s *stubOpenDepositStatusChecker) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error) {
+	return strings.TrimSpace(s.status) != "", nil
+}
+
+func (s *stubOpenDepositStatusChecker) OpenDepositStatus(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (string, error) {
+	return s.status, nil
+}
+
+func TestLLMService_AppendsPaidDepositContext_DoesNotPromptForConfirmationRepeat(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Ok!"},
+	}
+	checker := &stubOpenDepositStatusChecker{status: "succeeded"}
+
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithPaymentChecker(checker))
+	orgID := uuid.New()
+	leadID := uuid.New()
+	if _, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-paid",
+		LeadID:         leadID.String(),
+		OrgID:          orgID.String(),
+		Intro:          "hi",
+		Channel:        ChannelSMS,
+	}); err != nil {
+		t.Fatalf("StartConversation returned error: %v", err)
+	}
+
+	found := false
+	for _, sys := range mockLLM.lastReq.System {
+		if strings.Contains(sys, "ALREADY PAID their deposit") {
+			found = true
+			if strings.Contains(strings.ToLower(sys), "acknowledge") {
+				t.Fatalf("expected paid-deposit context to avoid prompting for an acknowledgment, got %q", sys)
+			}
+			if !strings.Contains(sys, "already sent a payment confirmation SMS") {
+				t.Fatalf("expected paid-deposit context to mention confirmation already sent, got %q", sys)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected paid-deposit context to be injected")
+	}
+}
+
+func TestLLMService_AppendsPendingDepositContext_DoesNotClaimPaid(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Ok!"},
+	}
+	checker := &stubOpenDepositStatusChecker{status: "deposit_pending"}
+
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithPaymentChecker(checker))
+	orgID := uuid.New()
+	leadID := uuid.New()
+	if _, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-pending",
+		LeadID:         leadID.String(),
+		OrgID:          orgID.String(),
+		Intro:          "hi",
+		Channel:        ChannelSMS,
+	}); err != nil {
+		t.Fatalf("StartConversation returned error: %v", err)
+	}
+
+	found := false
+	for _, sys := range mockLLM.lastReq.System {
+		if strings.Contains(sys, "deposit payment link") && strings.Contains(sys, "still pending") {
+			found = true
+			if strings.Contains(sys, "ALREADY PAID") {
+				t.Fatalf("expected pending-deposit context to avoid claiming the deposit is paid, got %q", sys)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected pending-deposit context to be injected")
+	}
+}
+
+type stubLLMClient struct {
+	response  LLMResponse
+	err       error
+	lastReq   LLMRequest
+	requests  []LLMRequest
+	responses []LLMResponse
+	errs      []error
+	calls     int
+}
+
+func (s *stubLLMClient) Complete(ctx context.Context, req LLMRequest) (LLMResponse, error) {
 	s.lastReq = req
+	s.requests = append(s.requests, req)
+
+	if s.calls < len(s.errs) && s.errs[s.calls] != nil {
+		err := s.errs[s.calls]
+		s.calls++
+		return LLMResponse{}, err
+	}
+	if len(s.responses) > 0 {
+		if s.calls >= len(s.responses) {
+			s.calls++
+			return LLMResponse{}, errors.New("no scripted response")
+		}
+		resp := s.responses[s.calls]
+		s.calls++
+		return resp, nil
+	}
 	if s.err != nil {
-		return openai.ChatCompletionResponse{}, s.err
+		return LLMResponse{}, s.err
 	}
 	return s.response, nil
 }
@@ -361,173 +496,4 @@ func (s *stubRAG) Query(ctx context.Context, clinicID string, query string, topK
 		return nil, s.err
 	}
 	return s.contexts, nil
-}
-
-type scriptedChatClient struct {
-	responses []openai.ChatCompletionResponse
-	errs      []error
-	calls     int
-	lastReq   openai.ChatCompletionRequest
-}
-
-func (s *scriptedChatClient) CreateChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error) {
-	s.lastReq = req
-	if s.calls < len(s.errs) && s.errs[s.calls] != nil {
-		err := s.errs[s.calls]
-		s.calls++
-		return openai.ChatCompletionResponse{}, err
-	}
-	if s.calls >= len(s.responses) {
-		s.calls++
-		return openai.ChatCompletionResponse{}, errors.New("no scripted response")
-	}
-	resp := s.responses[s.calls]
-	s.calls++
-	return resp, nil
-}
-
-func TestGPTService_UsesRAGContext(t *testing.T) {
-	mr := miniredis.RunT(t)
-	defer mr.Close()
-
-	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mockOpenAI := &stubChatClient{
-		response: openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "Response"}},
-			},
-		},
-	}
-	rag := &stubRAG{contexts: []string{"Dermaplaning removes peach fuzz"}}
-
-	service := NewGPTService(mockOpenAI, client, rag, "gpt-5-mini", logging.Default())
-	_, err := service.StartConversation(context.Background(), StartRequest{
-		LeadID:   "lead-99",
-		Intro:    "dermaplaning",
-		Source:   "web",
-		Channel:  ChannelSMS,
-		OrgID:    "org-123",
-		ClinicID: "clinic-77",
-	})
-	if err != nil {
-		t.Fatalf("StartConversation returned error: %v", err)
-	}
-
-	if rag.lastClinic != "clinic-77" || rag.lastQuery != "dermaplaning" {
-		t.Fatalf("rag queried with wrong parameters: %#v", rag)
-	}
-
-	foundContext := false
-	for _, msg := range mockOpenAI.lastReq.Messages {
-		if strings.Contains(msg.Content, "Dermaplaning removes peach fuzz") {
-			foundContext = true
-			break
-		}
-	}
-	if !foundContext {
-		t.Fatal("expected RAG context to be injected into chat history")
-	}
-}
-
-type stubOpenDepositStatusChecker struct {
-	status string
-}
-
-func (s *stubOpenDepositStatusChecker) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error) {
-	return strings.TrimSpace(s.status) != "", nil
-}
-
-func (s *stubOpenDepositStatusChecker) OpenDepositStatus(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (string, error) {
-	return s.status, nil
-}
-
-func TestGPTService_AppendsPaidDepositContext_DoesNotPromptForConfirmationRepeat(t *testing.T) {
-	mr := miniredis.RunT(t)
-	defer mr.Close()
-
-	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mockOpenAI := &stubChatClient{
-		response: openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "Ok!"}},
-			},
-		},
-	}
-	checker := &stubOpenDepositStatusChecker{status: "succeeded"}
-
-	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default(), WithPaymentChecker(checker))
-	orgID := uuid.New()
-	leadID := uuid.New()
-	if _, err := service.StartConversation(context.Background(), StartRequest{
-		ConversationID: "conv-paid",
-		LeadID:         leadID.String(),
-		OrgID:          orgID.String(),
-		Intro:          "hi",
-		Channel:        ChannelSMS,
-	}); err != nil {
-		t.Fatalf("StartConversation returned error: %v", err)
-	}
-
-	found := false
-	for _, msg := range mockOpenAI.lastReq.Messages {
-		if msg.Role != openai.ChatMessageRoleSystem {
-			continue
-		}
-		if strings.Contains(msg.Content, "ALREADY PAID their deposit") {
-			found = true
-			if strings.Contains(strings.ToLower(msg.Content), "acknowledge") {
-				t.Fatalf("expected paid-deposit context to avoid prompting for an acknowledgment, got %q", msg.Content)
-			}
-			if !strings.Contains(msg.Content, "already sent a payment confirmation SMS") {
-				t.Fatalf("expected paid-deposit context to mention confirmation already sent, got %q", msg.Content)
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("expected paid-deposit context to be injected")
-	}
-}
-
-func TestGPTService_AppendsPendingDepositContext_DoesNotClaimPaid(t *testing.T) {
-	mr := miniredis.RunT(t)
-	defer mr.Close()
-
-	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	mockOpenAI := &stubChatClient{
-		response: openai.ChatCompletionResponse{
-			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "Ok!"}},
-			},
-		},
-	}
-	checker := &stubOpenDepositStatusChecker{status: "deposit_pending"}
-
-	service := NewGPTService(mockOpenAI, client, nil, "gpt-5-mini", logging.Default(), WithPaymentChecker(checker))
-	orgID := uuid.New()
-	leadID := uuid.New()
-	if _, err := service.StartConversation(context.Background(), StartRequest{
-		ConversationID: "conv-pending",
-		LeadID:         leadID.String(),
-		OrgID:          orgID.String(),
-		Intro:          "hi",
-		Channel:        ChannelSMS,
-	}); err != nil {
-		t.Fatalf("StartConversation returned error: %v", err)
-	}
-
-	found := false
-	for _, msg := range mockOpenAI.lastReq.Messages {
-		if msg.Role != openai.ChatMessageRoleSystem {
-			continue
-		}
-		if strings.Contains(msg.Content, "deposit payment link") && strings.Contains(msg.Content, "still pending") {
-			found = true
-			if strings.Contains(msg.Content, "ALREADY PAID") {
-				t.Fatalf("expected pending-deposit context to avoid claiming the deposit is paid, got %q", msg.Content)
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("expected pending-deposit context to be injected")
-	}
 }

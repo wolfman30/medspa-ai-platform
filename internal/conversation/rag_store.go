@@ -7,15 +7,14 @@ import (
 	"sort"
 	"sync"
 
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
 type embeddingClient interface {
-	CreateEmbeddings(ctx context.Context, request openai.EmbeddingRequestConverter) (openai.EmbeddingResponse, error)
+	Embed(ctx context.Context, modelID string, texts []string) ([][]float32, error)
 }
 
-// RAGRetriever exposes the query capability needed by GPTService.
+// RAGRetriever exposes the query capability needed by LLMService.
 type RAGRetriever interface {
 	Query(ctx context.Context, clinicID string, query string, topK int) ([]string, error)
 }
@@ -46,7 +45,7 @@ func NewMemoryRAGStore(client embeddingClient, model string, logger *logging.Log
 		panic("conversation: embedding client cannot be nil")
 	}
 	if model == "" {
-		model = "text-embedding-3-small"
+		model = "amazon.titan-embed-text-v1"
 	}
 	if logger == nil {
 		logger = logging.Default()
@@ -66,26 +65,21 @@ func (s *MemoryRAGStore) AddDocuments(ctx context.Context, clinicID string, cont
 		return nil
 	}
 
-	req := &openai.EmbeddingRequest{
-		Model: openai.EmbeddingModel(s.model),
-		Input: contents,
-	}
-
-	resp, err := s.client.CreateEmbeddings(ctx, req)
+	resp, err := s.client.Embed(ctx, s.model, contents)
 	if err != nil {
 		return err
 	}
-	if len(resp.Data) != len(contents) {
+	if len(resp) != len(contents) {
 		return errors.New("conversation: embedding response size mismatch")
 	}
 
 	clinicKey := clinicID
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, item := range resp.Data {
+	for i, item := range resp {
 		s.docments[clinicKey] = append(s.docments[clinicKey], ragDocument{
 			content:   contents[i],
-			embedding: item.Embedding,
+			embedding: item,
 		})
 	}
 	return nil
@@ -96,19 +90,15 @@ func (s *MemoryRAGStore) Query(ctx context.Context, clinicID string, query strin
 	if topK <= 0 {
 		topK = 3
 	}
-	req := &openai.EmbeddingRequest{
-		Model: openai.EmbeddingModel(s.model),
-		Input: []string{query},
-	}
-	resp, err := s.client.CreateEmbeddings(ctx, req)
+	resp, err := s.client.Embed(ctx, s.model, []string{query})
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.Data) == 0 {
+	if len(resp) == 0 {
 		return nil, nil
 	}
 
-	queryVec := resp.Data[0].Embedding
+	queryVec := resp[0]
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()

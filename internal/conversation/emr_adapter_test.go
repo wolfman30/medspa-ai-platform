@@ -169,7 +169,7 @@ func TestEMRAdapter_FindOrCreatePatient_CreateNew(t *testing.T) {
 	}
 }
 
-func TestFormatSlotsForGPT(t *testing.T) {
+func TestFormatSlotsForLLM(t *testing.T) {
 	now := time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC)
 	slots := []AvailabilitySlot{
 		{
@@ -188,7 +188,7 @@ func TestFormatSlotsForGPT(t *testing.T) {
 		},
 	}
 
-	result := FormatSlotsForGPT(slots, 5)
+	result := FormatSlotsForLLM(slots, 5)
 
 	if result == "" {
 		t.Error("expected non-empty result")
@@ -201,14 +201,14 @@ func TestFormatSlotsForGPT(t *testing.T) {
 	}
 }
 
-func TestFormatSlotsForGPT_Empty(t *testing.T) {
-	result := FormatSlotsForGPT(nil, 5)
+func TestFormatSlotsForLLM_Empty(t *testing.T) {
+	result := FormatSlotsForLLM(nil, 5)
 	if !contains(result, "No available appointments") {
 		t.Error("expected empty slots message")
 	}
 }
 
-func TestFormatSlotsForGPT_MaxSlots(t *testing.T) {
+func TestFormatSlotsForLLM_MaxSlots(t *testing.T) {
 	slots := make([]AvailabilitySlot, 10)
 	for i := range slots {
 		slots[i] = AvailabilitySlot{
@@ -217,7 +217,7 @@ func TestFormatSlotsForGPT_MaxSlots(t *testing.T) {
 		}
 	}
 
-	result := FormatSlotsForGPT(slots, 3)
+	result := FormatSlotsForLLM(slots, 3)
 
 	// Count how many numbered items appear (should be max 3)
 	count := 0

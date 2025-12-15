@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -67,25 +66,17 @@ type stubEmbeddingClient struct {
 	calls       int
 }
 
-func (s *stubEmbeddingClient) CreateEmbeddings(ctx context.Context, request openai.EmbeddingRequestConverter) (openai.EmbeddingResponse, error) {
+func (s *stubEmbeddingClient) Embed(ctx context.Context, modelID string, texts []string) ([][]float32, error) {
 	if s.err != nil {
-		return openai.EmbeddingResponse{}, s.err
+		return nil, s.err
 	}
-	req, ok := request.(*openai.EmbeddingRequest)
-	if !ok {
-		return openai.EmbeddingResponse{}, errors.New("unexpected request type")
+	if len(s.nextVectors) < len(texts) {
+		return nil, errors.New("insufficient stub embeddings")
 	}
-	inputs, ok := req.Input.([]string)
-	if !ok {
-		return openai.EmbeddingResponse{}, errors.New("unexpected input payload")
-	}
-	if len(s.nextVectors) < len(inputs) {
-		return openai.EmbeddingResponse{}, errors.New("insufficient stub embeddings")
-	}
-	data := make([]openai.Embedding, len(inputs))
-	for i := range inputs {
-		data[i] = openai.Embedding{Embedding: s.nextVectors[i]}
+	data := make([][]float32, len(texts))
+	for i := range texts {
+		data[i] = s.nextVectors[i]
 	}
 	s.calls++
-	return openai.EmbeddingResponse{Data: data}, nil
+	return data, nil
 }

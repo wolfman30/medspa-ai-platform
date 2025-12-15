@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -21,7 +20,7 @@ import (
 )
 
 const (
-	defaultOpenAISystemPrompt = `You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa.
+	defaultSystemPrompt = `You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa.
 
 ANSWERING SERVICE QUESTIONS:
 You CAN and SHOULD answer general questions about medspa services and treatments:
@@ -127,18 +126,28 @@ WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 	maxHistoryMessages = 24
 )
 
-var gptTracer = otel.Tracer("medspa.internal.conversation.gpt")
+var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
 
-var openaiLatency = prometheus.NewHistogramVec(
+var llmLatency = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "medspa",
 		Subsystem: "conversation",
-		Name:      "openai_latency_seconds",
-		Help:      "Latency of OpenAI chat completions",
+		Name:      "llm_latency_seconds",
+		Help:      "Latency of LLM completions",
 		// Focus on sub-10s buckets with a few higher ones for visibility.
 		Buckets: []float64{0.25, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30},
 	},
 	[]string{"model", "status"},
+)
+
+var llmTokensTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "medspa",
+		Subsystem: "conversation",
+		Name:      "llm_tokens_total",
+		Help:      "Tokens used by the LLM",
+	},
+	[]string{"model", "type"}, // type: input, output, total
 )
 
 var depositDecisionTotal = prometheus.NewCounterVec(
@@ -146,13 +155,14 @@ var depositDecisionTotal = prometheus.NewCounterVec(
 		Namespace: "medspa",
 		Subsystem: "conversation",
 		Name:      "deposit_decision_total",
-		Help:      "Counts GPT-based deposit decisions by outcome",
+		Help:      "Counts LLM-based deposit decisions by outcome",
 	},
 	[]string{"model", "outcome"}, // outcome: collect, skip, error
 )
 
 func init() {
-	prometheus.MustRegister(openaiLatency)
+	prometheus.MustRegister(llmLatency)
+	prometheus.MustRegister(llmTokensTotal)
 	prometheus.MustRegister(depositDecisionTotal)
 }
 
@@ -162,14 +172,10 @@ func RegisterMetrics(reg prometheus.Registerer) {
 	if reg == nil || reg == prometheus.DefaultRegisterer {
 		return
 	}
-	reg.MustRegister(openaiLatency, depositDecisionTotal)
+	reg.MustRegister(llmLatency, llmTokensTotal, depositDecisionTotal)
 }
 
-type chatClient interface {
-	CreateChatCompletion(ctx context.Context, request openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error)
-}
-
-// DepositConfig allows callers to configure defaults used when GPT signals a deposit.
+// DepositConfig allows callers to configure defaults used when the LLM signals a deposit.
 type DepositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -177,32 +183,32 @@ type DepositConfig struct {
 	Description        string
 }
 
-type GPTOption func(*GPTService)
+type LLMOption func(*LLMService)
 
-// WithDepositConfig sets the defaults applied to GPT-produced deposit intents.
-func WithDepositConfig(cfg DepositConfig) GPTOption {
-	return func(s *GPTService) {
+// WithDepositConfig sets the defaults applied to LLM-produced deposit intents.
+func WithDepositConfig(cfg DepositConfig) LLMOption {
+	return func(s *LLMService) {
 		s.deposit = depositConfig(cfg)
 	}
 }
 
 // WithEMR configures an EMR adapter for real-time availability lookup.
-func WithEMR(emr *EMRAdapter) GPTOption {
-	return func(s *GPTService) {
+func WithEMR(emr *EMRAdapter) LLMOption {
+	return func(s *LLMService) {
 		s.emr = emr
 	}
 }
 
 // WithLeadsRepo configures the leads repository for saving scheduling preferences.
-func WithLeadsRepo(repo leads.Repository) GPTOption {
-	return func(s *GPTService) {
+func WithLeadsRepo(repo leads.Repository) LLMOption {
+	return func(s *LLMService) {
 		s.leadsRepo = repo
 	}
 }
 
 // WithClinicStore configures the clinic config store for business hours awareness.
-func WithClinicStore(store *clinic.Store) GPTOption {
-	return func(s *GPTService) {
+func WithClinicStore(store *clinic.Store) LLMOption {
+	return func(s *LLMService) {
 		s.clinicStore = store
 	}
 }
@@ -213,8 +219,8 @@ type PaymentStatusChecker interface {
 }
 
 // WithPaymentChecker configures payment status checking for context injection.
-func WithPaymentChecker(checker PaymentStatusChecker) GPTOption {
-	return func(s *GPTService) {
+func WithPaymentChecker(checker PaymentStatusChecker) LLMOption {
+	return func(s *LLMService) {
 		s.paymentChecker = checker
 	}
 }
@@ -226,9 +232,9 @@ type depositConfig struct {
 	Description        string
 }
 
-// GPTService produces conversation responses using OpenAI and stores context in Redis.
-type GPTService struct {
-	client         chatClient
+// LLMService produces conversation responses using a configured LLM and stores context in Redis.
+type LLMService struct {
+	client         LLMClient
 	rag            RAGRetriever
 	emr            *EMRAdapter
 	model          string
@@ -240,10 +246,10 @@ type GPTService struct {
 	paymentChecker PaymentStatusChecker
 }
 
-// NewGPTService returns a GPT-backed Service implementation.
-func NewGPTService(client chatClient, redisClient *redis.Client, rag RAGRetriever, model string, logger *logging.Logger, opts ...GPTOption) *GPTService {
+// NewLLMService returns an LLM-backed Service implementation.
+func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever, model string, logger *logging.Logger, opts ...LLMOption) *LLMService {
 	if client == nil {
-		panic("conversation: chat client cannot be nil")
+		panic("conversation: llm client cannot be nil")
 	}
 	if redisClient == nil {
 		panic("conversation: redis client cannot be nil")
@@ -252,15 +258,16 @@ func NewGPTService(client chatClient, redisClient *redis.Client, rag RAGRetrieve
 		logger = logging.Default()
 	}
 	if model == "" {
-		model = "gpt-4o-mini"
+		// Widely available small model; override in config for Claude Haiku 4.5, etc.
+		model = "anthropic.claude-3-haiku-20240307-v1:0"
 	}
 
-	service := &GPTService{
+	service := &LLMService{
 		client:  client,
 		rag:     rag,
 		model:   model,
 		logger:  logger,
-		history: newHistoryStore(redisClient, gptTracer),
+		history: newHistoryStore(redisClient, llmTracer),
 	}
 
 	for _, opt := range opts {
@@ -278,8 +285,8 @@ func NewGPTService(client chatClient, redisClient *redis.Client, rag RAGRetrieve
 }
 
 // StartConversation opens a new thread, generates the first assistant response, and persists context.
-func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
-	ctx, span := gptTracer.Start(ctx, "conversation.start")
+func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
+	ctx, span := llmTracer.Start(ctx, "conversation.start")
 	defer span.End()
 
 	conversationID := req.ConversationID
@@ -296,12 +303,12 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 		attribute.String("medspa.channel", string(req.Channel)),
 	)
 
-	history := []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleSystem, Content: defaultOpenAISystemPrompt},
+	history := []ChatMessage{
+		{Role: ChatRoleSystem, Content: defaultSystemPrompt},
 	}
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Intro)
-	history = append(history, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
+	history = append(history, ChatMessage{
+		Role:    ChatRoleUser,
 		Content: formatIntroMessage(req, conversationID),
 	})
 
@@ -310,8 +317,8 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 		span.RecordError(err)
 		return nil, err
 	}
-	history = append(history, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleAssistant,
+	history = append(history, ChatMessage{
+		Role:    ChatRoleAssistant,
 		Content: reply,
 	})
 
@@ -330,12 +337,12 @@ func (s *GPTService) StartConversation(ctx context.Context, req StartRequest) (*
 
 // ProcessMessage continues an existing conversation with Redis-backed context.
 // If the conversation doesn't exist, it automatically starts a new one.
-func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
+func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
 	if strings.TrimSpace(req.ConversationID) == "" {
 		return nil, errors.New("conversation: conversationID required")
 	}
 
-	ctx, span := gptTracer.Start(ctx, "conversation.message")
+	ctx, span := llmTracer.Start(ctx, "conversation.message")
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("medspa.org_id", req.OrgID),
@@ -364,8 +371,8 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	}
 
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Message)
-	history = append(history, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
+	history = append(history, ChatMessage{
+		Role:    ChatRoleUser,
 		Content: req.Message,
 	})
 
@@ -373,8 +380,8 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if err != nil {
 		return nil, err
 	}
-	history = append(history, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleAssistant,
+	history = append(history, ChatMessage{
+		Role:    ChatRoleAssistant,
 		Content: reply,
 	})
 
@@ -420,16 +427,16 @@ func (s *GPTService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 }
 
 // GetHistory retrieves the conversation history for a given conversation ID.
-func (s *GPTService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+func (s *LLMService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
 	history, err := s.history.Load(ctx, conversationID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert openai messages to our Message type, filtering out system messages
+	// Convert chat messages to our Message type, filtering out system messages.
 	var messages []Message
 	for _, msg := range history {
-		if msg.Role == openai.ChatMessageRoleSystem {
+		if msg.Role == ChatRoleSystem {
 			continue // Don't expose system prompts
 		}
 		messages = append(messages, Message{
@@ -440,45 +447,90 @@ func (s *GPTService) GetHistory(ctx context.Context, conversationID string) ([]M
 	return messages, nil
 }
 
-func (s *GPTService) generateResponse(ctx context.Context, history []openai.ChatCompletionMessage) (string, error) {
-	ctx, span := gptTracer.Start(ctx, "conversation.openai")
+func (s *LLMService) generateResponse(ctx context.Context, history []ChatMessage) (string, error) {
+	ctx, span := llmTracer.Start(ctx, "conversation.llm")
 	defer span.End()
 
 	trimmed := trimHistory(history, maxHistoryMessages)
-	req := openai.ChatCompletionRequest{
-		Model:    s.model,
-		Messages: trimmed,
+	system, messages := splitSystemAndMessages(trimmed)
+
+	req := LLMRequest{
+		Model:       s.model,
+		System:      system,
+		Messages:    messages,
+		MaxTokens:   450,
+		Temperature: 0.2,
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	start := time.Now()
-	resp, err := s.client.CreateChatCompletion(callCtx, req)
+	resp, err := s.client.Complete(callCtx, req)
 	latency := time.Since(start)
 	status := "ok"
 	if err != nil {
 		status = "error"
 	}
-	openaiLatency.WithLabelValues(s.model, status).Observe(latency.Seconds())
+	llmLatency.WithLabelValues(s.model, status).Observe(latency.Seconds())
 	if span.IsRecording() {
-		span.SetAttributes(attribute.Float64("medspa.openai.latency_ms", float64(latency.Milliseconds())))
+		span.SetAttributes(
+			attribute.Float64("medspa.llm.latency_ms", float64(latency.Milliseconds())),
+			attribute.String("medspa.llm.model", s.model),
+			attribute.Int("medspa.llm.input_tokens", int(resp.Usage.InputTokens)),
+			attribute.Int("medspa.llm.output_tokens", int(resp.Usage.OutputTokens)),
+			attribute.Int("medspa.llm.total_tokens", int(resp.Usage.TotalTokens)),
+			attribute.String("medspa.llm.stop_reason", resp.StopReason),
+		)
 	}
-	s.logger.Info("openai completion finished", "model", s.model, "latency_ms", latency.Milliseconds())
 	if err != nil {
 		span.RecordError(err)
-		return "", fmt.Errorf("conversation: openai completion failed: %w", err)
+		s.logger.Warn("llm completion failed", "model", s.model, "latency_ms", latency.Milliseconds(), "error", err)
+		return "", fmt.Errorf("conversation: llm completion failed: %w", err)
 	}
-	if len(resp.Choices) == 0 {
-		err := errors.New("conversation: openai returned no choices")
+	if resp.Usage.InputTokens > 0 {
+		llmTokensTotal.WithLabelValues(s.model, "input").Add(float64(resp.Usage.InputTokens))
+	}
+	if resp.Usage.OutputTokens > 0 {
+		llmTokensTotal.WithLabelValues(s.model, "output").Add(float64(resp.Usage.OutputTokens))
+	}
+	if resp.Usage.TotalTokens > 0 {
+		llmTokensTotal.WithLabelValues(s.model, "total").Add(float64(resp.Usage.TotalTokens))
+	}
+
+	text := strings.TrimSpace(resp.Text)
+	s.logger.Info("llm completion finished",
+		"model", s.model,
+		"latency_ms", latency.Milliseconds(),
+		"input_tokens", resp.Usage.InputTokens,
+		"output_tokens", resp.Usage.OutputTokens,
+		"total_tokens", resp.Usage.TotalTokens,
+		"stop_reason", resp.StopReason,
+	)
+	if text == "" {
+		err := errors.New("conversation: llm returned empty response")
 		span.RecordError(err)
 		return "", err
 	}
-	if span.IsRecording() {
-		span.SetAttributes(
-			attribute.Int("medspa.openai.choices", len(resp.Choices)),
-		)
+	return text, nil
+}
+
+func splitSystemAndMessages(history []ChatMessage) ([]string, []ChatMessage) {
+	if len(history) == 0 {
+		return nil, nil
 	}
-	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+	system := make([]string, 0, 4)
+	messages := make([]ChatMessage, 0, len(history))
+	for _, msg := range history {
+		if strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
+		if msg.Role == ChatRoleSystem {
+			system = append(system, msg.Content)
+			continue
+		}
+		messages = append(messages, msg)
+	}
+	return system, messages
 }
 
 func formatIntroMessage(req StartRequest, conversationID string) string {
@@ -513,7 +565,7 @@ func formatIntroMessage(req StartRequest, conversationID string) string {
 	return builder.String()
 }
 
-func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCompletionMessage, orgID, leadID, clinicID, query string) []openai.ChatCompletionMessage {
+func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, orgID, leadID, clinicID, query string) []ChatMessage {
 	// Append payment status context if available
 	depositContextInjected := false
 	if s.paymentChecker != nil && orgID != "" && leadID != "" {
@@ -535,8 +587,8 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 					case "deposit_pending":
 						content = "IMPORTANT: This patient was already sent a deposit payment link and it is still pending. Do NOT offer another deposit or claim the deposit is already received. Do NOT restart intake or offer to schedule a consultation again. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation. If they ask about payment, tell them to use the deposit link they received."
 					}
-					history = append(history, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleSystem,
+					history = append(history, ChatMessage{
+						Role:    ChatRoleSystem,
 						Content: content,
 					})
 					depositContextInjected = true
@@ -546,8 +598,8 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 				if err != nil {
 					s.logger.Warn("failed to check payment status", "org_id", orgID, "lead_id", leadID, "error", err)
 				} else if hasDeposit {
-					history = append(history, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleSystem,
+					history = append(history, ChatMessage{
+						Role:    ChatRoleSystem,
 						Content: "IMPORTANT: This patient has an existing deposit in progress (pending payment or already paid). Do NOT offer another deposit. Do NOT restart intake or offer to schedule a consultation again. Do NOT repeat any payment confirmation message. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation. If they ask about next steps: \"Our team will call you within 24 hours to confirm a specific date and time that works for you.\"",
 					})
 					depositContextInjected = true
@@ -559,8 +611,8 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 	// If the payment checker is unavailable (or hasn't persisted yet) but the conversation indicates
 	// the patient already agreed to a deposit, inject guardrails so we don't restart intake.
 	if !depositContextInjected && conversationHasDepositAgreement(history) {
-		history = append(history, openai.ChatCompletionMessage{
-			Role: openai.ChatMessageRoleSystem,
+		history = append(history, ChatMessage{
+			Role:    ChatRoleSystem,
 			Content: "IMPORTANT: This patient already agreed to the deposit and is in the booking flow. Do NOT restart intake or offer to schedule a consultation again. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation.",
 		})
 	}
@@ -572,8 +624,8 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 			s.logger.Warn("failed to fetch clinic config", "org_id", orgID, "error", err)
 		} else if cfg != nil {
 			hoursContext := cfg.BusinessHoursContext(time.Now())
-			history = append(history, openai.ChatCompletionMessage{
-				Role:    openai.ChatMessageRoleSystem,
+			history = append(history, ChatMessage{
+				Role:    ChatRoleSystem,
 				Content: hoursContext,
 			})
 		}
@@ -590,8 +642,8 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 			for i, snippet := range snippets {
 				builder.WriteString(fmt.Sprintf("%d. %s\n", i+1, snippet))
 			}
-			history = append(history, openai.ChatCompletionMessage{
-				Role:    openai.ChatMessageRoleSystem,
+			history = append(history, ChatMessage{
+				Role:    ChatRoleSystem,
 				Content: builder.String(),
 			})
 		}
@@ -603,9 +655,9 @@ func (s *GPTService) appendContext(ctx context.Context, history []openai.ChatCom
 		if err != nil {
 			s.logger.Warn("failed to fetch EMR availability", "error", err)
 		} else if len(slots) > 0 {
-			availabilityContext := FormatSlotsForGPT(slots, 5)
-			history = append(history, openai.ChatCompletionMessage{
-				Role:    openai.ChatMessageRoleSystem,
+			availabilityContext := FormatSlotsForLLM(slots, 5)
+			history = append(history, ChatMessage{
+				Role:    ChatRoleSystem,
 				Content: "Real-time appointment availability from clinic calendar:\n" + availabilityContext,
 			})
 		}
@@ -626,7 +678,7 @@ func containsBookingIntent(msg string) bool {
 	return false
 }
 
-func trimHistory(history []openai.ChatCompletionMessage, limit int) []openai.ChatCompletionMessage {
+func trimHistory(history []ChatMessage, limit int) []ChatMessage {
 	if limit <= 0 || len(history) <= limit {
 		return history
 	}
@@ -634,9 +686,9 @@ func trimHistory(history []openai.ChatCompletionMessage, limit int) []openai.Cha
 		return history
 	}
 
-	var result []openai.ChatCompletionMessage
+	var result []ChatMessage
 	system := history[0]
-	if system.Role == openai.ChatMessageRoleSystem {
+	if system.Role == ChatRoleSystem {
 		result = append(result, system)
 		remaining := limit - 1
 		if remaining <= 0 {
@@ -652,8 +704,8 @@ func trimHistory(history []openai.ChatCompletionMessage, limit int) []openai.Cha
 	return history[len(history)-limit:]
 }
 
-func (s *GPTService) extractDepositIntent(ctx context.Context, history []openai.ChatCompletionMessage) (*DepositIntent, error) {
-	ctx, span := gptTracer.Start(ctx, "conversation.deposit_intent")
+func (s *LLMService) extractDepositIntent(ctx context.Context, history []ChatMessage) (*DepositIntent, error) {
+	ctx, span := llmTracer.Start(ctx, "conversation.deposit_intent")
 	defer span.End()
 
 	outcome := "skip"
@@ -664,7 +716,7 @@ func (s *GPTService) extractDepositIntent(ctx context.Context, history []openai.
 
 	// Focus on the most recent turns to keep the prompt small.
 	transcript := summarizeHistory(history, 8)
-	prompt := fmt.Sprintf(`You are a decision agent for MedSpa AI. Analyze this conversation and decide if we should send a payment link to collect a deposit.
+	systemPrompt := fmt.Sprintf(`You are a decision agent for MedSpa AI. Analyze a conversation and decide if we should send a payment link to collect a deposit.
 
 CRITICAL: Return ONLY a JSON object, nothing else. No markdown, no code fences, no explanation.
 
@@ -680,37 +732,57 @@ Rules:
   - The assistant just asked "Would you like to proceed?" - WAIT for their response
 - Default amount: %d cents
 - For success_url and cancel_url: use empty strings
-
-Conversation:
-%s`, s.deposit.DefaultAmountCents, transcript)
-
-	req := openai.ChatCompletionRequest{
-		Model: s.model,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: prompt},
-		},
-		Temperature: 0,
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
-	}
+`, s.deposit.DefaultAmountCents)
 
 	callCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 
-	resp, err := s.client.CreateChatCompletion(callCtx, req)
+	start := time.Now()
+	resp, err := s.client.Complete(callCtx, LLMRequest{
+		Model:  s.model,
+		System: []string{systemPrompt},
+		Messages: []ChatMessage{
+			{Role: ChatRoleUser, Content: "Conversation:\n" + transcript},
+		},
+		MaxTokens:   256,
+		Temperature: 0,
+	})
+	latency := time.Since(start)
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	llmLatency.WithLabelValues(s.model, status).Observe(latency.Seconds())
+	if resp.Usage.InputTokens > 0 {
+		llmTokensTotal.WithLabelValues(s.model, "input").Add(float64(resp.Usage.InputTokens))
+	}
+	if resp.Usage.OutputTokens > 0 {
+		llmTokensTotal.WithLabelValues(s.model, "output").Add(float64(resp.Usage.OutputTokens))
+	}
+	if resp.Usage.TotalTokens > 0 {
+		llmTokensTotal.WithLabelValues(s.model, "total").Add(float64(resp.Usage.TotalTokens))
+	}
+	if span.IsRecording() {
+		span.SetAttributes(
+			attribute.String("medspa.llm.purpose", "deposit_classifier"),
+			attribute.Float64("medspa.llm.latency_ms", float64(latency.Milliseconds())),
+			attribute.Int("medspa.llm.input_tokens", int(resp.Usage.InputTokens)),
+			attribute.Int("medspa.llm.output_tokens", int(resp.Usage.OutputTokens)),
+			attribute.Int("medspa.llm.total_tokens", int(resp.Usage.TotalTokens)),
+			attribute.String("medspa.llm.stop_reason", resp.StopReason),
+		)
+	}
 	if err != nil {
 		outcome = "error"
 		s.maybeLogDepositClassifierError(raw, err)
 		return nil, fmt.Errorf("conversation: deposit classification failed: %w", err)
 	}
-	if len(resp.Choices) == 0 {
-		outcome = "error"
-		s.maybeLogDepositClassifierError(raw, errors.New("no choices"))
-		return nil, errors.New("conversation: deposit classification returned no choices")
-	}
 
-	raw = strings.TrimSpace(resp.Choices[0].Message.Content)
+	raw = strings.TrimSpace(resp.Text)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
 	var decision struct {
 		Collect     bool   `json:"collect"`
 		AmountCents int32  `json:"amount_cents"`
@@ -718,7 +790,15 @@ Conversation:
 		CancelURL   string `json:"cancel_url"`
 		Description string `json:"description"`
 	}
-	if err := json.Unmarshal([]byte(raw), &decision); err != nil {
+	jsonText := raw
+	if !strings.HasPrefix(jsonText, "{") {
+		start := strings.Index(jsonText, "{")
+		end := strings.LastIndex(jsonText, "}")
+		if start >= 0 && end > start {
+			jsonText = jsonText[start : end+1]
+		}
+	}
+	if err := json.Unmarshal([]byte(jsonText), &decision); err != nil {
 		outcome = "error"
 		s.maybeLogDepositClassifierError(raw, err)
 		return nil, fmt.Errorf("conversation: deposit classification parse: %w", err)
@@ -755,13 +835,13 @@ Conversation:
 	return intent, nil
 }
 
-func summarizeHistory(history []openai.ChatCompletionMessage, limit int) string {
+func summarizeHistory(history []ChatMessage, limit int) string {
 	if limit > 0 && len(history) > limit {
 		history = history[len(history)-limit:]
 	}
 	var builder strings.Builder
 	for _, msg := range history {
-		builder.WriteString(string(msg.Role))
+		builder.WriteString(msg.Role)
 		builder.WriteString(": ")
 		builder.WriteString(msg.Content)
 		builder.WriteString("\n")
@@ -769,7 +849,7 @@ func summarizeHistory(history []openai.ChatCompletionMessage, limit int) string 
 	return builder.String()
 }
 
-func (s *GPTService) maybeLogDepositClassifierError(raw string, err error) {
+func (s *LLMService) maybeLogDepositClassifierError(raw string, err error) {
 	if s == nil || s.logger == nil || err == nil {
 		return
 	}
@@ -787,7 +867,7 @@ func (s *GPTService) maybeLogDepositClassifierError(raw string, err error) {
 	)
 }
 
-func (s *GPTService) shouldSampleDepositLog() bool {
+func (s *LLMService) shouldSampleDepositLog() bool {
 	// 10% sampling to avoid noisy logs.
 	return time.Now().UnixNano()%10 == 0
 }
@@ -797,7 +877,7 @@ func (s *GPTService) shouldSampleDepositLog() bool {
 // It supports two cases:
 // 1) The user explicitly mentions deposit/payment AND agrees.
 // 2) The user gives a generic affirmative ("yes", "sure", etc) immediately after the assistant asked for a deposit.
-func looksLikeDepositAgreement(message string, history []openai.ChatCompletionMessage) bool {
+func looksLikeDepositAgreement(message string, history []ChatMessage) bool {
 	msg := strings.ToLower(strings.TrimSpace(message))
 	if msg == "" {
 		return false
@@ -853,7 +933,7 @@ func looksLikeDepositAgreement(message string, history []openai.ChatCompletionMe
 
 // assistantAskedForDeposit returns true if the most recent assistant message (before the current user turn)
 // contains deposit-related language.
-func assistantAskedForDeposit(history []openai.ChatCompletionMessage) bool {
+func assistantAskedForDeposit(history []ChatMessage) bool {
 	if len(history) < 3 {
 		return false
 	}
@@ -865,7 +945,7 @@ func assistantAskedForDeposit(history []openai.ChatCompletionMessage) bool {
 	}
 
 	for i := len(prior) - 1; i >= 0; i-- {
-		if prior[i].Role != openai.ChatMessageRoleAssistant {
+		if prior[i].Role != ChatRoleAssistant {
 			continue
 		}
 		text := strings.ToLower(prior[i].Content)
@@ -880,9 +960,9 @@ func assistantAskedForDeposit(history []openai.ChatCompletionMessage) bool {
 	return false
 }
 
-func conversationHasDepositAgreement(history []openai.ChatCompletionMessage) bool {
+func conversationHasDepositAgreement(history []ChatMessage) bool {
 	for i := 0; i < len(history); i++ {
-		if history[i].Role != openai.ChatMessageRoleAssistant {
+		if history[i].Role != ChatRoleAssistant {
 			continue
 		}
 		assistantText := strings.ToLower(history[i].Content)
@@ -894,9 +974,9 @@ func conversationHasDepositAgreement(history []openai.ChatCompletionMessage) boo
 		// deposit as agreed even if the payment record hasn't persisted yet.
 		for j := i + 1; j < len(history); j++ {
 			switch history[j].Role {
-			case openai.ChatMessageRoleSystem:
+			case ChatRoleSystem:
 				continue
-			case openai.ChatMessageRoleUser:
+			case ChatRoleUser:
 				msg := strings.ToLower(strings.TrimSpace(history[j].Content))
 				if msg == "" {
 					break
@@ -919,7 +999,7 @@ func conversationHasDepositAgreement(history []openai.ChatCompletionMessage) boo
 }
 
 // extractAndSavePreferences extracts scheduling preferences from conversation history and saves them
-func (s *GPTService) extractAndSavePreferences(ctx context.Context, leadID string, history []openai.ChatCompletionMessage) error {
+func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID string, history []ChatMessage) error {
 	prefs := leads.SchedulingPreferences{}
 	hasPreferences := false
 
@@ -930,7 +1010,7 @@ func (s *GPTService) extractAndSavePreferences(ctx context.Context, leadID strin
 	userMessages := ""
 	userMessagesOriginal := "" // Keep original case for name extraction
 	for _, msg := range history {
-		if msg.Role == openai.ChatMessageRoleUser {
+		if msg.Role == ChatRoleUser {
 			userMessages += strings.ToLower(msg.Content) + " "
 			userMessagesOriginal += msg.Content + " "
 		}
@@ -962,9 +1042,9 @@ func (s *GPTService) extractAndSavePreferences(ctx context.Context, leadID strin
 	// Also check for standalone name response (single capitalized word after AI asked for name)
 	if prefs.Name == "" {
 		for i, msg := range history {
-			if msg.Role == openai.ChatMessageRoleUser {
+			if msg.Role == ChatRoleUser {
 				// Check if previous assistant message asked for name
-				if i > 0 && history[i-1].Role == openai.ChatMessageRoleAssistant {
+				if i > 0 && history[i-1].Role == ChatRoleAssistant {
 					prevMsg := strings.ToLower(history[i-1].Content)
 					if strings.Contains(prevMsg, "name") && (strings.Contains(prevMsg, "may i") || strings.Contains(prevMsg, "what") || strings.Contains(prevMsg, "your")) {
 						// This user message might be just their name

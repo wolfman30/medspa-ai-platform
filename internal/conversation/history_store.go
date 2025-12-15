@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	openai "github.com/sashabaranov/go-openai"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -32,7 +31,7 @@ func newHistoryStore(redis *redis.Client, tracer trace.Tracer) *historyStore {
 	}
 }
 
-func (s *historyStore) Save(ctx context.Context, conversationID string, history []openai.ChatCompletionMessage) error {
+func (s *historyStore) Save(ctx context.Context, conversationID string, history []ChatMessage) error {
 	ctx, span := s.tracer.Start(ctx, "conversation.save_history")
 	defer span.End()
 
@@ -48,7 +47,7 @@ func (s *historyStore) Save(ctx context.Context, conversationID string, history 
 	return nil
 }
 
-func (s *historyStore) Load(ctx context.Context, conversationID string) ([]openai.ChatCompletionMessage, error) {
+func (s *historyStore) Load(ctx context.Context, conversationID string) ([]ChatMessage, error) {
 	ctx, span := s.tracer.Start(ctx, "conversation.load_history")
 	defer span.End()
 
@@ -61,7 +60,7 @@ func (s *historyStore) Load(ctx context.Context, conversationID string) ([]opena
 		return nil, fmt.Errorf("conversation: failed to load history: %w", err)
 	}
 
-	var history []openai.ChatCompletionMessage
+	var history []ChatMessage
 	if err := json.Unmarshal(data, &history); err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("conversation: failed to decode history: %w", err)
