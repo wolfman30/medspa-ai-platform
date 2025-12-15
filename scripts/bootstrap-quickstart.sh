@@ -18,7 +18,8 @@ if [ ! -f .env ]; then
     cp .env.bootstrap.example .env
     echo ""
     echo "📝 IMPORTANT: Edit .env and add your API keys:"
-    echo "   - OPENAI_API_KEY (required)"
+    echo "   - BEDROCK_MODEL_ID (required)"
+    echo "   - AWS_REGION + AWS credentials (required for Bedrock)"
     echo "   - TELNYX_API_KEY (required for SMS)"
     echo "   - SQUARE_ACCESS_TOKEN (required for payments)"
     echo ""
@@ -28,9 +29,16 @@ fi
 
 # Validate critical environment variables
 source .env
-if [ -z "$OPENAI_API_KEY" ] || [ "$OPENAI_API_KEY" = "sk-your-openai-key-here" ]; then
-    echo "❌ OPENAI_API_KEY not set in .env"
+if [ -z "$BEDROCK_MODEL_ID" ]; then
+    echo "❌ BEDROCK_MODEL_ID not set in .env"
     exit 1
+fi
+if [ -z "$AWS_REGION" ]; then
+    echo "❌ AWS_REGION not set in .env"
+    exit 1
+fi
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    echo "WARNING: AWS credentials not set in .env; Bedrock calls may fail inside Docker containers."
 fi
 
 echo "✅ Environment configured"

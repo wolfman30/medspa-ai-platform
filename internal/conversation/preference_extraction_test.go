@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 )
 
@@ -43,7 +42,7 @@ func (m *mockLeadsRepo) ListByOrg(ctx context.Context, orgID string, filter lead
 func TestExtractAndSavePreferences(t *testing.T) {
 	tests := []struct {
 		name          string
-		conversation  []openai.ChatCompletionMessage
+		conversation  []ChatMessage
 		expectService string
 		expectDays    string
 		expectTimes   string
@@ -51,10 +50,10 @@ func TestExtractAndSavePreferences(t *testing.T) {
 	}{
 		{
 			name: "extracts botox and weekday afternoons",
-			conversation: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleUser, Content: "I want to book botox"},
-				{Role: openai.ChatMessageRoleAssistant, Content: "Great! What days work best?"},
-				{Role: openai.ChatMessageRoleUser, Content: "Weekdays in the afternoon"},
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I want to book botox"},
+				{Role: ChatRoleAssistant, Content: "Great! What days work best?"},
+				{Role: ChatRoleUser, Content: "Weekdays in the afternoon"},
 			},
 			expectService: "botox",
 			expectDays:    "weekdays",
@@ -63,10 +62,10 @@ func TestExtractAndSavePreferences(t *testing.T) {
 		},
 		{
 			name: "extracts filler and weekend mornings",
-			conversation: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleUser, Content: "I'd like to schedule an appointment for dermal filler"},
-				{Role: openai.ChatMessageRoleAssistant, Content: "Perfect! When works for you?"},
-				{Role: openai.ChatMessageRoleUser, Content: "Weekend mornings would be great"},
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I'd like to schedule an appointment for dermal filler"},
+				{Role: ChatRoleAssistant, Content: "Perfect! When works for you?"},
+				{Role: ChatRoleUser, Content: "Weekend mornings would be great"},
 			},
 			expectService: "filler",
 			expectDays:    "weekends",
@@ -75,9 +74,9 @@ func TestExtractAndSavePreferences(t *testing.T) {
 		},
 		{
 			name: "no preferences mentioned",
-			conversation: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleUser, Content: "What are your hours?"},
-				{Role: openai.ChatMessageRoleAssistant, Content: "We're open 9-5 weekdays"},
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "What are your hours?"},
+				{Role: ChatRoleAssistant, Content: "We're open 9-5 weekdays"},
 			},
 			expectSaved: false,
 		},
@@ -86,7 +85,7 @@ func TestExtractAndSavePreferences(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockLeadsRepo{}
-			svc := &GPTService{
+			svc := &LLMService{
 				leadsRepo: mock,
 			}
 

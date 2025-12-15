@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/redis/go-redis/v9"
-	openai "github.com/sashabaranov/go-openai"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -16,7 +17,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// BuildConversationService wires Redis-backed GPT conversation services from config.
+// BuildConversationService wires Redis-backed LLM conversation services from config.
 func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsRepo leads.Repository, paymentChecker conversation.PaymentStatusChecker, logger *logging.Logger) (conversation.Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("bootstrap: config is required")
@@ -28,10 +29,16 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		ctx = context.Background()
 	}
 
-	if cfg.OpenAIAPIKey == "" {
-		logger.Warn("no OpenAI API key configured; using stub conversation service")
+	if cfg.BedrockModelID == "" {
+		logger.Warn("no Bedrock model configured; using stub conversation service")
 		return conversation.NewStubService(), nil
 	}
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: load aws config: %w", err)
+	}
+	bedrockClient := bedrockruntime.NewFromConfig(awsCfg)
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisAddr,
@@ -42,23 +49,18 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		logger.Warn("failed to seed default knowledge", "error", err)
 	}
 
-	openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
-	if cfg.OpenAIBaseURL != "" {
-		openaiCfg.BaseURL = cfg.OpenAIBaseURL
-	}
-	openaiClient := openai.NewClientWithConfig(openaiCfg)
-
 	var rag conversation.RAGRetriever
-	if cfg.OpenAIEmbeddingModel != "" {
-		ragStore := conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
+	if cfg.BedrockEmbeddingModelID != "" {
+		embedder := conversation.NewBedrockEmbeddingClient(bedrockClient)
+		ragStore := conversation.NewMemoryRAGStore(embedder, cfg.BedrockEmbeddingModelID, logger)
 		if err := hydrateRAGFromRedis(ctx, knowledgeRepo, ragStore, logger); err != nil {
 			logger.Warn("failed to hydrate RAG store", "error", err)
 		}
 		rag = ragStore
 	}
 
-	// Build GPT service options
-	opts := []conversation.GPTOption{
+	// Build LLM service options
+	opts := []conversation.LLMOption{
 		conversation.WithDepositConfig(conversation.DepositConfig{
 			DefaultAmountCents: int32(cfg.DepositAmountCents),
 			SuccessURL:         cfg.SquareSuccessURL,
@@ -90,12 +92,12 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		logger.Info("payment checker wired into conversation service")
 	}
 
-	logger.Info("using GPT conversation service", "model", cfg.OpenAIModel, "redis", cfg.RedisAddr)
-	return conversation.NewGPTService(
-		openaiClient,
+	logger.Info("using LLM conversation service", "model", cfg.BedrockModelID, "redis", cfg.RedisAddr)
+	return conversation.NewLLMService(
+		conversation.NewBedrockLLMClient(bedrockClient),
 		redisClient,
 		rag,
-		cfg.OpenAIModel,
+		cfg.BedrockModelID,
 		logger,
 		opts...,
 	), nil

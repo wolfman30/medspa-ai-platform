@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,7 +20,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
@@ -172,15 +173,17 @@ func main() {
 
 	var knowledgeRepo conversation.KnowledgeRepository
 	var ragIngestor conversation.RAGIngestor
-	if redisClient != nil && cfg.OpenAIEmbeddingModel != "" && cfg.OpenAIAPIKey != "" {
+	if redisClient != nil && cfg.BedrockEmbeddingModelID != "" {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
 
-		openaiCfg := openai.DefaultConfig(cfg.OpenAIAPIKey)
-		if cfg.OpenAIBaseURL != "" {
-			openaiCfg.BaseURL = cfg.OpenAIBaseURL
+		awsCfg, err := awsconfig.LoadDefaultConfig(appCtx, awsconfig.WithRegion(cfg.AWSRegion))
+		if err != nil {
+			logger.Warn("failed to configure Bedrock embedding client; RAG disabled", "error", err)
+		} else {
+			bedrockClient := bedrockruntime.NewFromConfig(awsCfg)
+			embedder := conversation.NewBedrockEmbeddingClient(bedrockClient)
+			ragIngestor = conversation.NewMemoryRAGStore(embedder, cfg.BedrockEmbeddingModelID, logger)
 		}
-		openaiClient := openai.NewClientWithConfig(openaiCfg)
-		ragIngestor = conversation.NewMemoryRAGStore(openaiClient, cfg.OpenAIEmbeddingModel, logger)
 	}
 	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, ragIngestor, logger)
 

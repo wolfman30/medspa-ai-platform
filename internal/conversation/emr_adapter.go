@@ -22,7 +22,7 @@ type EMRClient interface {
 	CreateAppointment(ctx context.Context, req emr.AppointmentRequest) (*emr.Appointment, error)
 }
 
-// AvailabilitySlot is a simplified slot representation for GPT context.
+// AvailabilitySlot is a simplified slot representation for LLM context.
 type AvailabilitySlot struct {
 	ID           string
 	ProviderName string
@@ -87,8 +87,8 @@ func (a *EMRAdapter) GetUpcomingAvailability(ctx context.Context, days int, serv
 	return result, nil
 }
 
-// FormatSlotsForGPT converts slots to a human-readable string for GPT context.
-func FormatSlotsForGPT(slots []AvailabilitySlot, maxSlots int) string {
+// FormatSlotsForLLM converts slots to a human-readable string for LLM context.
+func FormatSlotsForLLM(slots []AvailabilitySlot, maxSlots int) string {
 	if len(slots) == 0 {
 		return "No available appointments found for the requested timeframe."
 	}

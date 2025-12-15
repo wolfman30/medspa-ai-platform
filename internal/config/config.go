@@ -52,10 +52,8 @@ type Config struct {
 	AWSEndpointOverride      string
 	ConversationQueueURL     string
 	ConversationJobsTable    string
-	OpenAIAPIKey             string
-	OpenAIModel              string
-	OpenAIBaseURL            string
-	OpenAIEmbeddingModel     string
+	BedrockModelID           string
+	BedrockEmbeddingModelID  string
 	RedisAddr                string
 	RedisPassword            string
 
@@ -116,10 +114,8 @@ func Load() *Config {
 		AWSEndpointOverride:      getEnv("AWS_ENDPOINT_OVERRIDE", "http://localhost:4566"),
 		ConversationQueueURL:     getEnv("CONVERSATION_QUEUE_URL", "http://localhost:4566/000000000000/conversation-events"),
 		ConversationJobsTable:    getEnv("CONVERSATION_JOBS_TABLE", "conversation_jobs"),
-		OpenAIAPIKey:             getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:              getEnv("OPENAI_MODEL", "gpt-4o-mini"),
-		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", ""),
-		OpenAIEmbeddingModel:     getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+		BedrockModelID:           getEnv("BEDROCK_MODEL_ID", ""),
+		BedrockEmbeddingModelID:  getEnv("BEDROCK_EMBEDDING_MODEL_ID", ""),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:            getEnv("REDIS_PASSWORD", ""),
 
