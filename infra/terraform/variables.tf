@@ -52,3 +52,45 @@ variable "api_lambda_timeout" {
   type        = number
   default     = 30
 }
+
+variable "api_image_tag" {
+  description = "ECR image tag for the API image"
+  type        = string
+  default     = "latest"
+}
+
+variable "api_task_cpu" {
+  description = "ECS task CPU units for the API service"
+  type        = number
+  default     = 512
+}
+
+variable "api_task_memory" {
+  description = "ECS task memory (MiB) for the API service"
+  type        = number
+  default     = 1024
+}
+
+variable "api_desired_count" {
+  description = "Desired number of API tasks"
+  type        = number
+  default     = 1
+}
+
+variable "api_certificate_arn" {
+  description = "Optional ACM certificate ARN for ALB HTTPS"
+  type        = string
+  default     = ""
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache Redis node type"
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "redis_num_cache_clusters" {
+  description = "Number of cache clusters (1 = single node, 2+ enables replicas/failover)"
+  type        = number
+  default     = 1
+}

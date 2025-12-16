@@ -1,6 +1,32 @@
+locals {
+  name_prefix = "medspa-${var.environment}"
+}
+
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/${local.name_prefix}-voice"
+  retention_in_days = 14
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-voice-logs"
+  })
+}
+
+resource "aws_ecr_repository" "voice" {
+  name                 = "${local.name_prefix}-voice-lambda"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-voice-ecr"
+  })
+}
+
 resource "aws_security_group" "lambda" {
-  name        = "medspa-${var.environment}-lambda-sg"
-  description = "Security group for Lambda function"
+  name        = "${local.name_prefix}-voice-lambda-sg"
+  description = "Security group for voice webhook Lambda"
   vpc_id      = var.vpc_id
 
   egress {
@@ -11,13 +37,13 @@ resource "aws_security_group" "lambda" {
     description = "Allow all outbound"
   }
 
-  tags = {
-    Name = "medspa-${var.environment}-lambda-sg"
-  }
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-voice-lambda-sg"
+  })
 }
 
 resource "aws_iam_role" "lambda" {
-  name = "medspa-${var.environment}-lambda-role"
+  name = "${local.name_prefix}-voice-lambda-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -32,9 +58,14 @@ resource "aws_iam_role" "lambda" {
     ]
   })
 
-  tags = {
-    Name = "medspa-${var.environment}-lambda-role"
-  }
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-voice-lambda-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
@@ -42,30 +73,11 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy" "lambda_secrets" {
-  name = "medspa-${var.environment}-lambda-secrets-policy"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = var.secret_arn
-      }
-    ]
-  })
-}
-
-resource "aws_lambda_function" "api" {
-  filename      = "lambda_placeholder.zip"
-  function_name = "medspa-${var.environment}-api"
+resource "aws_lambda_function" "voice" {
+  function_name = "${local.name_prefix}-voice"
   role          = aws_iam_role.lambda.arn
-  handler       = "bootstrap"
-  runtime       = "provided.al2023"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.voice.repository_url}:${var.image_tag}"
 
   memory_size = var.memory_size
   timeout     = var.timeout
@@ -77,27 +89,15 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      ENV        = var.environment
-      SECRET_ARN = var.secret_arn
+      ENV               = var.environment
+      UPSTREAM_BASE_URL = var.upstream_base_url
+      UPSTREAM_TIMEOUT  = "${var.timeout}s"
     }
   }
 
-  tags = {
-    Name = "medspa-${var.environment}-api"
-  }
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-voice"
+  })
 
-  lifecycle {
-    ignore_changes = [filename, source_code_hash]
-  }
-}
-
-# Create placeholder zip file
-data "archive_file" "lambda_placeholder" {
-  type        = "zip"
-  output_path = "${path.module}/lambda_placeholder.zip"
-
-  source {
-    content  = "placeholder"
-    filename = "bootstrap"
-  }
+  depends_on = [aws_cloudwatch_log_group.lambda]
 }

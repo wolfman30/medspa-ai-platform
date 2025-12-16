@@ -22,6 +22,12 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -ldflags="-s -w" -o /bin/conversation-worker ./cmd/conversation-worker
 
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -ldflags="-s -w" -o /bin/migrate ./cmd/migrate
+
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -ldflags="-s -w" -o /bin/voice-lambda ./cmd/voice-lambda
+
 ##
 ## Runtime stage
 ## 
@@ -44,3 +50,15 @@ FROM gcr.io/distroless/base-debian12 AS conversation-worker
 COPY --from=builder /bin/conversation-worker /bin/conversation-worker
 
 ENTRYPOINT ["/bin/conversation-worker"]
+
+FROM gcr.io/distroless/base-debian12 AS migrate
+
+COPY --from=builder /bin/migrate /bin/migrate
+
+ENTRYPOINT ["/bin/migrate"]
+
+FROM public.ecr.aws/lambda/provided:al2023 AS voice-lambda
+
+COPY --from=builder /bin/voice-lambda /var/task/bootstrap
+
+CMD ["bootstrap"]

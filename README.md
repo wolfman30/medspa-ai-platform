@@ -80,9 +80,11 @@ This starts:
 
 Shut everything down with `docker compose down -v` (or `task docker-down`). When using LocalStack, point AWS SDK clients at `AWS_ENDPOINT_URL=http://localstack:4566` and use the dummy credentials already present in `.env.example`.
 
-### Bootstrap Deployment (Lightsail + Neon)
+### Bootstrap Deployment (Lightsail + Neon) (deprecated)
 
-For the low-cost deployment described in the bootstrap plan, use `docker-compose.bootstrap.yml` and follow `docs/BOOTSTRAP_DEPLOYMENT.md`. This runs the API and workers in a single container with `USE_MEMORY_QUEUE=true`, connects to Neon Postgres, and talks to a Redis instance installed on the host.
+This path is retained for historical reference only. New deployments should use ECS Fargate (Spot) + Lambda voice ingress + ElastiCache Redis:
+
+- `docs/DEPLOYMENT_ECS.md`
 
 ### Available Tasks
 

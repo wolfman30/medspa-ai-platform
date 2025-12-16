@@ -3,6 +3,11 @@ variable "environment" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "AWS region (used for log configuration)"
+  type        = string
+}
+
 variable "vpc_id" {
   description = "VPC ID"
   type        = string
@@ -23,7 +28,19 @@ variable "timeout" {
   type        = number
 }
 
-variable "secret_arn" {
-  description = "ARN of secrets manager secret"
+variable "image_tag" {
+  description = "ECR image tag for the voice lambda image"
   type        = string
+  default     = "latest"
+}
+
+variable "upstream_base_url" {
+  description = "Base URL for the upstream API (ALB) that receives forwarded webhooks"
+  type        = string
+}
+
+variable "tags" {
+  description = "Additional tags to apply to resources"
+  type        = map(string)
+  default     = {}
 }
