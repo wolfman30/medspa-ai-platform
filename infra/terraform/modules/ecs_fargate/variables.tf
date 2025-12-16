@@ -64,6 +64,18 @@ variable "desired_count" {
   default     = 1
 }
 
+variable "deployment_minimum_healthy_percent" {
+  description = "Minimum healthy percent for ECS rolling deployments (lower in non-prod to reduce capacity requirements)"
+  type        = number
+  default     = 100
+}
+
+variable "deployment_maximum_percent" {
+  description = "Maximum percent for ECS rolling deployments"
+  type        = number
+  default     = 200
+}
+
 variable "assign_public_ip" {
   description = "Assign public IPs to tasks (generally false when using private subnets + NAT)"
   type        = bool

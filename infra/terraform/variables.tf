@@ -101,6 +101,18 @@ variable "codedeploy_termination_wait_time_minutes" {
   default     = 5
 }
 
+variable "deployment_minimum_healthy_percent" {
+  description = "Minimum healthy percent for ECS rolling deployments (used when enable_blue_green=false)"
+  type        = number
+  default     = 100
+}
+
+variable "deployment_maximum_percent" {
+  description = "Maximum percent for ECS rolling deployments (used when enable_blue_green=false)"
+  type        = number
+  default     = 200
+}
+
 variable "redis_node_type" {
   description = "ElastiCache Redis node type"
   type        = string

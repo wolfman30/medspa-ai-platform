@@ -55,6 +55,8 @@ module "ecs_fargate" {
   enable_blue_green                        = var.enable_blue_green
   codedeploy_deployment_config_name        = var.codedeploy_deployment_config_name
   codedeploy_termination_wait_time_minutes = var.codedeploy_termination_wait_time_minutes
+  deployment_minimum_healthy_percent       = var.deployment_minimum_healthy_percent
+  deployment_maximum_percent               = var.deployment_maximum_percent
 
   environment_variables = {
     LOG_LEVEL        = "info"
