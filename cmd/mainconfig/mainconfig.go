@@ -2,6 +2,7 @@ package mainconfig
 
 import (
 	"context"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -14,11 +15,11 @@ import (
 // LoadAWSConfig centralizes AWS SDK initialization so both binaries share the
 // same LocalStack/production wiring.
 func LoadAWSConfig(ctx context.Context, cfg *appconfig.Config) (aws.Config, error) {
-	loaders := []func(*config.LoadOptions) error{
-		config.WithRegion(cfg.AWSRegion),
-		config.WithCredentialsProvider(
+	loaders := []func(*config.LoadOptions) error{config.WithRegion(cfg.AWSRegion)}
+	if strings.TrimSpace(cfg.AWSAccessKeyID) != "" && strings.TrimSpace(cfg.AWSSecretAccessKey) != "" {
+		loaders = append(loaders, config.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AWSAccessKeyID, cfg.AWSSecretAccessKey, ""),
-		),
+		))
 	}
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, loaders...)
