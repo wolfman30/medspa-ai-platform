@@ -1,7 +1,7 @@
 resource "aws_apigatewayv2_api" "main" {
-  name          = "medspa-${var.environment}-api"
+  name          = "medspa-${var.environment}-voice"
   protocol_type = "HTTP"
-  description   = "API Gateway for medspa-ai-platform ${var.environment}"
+  description   = "Voice webhook gateway (Twilio/Telnyx) for ${var.environment}"
 
   cors_configuration {
     allow_origins = ["*"]
@@ -11,7 +11,7 @@ resource "aws_apigatewayv2_api" "main" {
   }
 
   tags = {
-    Name = "medspa-${var.environment}-api"
+    Name = "medspa-${var.environment}-voice"
   }
 }
 
@@ -55,11 +55,11 @@ resource "aws_apigatewayv2_stage" "default" {
 }
 
 resource "aws_cloudwatch_log_group" "api_gateway" {
-  name              = "/aws/apigateway/medspa-${var.environment}"
+  name              = "/aws/apigateway/medspa-${var.environment}-voice"
   retention_in_days = 7
 
   tags = {
-    Name = "medspa-${var.environment}-api-logs"
+    Name = "medspa-${var.environment}-voice-logs"
   }
 }
 

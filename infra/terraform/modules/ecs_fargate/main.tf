@@ -1,0 +1,359 @@
+locals {
+  name_prefix = "medspa-${var.environment}"
+}
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/ecs/${local.name_prefix}-api"
+  retention_in_days = 14
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-api-logs"
+  })
+}
+
+resource "aws_ecr_repository" "api" {
+  name                 = "${local.name_prefix}-api"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-api-ecr"
+  })
+}
+
+resource "aws_ecs_cluster" "main" {
+  name = "${local.name_prefix}-cluster"
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-cluster"
+  })
+}
+
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name = aws_ecs_cluster.main.name
+
+  capacity_providers = var.enable_fargate_fallback ? ["FARGATE", "FARGATE_SPOT"] : ["FARGATE_SPOT"]
+
+  default_capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = var.spot_weight
+    base              = 0
+  }
+
+  dynamic "default_capacity_provider_strategy" {
+    for_each = var.enable_fargate_fallback ? [1] : []
+    content {
+      capacity_provider = "FARGATE"
+      weight            = var.fargate_weight
+      base              = var.fargate_base
+    }
+  }
+}
+
+resource "aws_security_group" "alb" {
+  name        = "${local.name_prefix}-alb-sg"
+  description = "ALB security group"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP from internet"
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS from internet"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-alb-sg"
+  })
+}
+
+resource "aws_security_group" "tasks" {
+  name        = "${local.name_prefix}-tasks-sg"
+  description = "ECS tasks security group"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+    description     = "Container port from ALB"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-tasks-sg"
+  })
+}
+
+resource "aws_lb" "api" {
+  name               = "${local.name_prefix}-alb"
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = var.public_subnet_ids
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-alb"
+  })
+}
+
+resource "aws_lb_target_group" "api" {
+  name        = "${local.name_prefix}-tg"
+  port        = var.container_port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = var.health_check_path
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-tg"
+  })
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.api.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  dynamic "default_action" {
+    for_each = var.certificate_arn != "" ? [1] : []
+    content {
+      type = "redirect"
+
+      redirect {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+  }
+
+  dynamic "default_action" {
+    for_each = var.certificate_arn == "" ? [1] : []
+    content {
+      type             = "forward"
+      target_group_arn = aws_lb_target_group.api.arn
+    }
+  }
+}
+
+resource "aws_lb_listener" "https" {
+  count             = var.certificate_arn != "" ? 1 : 0
+  load_balancer_arn = aws_lb.api.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.certificate_arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+}
+
+data "aws_iam_policy_document" "task_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "execution" {
+  name               = "${local.name_prefix}-ecs-exec-role"
+  assume_role_policy = data.aws_iam_policy_document.task_assume.json
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-ecs-exec-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "execution" {
+  role       = aws_iam_role.execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role_policy" "execution_secrets" {
+  count = length(var.secret_arns) > 0 ? 1 : 0
+  name  = "${local.name_prefix}-ecs-exec-secrets"
+  role  = aws_iam_role.execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [for arn in var.secret_arns : "${arn}*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "task" {
+  name               = "${local.name_prefix}-ecs-task-role"
+  assume_role_policy = data.aws_iam_policy_document.task_assume.json
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-ecs-task-role"
+  })
+}
+
+locals {
+  computed_image_uri = var.api_image_uri != "" ? var.api_image_uri : "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
+
+  base_env = merge({
+    PORT = tostring(var.container_port)
+    ENV  = var.environment
+  }, var.environment_variables)
+
+  env_list = [
+    for k, v in local.base_env : {
+      name  = k
+      value = v
+    }
+  ]
+
+  secrets_list = [
+    for k, v in var.secret_environment_variables : {
+      name      = k
+      valueFrom = v
+    }
+  ]
+}
+
+resource "aws_ecs_task_definition" "api" {
+  family                   = "${local.name_prefix}-api"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "api"
+      image     = local.computed_image_uri
+      essential = true
+      portMappings = [
+        {
+          containerPort = var.container_port
+          hostPort      = var.container_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = local.env_list
+      secrets     = local.secrets_list
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.api.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "api"
+        }
+      }
+    }
+  ])
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-taskdef"
+  })
+}
+
+resource "aws_ecs_service" "api" {
+  name                   = "${local.name_prefix}-api"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = var.desired_count
+  enable_execute_command = var.enable_execute_command
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.tasks.id]
+    assign_public_ip = var.assign_public_ip
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.api.arn
+    container_name   = "api"
+    container_port   = var.container_port
+  }
+
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = var.spot_weight
+    base              = 0
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.enable_fargate_fallback ? [1] : []
+    content {
+      capacity_provider = "FARGATE"
+      weight            = var.fargate_weight
+      base              = var.fargate_base
+    }
+  }
+
+  health_check_grace_period_seconds = 30
+
+  depends_on = [
+    aws_lb_listener.http,
+    aws_ecs_cluster_capacity_providers.main
+  ]
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-api-service"
+  })
+}
+
