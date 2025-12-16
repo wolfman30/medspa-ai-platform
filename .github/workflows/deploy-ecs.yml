@@ -117,42 +117,42 @@ jobs:
             export APP GROUP TASK_DEF CONTAINER_NAME CONTAINER_PORT
 
             python3 - <<'PY'
-import hashlib
-import json
-import os
+          import hashlib
+          import json
+          import os
 
-task_def = os.environ["TASK_DEF"]
-container_name = os.environ["CONTAINER_NAME"]
-container_port = int(os.environ["CONTAINER_PORT"])
+          task_def = os.environ["TASK_DEF"]
+          container_name = os.environ["CONTAINER_NAME"]
+          container_port = int(os.environ["CONTAINER_PORT"])
 
-appspec = (
-    "version: 1\n"
-    "Resources:\n"
-    "  - TargetService:\n"
-    "      Type: AWS::ECS::Service\n"
-    "      Properties:\n"
-    f"        TaskDefinition: \"{task_def}\"\n"
-    "        LoadBalancerInfo:\n"
-    f"          ContainerName: \"{container_name}\"\n"
-    f"          ContainerPort: {container_port}\n"
-)
+          appspec = (
+              "version: 1\n"
+              "Resources:\n"
+              "  - TargetService:\n"
+              "      Type: AWS::ECS::Service\n"
+              "      Properties:\n"
+              f"        TaskDefinition: \"{task_def}\"\n"
+              "        LoadBalancerInfo:\n"
+              f"          ContainerName: \"{container_name}\"\n"
+              f"          ContainerPort: {container_port}\n"
+          )
 
-payload = {
-    "applicationName": os.environ["APP"],
-    "deploymentGroupName": os.environ["GROUP"],
-    "deploymentConfigName": "CodeDeployDefault.ECSAllAtOnce",
-    "revision": {
-        "revisionType": "AppSpecContent",
-        "appSpecContent": {
-            "content": appspec,
-            "sha256": hashlib.sha256(appspec.encode("utf-8")).hexdigest(),
-        },
-    },
-}
+          payload = {
+              "applicationName": os.environ["APP"],
+              "deploymentGroupName": os.environ["GROUP"],
+              "deploymentConfigName": "CodeDeployDefault.ECSAllAtOnce",
+              "revision": {
+                  "revisionType": "AppSpecContent",
+                  "appSpecContent": {
+                      "content": appspec,
+                      "sha256": hashlib.sha256(appspec.encode("utf-8")).hexdigest(),
+                  },
+              },
+          }
 
-with open("deployment.json", "w", encoding="utf-8") as f:
-    json.dump(payload, f)
-PY
+          with open("deployment.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f)
+          PY
 
             DEPLOYMENT_ID="$(aws deploy create-deployment --region "${{ env.AWS_REGION }}" --cli-input-json file://deployment.json --query deploymentId --output text)"
             echo "DeploymentId=${DEPLOYMENT_ID}"
@@ -268,42 +268,42 @@ PY
             export APP GROUP TASK_DEF CONTAINER_NAME CONTAINER_PORT
 
             python3 - <<'PY'
-import hashlib
-import json
-import os
+          import hashlib
+          import json
+          import os
 
-task_def = os.environ["TASK_DEF"]
-container_name = os.environ["CONTAINER_NAME"]
-container_port = int(os.environ["CONTAINER_PORT"])
+          task_def = os.environ["TASK_DEF"]
+          container_name = os.environ["CONTAINER_NAME"]
+          container_port = int(os.environ["CONTAINER_PORT"])
 
-appspec = (
-    "version: 1\n"
-    "Resources:\n"
-    "  - TargetService:\n"
-    "      Type: AWS::ECS::Service\n"
-    "      Properties:\n"
-    f"        TaskDefinition: \"{task_def}\"\n"
-    "        LoadBalancerInfo:\n"
-    f"          ContainerName: \"{container_name}\"\n"
-    f"          ContainerPort: {container_port}\n"
-)
+          appspec = (
+              "version: 1\n"
+              "Resources:\n"
+              "  - TargetService:\n"
+              "      Type: AWS::ECS::Service\n"
+              "      Properties:\n"
+              f"        TaskDefinition: \"{task_def}\"\n"
+              "        LoadBalancerInfo:\n"
+              f"          ContainerName: \"{container_name}\"\n"
+              f"          ContainerPort: {container_port}\n"
+          )
 
-payload = {
-    "applicationName": os.environ["APP"],
-    "deploymentGroupName": os.environ["GROUP"],
-    "deploymentConfigName": "CodeDeployDefault.ECSAllAtOnce",
-    "revision": {
-        "revisionType": "AppSpecContent",
-        "appSpecContent": {
-            "content": appspec,
-            "sha256": hashlib.sha256(appspec.encode("utf-8")).hexdigest(),
-        },
-    },
-}
+          payload = {
+              "applicationName": os.environ["APP"],
+              "deploymentGroupName": os.environ["GROUP"],
+              "deploymentConfigName": "CodeDeployDefault.ECSAllAtOnce",
+              "revision": {
+                  "revisionType": "AppSpecContent",
+                  "appSpecContent": {
+                      "content": appspec,
+                      "sha256": hashlib.sha256(appspec.encode("utf-8")).hexdigest(),
+                  },
+              },
+          }
 
-with open("deployment.json", "w", encoding="utf-8") as f:
-    json.dump(payload, f)
-PY
+          with open("deployment.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f)
+          PY
 
             DEPLOYMENT_ID="$(aws deploy create-deployment --region "${{ env.AWS_REGION }}" --cli-input-json file://deployment.json --query deploymentId --output text)"
             echo "DeploymentId=${DEPLOYMENT_ID}"
