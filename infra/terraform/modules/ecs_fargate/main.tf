@@ -366,6 +366,14 @@ resource "aws_ecs_service" "api" {
   desired_count          = var.desired_count
   enable_execute_command = var.enable_execute_command
 
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.tasks.id]

@@ -175,7 +175,18 @@ The Lambda forwards these requests to the ECS API's existing voice endpoints.
 
 Workflow: `.github/workflows/deploy-ecs.yml`
 
-Required GitHub secrets:
+Jobs:
+
+- `Deploy development` (auto on `develop` and `main`)
+- `Deploy production (gated)` (only on `main`, or manual dispatch with `deploy_production=true`)
+
+To gate production, configure a GitHub Environment:
+
+1. Repo Settings -> Environments -> `production`
+2. Add “Required reviewers” (human approval)
+3. Add environment secrets (optional)
+
+Required GitHub secrets (repo-level or environment-level):
 
 - `AWS_ACCOUNT_ID`: AWS account number (for ECR login)
 - `AWS_DEPLOY_ROLE_ARN`: IAM role to assume via OIDC
@@ -183,8 +194,12 @@ Required GitHub secrets:
 
 Branch mapping:
 
-- `develop` -> `environment=development`
-- `main` -> `environment=production`
+- `develop` -> deploys `environment=development`
+- `main` -> deploys `environment=development`, then waits for approval and deploys `environment=production`
+
+Deployment strategy:
+
+- ECS uses rolling updates behind the ALB with a deployment circuit breaker (rollback on failure) and 100% minimum healthy capacity to avoid downtime.
 
 ---
 
