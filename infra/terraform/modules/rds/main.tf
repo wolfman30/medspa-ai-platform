@@ -36,7 +36,7 @@ resource "aws_security_group" "rds" {
 resource "aws_db_instance" "main" {
   identifier     = "medspa-${var.environment}-db"
   engine         = "postgres"
-  engine_version = "15.3"
+  engine_version = "15.15"
   instance_class = var.db_instance_class
 
   allocated_storage     = 20

@@ -1,5 +1,7 @@
 ﻿# Bootstrap Deployment (Lightsail + Neon)
 
+> Deprecated: Lightsail bootstrap is retained for reference only. New deployments should use ECS Fargate (Spot) + Lambda voice ingress + ElastiCache Redis: `docs/DEPLOYMENT_ECS.md`.
+
 This guide covers the $200/mo bootstrap deployment that runs everything on a single AWS Lightsail instance while relying on managed Neon Postgres and a local Redis service.
 
 ## Architecture Summary
