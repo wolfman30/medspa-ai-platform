@@ -92,7 +92,8 @@ jobs:
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=development" \
-            -var="api_image_tag=${{ github.sha }}"
+            -var="api_image_tag=${{ github.sha }}" \
+            -var="enable_blue_green=false"
 
       - name: Deploy API (blue/green via CodeDeploy) and wait
         working-directory: infra/terraform
@@ -241,7 +242,9 @@ PY
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=production" \
-            -var="api_image_tag=${{ github.sha }}"
+            -var="api_image_tag=${{ github.sha }}" \
+            -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="enable_blue_green=true"
 
       - name: Deploy API (blue/green via CodeDeploy) and wait
         working-directory: infra/terraform

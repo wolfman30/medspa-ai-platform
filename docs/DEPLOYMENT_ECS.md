@@ -61,6 +61,7 @@ This path is deprecated for production. Lightsail + self-managed Redis is no lon
 3. Plan ingress:
    - API traffic -> ALB
    - Voice webhooks -> API Gateway + Lambda
+4. For **production blue/green**, provision an **ACM certificate** and set `api_certificate_arn` (CodeDeploy test listener uses HTTPS).
 
 ### 2.2 Terraform backend (state) setup
 
@@ -192,6 +193,7 @@ Required GitHub secrets (repo-level or environment-level):
 - `AWS_ACCOUNT_ID`: AWS account number (for ECR login)
 - `AWS_DEPLOY_ROLE_ARN`: IAM role to assume via OIDC
 - `TF_STATE_BUCKET`: Terraform state bucket name
+- `API_CERTIFICATE_ARN`: (production) ACM cert ARN for the ALB (required when `enable_blue_green=true`)
 
 Branch mapping:
 
@@ -200,8 +202,9 @@ Branch mapping:
 
 Deployment strategy:
 
-- ECS uses **CodeDeploy blue/green**: Terraform registers a new task definition, then CodeDeploy shifts ALB traffic between two target groups (automatic rollback on failure).
-- A private ALB **test listener** (default `9000`, VPC-only) routes to the green target group for pre-cutover verification when you have VPC access.
+- `development`: rolling ECS deployments (`enable_blue_green=false`).
+- `production`: **CodeDeploy blue/green** (`enable_blue_green=true`) shifts ALB traffic between two target groups (automatic rollback on failure).
+- The private ALB **test listener** (default `9000`, VPC-only) is **HTTPS** when `api_certificate_arn` is set.
 
 ---
 

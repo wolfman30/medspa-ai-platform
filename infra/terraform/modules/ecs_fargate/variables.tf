@@ -98,6 +98,11 @@ variable "certificate_arn" {
   description = "Optional ACM certificate ARN to enable HTTPS on the ALB"
   type        = string
   default     = ""
+
+  validation {
+    condition     = !var.enable_blue_green || var.certificate_arn != ""
+    error_message = "certificate_arn must be set when enable_blue_green is true (required for CodeDeploy blue/green HTTPS listeners)."
+  }
 }
 
 variable "enable_blue_green" {
