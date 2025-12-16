@@ -88,6 +88,17 @@ resource "aws_security_group" "alb" {
     description = "HTTPS from internet"
   }
 
+  dynamic "ingress" {
+    for_each = var.enable_blue_green ? [1] : []
+    content {
+      from_port   = var.test_listener_port
+      to_port     = var.test_listener_port
+      protocol    = "tcp"
+      cidr_blocks = [var.vpc_cidr]
+      description = "CodeDeploy test listener from VPC"
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -159,6 +170,29 @@ resource "aws_lb_target_group" "api" {
   })
 }
 
+resource "aws_lb_target_group" "api_green" {
+  count = var.enable_blue_green ? 1 : 0
+
+  name        = "${local.name_prefix}-tg-green"
+  port        = var.container_port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = var.health_check_path
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-tg-green"
+  })
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.api.arn
   port              = 80
@@ -198,6 +232,23 @@ resource "aws_lb_listener" "https" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
   }
+}
+
+resource "aws_lb_listener" "test" {
+  count = var.enable_blue_green ? 1 : 0
+
+  load_balancer_arn = aws_lb.api.arn
+  port              = var.test_listener_port
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api_green[0].arn
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-test-listener"
+  })
 }
 
 data "aws_iam_policy_document" "task_assume" {
@@ -261,6 +312,7 @@ resource "aws_iam_role" "task" {
 locals {
   computed_image_uri = var.api_image_uri != "" ? var.api_image_uri : "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
   migrate_image_uri  = "${aws_ecr_repository.api.repository_url}:migrate-${var.image_tag}"
+  prod_listener_arns = var.certificate_arn != "" ? [aws_lb_listener.https[0].arn] : [aws_lb_listener.http.arn]
 
   base_env = merge({
     PORT = tostring(var.container_port)
@@ -360,11 +412,76 @@ resource "aws_ecs_task_definition" "migrate" {
 }
 
 resource "aws_ecs_service" "api" {
+  count = var.enable_blue_green ? 1 : 0
+
   name                   = "${local.name_prefix}-api"
   cluster                = aws_ecs_cluster.main.id
   task_definition        = aws_ecs_task_definition.api.arn
   desired_count          = var.desired_count
   enable_execute_command = var.enable_execute_command
+
+  deployment_controller {
+    type = "CODE_DEPLOY"
+  }
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.tasks.id]
+    assign_public_ip = var.assign_public_ip
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.api.arn
+    container_name   = "api"
+    container_port   = var.container_port
+  }
+
+  lifecycle {
+    ignore_changes = [
+      task_definition,
+      load_balancer,
+    ]
+  }
+
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = var.spot_weight
+    base              = 0
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.enable_fargate_fallback ? [1] : []
+    content {
+      capacity_provider = "FARGATE"
+      weight            = var.fargate_weight
+      base              = var.fargate_base
+    }
+  }
+
+  health_check_grace_period_seconds = 30
+
+  depends_on = [
+    aws_lb_listener.http,
+    aws_ecs_cluster_capacity_providers.main
+  ]
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-api-service"
+  })
+}
+
+resource "aws_ecs_service" "api_rolling" {
+  count = var.enable_blue_green ? 0 : 1
+
+  name                   = "${local.name_prefix}-api"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = var.desired_count
+  enable_execute_command = var.enable_execute_command
+
+  deployment_controller {
+    type = "ECS"
+  }
 
   deployment_circuit_breaker {
     enable   = true
@@ -411,4 +528,104 @@ resource "aws_ecs_service" "api" {
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-api-service"
   })
+}
+
+locals {
+  api_service_name = var.enable_blue_green ? aws_ecs_service.api[0].name : aws_ecs_service.api_rolling[0].name
+}
+
+data "aws_iam_policy_document" "codedeploy_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["codedeploy.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "codedeploy" {
+  count              = var.enable_blue_green ? 1 : 0
+  name               = "${local.name_prefix}-codedeploy-role"
+  assume_role_policy = data.aws_iam_policy_document.codedeploy_assume.json
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-codedeploy-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy" {
+  count      = var.enable_blue_green ? 1 : 0
+  role       = aws_iam_role.codedeploy[0].name
+  policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS"
+}
+
+resource "aws_codedeploy_app" "api" {
+  count            = var.enable_blue_green ? 1 : 0
+  name             = "${local.name_prefix}-api"
+  compute_platform = "ECS"
+}
+
+resource "aws_codedeploy_deployment_group" "api" {
+  count                 = var.enable_blue_green ? 1 : 0
+  app_name              = aws_codedeploy_app.api[0].name
+  deployment_group_name = "${local.name_prefix}-api"
+  service_role_arn      = aws_iam_role.codedeploy[0].arn
+
+  deployment_config_name = var.codedeploy_deployment_config_name
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  blue_green_deployment_config {
+    deployment_ready_option {
+      action_on_timeout    = "CONTINUE_DEPLOYMENT"
+      wait_time_in_minutes = 0
+    }
+
+    terminate_blue_instances_on_deployment_success {
+      action                           = "TERMINATE"
+      termination_wait_time_in_minutes = var.codedeploy_termination_wait_time_minutes
+    }
+  }
+
+  ecs_service {
+    cluster_name = aws_ecs_cluster.main.name
+    service_name = local.api_service_name
+  }
+
+  load_balancer_info {
+    target_group_pair_info {
+      prod_traffic_route {
+        listener_arns = local.prod_listener_arns
+      }
+
+      test_traffic_route {
+        listener_arns = [aws_lb_listener.test[0].arn]
+      }
+
+      target_group {
+        name = aws_lb_target_group.api.name
+      }
+
+      target_group {
+        name = aws_lb_target_group.api_green[0].name
+      }
+    }
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events = [
+      "DEPLOYMENT_FAILURE",
+      "DEPLOYMENT_STOP_ON_REQUEST",
+    ]
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.codedeploy,
+    aws_lb_listener.test,
+  ]
 }
