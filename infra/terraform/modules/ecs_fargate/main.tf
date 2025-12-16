@@ -488,8 +488,8 @@ resource "aws_ecs_service" "api_rolling" {
     rollback = true
   }
 
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = var.deployment_minimum_healthy_percent
+  deployment_maximum_percent         = var.deployment_maximum_percent
 
   network_configuration {
     subnets          = var.private_subnet_ids
