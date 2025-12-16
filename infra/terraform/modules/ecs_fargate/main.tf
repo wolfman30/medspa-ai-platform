@@ -11,6 +11,15 @@ resource "aws_cloudwatch_log_group" "api" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "migrate" {
+  name              = "/ecs/${local.name_prefix}-migrate"
+  retention_in_days = 14
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-migrate-logs"
+  })
+}
+
 resource "aws_ecr_repository" "api" {
   name                 = "${local.name_prefix}-api"
   image_tag_mutability = "MUTABLE"
@@ -251,6 +260,7 @@ resource "aws_iam_role" "task" {
 
 locals {
   computed_image_uri = var.api_image_uri != "" ? var.api_image_uri : "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
+  migrate_image_uri  = "${aws_ecr_repository.api.repository_url}:migrate-${var.image_tag}"
 
   base_env = merge({
     PORT = tostring(var.container_port)
@@ -269,6 +279,13 @@ locals {
       name      = k
       valueFrom = v
     }
+  ]
+
+  migrate_secrets_list = [
+    for k, v in var.secret_environment_variables : {
+      name      = k
+      valueFrom = v
+    } if k == "DATABASE_URL"
   ]
 }
 
@@ -308,6 +325,37 @@ resource "aws_ecs_task_definition" "api" {
 
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-taskdef"
+  })
+}
+
+resource "aws_ecs_task_definition" "migrate" {
+  family                   = "${local.name_prefix}-migrate"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.migrate_task_cpu
+  memory                   = var.migrate_task_memory
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "migrate"
+      image     = local.migrate_image_uri
+      essential = true
+      secrets   = local.migrate_secrets_list
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.migrate.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "migrate"
+        }
+      }
+    }
+  ])
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-migrate-taskdef"
   })
 }
 
@@ -356,4 +404,3 @@ resource "aws_ecs_service" "api" {
     Name = "${local.name_prefix}-api-service"
   })
 }
-

@@ -33,3 +33,7 @@ output "api_image_uri" {
   value       = local.computed_image_uri
 }
 
+output "migration_task_definition_arn" {
+  description = "Task definition ARN for the one-off DB migration task"
+  value       = aws_ecs_task_definition.migrate.arn
+}

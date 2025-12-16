@@ -81,6 +81,13 @@ jobs:
           docker build --target api -t "$IMAGE" .
           docker push "$IMAGE"
 
+      - name: Build & push DB migrator image
+        env:
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-${{ steps.env.outputs.deploy_env }}-api:migrate-${{ github.sha }}
+        run: |
+          docker build --target migrate -t "$IMAGE" .
+          docker push "$IMAGE"
+
       - name: Build & push voice-lambda image
         env:
           IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-${{ steps.env.outputs.deploy_env }}-voice-lambda:${{ github.sha }}

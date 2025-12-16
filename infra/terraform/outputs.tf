@@ -44,6 +44,16 @@ output "ecs_service_name" {
   value       = module.ecs_fargate.service_name
 }
 
+output "ecs_task_security_group_id" {
+  description = "Security group ID for ECS tasks"
+  value       = module.ecs_fargate.task_security_group_id
+}
+
+output "migration_task_definition_arn" {
+  description = "Task definition ARN for the one-off DB migration task"
+  value       = module.ecs_fargate.migration_task_definition_arn
+}
+
 output "api_ecr_repository_url" {
   description = "ECR repository URL for the API image"
   value       = module.ecs_fargate.api_ecr_repository_url
