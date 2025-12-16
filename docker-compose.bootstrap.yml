@@ -1,4 +1,6 @@
 ﻿services:
+  # DEPRECATED: Lightsail bootstrap stack. Prefer ECS Fargate + ElastiCache + Lambda voice ingress.
+  # See: docs/DEPLOYMENT_ECS.md
   api:
     build:
       context: .
