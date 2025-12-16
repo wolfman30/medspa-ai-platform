@@ -94,6 +94,13 @@ jobs:
             -var="environment=development" \
             -var="api_image_tag=${{ github.sha }}"
 
+      - name: Wait for ECS service stability
+        working-directory: infra/terraform
+        run: |
+          CLUSTER="$(terraform output -raw ecs_cluster_name)"
+          SERVICE="$(terraform output -raw ecs_service_name)"
+          aws ecs wait services-stable --region "${{ env.AWS_REGION }}" --cluster "$CLUSTER" --services "$SERVICE"
+
   deploy_production:
     name: Deploy production (gated)
     runs-on: ubuntu-latest
@@ -173,3 +180,10 @@ jobs:
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=production" \
             -var="api_image_tag=${{ github.sha }}"
+
+      - name: Wait for ECS service stability
+        working-directory: infra/terraform
+        run: |
+          CLUSTER="$(terraform output -raw ecs_cluster_name)"
+          SERVICE="$(terraform output -raw ecs_service_name)"
+          aws ecs wait services-stable --region "${{ env.AWS_REGION }}" --cluster "$CLUSTER" --services "$SERVICE"
