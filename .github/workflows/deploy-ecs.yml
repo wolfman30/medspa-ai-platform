@@ -21,7 +21,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    environment: development
+    environment:
+      name: development
     concurrency:
       group: deploy-development
       cancel-in-progress: false
@@ -171,7 +172,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    environment: production
+    environment:
+      name: production
     concurrency:
       group: deploy-production
       cancel-in-progress: false
