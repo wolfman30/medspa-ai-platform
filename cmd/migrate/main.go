@@ -54,4 +54,3 @@ func main() {
 
 	fmt.Println("migrations complete")
 }
-
