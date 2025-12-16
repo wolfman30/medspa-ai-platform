@@ -243,6 +243,13 @@ resource "aws_lb_listener" "test" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = var.certificate_arn
 
+  lifecycle {
+    precondition {
+      condition     = var.certificate_arn != ""
+      error_message = "certificate_arn must be set when enable_blue_green is true (required for the CodeDeploy HTTPS test listener)."
+    }
+  }
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api_green[0].arn
