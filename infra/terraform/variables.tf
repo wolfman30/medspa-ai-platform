@@ -86,7 +86,7 @@ variable "api_certificate_arn" {
 variable "enable_blue_green" {
   description = "Enable ECS blue/green deployments via CodeDeploy"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "codedeploy_deployment_config_name" {
