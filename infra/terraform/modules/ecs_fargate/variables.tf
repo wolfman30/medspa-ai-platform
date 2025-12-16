@@ -41,6 +41,18 @@ variable "task_memory" {
   default     = 1024
 }
 
+variable "migrate_task_cpu" {
+  description = "Fargate task CPU units for the one-off DB migrator task"
+  type        = number
+  default     = 256
+}
+
+variable "migrate_task_memory" {
+  description = "Fargate task memory (MiB) for the one-off DB migrator task"
+  type        = number
+  default     = 512
+}
+
 variable "desired_count" {
   description = "Desired number of API tasks"
   type        = number
@@ -130,4 +142,3 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
