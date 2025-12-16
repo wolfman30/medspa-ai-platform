@@ -13,6 +13,11 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR (used to restrict internal listeners)"
+  type        = string
+}
+
 variable "public_subnet_ids" {
   description = "Public subnet IDs (for the ALB)"
   type        = list(string)
@@ -81,6 +86,30 @@ variable "certificate_arn" {
   description = "Optional ACM certificate ARN to enable HTTPS on the ALB"
   type        = string
   default     = ""
+}
+
+variable "enable_blue_green" {
+  description = "Enable ECS blue/green deployments via CodeDeploy"
+  type        = bool
+  default     = true
+}
+
+variable "test_listener_port" {
+  description = "ALB listener port used by CodeDeploy for test traffic"
+  type        = number
+  default     = 9000
+}
+
+variable "codedeploy_deployment_config_name" {
+  description = "CodeDeploy deployment config name (ECS blue/green)"
+  type        = string
+  default     = "CodeDeployDefault.ECSAllAtOnce"
+}
+
+variable "codedeploy_termination_wait_time_minutes" {
+  description = "Minutes to keep the old task set running after a successful blue/green deployment"
+  type        = number
+  default     = 5
 }
 
 variable "health_check_path" {

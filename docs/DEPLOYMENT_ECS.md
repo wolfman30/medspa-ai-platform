@@ -36,6 +36,7 @@ This path is deprecated for production. Lightsail + self-managed Redis is no lon
 2. **Core API**
    - ECS cluster with **FARGATE_SPOT** (optional on-demand fallback)
    - ECS Service running the `api` container behind an ALB
+   - **Blue/green deployments** via **CodeDeploy** (two target groups + an internal test listener)
 3. **Voice webhooks**
    - API Gateway (HTTP API) -> Lambda (`voice-lambda`)
    - Lambda forwards voice webhook requests to the ECS API voice endpoints
@@ -167,7 +168,7 @@ The Lambda forwards these requests to the ECS API's existing voice endpoints.
 
 - Keep Lightsail running until production is stable.
 - Roll back by reverting webhook URLs + DNS to Lightsail.
-- ECS rollback by pinning a previous image tag and forcing a new deployment.
+- ECS rollback by redeploying a previous git SHA/image tag (CodeDeploy swaps traffic back with no downtime).
 
 ---
 
@@ -183,7 +184,7 @@ Jobs:
 To gate production, configure a GitHub Environment:
 
 1. Repo Settings -> Environments -> `production`
-2. Add “Required reviewers” (human approval)
+2. Add Required reviewers (human approval)
 3. Add environment secrets (optional)
 
 Required GitHub secrets (repo-level or environment-level):
@@ -199,7 +200,8 @@ Branch mapping:
 
 Deployment strategy:
 
-- ECS uses rolling updates behind the ALB with a deployment circuit breaker (rollback on failure) and 100% minimum healthy capacity to avoid downtime.
+- ECS uses **CodeDeploy blue/green**: Terraform registers a new task definition, then CodeDeploy shifts ALB traffic between two target groups (automatic rollback on failure).
+- A private ALB **test listener** (default `9000`, VPC-only) routes to the green target group for pre-cutover verification when you have VPC access.
 
 ---
 
@@ -207,11 +209,11 @@ Deployment strategy:
 
 Typical ballpark monthly costs per environment (region-dependent):
 
-- ALB: ~$20–$30
+- ALB: ~$20-$30
 - NAT Gateways: ~$32 each + data (2 AZs => $64+/env)
-- ECS Fargate Spot (1–2 tasks, 0.5–1 vCPU, 1–2 GB): ~$15–$80
-- ElastiCache Redis (small): ~$15–$60
-- RDS (t4g.micro/small + storage) or Neon: ~$15–$150+
+- ECS Fargate Spot (1-2 tasks, 0.5-1 vCPU, 1-2 GB): ~$15-$80
+- ElastiCache Redis (small): ~$15-$60
+- RDS (t4g.micro/small + storage) or Neon: ~$15-$150+
 - Lambda + API Gateway (voice webhooks): usually <$5 unless high volume
 - Secrets Manager: ~$0.40/secret/month + API calls
 

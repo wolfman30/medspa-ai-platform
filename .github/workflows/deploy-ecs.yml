@@ -94,12 +94,74 @@ jobs:
             -var="environment=development" \
             -var="api_image_tag=${{ github.sha }}"
 
-      - name: Wait for ECS service stability
+      - name: Deploy API (blue/green via CodeDeploy) and wait
         working-directory: infra/terraform
         run: |
-          CLUSTER="$(terraform output -raw ecs_cluster_name)"
-          SERVICE="$(terraform output -raw ecs_service_name)"
-          aws ecs wait services-stable --region "${{ env.AWS_REGION }}" --cluster "$CLUSTER" --services "$SERVICE"
+          set -euo pipefail
+
+          APP="$(terraform output -raw codedeploy_app_name 2>/dev/null || true)"
+          GROUP="$(terraform output -raw codedeploy_deployment_group_name 2>/dev/null || true)"
+          TASK_DEF="$(terraform output -raw api_task_definition_arn 2>/dev/null || true)"
+
+          if [ -n "$APP" ] && [ -n "$GROUP" ] && [ -n "$TASK_DEF" ]; then
+            echo "Triggering CodeDeploy blue/green deployment: ${APP} / ${GROUP}"
+
+            read -r CONTAINER_NAME CONTAINER_PORT <<< "$(aws ecs describe-task-definition --region "${{ env.AWS_REGION }}" --task-definition "$TASK_DEF" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"taskDefinition\"][\"containerDefinitions\"][0]; p=(c.get(\"portMappings\") or [{\"containerPort\": 0}])[0][\"containerPort\"]; print(c[\"name\"], p)')"
+
+            if [ -z "${CONTAINER_PORT}" ] || [ "${CONTAINER_PORT}" = "0" ]; then
+              echo "Failed to determine container port from task definition: ${TASK_DEF}"
+              exit 1
+            fi
+
+            export APP GROUP TASK_DEF CONTAINER_NAME CONTAINER_PORT
+
+            python3 - <<'PY'
+import hashlib
+import json
+import os
+
+task_def = os.environ["TASK_DEF"]
+container_name = os.environ["CONTAINER_NAME"]
+container_port = int(os.environ["CONTAINER_PORT"])
+
+appspec = (
+    "version: 1\n"
+    "Resources:\n"
+    "  - TargetService:\n"
+    "      Type: AWS::ECS::Service\n"
+    "      Properties:\n"
+    f"        TaskDefinition: \"{task_def}\"\n"
+    "        LoadBalancerInfo:\n"
+    f"          ContainerName: \"{container_name}\"\n"
+    f"          ContainerPort: {container_port}\n"
+)
+
+payload = {
+    "applicationName": os.environ["APP"],
+    "deploymentGroupName": os.environ["GROUP"],
+    "deploymentConfigName": "CodeDeployDefault.ECSAllAtOnce",
+    "revision": {
+        "revisionType": "AppSpecContent",
+        "appSpecContent": {
+            "content": appspec,
+            "sha256": hashlib.sha256(appspec.encode("utf-8")).hexdigest(),
+        },
+    },
+}
+
+with open("deployment.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PY
+
+            DEPLOYMENT_ID="$(aws deploy create-deployment --region "${{ env.AWS_REGION }}" --cli-input-json file://deployment.json --query deploymentId --output text)"
+            echo "DeploymentId=${DEPLOYMENT_ID}"
+            aws deploy wait deployment-successful --region "${{ env.AWS_REGION }}" --deployment-id "${DEPLOYMENT_ID}"
+          else
+            echo "CodeDeploy blue/green disabled (missing outputs); waiting for ECS stability."
+            CLUSTER="$(terraform output -raw ecs_cluster_name)"
+            SERVICE="$(terraform output -raw ecs_service_name)"
+            aws ecs wait services-stable --region "${{ env.AWS_REGION }}" --cluster "$CLUSTER" --services "$SERVICE"
+          fi
 
   deploy_production:
     name: Deploy production (gated)
@@ -181,9 +243,71 @@ jobs:
             -var="environment=production" \
             -var="api_image_tag=${{ github.sha }}"
 
-      - name: Wait for ECS service stability
+      - name: Deploy API (blue/green via CodeDeploy) and wait
         working-directory: infra/terraform
         run: |
-          CLUSTER="$(terraform output -raw ecs_cluster_name)"
-          SERVICE="$(terraform output -raw ecs_service_name)"
-          aws ecs wait services-stable --region "${{ env.AWS_REGION }}" --cluster "$CLUSTER" --services "$SERVICE"
+          set -euo pipefail
+
+          APP="$(terraform output -raw codedeploy_app_name 2>/dev/null || true)"
+          GROUP="$(terraform output -raw codedeploy_deployment_group_name 2>/dev/null || true)"
+          TASK_DEF="$(terraform output -raw api_task_definition_arn 2>/dev/null || true)"
+
+          if [ -n "$APP" ] && [ -n "$GROUP" ] && [ -n "$TASK_DEF" ]; then
+            echo "Triggering CodeDeploy blue/green deployment: ${APP} / ${GROUP}"
+
+            read -r CONTAINER_NAME CONTAINER_PORT <<< "$(aws ecs describe-task-definition --region "${{ env.AWS_REGION }}" --task-definition "$TASK_DEF" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"taskDefinition\"][\"containerDefinitions\"][0]; p=(c.get(\"portMappings\") or [{\"containerPort\": 0}])[0][\"containerPort\"]; print(c[\"name\"], p)')"
+
+            if [ -z "${CONTAINER_PORT}" ] || [ "${CONTAINER_PORT}" = "0" ]; then
+              echo "Failed to determine container port from task definition: ${TASK_DEF}"
+              exit 1
+            fi
+
+            export APP GROUP TASK_DEF CONTAINER_NAME CONTAINER_PORT
+
+            python3 - <<'PY'
+import hashlib
+import json
+import os
+
+task_def = os.environ["TASK_DEF"]
+container_name = os.environ["CONTAINER_NAME"]
+container_port = int(os.environ["CONTAINER_PORT"])
+
+appspec = (
+    "version: 1\n"
+    "Resources:\n"
+    "  - TargetService:\n"
+    "      Type: AWS::ECS::Service\n"
+    "      Properties:\n"
+    f"        TaskDefinition: \"{task_def}\"\n"
+    "        LoadBalancerInfo:\n"
+    f"          ContainerName: \"{container_name}\"\n"
+    f"          ContainerPort: {container_port}\n"
+)
+
+payload = {
+    "applicationName": os.environ["APP"],
+    "deploymentGroupName": os.environ["GROUP"],
+    "deploymentConfigName": "CodeDeployDefault.ECSAllAtOnce",
+    "revision": {
+        "revisionType": "AppSpecContent",
+        "appSpecContent": {
+            "content": appspec,
+            "sha256": hashlib.sha256(appspec.encode("utf-8")).hexdigest(),
+        },
+    },
+}
+
+with open("deployment.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PY
+
+            DEPLOYMENT_ID="$(aws deploy create-deployment --region "${{ env.AWS_REGION }}" --cli-input-json file://deployment.json --query deploymentId --output text)"
+            echo "DeploymentId=${DEPLOYMENT_ID}"
+            aws deploy wait deployment-successful --region "${{ env.AWS_REGION }}" --deployment-id "${DEPLOYMENT_ID}"
+          else
+            echo "CodeDeploy blue/green disabled (missing outputs); waiting for ECS stability."
+            CLUSTER="$(terraform output -raw ecs_cluster_name)"
+            SERVICE="$(terraform output -raw ecs_service_name)"
+            aws ecs wait services-stable --region "${{ env.AWS_REGION }}" --cluster "$CLUSTER" --services "$SERVICE"
+          fi

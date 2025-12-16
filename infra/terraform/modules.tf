@@ -42,6 +42,7 @@ module "ecs_fargate" {
   environment        = var.environment
   aws_region         = var.aws_region
   vpc_id             = module.vpc.vpc_id
+  vpc_cidr           = module.vpc.vpc_cidr
   public_subnet_ids  = module.vpc.public_subnet_ids
   private_subnet_ids = module.vpc.private_subnet_ids
 
@@ -50,6 +51,10 @@ module "ecs_fargate" {
   task_cpu        = var.api_task_cpu
   task_memory     = var.api_task_memory
   certificate_arn = var.api_certificate_arn
+
+  enable_blue_green                        = var.enable_blue_green
+  codedeploy_deployment_config_name        = var.codedeploy_deployment_config_name
+  codedeploy_termination_wait_time_minutes = var.codedeploy_termination_wait_time_minutes
 
   environment_variables = {
     LOG_LEVEL        = "info"
