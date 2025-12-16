@@ -160,6 +160,13 @@ var depositDecisionTotal = prometheus.NewCounterVec(
 	[]string{"model", "outcome"}, // outcome: collect, skip, error
 )
 
+var (
+	depositAffirmativeRE = regexp.MustCompile(`(?i)(?:\b(?:yes|yeah|yea|sure|ok|okay|absolutely|definitely|proceed)\b|let'?s do it|i'?ll pay|i will pay)`)
+	depositNegativeRE    = regexp.MustCompile(`(?i)(?:no deposit|don'?t want|do not want|not paying|not now|maybe(?: later)?|later|skip|no thanks|nope)`)
+	depositKeywordRE     = regexp.MustCompile(`(?i)(?:\b(?:deposit|payment)\b|\bpay\b|secure (?:my|your) spot|hold (?:my|your) spot)`)
+	depositAskRE         = regexp.MustCompile(`(?i)(?:\bdeposit\b|refundable deposit|payment link|secure (?:my|your) spot|hold (?:my|your) spot|pay a deposit)`)
+)
+
 func init() {
 	prometheus.MustRegister(llmLatency)
 	prometheus.MustRegister(llmTokensTotal)
@@ -395,7 +402,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if derr != nil {
 		span.RecordError(derr)
 		s.logger.Warn("deposit intent extraction failed", "error", derr)
-	} else if depositIntent == nil && looksLikeDepositAgreement(req.Message, history) {
+	} else if depositIntent == nil && latestTurnAgreedToDeposit(history) {
 		// Fallback heuristic: if the user explicitly agrees to a deposit in their message,
 		// send a deposit intent even if the classifier skipped.
 		depositIntent = &DepositIntent{
@@ -872,90 +879,44 @@ func (s *LLMService) shouldSampleDepositLog() bool {
 	return time.Now().UnixNano()%10 == 0
 }
 
-// looksLikeDepositAgreement returns true when a user message clearly indicates they want to pay a deposit.
+// latestTurnAgreedToDeposit returns true when the most recent user message clearly indicates they want to pay a deposit.
 // This is used as a deterministic fallback to avoid missing deposits due to LLM classifier variance.
-// It supports two cases:
-// 1) The user explicitly mentions deposit/payment AND agrees.
-// 2) The user gives a generic affirmative ("yes", "sure", etc) immediately after the assistant asked for a deposit.
-func looksLikeDepositAgreement(message string, history []ChatMessage) bool {
-	msg := strings.ToLower(strings.TrimSpace(message))
+func latestTurnAgreedToDeposit(history []ChatMessage) bool {
+	userIndex := -1
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == ChatRoleUser {
+			userIndex = i
+			break
+		}
+	}
+	if userIndex == -1 {
+		return false
+	}
+
+	msg := strings.TrimSpace(history[userIndex].Content)
 	if msg == "" {
 		return false
 	}
-
-	// Negative intent markers override.
-	hasNegative := strings.Contains(msg, "no deposit") ||
-		strings.Contains(msg, "don't want") ||
-		strings.Contains(msg, "do not want") ||
-		strings.Contains(msg, "not paying") ||
-		strings.Contains(msg, "maybe later") ||
-		strings.Contains(msg, "skip") ||
-		strings.Contains(msg, "not now") ||
-		strings.Contains(msg, "no thanks") ||
-		strings.Contains(msg, "nope")
-	if hasNegative {
+	if depositNegativeRE.MatchString(msg) {
 		return false
 	}
-
-	// Positive intent markers.
-	hasPositive := strings.Contains(msg, "yes") ||
-		strings.Contains(msg, "yeah") ||
-		strings.Contains(msg, "yea") ||
-		strings.Contains(msg, "sure") ||
-		strings.Contains(msg, "ok") ||
-		strings.Contains(msg, "okay") ||
-		strings.Contains(msg, "absolutely") ||
-		strings.Contains(msg, "definitely") ||
-		strings.Contains(msg, "proceed") ||
-		strings.Contains(msg, "let's do it") ||
-		strings.Contains(msg, "lets do it") ||
-		strings.Contains(msg, "i'll pay") ||
-		strings.Contains(msg, "i will pay")
-	if !hasPositive {
+	if !depositAffirmativeRE.MatchString(msg) {
 		return false
 	}
-
-	// Explicit deposit/payment mention.
-	hasDepositKeyword := strings.Contains(msg, "deposit") ||
-		strings.Contains(msg, "pay") ||
-		strings.Contains(msg, "payment") ||
-		strings.Contains(msg, "secure my spot") ||
-		strings.Contains(msg, "secure your spot") ||
-		strings.Contains(msg, "hold my spot") ||
-		strings.Contains(msg, "hold your spot")
-	if hasDepositKeyword {
+	if depositKeywordRE.MatchString(msg) {
 		return true
 	}
 
 	// Generic affirmative only counts if the assistant just asked about a deposit.
-	return assistantAskedForDeposit(history)
-}
-
-// assistantAskedForDeposit returns true if the most recent assistant message (before the current user turn)
-// contains deposit-related language.
-func assistantAskedForDeposit(history []ChatMessage) bool {
-	if len(history) < 3 {
-		return false
-	}
-
-	// Remove current user + current assistant reply.
-	prior := history
-	if len(prior) >= 2 {
-		prior = prior[:len(prior)-2]
-	}
-
-	for i := len(prior) - 1; i >= 0; i-- {
-		if prior[i].Role != ChatRoleAssistant {
+	for i := userIndex - 1; i >= 0; i-- {
+		switch history[i].Role {
+		case ChatRoleSystem:
 			continue
+		case ChatRoleAssistant:
+			return depositAskRE.MatchString(history[i].Content)
+		default:
+			return false
 		}
-		text := strings.ToLower(prior[i].Content)
-		return strings.Contains(text, "deposit") ||
-			strings.Contains(text, "refundable deposit") ||
-			strings.Contains(text, "secure your spot") ||
-			strings.Contains(text, "secure my spot") ||
-			strings.Contains(text, "hold your spot") ||
-			strings.Contains(text, "hold my spot") ||
-			strings.Contains(text, "pay a deposit")
 	}
 	return false
 }
@@ -965,8 +926,7 @@ func conversationHasDepositAgreement(history []ChatMessage) bool {
 		if history[i].Role != ChatRoleAssistant {
 			continue
 		}
-		assistantText := strings.ToLower(history[i].Content)
-		if !strings.Contains(assistantText, "deposit") {
+		if !depositAskRE.MatchString(history[i].Content) {
 			continue
 		}
 
@@ -977,14 +937,14 @@ func conversationHasDepositAgreement(history []ChatMessage) bool {
 			case ChatRoleSystem:
 				continue
 			case ChatRoleUser:
-				msg := strings.ToLower(strings.TrimSpace(history[j].Content))
+				msg := strings.TrimSpace(history[j].Content)
 				if msg == "" {
 					break
 				}
-				if strings.Contains(msg, "no") || strings.Contains(msg, "not now") || strings.Contains(msg, "maybe") || strings.Contains(msg, "later") || strings.Contains(msg, "skip") {
+				if depositNegativeRE.MatchString(msg) {
 					break
 				}
-				if strings.Contains(msg, "yes") || strings.Contains(msg, "yeah") || strings.Contains(msg, "yea") || strings.Contains(msg, "sure") || strings.Contains(msg, "ok") || strings.Contains(msg, "okay") || strings.Contains(msg, "absolutely") || strings.Contains(msg, "definitely") || strings.Contains(msg, "proceed") || strings.Contains(msg, "let's do it") || strings.Contains(msg, "lets do it") || strings.Contains(msg, "i'll pay") || strings.Contains(msg, "i will pay") {
+				if depositAffirmativeRE.MatchString(msg) {
 					return true
 				}
 				break
