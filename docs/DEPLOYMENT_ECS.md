@@ -36,6 +36,7 @@ This path is deprecated for production. Lightsail + self-managed Redis is no lon
 2. **Core API**
    - ECS cluster with **FARGATE_SPOT** (optional on-demand fallback)
    - ECS Service running the `api` container behind an ALB
+   - **Blue/green deployments** via **CodeDeploy** (two target groups + an internal test listener)
 3. **Voice webhooks**
    - API Gateway (HTTP API) -> Lambda (`voice-lambda`)
    - Lambda forwards voice webhook requests to the ECS API voice endpoints
@@ -60,6 +61,7 @@ This path is deprecated for production. Lightsail + self-managed Redis is no lon
 3. Plan ingress:
    - API traffic -> ALB
    - Voice webhooks -> API Gateway + Lambda
+4. For **production blue/green**, provision an **ACM certificate** and set `api_certificate_arn` (CodeDeploy test listener uses HTTPS).
 
 ### 2.2 Terraform backend (state) setup
 
@@ -167,7 +169,7 @@ The Lambda forwards these requests to the ECS API's existing voice endpoints.
 
 - Keep Lightsail running until production is stable.
 - Roll back by reverting webhook URLs + DNS to Lightsail.
-- ECS rollback by pinning a previous image tag and forcing a new deployment.
+- ECS rollback by redeploying a previous git SHA/image tag (CodeDeploy swaps traffic back with no downtime).
 
 ---
 
@@ -175,16 +177,34 @@ The Lambda forwards these requests to the ECS API's existing voice endpoints.
 
 Workflow: `.github/workflows/deploy-ecs.yml`
 
-Required GitHub secrets:
+Jobs:
+
+- `Deploy development` (auto on `develop` and `main`)
+- `Deploy production (gated)` (only on `main`, or manual dispatch with `deploy_production=true`)
+
+To gate production, configure a GitHub Environment:
+
+1. Repo Settings -> Environments -> `production`
+2. Add Required reviewers (human approval)
+3. Add environment secrets (optional)
+
+Required GitHub secrets (repo-level or environment-level):
 
 - `AWS_ACCOUNT_ID`: AWS account number (for ECR login)
 - `AWS_DEPLOY_ROLE_ARN`: IAM role to assume via OIDC
 - `TF_STATE_BUCKET`: Terraform state bucket name
+- `API_CERTIFICATE_ARN`: (production) ACM cert ARN for the ALB (required when `enable_blue_green=true`)
 
 Branch mapping:
 
-- `develop` -> `environment=development`
-- `main` -> `environment=production`
+- `develop` -> deploys `environment=development`
+- `main` -> deploys `environment=development`, then waits for approval and deploys `environment=production`
+
+Deployment strategy:
+
+- `development`: rolling ECS deployments (`enable_blue_green=false`).
+- `production`: **CodeDeploy blue/green** (`enable_blue_green=true`) shifts ALB traffic between two target groups (automatic rollback on failure).
+- The private ALB **test listener** (default `9000`, VPC-only) is **HTTPS** when `api_certificate_arn` is set.
 
 ---
 
@@ -192,11 +212,11 @@ Branch mapping:
 
 Typical ballpark monthly costs per environment (region-dependent):
 
-- ALB: ~$20–$30
+- ALB: ~$20-$30
 - NAT Gateways: ~$32 each + data (2 AZs => $64+/env)
-- ECS Fargate Spot (1–2 tasks, 0.5–1 vCPU, 1–2 GB): ~$15–$80
-- ElastiCache Redis (small): ~$15–$60
-- RDS (t4g.micro/small + storage) or Neon: ~$15–$150+
+- ECS Fargate Spot (1-2 tasks, 0.5-1 vCPU, 1-2 GB): ~$15-$80
+- ElastiCache Redis (small): ~$15-$60
+- RDS (t4g.micro/small + storage) or Neon: ~$15-$150+
 - Lambda + API Gateway (voice webhooks): usually <$5 unless high volume
 - Secrets Manager: ~$0.40/secret/month + API calls
 

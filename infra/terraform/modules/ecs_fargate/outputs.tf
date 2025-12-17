@@ -5,7 +5,7 @@ output "cluster_name" {
 
 output "service_name" {
   description = "ECS service name"
-  value       = aws_ecs_service.api.name
+  value       = local.api_service_name
 }
 
 output "alb_dns_name" {
@@ -33,7 +33,22 @@ output "api_image_uri" {
   value       = local.computed_image_uri
 }
 
+output "api_task_definition_arn" {
+  description = "Current API task definition ARN (latest revision created by Terraform)"
+  value       = aws_ecs_task_definition.api.arn
+}
+
 output "migration_task_definition_arn" {
   description = "Task definition ARN for the one-off DB migration task"
   value       = aws_ecs_task_definition.migrate.arn
+}
+
+output "codedeploy_app_name" {
+  description = "CodeDeploy application name (ECS blue/green)"
+  value       = var.enable_blue_green ? aws_codedeploy_app.api[0].name : ""
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "CodeDeploy deployment group name (ECS blue/green)"
+  value       = var.enable_blue_green ? aws_codedeploy_deployment_group.api[0].deployment_group_name : ""
 }

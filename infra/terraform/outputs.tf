@@ -59,6 +59,21 @@ output "api_ecr_repository_url" {
   value       = module.ecs_fargate.api_ecr_repository_url
 }
 
+output "api_task_definition_arn" {
+  description = "Current API task definition ARN (latest revision created by Terraform)"
+  value       = module.ecs_fargate.api_task_definition_arn
+}
+
+output "codedeploy_app_name" {
+  description = "CodeDeploy application name (ECS blue/green)"
+  value       = module.ecs_fargate.codedeploy_app_name
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "CodeDeploy deployment group name (ECS blue/green)"
+  value       = module.ecs_fargate.codedeploy_deployment_group_name
+}
+
 output "redis_endpoint" {
   description = "Primary Redis endpoint (host:port)"
   value       = "${module.redis.primary_endpoint_address}:${module.redis.port}"
