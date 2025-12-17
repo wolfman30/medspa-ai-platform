@@ -103,18 +103,20 @@ module "ecs_fargate" {
 module "lambda" {
   source = "./modules/lambda"
 
-  environment = var.environment
-  aws_region  = var.aws_region
-  vpc_id      = module.vpc.vpc_id
-  subnet_ids  = module.vpc.private_subnet_ids
-  memory_size = var.api_lambda_memory
-  timeout     = var.api_lambda_timeout
-  image_tag   = var.api_image_tag
+  environment     = var.environment
+  aws_region      = var.aws_region
+  vpc_id          = module.vpc.vpc_id
+  subnet_ids      = module.vpc.private_subnet_ids
+  memory_size     = var.api_lambda_memory
+  timeout         = var.api_lambda_timeout
+  image_tag       = var.api_image_tag
+  create_function = var.enable_voice_webhooks
 
   upstream_base_url = "http://${module.ecs_fargate.alb_dns_name}"
 }
 
 module "api_gateway" {
+  count  = var.enable_voice_webhooks ? 1 : 0
   source = "./modules/api_gateway"
 
   environment          = var.environment
