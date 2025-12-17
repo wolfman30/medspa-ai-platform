@@ -83,6 +83,36 @@ variable "api_certificate_arn" {
   default     = ""
 }
 
+variable "enable_blue_green" {
+  description = "Enable ECS blue/green deployments via CodeDeploy"
+  type        = bool
+  default     = false
+}
+
+variable "codedeploy_deployment_config_name" {
+  description = "CodeDeploy deployment config name (ECS blue/green)"
+  type        = string
+  default     = "CodeDeployDefault.ECSAllAtOnce"
+}
+
+variable "codedeploy_termination_wait_time_minutes" {
+  description = "Minutes to keep the old task set running after a successful blue/green deployment"
+  type        = number
+  default     = 5
+}
+
+variable "deployment_minimum_healthy_percent" {
+  description = "Minimum healthy percent for ECS rolling deployments (used when enable_blue_green=false)"
+  type        = number
+  default     = 100
+}
+
+variable "deployment_maximum_percent" {
+  description = "Maximum percent for ECS rolling deployments (used when enable_blue_green=false)"
+  type        = number
+  default     = 200
+}
+
 variable "redis_node_type" {
   description = "ElastiCache Redis node type"
   type        = string
