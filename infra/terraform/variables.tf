@@ -53,6 +53,12 @@ variable "api_lambda_timeout" {
   default     = 30
 }
 
+variable "enable_voice_webhooks" {
+  description = "Enable voice webhook Lambda + API Gateway. Disable during image bootstrap to create ECR repos first."
+  type        = bool
+  default     = true
+}
+
 variable "api_image_tag" {
   description = "ECR image tag for the API image"
   type        = string

@@ -52,15 +52,16 @@ jobs:
             -backend-config="key=medspa-ai-platform/development/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
-      - name: Terraform apply (bootstrap ECR repos)
+      - name: Terraform apply (bootstrap infra for image push)
         working-directory: infra/terraform
         run: |
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=development" \
             -var="api_image_tag=${{ github.sha }}" \
-            -target=module.ecs_fargate.aws_ecr_repository.api \
-            -target=module.lambda.aws_ecr_repository.voice
+            -var="api_desired_count=0" \
+            -var="enable_voice_webhooks=false" \
+            -var="enable_blue_green=false"
 
       - name: Login to ECR
         run: |
@@ -203,15 +204,17 @@ jobs:
             -backend-config="key=medspa-ai-platform/production/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
-      - name: Terraform apply (bootstrap ECR repos)
+      - name: Terraform apply (bootstrap infra for image push)
         working-directory: infra/terraform
         run: |
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=production" \
             -var="api_image_tag=${{ github.sha }}" \
-            -target=module.ecs_fargate.aws_ecr_repository.api \
-            -target=module.lambda.aws_ecr_repository.voice
+            -var="api_desired_count=0" \
+            -var="enable_voice_webhooks=false" \
+            -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="enable_blue_green=true"
 
       - name: Login to ECR
         run: |
