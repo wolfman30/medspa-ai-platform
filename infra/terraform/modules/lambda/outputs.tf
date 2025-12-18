@@ -1,16 +1,16 @@
 output "function_name" {
   description = "Name of the Lambda function"
-  value       = aws_lambda_function.voice.function_name
+  value       = try(aws_lambda_function.voice[0].function_name, "")
 }
 
 output "function_arn" {
   description = "ARN of the Lambda function"
-  value       = aws_lambda_function.voice.arn
+  value       = try(aws_lambda_function.voice[0].arn, "")
 }
 
 output "invoke_arn" {
   description = "Invoke ARN of the Lambda function"
-  value       = aws_lambda_function.voice.invoke_arn
+  value       = try(aws_lambda_function.voice[0].invoke_arn, "")
 }
 
 output "ecr_repository_url" {
