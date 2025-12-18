@@ -1,0 +1,66 @@
+{
+  "resourceType": "Bundle",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Slot",
+        "contained": [
+          {
+            "resourceType": "Location",
+            "id": "1",
+            "identifier": [
+              {
+                "use": "official",
+                "value": "1"
+              }
+            ],
+            "name": "NexTech Dermatology"
+          },
+          {
+            "resourceType": "Practitioner",
+            "id": "9323",
+            "identifier": [
+              {
+                "use": "official",
+                "value": "9323"
+              }
+            ],
+            "name": [
+              {
+                "text": "Walters, Sherri",
+                "family": "Walters",
+                "given": [
+                  "Sherri",
+                  ""
+                ]
+              }
+            ]
+          }
+        ],
+        "extension": [
+          {
+            "url": "https://select.nextech-api.com/api/structuredefinition/appointment-type",
+            "valueReference": {
+              "reference": "appointment-type/9",
+              "display": "Surgery Cosmetic"
+            }
+          },
+          {
+            "url": "https://select.nextech-api.com/api/structuredefinition/appointment-purpose",
+            "valueReference": {
+              "reference": "appointment-purpose/224",
+              "display": "Skin Check"
+            }
+          }
+        ],
+        "schedule": {
+          "reference": "schedule/location_1_practitioner_9323"
+        },
+        "status": "free",
+        "start": "2018-02-26T14:00:00-05:00",
+        "end": "2018-02-26T15:00:00-05:00"
+      }
+    }
+  ]
+}
+

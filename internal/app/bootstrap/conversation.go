@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/emr/aesthetic"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/nextech"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -69,10 +71,10 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	}
 
 	// Configure EMR integration if credentials are provided
-	emrAdapter := buildEMRAdapter(cfg, logger)
+	emrAdapter := buildEMRAdapter(ctx, cfg, logger)
 	if emrAdapter != nil {
 		opts = append(opts, conversation.WithEMR(emrAdapter))
-		logger.Info("EMR integration enabled", "provider", "nextech")
+		logger.Info("EMR integration enabled")
 	}
 
 	// Wire in leads repository for preference capture
@@ -103,26 +105,86 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	), nil
 }
 
-// buildEMRAdapter creates an EMR adapter if Nextech credentials are configured.
-func buildEMRAdapter(cfg *appconfig.Config, logger *logging.Logger) *conversation.EMRAdapter {
+// buildEMRAdapter creates an EMR adapter based on configured provider credentials.
+func buildEMRAdapter(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) *conversation.EMRAdapter {
 	if cfg.NextechBaseURL == "" || cfg.NextechClientID == "" || cfg.NextechClientSecret == "" {
 		logger.Info("nextech EMR not configured; skipping EMR integration")
+	} else {
+		client, err := nextech.New(nextech.Config{
+			BaseURL:      cfg.NextechBaseURL,
+			ClientID:     cfg.NextechClientID,
+			ClientSecret: cfg.NextechClientSecret,
+			Timeout:      30 * time.Second,
+		})
+		if err != nil {
+			logger.Error("failed to create nextech client", "error", err)
+			return nil
+		}
+
+		logger.Info("EMR integration enabled", "provider", "nextech")
+		return conversation.NewEMRAdapter(client, "")
+	}
+
+	if strings.TrimSpace(cfg.AestheticRecordClinicID) == "" {
+		logger.Info("aesthetic record shadow scheduler not configured; skipping EMR integration")
 		return nil
 	}
 
-	client, err := nextech.New(nextech.Config{
-		BaseURL:      cfg.NextechBaseURL,
-		ClientID:     cfg.NextechClientID,
-		ClientSecret: cfg.NextechClientSecret,
-		Timeout:      30 * time.Second,
+	var upstream aesthetic.AvailabilitySource
+	if strings.TrimSpace(cfg.AestheticRecordSelectBaseURL) != "" {
+		selectClient, err := aesthetic.NewSelectAPIClient(aesthetic.SelectAPIConfig{
+			BaseURL:     cfg.AestheticRecordSelectBaseURL,
+			BearerToken: cfg.AestheticRecordSelectBearerToken,
+		})
+		if err != nil {
+			logger.Error("failed to create aesthetic record select api client", "error", err)
+			return nil
+		}
+		upstream = selectClient
+	} else {
+		logger.Warn("aesthetic record upstream not configured; shadow schedule requires manual slot seeding until upstream is available")
+	}
+
+	shadowClient, err := aesthetic.New(aesthetic.Config{
+		ClinicID: cfg.AestheticRecordClinicID,
+		Upstream: upstream,
 	})
 	if err != nil {
-		logger.Error("failed to create nextech client", "error", err)
+		logger.Error("failed to create aesthetic record shadow scheduler client", "error", err)
 		return nil
 	}
 
-	// Use empty clinicID as default; can be overridden per-org in the future
-	return conversation.NewEMRAdapter(client, "")
+	if cfg.AestheticRecordShadowSyncEnabled {
+		if upstream == nil {
+			logger.Warn("aesthetic record shadow sync enabled but upstream is nil; sync will not run")
+		} else {
+			targets := []aesthetic.SyncTarget{{
+				ClinicID:    cfg.AestheticRecordClinicID,
+				ProviderID:  strings.TrimSpace(cfg.AestheticRecordProviderID),
+				ServiceType: "",
+			}}
+			svc, err := aesthetic.NewSyncService(aesthetic.SyncServiceConfig{
+				Client:       shadowClient,
+				Targets:      targets,
+				Interval:     cfg.AestheticRecordSyncInterval,
+				WindowDays:   cfg.AestheticRecordSyncWindowDays,
+				DurationMins: cfg.AestheticRecordSyncDurationMins,
+			})
+			if err != nil {
+				logger.Error("failed to create aesthetic record shadow sync service", "error", err)
+			} else {
+				go svc.Start(ctx)
+				logger.Info("aesthetic record shadow scheduler sync started",
+					"clinic_id", cfg.AestheticRecordClinicID,
+					"provider_id", cfg.AestheticRecordProviderID,
+					"interval", cfg.AestheticRecordSyncInterval.String(),
+				)
+			}
+		}
+	}
+
+	logger.Info("EMR integration enabled", "provider", "aesthetic_record_shadow")
+	return conversation.NewEMRAdapter(shadowClient, cfg.AestheticRecordClinicID)
 }
 
 func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowledgeRepository) error {
