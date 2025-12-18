@@ -26,7 +26,7 @@ output "rds_database_name" {
 
 output "api_gateway_url" {
   description = "URL of the voice webhook API Gateway (HTTP API)"
-  value       = module.api_gateway.api_url
+  value       = try(module.api_gateway[0].api_url, "")
 }
 
 output "api_alb_dns_name" {

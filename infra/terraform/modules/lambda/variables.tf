@@ -34,6 +34,12 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "create_function" {
+  description = "Whether to create the Lambda function (set false during bootstrap before the image tag exists in ECR)"
+  type        = bool
+  default     = true
+}
+
 variable "upstream_base_url" {
   description = "Base URL for the upstream API (ALB) that receives forwarded webhooks"
   type        = string

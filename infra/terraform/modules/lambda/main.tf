@@ -74,6 +74,8 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 resource "aws_lambda_function" "voice" {
+  count = var.create_function ? 1 : 0
+
   function_name = "${local.name_prefix}-voice"
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
