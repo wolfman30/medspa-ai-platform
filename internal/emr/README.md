@@ -13,7 +13,7 @@ internal/emr/
 │   ├── client_test.go   # Tests
 │   └── README.md        # Nextech-specific documentation
 ├── boulevard/            # TODO: Boulevard implementation
-└── aesthetic/            # TODO: Aesthetic Record implementation
+└── aesthetic/            # Aesthetic Record shadow scheduler (mock upstream)
 ```
 
 ## Unified Interface
@@ -43,7 +43,7 @@ type Client interface {
 |-----|--------------|--------|------------|-----------|
 | **Nextech** | 15% | ✅ Implemented | Public API | [`nextech/`](nextech/) |
 | **Boulevard** | 25% | 🚧 Planned | Enterprise only | `boulevard/` |
-| **Aesthetic Record** | 30% | 🚧 Planned | Partnership required | `aesthetic/` |
+| **Aesthetic Record** | 30% | 🟡 Shadow scheduler | Partnership required | `aesthetic/` |
 
 ---
 

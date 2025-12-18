@@ -66,6 +66,16 @@ type Config struct {
 	NextechBaseURL      string
 	NextechClientID     string
 	NextechClientSecret string
+
+	// Aesthetic Record (Shadow Scheduler) Configuration
+	AestheticRecordClinicID          string
+	AestheticRecordProviderID        string
+	AestheticRecordSelectBaseURL     string
+	AestheticRecordSelectBearerToken string
+	AestheticRecordShadowSyncEnabled bool
+	AestheticRecordSyncInterval      time.Duration
+	AestheticRecordSyncWindowDays    int
+	AestheticRecordSyncDurationMins  int
 }
 
 // Load reads configuration from environment variables
@@ -128,6 +138,16 @@ func Load() *Config {
 		NextechBaseURL:      getEnv("NEXTECH_BASE_URL", ""),
 		NextechClientID:     getEnv("NEXTECH_CLIENT_ID", ""),
 		NextechClientSecret: getEnv("NEXTECH_CLIENT_SECRET", ""),
+
+		// Aesthetic Record (Shadow Scheduler) Configuration
+		AestheticRecordClinicID:          getEnv("AESTHETIC_RECORD_CLINIC_ID", ""),
+		AestheticRecordProviderID:        getEnv("AESTHETIC_RECORD_PROVIDER_ID", ""),
+		AestheticRecordSelectBaseURL:     getEnv("AESTHETIC_RECORD_SELECT_BASE_URL", ""),
+		AestheticRecordSelectBearerToken: getEnv("AESTHETIC_RECORD_SELECT_BEARER_TOKEN", ""),
+		AestheticRecordShadowSyncEnabled: getEnvAsBool("AESTHETIC_RECORD_SHADOW_SYNC_ENABLED", false),
+		AestheticRecordSyncInterval:      getEnvAsDuration("AESTHETIC_RECORD_SYNC_INTERVAL", 30*time.Minute),
+		AestheticRecordSyncWindowDays:    getEnvAsInt("AESTHETIC_RECORD_SYNC_WINDOW_DAYS", 7),
+		AestheticRecordSyncDurationMins:  getEnvAsInt("AESTHETIC_RECORD_SYNC_DURATION_MINS", 30),
 	}
 }
 
