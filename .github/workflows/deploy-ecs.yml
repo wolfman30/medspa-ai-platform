@@ -52,6 +52,13 @@ jobs:
             -backend-config="key=medspa-ai-platform/development/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
+      - name: Validate HTTPS certificate configured
+        run: |
+          if [ -z "${{ secrets.API_CERTIFICATE_ARN }}" ]; then
+            echo "Missing API_CERTIFICATE_ARN secret (required to keep development HTTPS in Terraform)."
+            exit 1
+          fi
+
       - name: Terraform apply (bootstrap infra for image push)
         working-directory: infra/terraform
         run: |
@@ -61,6 +68,7 @@ jobs:
             -var="api_image_tag=${{ github.sha }}" \
             -var="api_desired_count=0" \
             -var="enable_voice_webhooks=false" \
+            -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="enable_blue_green=false"
 
       - name: Login to ECR
@@ -96,6 +104,7 @@ jobs:
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=development" \
             -var="api_image_tag=${{ github.sha }}" \
+            -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="enable_blue_green=false"
 
       - name: Deploy API (blue/green via CodeDeploy) and wait
@@ -203,6 +212,13 @@ jobs:
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="key=medspa-ai-platform/production/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Validate HTTPS certificate configured
+        run: |
+          if [ -z "${{ secrets.API_CERTIFICATE_ARN }}" ]; then
+            echo "Missing API_CERTIFICATE_ARN secret (required for production HTTPS)."
+            exit 1
+          fi
 
       - name: Terraform apply (bootstrap infra for image push)
         working-directory: infra/terraform

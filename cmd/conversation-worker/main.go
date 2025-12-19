@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"os"
 	"os/signal"
@@ -147,10 +148,14 @@ func main() {
 	// Initialize notification service for clinic operator alerts
 	var notifier conversation.PaymentNotifier
 	if cfg.RedisAddr != "" {
-		redisClient := redis.NewClient(&redis.Options{
+		redisOptions := &redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
-		})
+		}
+		if cfg.RedisTLS {
+			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		redisClient := redis.NewClient(redisOptions)
 		if err := redisClient.Ping(ctx).Err(); err != nil {
 			logger.Warn("redis not available, clinic notifications disabled", "error", err)
 		} else {

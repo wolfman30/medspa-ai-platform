@@ -318,6 +318,40 @@ resource "aws_iam_role" "task" {
   })
 }
 
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_role_policy" "bedrock_runtime" {
+  name = "${local.name_prefix}-bedrock-runtime"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "BedrockInvokeClaudeHaiku45"
+        Effect = "Allow"
+        Action = [
+          "bedrock:Converse",
+          "bedrock:ConverseStream",
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = [
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw",
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0",
+
+          "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+          "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1",
+          "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1:2:8k",
+          "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
+          "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0:8k"
+        ]
+      }
+    ]
+  })
+}
+
 locals {
   computed_image_uri = var.api_image_uri != "" ? var.api_image_uri : "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
   migrate_image_uri  = "${aws_ecr_repository.api.repository_url}:migrate-${var.image_tag}"

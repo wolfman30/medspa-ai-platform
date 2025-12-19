@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 module "vpc" {
   source = "./modules/vpc"
 
@@ -59,11 +61,14 @@ module "ecs_fargate" {
   deployment_maximum_percent               = var.deployment_maximum_percent
 
   environment_variables = {
-    LOG_LEVEL        = "info"
-    USE_MEMORY_QUEUE = "true"
-    WORKER_COUNT     = "2"
-    AWS_REGION       = var.aws_region
-    REDIS_ADDR       = "${module.redis.primary_endpoint_address}:${module.redis.port}"
+    LOG_LEVEL                  = "info"
+    USE_MEMORY_QUEUE           = "true"
+    WORKER_COUNT               = "2"
+    AWS_REGION                 = var.aws_region
+    REDIS_ADDR                 = "${module.redis.primary_endpoint_address}:${module.redis.port}"
+    REDIS_TLS                  = "true"
+    BEDROCK_MODEL_ID           = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw"
+    BEDROCK_EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
   }
 
   secret_environment_variables = {

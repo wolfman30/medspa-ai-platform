@@ -56,6 +56,7 @@ type Config struct {
 	BedrockEmbeddingModelID  string
 	RedisAddr                string
 	RedisPassword            string
+	RedisTLS                 bool
 
 	// SendGrid Email Configuration
 	SendGridAPIKey    string
@@ -128,6 +129,7 @@ func Load() *Config {
 		BedrockEmbeddingModelID:  getEnv("BEDROCK_EMBEDDING_MODEL_ID", ""),
 		RedisAddr:                getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:            getEnv("REDIS_PASSWORD", ""),
+		RedisTLS:                 getEnvAsBool("REDIS_TLS", false),
 
 		// SendGrid Email Configuration
 		SendGridAPIKey:    getEnv("SENDGRID_API_KEY", ""),
