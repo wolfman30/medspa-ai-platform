@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -154,10 +155,14 @@ func main() {
 	// Create Redis client for knowledge repo and clinic config
 	var redisClient *redis.Client
 	if cfg.RedisAddr != "" {
-		redisClient = redis.NewClient(&redis.Options{
+		redisOptions := &redis.Options{
 			Addr:     cfg.RedisAddr,
 			Password: cfg.RedisPassword,
-		})
+		}
+		if cfg.RedisTLS {
+			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		redisClient = redis.NewClient(redisOptions)
 	}
 
 	var clinicHandler *clinic.Handler

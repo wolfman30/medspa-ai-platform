@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"time"
@@ -42,10 +43,14 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	}
 	bedrockClient := bedrockruntime.NewFromConfig(awsCfg)
 
-	redisClient := redis.NewClient(&redis.Options{
+	redisOptions := &redis.Options{
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
-	})
+	}
+	if cfg.RedisTLS {
+		redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	redisClient := redis.NewClient(redisOptions)
 	knowledgeRepo := conversation.NewRedisKnowledgeRepository(redisClient)
 	if err := ensureDefaultKnowledge(ctx, knowledgeRepo); err != nil {
 		logger.Warn("failed to seed default knowledge", "error", err)
