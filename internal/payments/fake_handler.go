@@ -50,9 +50,9 @@ func NewFakePaymentsHandler(paymentsRepo paymentByIDStore, leadsRepo leads.Repos
 
 func (h *FakePaymentsHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.Get("/fake/{paymentID}", h.HandleCheckout)
-	r.Post("/fake/{paymentID}/complete", h.HandleComplete)
-	r.Get("/fake/{paymentID}/success", h.HandleSuccess)
+	r.Get("/payments/{paymentID}", h.HandleCheckout)
+	r.Post("/payments/{paymentID}/complete", h.HandleComplete)
+	r.Get("/payments/{paymentID}/success", h.HandleSuccess)
 	return r
 }
 
@@ -92,7 +92,7 @@ func (h *FakePaymentsHandler) HandleCheckout(w http.ResponseWriter, r *http.Requ
     <div class="card">
       <p><strong>Amount:</strong> $%.2f</p>
       <p class="muted">This is a demo-only payment page (no real payment is processed).</p>
-      <form method="POST" action="/payments/fake/%s/complete">
+      <form method="POST" action="/demo/payments/%s/complete">
         <button class="btn" type="submit">Complete Deposit</button>
       </form>
       <p class="muted">Payment ID: <code>%s</code></p>
@@ -111,7 +111,7 @@ func (h *FakePaymentsHandler) HandleComplete(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "failed to complete payment", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/payments/fake/%s/success", paymentID.String()), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/demo/payments/%s/success", paymentID.String()), http.StatusSeeOther)
 }
 
 func (h *FakePaymentsHandler) HandleSuccess(w http.ResponseWriter, r *http.Request) {

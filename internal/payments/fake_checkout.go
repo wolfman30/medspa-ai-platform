@@ -43,7 +43,7 @@ func (s *FakeCheckoutService) CreatePaymentLink(ctx context.Context, params Chec
 		return nil, fmt.Errorf("payments: fake checkout PUBLIC_BASE_URL must be an absolute http(s) URL")
 	}
 
-	checkoutURL := fmt.Sprintf("%s/payments/fake/%s", s.publicBaseURL, params.BookingIntentID)
+	checkoutURL := fmt.Sprintf("%s/demo/payments/%s", s.publicBaseURL, params.BookingIntentID)
 	return &CheckoutResponse{
 		URL:        checkoutURL,
 		ProviderID: "fake:" + params.BookingIntentID.String(),
@@ -62,4 +62,3 @@ func isValidBaseURL(value string) bool {
 		return false
 	}
 }
-

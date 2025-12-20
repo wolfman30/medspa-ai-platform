@@ -60,7 +60,7 @@ func New(cfg *Config) http.Handler {
 			public.Post("/webhooks/square", cfg.SquareWebhook.Handle)
 		}
 		if cfg.FakePayments != nil {
-			public.Mount("/payments", cfg.FakePayments.Routes())
+			public.Mount("/demo", cfg.FakePayments.Routes())
 		}
 		if cfg.TelnyxWebhooks != nil {
 			public.Post("/webhooks/telnyx/messages", cfg.TelnyxWebhooks.HandleMessages)
