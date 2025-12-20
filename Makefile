@@ -1,7 +1,7 @@
 go_files := $(shell go list ./...)
 
 .PHONY: all deps fmt lint vet test cover run-api run-worker migrate docker-up docker-down ci-cover
-.PHONY: clear-test-deposit
+.PHONY: clear-test-deposit e2e e2e-quick
 
 all: test
 
@@ -47,3 +47,11 @@ test:
 # Clears deposit state for a test phone (dry-run unless YES=1).
 clear-test-deposit:
 	./scripts/clear-test-deposit.sh $(TEST_PHONE)
+
+# Run full E2E test (requires API running)
+e2e:
+	./scripts/run-e2e-test.sh
+
+# Run E2E test with shorter wait times
+e2e-quick:
+	./scripts/run-e2e-test.sh --quick
