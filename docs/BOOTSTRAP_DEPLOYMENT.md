@@ -9,13 +9,13 @@ This guide covers the $200/mo bootstrap deployment that runs everything on a sin
 - **AWS Lightsail**: Ubuntu 22.04, 2 GB RAM, 1 vCPU. Hosts the Go API container with in-process workers and a local Redis service.
 - **Neon PostgreSQL**: Serverless Postgres for multitenant data + job tables.
 - **Redis**: Installed directly on the Lightsail host for conversation history + caching.
-- **OpenAI/Telnyx/Square**: Cloud APIs, configured via `.env`.
+- **AWS Bedrock/Telnyx/Square**: Cloud APIs, configured via `.env`.
 - **docker-compose.bootstrap.yml**: Builds and runs a single container with `USE_MEMORY_QUEUE=true`, so the API and workers share the same process/queue.
 
 ## 1. Prepare Managed Services
 
 1. **Neon** – create a project and database, grab the connection string (e.g. `postgresql://user:pass@ep-xyz.neon.tech/medspa?sslmode=require`).
-2. **OpenAI / Telnyx / Square / Twilio** – provision API keys you will paste into `.env`.
+2. **AWS (Bedrock) / Telnyx / Square / Twilio** – provision API keys and AWS credentials you will paste into `.env`.
 3. **Domain + DNS** – create DNS records in Cloudflare (or similar) for the API hostname.
 
 ## 2. Provision Lightsail
@@ -68,9 +68,9 @@ USE_MEMORY_QUEUE=true
 WORKER_COUNT=2
 DATABASE_URL=postgresql://user:pass@ep-xyz.neon.tech/medspa?sslmode=require
 REDIS_ADDR=localhost:6379
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+AWS_REGION=us-east-1
+BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1
 TELNYX_API_KEY=...
 TELNYX_MESSAGING_PROFILE_ID=...
 TELNYX_WEBHOOK_SECRET=...
@@ -125,7 +125,7 @@ Reload Caddy: `sudo systemctl reload caddy`.
 
 ## 6. Health Checks & Backups
 
-- `curl http://localhost:8080/health` – verifies Postgres, Redis, OpenAI, Telnyx.
+- `curl http://localhost:8080/health` – verifies Postgres, Redis, Bedrock, Telnyx.
 - Schedule Lightsail snapshots nightly while bootstrapping.
 - Monitor Redis memory via `redis-cli INFO memory`.
 

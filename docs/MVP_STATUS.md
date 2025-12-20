@@ -12,7 +12,7 @@ Core plumbing for SMS reception, AI conversations, Square checkout links, and we
 ## What’s Complete
 - **Messaging stack** (Telnyx primary, Twilio fallback): inbound webhooks with signature validation, STOP/HELP detection, quiet-hours suppression, retry worker, hosted-number + 10DLC onboarding, Prometheus metrics.  
   - `internal/http/handlers/telnyx_webhooks.go`, `internal/messaging/*`, `cmd/messaging-worker`, metrics in `internal/observability/metrics`.
-- **AI conversation engine**: GPT-5-mini prompt tuned for qualification + deposit offer, Redis-backed history, RAG hooks, preference extraction into leads, deposit intent classification, job queue (SQS or in-memory + Postgres job store), worker sends SMS replies and dispatches deposits, payment-success + booking confirmation SMS.  
+- **AI conversation engine**: Claude (via AWS Bedrock) prompt tuned for qualification + deposit offer, Redis-backed history, RAG hooks, preference extraction into leads, deposit intent classification, job queue (SQS or in-memory + Postgres job store), worker sends SMS replies and dispatches deposits, payment-success + booking confirmation SMS.  
   - `internal/conversation/*`, inline worker wiring in `cmd/api/main.go` and queue worker in `cmd/conversation-worker/main.go`.
 - **Lead + clinic data**: lead capture + listing, clinic config (hours, deposits) in Redis, org-scoped stats API (conversations/deposits).  
   - `internal/leads/*`, `internal/clinic/*`.
