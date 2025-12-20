@@ -48,9 +48,15 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
     PAYMENT_PROVIDER_KEY         = ""
     SQUARE_ACCESS_TOKEN          = ""
     SQUARE_LOCATION_ID           = ""
+    SQUARE_BASE_URL              = var.environment == "production" ? "https://connect.squareup.com" : "https://connect.squareupsandbox.com"
     SQUARE_WEBHOOK_SIGNATURE_KEY = ""
+    SQUARE_SUCCESS_URL           = ""
+    SQUARE_CANCEL_URL            = ""
+    SQUARE_SANDBOX               = var.environment == "production" ? "false" : "true"
     SQUARE_CLIENT_ID             = ""
     SQUARE_CLIENT_SECRET         = ""
+    SQUARE_OAUTH_REDIRECT_URI    = ""
+    SQUARE_OAUTH_SUCCESS_URL     = ""
 
     # Email
     SENDGRID_API_KEY    = ""
