@@ -119,7 +119,7 @@ jobs:
           if [ -n "$APP" ] && [ -n "$GROUP" ] && [ -n "$TASK_DEF" ]; then
             echo "Triggering CodeDeploy blue/green deployment: ${APP} / ${GROUP}"
 
-            read -r CONTAINER_NAME CONTAINER_PORT <<< "$(aws ecs describe-task-definition --region "${{ env.AWS_REGION }}" --task-definition "$TASK_DEF" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"taskDefinition\"][\"containerDefinitions\"][0]; p=(c.get(\"portMappings\") or [{\"containerPort\": 0}])[0][\"containerPort\"]; print(c[\"name\"], p)')"
+            read -r CONTAINER_NAME CONTAINER_PORT <<< "$(aws ecs describe-task-definition --region "${{ env.AWS_REGION }}" --task-definition "$TASK_DEF" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d["taskDefinition"]["containerDefinitions"][0]; p=(c.get("portMappings") or [{"containerPort": 0}])[0]["containerPort"]; print(c["name"], p)')"
 
             if [ -z "${CONTAINER_PORT}" ] || [ "${CONTAINER_PORT}" = "0" ]; then
               echo "Failed to determine container port from task definition: ${TASK_DEF}"
@@ -280,7 +280,7 @@ jobs:
           if [ -n "$APP" ] && [ -n "$GROUP" ] && [ -n "$TASK_DEF" ]; then
             echo "Triggering CodeDeploy blue/green deployment: ${APP} / ${GROUP}"
 
-            read -r CONTAINER_NAME CONTAINER_PORT <<< "$(aws ecs describe-task-definition --region "${{ env.AWS_REGION }}" --task-definition "$TASK_DEF" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d[\"taskDefinition\"][\"containerDefinitions\"][0]; p=(c.get(\"portMappings\") or [{\"containerPort\": 0}])[0][\"containerPort\"]; print(c[\"name\"], p)')"
+            read -r CONTAINER_NAME CONTAINER_PORT <<< "$(aws ecs describe-task-definition --region "${{ env.AWS_REGION }}" --task-definition "$TASK_DEF" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d["taskDefinition"]["containerDefinitions"][0]; p=(c.get("portMappings") or [{"containerPort": 0}])[0]["containerPort"]; print(c["name"], p)')"
 
             if [ -z "${CONTAINER_PORT}" ] || [ "${CONTAINER_PORT}" = "0" ]; then
               echo "Failed to determine container port from task definition: ${TASK_DEF}"
