@@ -22,6 +22,7 @@ type Config struct {
 	MessagingHandler    *messaging.Handler
 	ConversationHandler *conversation.Handler
 	PaymentsHandler     *payments.CheckoutHandler
+	FakePayments        *payments.FakePaymentsHandler
 	SquareWebhook       *payments.SquareWebhookHandler
 	SquareOAuth         *payments.OAuthHandler
 	AdminMessaging      *handlers.AdminMessagingHandler
@@ -57,6 +58,9 @@ func New(cfg *Config) http.Handler {
 		})
 		if cfg.SquareWebhook != nil {
 			public.Post("/webhooks/square", cfg.SquareWebhook.Handle)
+		}
+		if cfg.FakePayments != nil {
+			public.Mount("/payments", cfg.FakePayments.Routes())
 		}
 		if cfg.TelnyxWebhooks != nil {
 			public.Post("/webhooks/telnyx/messages", cfg.TelnyxWebhooks.HandleMessages)

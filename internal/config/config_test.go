@@ -17,8 +17,14 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Env != "development" {
 		t.Fatalf("expected default env, got %s", cfg.Env)
 	}
+	if cfg.PublicBaseURL != "" {
+		t.Fatalf("expected default public base url empty, got %s", cfg.PublicBaseURL)
+	}
 	if cfg.BedrockModelID != "" {
 		t.Fatalf("expected default bedrock model empty, got %s", cfg.BedrockModelID)
+	}
+	if cfg.AllowFakePayments {
+		t.Fatalf("expected fake payments disabled by default")
 	}
 	if cfg.AestheticRecordShadowSyncEnabled {
 		t.Fatalf("expected aesthetic record shadow sync disabled by default")
@@ -31,9 +37,11 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	t.Setenv("PORT", "9090")
 	t.Setenv("ENV", "production")
+	t.Setenv("PUBLIC_BASE_URL", "https://example.com")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("DATABASE_URL", "postgres://user@host/db")
 	t.Setenv("DEPOSIT_AMOUNT_CENTS", "7500")
+	t.Setenv("ALLOW_FAKE_PAYMENTS", "true")
 	t.Setenv("TWILIO_ORG_MAP_JSON", "{\"+1555\":\"org1\"}")
 	t.Setenv("AESTHETIC_RECORD_CLINIC_ID", "clinic-123")
 	t.Setenv("AESTHETIC_RECORD_SHADOW_SYNC_ENABLED", "true")
@@ -47,11 +55,17 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.Env != "production" {
 		t.Fatalf("expected env override, got %s", cfg.Env)
 	}
+	if cfg.PublicBaseURL != "https://example.com" {
+		t.Fatalf("expected public base url override, got %s", cfg.PublicBaseURL)
+	}
 	if cfg.DatabaseURL != "postgres://user@host/db" {
 		t.Fatalf("expected db override, got %s", cfg.DatabaseURL)
 	}
 	if cfg.DepositAmountCents != 7500 {
 		t.Fatalf("expected deposit override, got %d", cfg.DepositAmountCents)
+	}
+	if !cfg.AllowFakePayments {
+		t.Fatalf("expected allow fake payments override to be true")
 	}
 	if cfg.TwilioOrgMapJSON != "{\"+1555\":\"org1\"}" {
 		t.Fatalf("expected org map override, got %s", cfg.TwilioOrgMapJSON)

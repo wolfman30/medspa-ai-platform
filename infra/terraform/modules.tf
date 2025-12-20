@@ -66,6 +66,8 @@ module "ecs_fargate" {
     USE_MEMORY_QUEUE           = "true"
     WORKER_COUNT               = "2"
     AWS_REGION                 = var.aws_region
+    PUBLIC_BASE_URL            = var.api_public_base_url
+    ALLOW_FAKE_PAYMENTS        = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
     REDIS_ADDR                 = "${module.redis.primary_endpoint_address}:${module.redis.port}"
     REDIS_TLS                  = "true"
     BEDROCK_MODEL_ID           = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw"
@@ -118,7 +120,7 @@ module "lambda" {
   image_tag       = var.api_image_tag
   create_function = var.enable_voice_webhooks
 
-  upstream_base_url = "http://${module.ecs_fargate.alb_dns_name}"
+  upstream_base_url = var.voice_upstream_base_url != "" ? var.voice_upstream_base_url : "http://${module.ecs_fargate.alb_dns_name}"
 }
 
 module "api_gateway" {
