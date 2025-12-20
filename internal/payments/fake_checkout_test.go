@@ -47,7 +47,7 @@ func TestFakeCheckoutService_ReturnsInternalURL(t *testing.T) {
 	if resp == nil || resp.URL == "" {
 		t.Fatalf("expected checkout url")
 	}
-	wantPrefix := "https://api-dev.aiwolfsolutions.com/payments/fake/" + intentID.String()
+	wantPrefix := "https://api-dev.aiwolfsolutions.com/demo/payments/" + intentID.String()
 	if resp.URL != wantPrefix {
 		t.Fatalf("unexpected url: got %s want %s", resp.URL, wantPrefix)
 	}
@@ -55,4 +55,3 @@ func TestFakeCheckoutService_ReturnsInternalURL(t *testing.T) {
 		t.Fatalf("unexpected provider id: %s", resp.ProviderID)
 	}
 }
-
