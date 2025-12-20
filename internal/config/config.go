@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Port                     string
 	Env                      string
+	PublicBaseURL            string
 	LogLevel                 string
 	UseMemoryQueue           bool
 	WorkerCount              int
@@ -41,6 +42,7 @@ type Config struct {
 	SquareOAuthRedirectURI   string
 	SquareOAuthSuccessURL    string
 	SquareSandbox            bool
+	AllowFakePayments        bool
 	DepositAmountCents       int
 	AdminJWTSecret           string
 	QuietHoursStart          string
@@ -84,6 +86,7 @@ func Load() *Config {
 	return &Config{
 		Port:                     getEnv("PORT", "8080"),
 		Env:                      getEnv("ENV", "development"),
+		PublicBaseURL:            getEnv("PUBLIC_BASE_URL", ""),
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 		UseMemoryQueue:           getEnvAsBool("USE_MEMORY_QUEUE", false),
 		WorkerCount:              getEnvAsInt("WORKER_COUNT", 2),
@@ -114,6 +117,7 @@ func Load() *Config {
 		SquareOAuthRedirectURI:   getEnv("SQUARE_OAUTH_REDIRECT_URI", ""),
 		SquareOAuthSuccessURL:    getEnv("SQUARE_OAUTH_SUCCESS_URL", ""),
 		SquareSandbox:            getEnvAsBool("SQUARE_SANDBOX", true),
+		AllowFakePayments:        getEnvAsBool("ALLOW_FAKE_PAYMENTS", false),
 		DepositAmountCents:       getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
 		AdminJWTSecret:           getEnv("ADMIN_JWT_SECRET", ""),
 		QuietHoursStart:          getEnv("QUIET_HOURS_START", ""),

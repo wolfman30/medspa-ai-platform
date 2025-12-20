@@ -130,3 +130,15 @@ variable "redis_num_cache_clusters" {
   type        = number
   default     = 1
 }
+
+variable "api_public_base_url" {
+  description = "Public base URL for the API (used for demo payment links and voice webhook proxy upstream)"
+  type        = string
+  default     = ""
+}
+
+variable "voice_upstream_base_url" {
+  description = "Optional override for voice-lambda upstream base URL (default uses the ALB DNS over HTTP)"
+  type        = string
+  default     = ""
+}
