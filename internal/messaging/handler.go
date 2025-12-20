@@ -176,7 +176,11 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isMissedCallStatus(callStatus) {
-		w.WriteHeader(http.StatusNoContent)
+		// Return TwiML that rejects the call - this will trigger a status callback
+		// with "no-answer" status, which will then trigger the missed call SMS flow
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="busy"/></Response>`))
 		return
 	}
 
