@@ -2,10 +2,13 @@
 name: Deploy (Development -> Production)
 
 on:
-  push:
-    branches: [ develop, main ]
   workflow_dispatch:
     inputs:
+      deploy_development:
+        description: "Deploy development"
+        required: true
+        type: boolean
+        default: true
       deploy_production:
         description: "Also deploy production (requires approval)"
         required: true
@@ -27,7 +30,7 @@ jobs:
     concurrency:
       group: deploy-development
       cancel-in-progress: false
-    if: github.ref_name == 'develop' || github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_development
 
     steps:
       - name: Checkout
@@ -106,6 +109,41 @@ jobs:
             -var="api_image_tag=${{ github.sha }}" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="enable_blue_green=false"
+
+      - name: Refresh DATABASE_URL (RDS managed secret)
+        run: |
+          set -euo pipefail
+
+          REGION="${{ env.AWS_REGION }}"
+          ENV_NAME="development"
+          DB_ID="medspa-${ENV_NAME}-db"
+          APP_SECRET_ID="medspa-${ENV_NAME}-app-secrets"
+
+          MASTER_SECRET_ARN="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text)"
+          if [ -z "$MASTER_SECRET_ARN" ] || [ "$MASTER_SECRET_ARN" = "None" ]; then
+            echo "RDS master user secret ARN not found for ${DB_ID}"
+            exit 1
+          fi
+
+          HOST="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].Endpoint.Address' --output text)"
+          USERNAME="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].MasterUsername' --output text)"
+          PASSWORD="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$MASTER_SECRET_ARN" --query 'SecretString' --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"password\"])')"
+
+          ENCODED_PASSWORD="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=\"\"))' "$PASSWORD")"
+          DB_URL="postgresql://${USERNAME}:${ENCODED_PASSWORD}@${HOST}:5432/medspa?sslmode=require"
+
+          CURRENT="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --query 'SecretString' --output text)"
+          UPDATED="$(
+            CURRENT="$CURRENT" DB_URL="$DB_URL" python3 - <<'PY'
+          import json, os
+
+          current = json.loads(os.environ["CURRENT"])
+          current["DATABASE_URL"] = os.environ["DB_URL"]
+          print(json.dumps(current))
+          PY
+          )"
+
+          aws secretsmanager put-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --secret-string "$UPDATED" >/dev/null
 
       - name: Deploy API (blue/green via CodeDeploy) and wait
         working-directory: infra/terraform
@@ -188,7 +226,7 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
-    if: github.ref_name == 'main' || (github.event_name == 'workflow_dispatch' && inputs.deploy_production)
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_production && github.ref_name == 'main'
 
     steps:
       - name: Checkout
@@ -267,6 +305,41 @@ jobs:
             -var="api_image_tag=${{ github.sha }}" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="enable_blue_green=true"
+
+      - name: Refresh DATABASE_URL (RDS managed secret)
+        run: |
+          set -euo pipefail
+
+          REGION="${{ env.AWS_REGION }}"
+          ENV_NAME="production"
+          DB_ID="medspa-${ENV_NAME}-db"
+          APP_SECRET_ID="medspa-${ENV_NAME}-app-secrets"
+
+          MASTER_SECRET_ARN="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text)"
+          if [ -z "$MASTER_SECRET_ARN" ] || [ "$MASTER_SECRET_ARN" = "None" ]; then
+            echo "RDS master user secret ARN not found for ${DB_ID}"
+            exit 1
+          fi
+
+          HOST="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].Endpoint.Address' --output text)"
+          USERNAME="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].MasterUsername' --output text)"
+          PASSWORD="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$MASTER_SECRET_ARN" --query 'SecretString' --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"password\"])')"
+
+          ENCODED_PASSWORD="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=\"\"))' "$PASSWORD")"
+          DB_URL="postgresql://${USERNAME}:${ENCODED_PASSWORD}@${HOST}:5432/medspa?sslmode=require"
+
+          CURRENT="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --query 'SecretString' --output text)"
+          UPDATED="$(
+            CURRENT="$CURRENT" DB_URL="$DB_URL" python3 - <<'PY'
+          import json, os
+
+          current = json.loads(os.environ["CURRENT"])
+          current["DATABASE_URL"] = os.environ["DB_URL"]
+          print(json.dumps(current))
+          PY
+          )"
+
+          aws secretsmanager put-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --secret-string "$UPDATED" >/dev/null
 
       - name: Deploy API (blue/green via CodeDeploy) and wait
         working-directory: infra/terraform

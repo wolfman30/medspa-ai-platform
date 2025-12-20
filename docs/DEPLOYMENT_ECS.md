@@ -193,12 +193,13 @@ Required GitHub secrets (repo-level or environment-level):
 - `AWS_ACCOUNT_ID`: AWS account number (for ECR login)
 - `AWS_DEPLOY_ROLE_ARN`: IAM role to assume via OIDC
 - `TF_STATE_BUCKET`: Terraform state bucket name
-- `API_CERTIFICATE_ARN`: (production) ACM cert ARN for the ALB (required when `enable_blue_green=true`)
+- `API_CERTIFICATE_ARN`: ACM cert ARN for ALB HTTPS (required in CI; production also uses it for the blue/green test listener)
 
-Branch mapping:
+Workflow usage:
 
-- `develop` -> deploys `environment=development`
-- `main` -> deploys `environment=development`, then waits for approval and deploys `environment=production`
+- Run `Deploy (Development -> Production)` manually via GitHub Actions (`workflow_dispatch`)
+- `deploy_development=true` deploys `environment=development`
+- `deploy_production=true` deploys `environment=production` (only when run from `main`)
 
 Deployment strategy:
 
@@ -223,5 +224,37 @@ Typical ballpark monthly costs per environment (region-dependent):
 To stay under budget:
 
 - Keep `development` at 1 task and the smallest Redis node.
-- Consider a single NAT gateway for `development` if needed.
+- Terraform uses a single NAT gateway for non-production by default (production keeps one per AZ).
 - Run the API service primarily on Spot with minimal on-demand base.
+
+---
+
+## 5) Parking (stop costs) + restore
+
+To stop almost all ongoing AWS cost while keeping config for fast restore, destroy the expensive modules (VPC/NAT, ECS/ALB, RDS, Redis, voice gateway) and keep Secrets Manager secrets.
+
+Development (example):
+
+```bash
+cd infra/terraform
+terraform init -reconfigure \
+  -backend-config="bucket=<bucket>" \
+  -backend-config="key=medspa-ai-platform/development/terraform.tfstate" \
+  -backend-config="region=us-east-1"
+
+terraform destroy -auto-approve \
+  -var="environment=development" \
+  -target=module.ecs_fargate \
+  -target=module.rds \
+  -target=module.redis \
+  -target=module.lambda \
+  -target="module.api_gateway[0]" \
+  -target=module.vpc
+```
+
+Production is the same with `key=medspa-ai-platform/production/terraform.tfstate` and `-var="environment=production"`.
+
+Restore:
+
+- Run the GitHub Actions workflow to recreate development when you're ready.
+- Later, run it from `main` with `deploy_production=true` to recreate production.

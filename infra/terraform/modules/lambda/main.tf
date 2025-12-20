@@ -14,6 +14,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 resource "aws_ecr_repository" "voice" {
   name                 = "${local.name_prefix}-voice-lambda"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
