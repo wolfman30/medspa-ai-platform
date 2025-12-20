@@ -84,7 +84,10 @@ terraform init \
 
 ```bash
 cd infra/terraform
-terraform apply -var="environment=development"
+terraform apply \
+  -var="environment=development" \
+  -var="api_public_base_url=https://api-dev.<your-domain>" \
+  -var="voice_upstream_base_url=https://api-dev.<your-domain>"
 ```
 
 Record outputs:
@@ -100,6 +103,7 @@ Populate the `medspa-<environment>-app-secrets` secret with at least:
 - `DATABASE_URL`
 - `ADMIN_JWT_SECRET`
 - Provider credentials (Twilio/Telnyx/Square/etc) as needed
+- `TWILIO_ORG_MAP_JSON` must map inbound numbers to an **org UUID** (payments/booking flows parse org IDs as UUIDs)
 
 Terraform creates placeholders (and ignores future secret edits), so you can safely edit values in AWS without Terraform overwriting them.
 
@@ -150,6 +154,7 @@ aws ecs run-task \
   - `POST {api_gateway_url}/webhooks/telnyx/voice`
 
 The Lambda forwards these requests to the ECS API's existing voice endpoints.
+If you enable ALB HTTPS redirects, set `voice_upstream_base_url` to your public HTTPS API hostname so the Lambda does not hit an HTTP→HTTPS redirect (which can fail due to certificate hostname mismatch).
 
 ### 2.8 Validate end-to-end (development)
 
