@@ -11,8 +11,8 @@ cp .env.bootstrap.example .env
 
 # Edit .env with your credentials
 # REQUIRED:
-# - OPENAI_API_KEY (get from platform.openai.com)
 # - DATABASE_URL (or use docker-compose postgres)
+# - AWS credentials for Bedrock (or use LocalStack)
 
 # REQUIRED for SMS (choose one):
 # Option A: Twilio (recommended for testing)
@@ -277,8 +277,8 @@ LIMIT 5;
 ## Troubleshooting
 
 ### No AI Response
-- Check `OPENAI_API_KEY` is set correctly
-- Check logs for OpenAI API errors
+- Check AWS credentials are configured for Bedrock access
+- Check logs for Bedrock API errors
 - Verify Redis is running: `redis-cli ping` → should return `PONG`
 
 ### Preferences Not Saved
