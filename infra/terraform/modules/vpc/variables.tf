@@ -12,3 +12,9 @@ variable "availability_zones" {
   description = "List of availability zones"
   type        = list(string)
 }
+
+variable "single_nat_gateway" {
+  description = "Use a single NAT gateway for all private subnets (cheaper, less HA)"
+  type        = bool
+  default     = false
+}

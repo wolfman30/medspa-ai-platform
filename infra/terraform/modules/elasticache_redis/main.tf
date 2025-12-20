@@ -80,4 +80,3 @@ resource "aws_elasticache_replication_group" "main" {
     Name = "${local.name_prefix}-redis"
   })
 }
-
