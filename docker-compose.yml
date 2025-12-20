@@ -8,10 +8,14 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://medspa:medspa@postgres:5432/medspa?sslmode=disable
+      REDIS_ADDR: redis:6379
+      # Bedrock model for AI conversations
+      BEDROCK_MODEL_ID: us.anthropic.claude-3-5-haiku-20241022-v1:0
       AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: localstack
-      AWS_SECRET_ACCESS_KEY: localstack
-      AWS_ENDPOINT_OVERRIDE: http://localstack:4566
+      # Pass AWS credentials from host environment
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     ports:
       - "8082:8080"
     depends_on:
@@ -51,16 +55,15 @@ services:
     env_file:
       - .env
     environment:
-      # Ensure worker can reach the Compose postgres/redis by default.
       DATABASE_URL: ${DATABASE_URL:-postgresql://medspa:medspa@postgres:5432/medspa?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      BEDROCK_MODEL_ID: us.anthropic.claude-3-5-haiku-20241022-v1:0
       AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: localstack
-      AWS_SECRET_ACCESS_KEY: localstack
-      AWS_ENDPOINT_OVERRIDE: http://localstack:4566
+      # Pass AWS credentials from host environment
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     depends_on:
-      localstack:
-        condition: service_started
       postgres:
         condition: service_healthy
       redis:
