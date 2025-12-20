@@ -59,6 +59,7 @@ ENTRYPOINT ["/bin/migrate"]
 
 FROM public.ecr.aws/lambda/provided:al2023 AS voice-lambda
 
-COPY --from=builder /bin/voice-lambda /var/task/bootstrap
+COPY --from=builder /bin/voice-lambda /var/runtime/bootstrap
+RUN chmod 755 /var/runtime/bootstrap
 
 CMD ["bootstrap"]
