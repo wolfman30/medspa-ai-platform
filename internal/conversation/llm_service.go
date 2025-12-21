@@ -398,13 +398,10 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return nil, err
 	}
 
-	depositIntent, derr := s.extractDepositIntent(ctx, history)
-	if derr != nil {
-		span.RecordError(derr)
-		s.logger.Warn("deposit intent extraction failed", "error", derr)
-	} else if depositIntent == nil && latestTurnAgreedToDeposit(history) {
-		// Fallback heuristic: if the user explicitly agrees to a deposit in their message,
-		// send a deposit intent even if the classifier skipped.
+	var depositIntent *DepositIntent
+	if latestTurnAgreedToDeposit(history) {
+		// Deterministic fallback: if the user explicitly agrees to a deposit in their message,
+		// send a deposit intent even if the classifier is skipped or errors.
 		depositIntent = &DepositIntent{
 			AmountCents: s.deposit.DefaultAmountCents,
 			Description: s.deposit.Description,
@@ -412,10 +409,20 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			CancelURL:   s.deposit.CancelURL,
 		}
 		s.logger.Info("deposit intent inferred from explicit user agreement", "amount_cents", depositIntent.AmountCents)
-	} else if depositIntent != nil {
-		s.logger.Info("deposit intent extracted", "amount_cents", depositIntent.AmountCents)
+	} else if shouldAttemptDepositClassification(history) {
+		extracted, derr := s.extractDepositIntent(ctx, history)
+		if derr != nil {
+			span.RecordError(derr)
+			s.logger.Warn("deposit intent extraction failed", "error", derr)
+		} else if extracted != nil {
+			s.logger.Info("deposit intent extracted", "amount_cents", extracted.AmountCents)
+		} else {
+			s.logger.Debug("no deposit intent detected")
+		}
+		depositIntent = extracted
 	} else {
-		s.logger.Debug("no deposit intent detected")
+		s.logger.Debug("deposit: classifier skipped (no deposit context)")
+		depositIntent = nil
 	}
 
 	// Extract and save scheduling preferences if lead ID is provided
@@ -431,6 +438,24 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		Timestamp:      time.Now().UTC(),
 		DepositIntent:  depositIntent,
 	}, nil
+}
+
+func shouldAttemptDepositClassification(history []ChatMessage) bool {
+	checked := 0
+	for i := len(history) - 1; i >= 0 && checked < 8; i-- {
+		if history[i].Role == ChatRoleSystem {
+			continue
+		}
+		msg := strings.TrimSpace(history[i].Content)
+		if msg == "" {
+			continue
+		}
+		if depositKeywordRE.MatchString(msg) || depositAskRE.MatchString(msg) {
+			return true
+		}
+		checked++
+	}
+	return false
 }
 
 // GetHistory retrieves the conversation history for a given conversation ID.
