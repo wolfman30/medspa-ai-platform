@@ -66,9 +66,27 @@ jobs:
             exit 1
           fi
 
-      - name: Terraform apply (bootstrap infra for image push)
+      - name: Terraform bootstrap (only if ECR repos missing)
         working-directory: infra/terraform
         run: |
+          set -euo pipefail
+
+          REGION="${{ env.AWS_REGION }}"
+          ENV_NAME="development"
+
+          NEED_BOOTSTRAP=0
+          for REPO in "medspa-${ENV_NAME}-api" "medspa-${ENV_NAME}-voice-lambda"; do
+            if ! aws ecr describe-repositories --region "$REGION" --repository-names "$REPO" >/dev/null 2>&1; then
+              NEED_BOOTSTRAP=1
+            fi
+          done
+
+          if [ "$NEED_BOOTSTRAP" -eq 0 ]; then
+            echo "ECR repos already exist; skipping bootstrap apply."
+            exit 0
+          fi
+
+          echo "ECR repos missing; running Terraform bootstrap apply (voice webhooks disabled)."
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=development" \
@@ -270,9 +288,27 @@ jobs:
             exit 1
           fi
 
-      - name: Terraform apply (bootstrap infra for image push)
+      - name: Terraform bootstrap (only if ECR repos missing)
         working-directory: infra/terraform
         run: |
+          set -euo pipefail
+
+          REGION="${{ env.AWS_REGION }}"
+          ENV_NAME="production"
+
+          NEED_BOOTSTRAP=0
+          for REPO in "medspa-${ENV_NAME}-api" "medspa-${ENV_NAME}-voice-lambda"; do
+            if ! aws ecr describe-repositories --region "$REGION" --repository-names "$REPO" >/dev/null 2>&1; then
+              NEED_BOOTSTRAP=1
+            fi
+          done
+
+          if [ "$NEED_BOOTSTRAP" -eq 0 ]; then
+            echo "ECR repos already exist; skipping bootstrap apply."
+            exit 0
+          fi
+
+          echo "ECR repos missing; running Terraform bootstrap apply (voice webhooks disabled)."
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=production" \
