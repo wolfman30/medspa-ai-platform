@@ -90,6 +90,19 @@ func (s *MemoryRAGStore) Query(ctx context.Context, clinicID string, query strin
 	if topK <= 0 {
 		topK = 3
 	}
+	var candidates []ragDocument
+	s.mu.RLock()
+	if docs, ok := s.docments[clinicID]; ok {
+		candidates = append(candidates, docs...)
+	}
+	if docs, ok := s.docments[""]; ok {
+		candidates = append(candidates, docs...)
+	}
+	s.mu.RUnlock()
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
 	resp, err := s.client.Embed(ctx, s.model, []string{query})
 	if err != nil {
 		return nil, err
@@ -99,19 +112,6 @@ func (s *MemoryRAGStore) Query(ctx context.Context, clinicID string, query strin
 	}
 
 	queryVec := resp[0]
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var candidates []ragDocument
-	if docs, ok := s.docments[clinicID]; ok {
-		candidates = append(candidates, docs...)
-	}
-	if docs, ok := s.docments[""]; ok {
-		candidates = append(candidates, docs...)
-	}
-	if len(candidates) == 0 {
-		return nil, nil
-	}
 
 	type scored struct {
 		score   float64
