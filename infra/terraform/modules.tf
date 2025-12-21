@@ -128,7 +128,7 @@ module "lambda" {
   image_tag       = var.api_image_tag
   create_function = var.enable_voice_webhooks
 
-  upstream_base_url = var.voice_upstream_base_url != "" ? var.voice_upstream_base_url : "http://${module.ecs_fargate.alb_dns_name}"
+  upstream_base_url = var.voice_upstream_base_url != "" ? var.voice_upstream_base_url : (var.api_public_base_url != "" ? var.api_public_base_url : "http://${module.ecs_fargate.alb_dns_name}")
 }
 
 module "api_gateway" {

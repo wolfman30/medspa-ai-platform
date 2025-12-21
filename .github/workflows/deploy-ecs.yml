@@ -61,6 +61,10 @@ jobs:
             echo "Missing API_CERTIFICATE_ARN secret (required to keep development HTTPS in Terraform)."
             exit 1
           fi
+          if [ -z "${{ secrets.API_PUBLIC_BASE_URL }}" ]; then
+            echo "Missing API_PUBLIC_BASE_URL secret (e.g., https://api-dev.example.com)."
+            exit 1
+          fi
 
       - name: Terraform apply (bootstrap infra for image push)
         working-directory: infra/terraform
@@ -72,6 +76,8 @@ jobs:
             -var="api_desired_count=0" \
             -var="enable_voice_webhooks=false" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
+            -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="enable_blue_green=false"
 
       - name: Login to ECR
@@ -108,6 +114,8 @@ jobs:
             -var="environment=development" \
             -var="api_image_tag=${{ github.sha }}" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
+            -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="enable_blue_green=false"
 
       - name: Refresh DATABASE_URL (RDS managed secret)
@@ -257,6 +265,10 @@ jobs:
             echo "Missing API_CERTIFICATE_ARN secret (required for production HTTPS)."
             exit 1
           fi
+          if [ -z "${{ secrets.API_PUBLIC_BASE_URL }}" ]; then
+            echo "Missing API_PUBLIC_BASE_URL secret (e.g., https://api.example.com)."
+            exit 1
+          fi
 
       - name: Terraform apply (bootstrap infra for image push)
         working-directory: infra/terraform
@@ -268,6 +280,8 @@ jobs:
             -var="api_desired_count=0" \
             -var="enable_voice_webhooks=false" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
+            -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="enable_blue_green=true"
 
       - name: Login to ECR
@@ -304,6 +318,8 @@ jobs:
             -var="environment=production" \
             -var="api_image_tag=${{ github.sha }}" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
+            -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="enable_blue_green=true"
 
       - name: Refresh DATABASE_URL (RDS managed secret)
