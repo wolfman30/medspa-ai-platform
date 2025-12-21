@@ -103,7 +103,7 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("medspa.org_id", orgID))
 
 	jobID := webhook.MessageSid
-	leadID, isNewLead, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
+	leadID, _, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
 	if err != nil {
 		h.logger.Error("failed to persist lead", "error", err, "org_id", orgID, "from", from)
 		http.Error(w, "Failed to persist lead", http.StatusInternalServerError)
@@ -136,11 +136,9 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("twilio webhook accepted", "org_id", orgID, "lead_id", leadID, "conversation_id", conversationID)
-	ackMsg := GetSmsAckMessage(isNewLead)
-	twimlAck := `<?xml version="1.0" encoding="UTF-8"?><Response><Message>` + ackMsg + `</Message></Response>`
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(twimlAck))
+	_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`))
 }
 
 // TwilioVoiceWebhook handles POST /webhooks/twilio/voice for missed-call detection.
