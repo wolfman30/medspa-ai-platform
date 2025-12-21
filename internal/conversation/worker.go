@@ -241,6 +241,14 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 				w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
 			}
 		}
+		if payload.Kind == jobTypeMessage {
+			w.logger.Warn("sending fallback reply after conversation failure", "job_id", payload.ID, "org_id", payload.Message.OrgID)
+			w.sendReply(ctx, payload, &Response{
+				ConversationID: payload.Message.ConversationID,
+				Message:        "Sorry — I’m having trouble responding right now. Please reply again in a moment.",
+				Timestamp:      time.Now().UTC(),
+			})
+		}
 	} else {
 		w.logger.Debug("conversation job processed", "job_id", payload.ID, "kind", payload.Kind)
 		var convID string

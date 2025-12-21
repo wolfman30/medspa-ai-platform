@@ -493,7 +493,7 @@ func (s *LLMService) generateResponse(ctx context.Context, history []ChatMessage
 		MaxTokens:   450,
 		Temperature: 0.2,
 	}
-	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	start := time.Now()
