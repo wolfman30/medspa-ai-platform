@@ -64,7 +64,9 @@ module "ecs_fargate" {
   environment_variables = {
     LOG_LEVEL                  = "info"
     USE_MEMORY_QUEUE           = "true"
-    WORKER_COUNT               = "2"
+    WORKER_COUNT               = var.environment == "production" ? "2" : "1"
+    AWS_RETRY_MODE             = var.environment == "production" ? "standard" : "adaptive"
+    AWS_MAX_ATTEMPTS           = var.environment == "production" ? "3" : "10"
     AWS_REGION                 = var.aws_region
     PUBLIC_BASE_URL            = var.api_public_base_url
     ALLOW_FAKE_PAYMENTS        = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
