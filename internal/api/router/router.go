@@ -26,6 +26,7 @@ type Config struct {
 	SquareWebhook       *payments.SquareWebhookHandler
 	SquareOAuth         *payments.OAuthHandler
 	AdminMessaging      *handlers.AdminMessagingHandler
+	AdminClinicData     *handlers.AdminClinicDataHandler
 	TelnyxWebhooks      *handlers.TelnyxWebhookHandler
 	ClinicHandler       *clinic.Handler
 	ClinicStatsHandler  *clinic.StatsHandler
@@ -101,6 +102,9 @@ func New(cfg *Config) http.Handler {
 				}
 				if cfg.ConversationHandler != nil {
 					clinicRoutes.Get("/conversations/{phone}", cfg.ConversationHandler.GetTranscript)
+				}
+				if cfg.AdminClinicData != nil {
+					clinicRoutes.Delete("/phones/{phone}", cfg.AdminClinicData.PurgePhone)
 				}
 				if cfg.SquareOAuth != nil {
 					clinicRoutes.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
