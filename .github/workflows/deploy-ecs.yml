@@ -127,9 +127,9 @@ jobs:
 
           HOST="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].Endpoint.Address' --output text)"
           USERNAME="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].MasterUsername' --output text)"
-          PASSWORD="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$MASTER_SECRET_ARN" --query 'SecretString' --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"password\"])')"
+          PASSWORD="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$MASTER_SECRET_ARN" --query 'SecretString' --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])')"
 
-          ENCODED_PASSWORD="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=\"\"))' "$PASSWORD")"
+          ENCODED_PASSWORD="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PASSWORD")"
           DB_URL="postgresql://${USERNAME}:${ENCODED_PASSWORD}@${HOST}:5432/medspa?sslmode=require"
 
           CURRENT="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --query 'SecretString' --output text)"
@@ -323,9 +323,9 @@ jobs:
 
           HOST="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].Endpoint.Address' --output text)"
           USERNAME="$(aws rds describe-db-instances --region "$REGION" --db-instance-identifier "$DB_ID" --query 'DBInstances[0].MasterUsername' --output text)"
-          PASSWORD="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$MASTER_SECRET_ARN" --query 'SecretString' --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"password\"])')"
+          PASSWORD="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$MASTER_SECRET_ARN" --query 'SecretString' --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])')"
 
-          ENCODED_PASSWORD="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=\"\"))' "$PASSWORD")"
+          ENCODED_PASSWORD="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PASSWORD")"
           DB_URL="postgresql://${USERNAME}:${ENCODED_PASSWORD}@${HOST}:5432/medspa?sslmode=require"
 
           CURRENT="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --query 'SecretString' --output text)"
