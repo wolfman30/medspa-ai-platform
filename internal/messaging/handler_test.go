@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -363,5 +364,60 @@ func TestTwilioWebhook_UpsertsLead(t *testing.T) {
 	}
 	if pub.lastReq.LeadID != "lead-123" {
 		t.Fatalf("expected conversation lead id to match repo result, got %s", pub.lastReq.LeadID)
+	}
+}
+
+type stubMessenger struct {
+	called bool
+	last   conversation.OutboundReply
+	err    error
+}
+
+func (s *stubMessenger) SendReply(ctx context.Context, reply conversation.OutboundReply) error {
+	s.called = true
+	s.last = reply
+	return s.err
+}
+
+func TestTwilioWebhook_SendsAckSMS(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{
+		"+15550001111": "org-test",
+	})
+	pub := &stubPublisher{}
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{
+		ID:        "lead-123",
+		OrgID:     "org-test",
+		CreatedAt: time.Now().UTC(),
+	}}
+	messenger := &stubMessenger{}
+	handler := NewHandler("", pub, resolver, messenger, leadRepo, logging.Default())
+
+	formData := url.Values{}
+	formData.Set("MessageSid", "SM123")
+	formData.Set("AccountSid", "AC123")
+	formData.Set("From", "+15559998888")
+	formData.Set("To", "+15550001111")
+	formData.Set("Body", "Hi there")
+
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if !messenger.called {
+		t.Fatalf("expected ack SMS to be sent")
+	}
+	if messenger.last.To != "+15559998888" {
+		t.Fatalf("expected ack to=%s, got %s", "+15559998888", messenger.last.To)
+	}
+	if messenger.last.From != "+15550001111" {
+		t.Fatalf("expected ack from=%s, got %s", "+15550001111", messenger.last.From)
+	}
+	if messenger.last.Body != SmsAckMessageFirst {
+		t.Fatalf("expected ack body %q, got %q", SmsAckMessageFirst, messenger.last.Body)
 	}
 }

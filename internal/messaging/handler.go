@@ -103,7 +103,7 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("medspa.org_id", orgID))
 
 	jobID := webhook.MessageSid
-	leadID, _, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
+	leadID, isNewLead, err := h.ensureLead(r.Context(), orgID, from, "twilio_sms")
 	if err != nil {
 		h.logger.Error("failed to persist lead", "error", err, "org_id", orgID, "from", from)
 		http.Error(w, "Failed to persist lead", http.StatusInternalServerError)
@@ -111,6 +111,8 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conversationID := deterministicConversationID(orgID, from)
+
+	h.sendSMSAck(from, to, orgID, leadID, conversationID, webhook.MessageSid, isNewLead)
 
 	msgReq := conversation.MessageRequest{
 		OrgID:          orgID,
@@ -139,6 +141,35 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`))
+}
+
+func (h *Handler) sendSMSAck(to, from, orgID, leadID, conversationID, messageSid string, isNewLead bool) {
+	if h.messenger == nil {
+		return
+	}
+	if strings.TrimSpace(to) == "" || strings.TrimSpace(from) == "" {
+		return
+	}
+
+	ackMsg := GetSmsAckMessage(isNewLead)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	reply := conversation.OutboundReply{
+		OrgID:          orgID,
+		LeadID:         leadID,
+		ConversationID: conversationID,
+		To:             to,
+		From:           from,
+		Body:           ackMsg,
+		Metadata: map[string]string{
+			"twilio_message_sid": messageSid,
+			"kind":              "sms_ack",
+		},
+	}
+	if err := h.messenger.SendReply(ctx, reply); err != nil {
+		h.logger.Warn("failed to send sms ack", "error", err, "org_id", orgID)
+	}
 }
 
 // TwilioVoiceWebhook handles POST /webhooks/twilio/voice for missed-call detection.
