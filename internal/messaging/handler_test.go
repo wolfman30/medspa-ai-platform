@@ -421,3 +421,91 @@ func TestTwilioWebhook_SendsAckSMS(t *testing.T) {
 		t.Fatalf("expected ack body %q, got %q", SmsAckMessageFirst, messenger.last.Body)
 	}
 }
+
+func TestTwilioVoiceWebhook_MissedCall_SendsInstantAck(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{
+		"+15551234567": "org-test",
+	})
+	pub := &stubPublisher{}
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: "lead-123", OrgID: "org-test"}}
+	messenger := &stubMessenger{}
+	handler := NewHandler("", pub, resolver, messenger, leadRepo, logging.Default())
+
+	formData := url.Values{}
+	formData.Set("CallSid", "CA123")
+	formData.Set("CallStatus", "busy")
+	formData.Set("From", "+15559998888")
+	formData.Set("To", "+15551234567")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/twilio/voice", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioVoiceWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if pub.startJobID != "CA123" {
+		t.Fatalf("expected start job id %q, got %q", "CA123", pub.startJobID)
+	}
+	if pub.lastStart.OrgID != "org-test" {
+		t.Fatalf("expected org_id org-test, got %s", pub.lastStart.OrgID)
+	}
+	if pub.lastStart.LeadID != "lead-123" {
+		t.Fatalf("expected lead_id lead-123, got %s", pub.lastStart.LeadID)
+	}
+	if pub.lastStart.ConversationID != "sms:org-test:15559998888" {
+		t.Fatalf("expected conversation_id %q, got %q", "sms:org-test:15559998888", pub.lastStart.ConversationID)
+	}
+
+	if !messenger.called {
+		t.Fatalf("expected instant ack SMS to be sent")
+	}
+	if messenger.last.To != "+15559998888" {
+		t.Fatalf("expected ack to=%s, got %s", "+15559998888", messenger.last.To)
+	}
+	if messenger.last.From != "+15551234567" {
+		t.Fatalf("expected ack from=%s, got %s", "+15551234567", messenger.last.From)
+	}
+	if messenger.last.Body != InstantAckMessage {
+		t.Fatalf("expected ack body %q, got %q", InstantAckMessage, messenger.last.Body)
+	}
+	if !strings.Contains(w.Body.String(), "<Response") {
+		t.Fatalf("expected TwiML response, got %s", w.Body.String())
+	}
+}
+
+func TestTwilioVoiceWebhook_NotMissedCall_ReturnsRejectTwiML(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{
+		"+15551234567": "org-test",
+	})
+	pub := &stubPublisher{}
+	messenger := &stubMessenger{}
+	handler := NewHandler("", pub, resolver, messenger, leads.NewInMemoryRepository(), logging.Default())
+
+	formData := url.Values{}
+	formData.Set("CallSid", "CA999")
+	formData.Set("CallStatus", "ringing")
+	formData.Set("From", "+15559998888")
+	formData.Set("To", "+15551234567")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/twilio/voice", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioVoiceWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if pub.startJobID != "" {
+		t.Fatalf("did not expect missed-call start enqueue for ringing status")
+	}
+	if messenger.called {
+		t.Fatalf("did not expect ack SMS for ringing status")
+	}
+	if !strings.Contains(w.Body.String(), "<Reject") {
+		t.Fatalf("expected reject TwiML, got %s", w.Body.String())
+	}
+}
