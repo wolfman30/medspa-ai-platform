@@ -164,7 +164,7 @@ func (h *Handler) sendSMSAck(to, from, orgID, leadID, conversationID, messageSid
 		Body:           ackMsg,
 		Metadata: map[string]string{
 			"twilio_message_sid": messageSid,
-			"kind":              "sms_ack",
+			"kind":               "sms_ack",
 		},
 	}
 	if err := h.messenger.SendReply(ctx, reply); err != nil {
