@@ -87,4 +87,3 @@ func TestAdminClinicDataHandler_PurgePhone_DeletesRowsAndRedisKey(t *testing.T) 
 		t.Fatalf("expectations: %v", err)
 	}
 }
-

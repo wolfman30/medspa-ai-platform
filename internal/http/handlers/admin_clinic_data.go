@@ -19,8 +19,8 @@ type adminClinicDataDB interface {
 }
 
 type AdminClinicDataConfig struct {
-	DB    adminClinicDataDB
-	Redis *redis.Client
+	DB     adminClinicDataDB
+	Redis  *redis.Client
 	Logger *logging.Logger
 }
 
@@ -247,4 +247,3 @@ func normalizeUSDigits(digits string) string {
 	}
 	return digits
 }
-
