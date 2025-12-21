@@ -176,6 +176,15 @@ func main() {
 		clinicStatsHandler = clinic.NewStatsHandler(statsRepo, logger)
 	}
 
+	var adminClinicDataHandler *handlers.AdminClinicDataHandler
+	if cfg.Env != "production" && dbPool != nil {
+		adminClinicDataHandler = handlers.NewAdminClinicDataHandler(handlers.AdminClinicDataConfig{
+			DB:     dbPool,
+			Redis:  redisClient,
+			Logger: logger,
+		})
+	}
+
 	var knowledgeRepo conversation.KnowledgeRepository
 	var ragIngestor conversation.RAGIngestor
 	if redisClient != nil && cfg.BedrockEmbeddingModelID != "" {
@@ -303,6 +312,7 @@ func main() {
 		SquareWebhook:       squareWebhookHandler,
 		SquareOAuth:         squareOAuthHandler,
 		AdminMessaging:      adminMessagingHandler,
+		AdminClinicData:     adminClinicDataHandler,
 		TelnyxWebhooks:      telnyxWebhookHandler,
 		ClinicHandler:       clinicHandler,
 		ClinicStatsHandler:  clinicStatsHandler,

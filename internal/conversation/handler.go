@@ -471,8 +471,13 @@ func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Conversation ID is typically orgID:phone
-	conversationID := fmt.Sprintf("%s:%s", orgID, phone)
+	digits := sanitizeDigits(phone)
+	if digits == "" {
+		http.Error(w, "invalid phone", http.StatusBadRequest)
+		return
+	}
+	digits = normalizeUSDigits(digits)
+	conversationID := fmt.Sprintf("sms:%s:%s", orgID, digits)
 
 	messages, err := h.service.GetHistory(r.Context(), conversationID)
 	if err != nil {
@@ -493,4 +498,27 @@ func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func sanitizeDigits(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// normalizeUSDigits converts 10-digit US numbers to E.164 digits by prefixing "1".
+func normalizeUSDigits(digits string) string {
+	if len(digits) == 10 {
+		return "1" + digits
+	}
+	return digits
 }
