@@ -34,6 +34,11 @@ type Config struct {
 	AdminAuthSecret     string
 	MetricsHandler      http.Handler
 	CORSAllowedOrigins  []string
+
+	// Cognito auth config (optional, enables Cognito JWT validation)
+	CognitoUserPoolID string
+	CognitoClientID   string
+	CognitoRegion     string
 }
 
 // New creates a new Chi router with all routes configured
@@ -82,10 +87,15 @@ func New(cfg *Config) http.Handler {
 		}
 	})
 
-	// Admin routes (protected by JWT)
-	if cfg.AdminAuthSecret != "" {
+	// Admin routes (protected by JWT - supports both legacy HMAC and Cognito RS256)
+	if cfg.AdminAuthSecret != "" || cfg.CognitoUserPoolID != "" {
 		r.Route("/admin", func(admin chi.Router) {
-			admin.Use(httpmiddleware.AdminJWT(cfg.AdminAuthSecret))
+			cognitoCfg := httpmiddleware.CognitoConfig{
+				Region:     cfg.CognitoRegion,
+				UserPoolID: cfg.CognitoUserPoolID,
+				ClientID:   cfg.CognitoClientID,
+			}
+			admin.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
 			if cfg.AdminMessaging != nil {
 				admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)
 				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
