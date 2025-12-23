@@ -1,183 +1,125 @@
-# medspa-ai-platform
+# MedSpa AI Platform (Revenue MVP)
 
-## Mission
+SMS-only AI receptionist that converts missed calls and inbound texts into qualified, deposit-backed leads — **without EMR writes**.
 
-AI-first medspa operations platform that captures missed leads, runs omni-channel conversations, books appointments, and collects deposits end-to-end. Our platform helps medical spas maximize revenue by automating lead capture, qualification, and conversion through intelligent multi-channel communication.
+## Objective (First Client: $2,000)
 
-## Project Structure
+This repo is being driven to a single near-term outcome: sell the first medspa client for **$2,000** by shipping the **Revenue MVP**.
+
+What we’re selling in that first deployment:
+
+- After-hours missed-call SMS follow-up from the clinic’s main number (Telnyx voice → SMS trigger).
+- Two-way SMS conversation that qualifies the lead (service + timing + new vs existing patient).
+- Square-hosted deposit links using the clinic’s own Square account (OAuth), plus payment webhooks.
+- Basic per-clinic stats/dashboard to prove ROI.
+
+What is intentionally *not* in scope for the first paid client:
+
+- No EMR availability lookup or calendar write (staff books inside the EMR).
+- No voice AI, Instagram DMs, web chat widget, etc.
+
+## Current State
+
+Revenue MVP core plumbing exists (Telnyx webhooks + compliance, conversation engine, Square checkout + webhook + OAuth, workers, metrics). Remaining work is primarily operational validation and clinic-specific knowledge content.
+
+- Status + gaps: `docs/MVP_STATUS.md`
+- Product scope + flows: `docs/revenue-mvp.md`
+- Live validation checklist: `docs/LIVE_DEV_CHECKS.md`
+- ECS deployment: `docs/DEPLOYMENT_ECS.md` (preferred), `docs/BOOTSTRAP_DEPLOYMENT.md` (deprecated)
+- E2E harness + results log: `scripts/e2e_full_flow.py`, `docs/E2E_TEST_RESULTS.md`
+
+## Repo Layout
 
 ```
-medspa-ai-platform/
-├── cmd/
-│   └── api/                 # API server entry point
-├── internal/
-│   ├── api/                 # HTTP API layer
-│   │   └── router/          # Chi router configuration
-│   ├── config/              # Configuration and environment loaders
-│   ├── leads/               # Lead management domain
-│   ├── messaging/           # Messaging integrations (Twilio, etc.)
-│   └── payments/            # Payment processing
-├── pkg/
-│   └── logging/             # Shared logging utilities
-├── infra/
-│   └── terraform/           # Infrastructure as code
-└── .github/
-    └── workflows/           # CI/CD pipelines
+cmd/
+  api/                 # HTTP API + webhooks; can run inline workers (USE_MEMORY_QUEUE=true)
+  conversation-worker/ # SQS/Dynamo worker for LLM + deposits (USE_MEMORY_QUEUE=false)
+  messaging-worker/    # Telnyx hosted-order polling + retry worker
+  voice-lambda/        # (ECS deployment) forwards voice webhooks to the API
+  migrate/             # DB migrations runner
+docs/                  # Product + ops docs
+infra/terraform/       # AWS infrastructure (ECS/Fargate + Redis + API Gateway/Lambda)
+internal/              # Domains (conversation, messaging, payments, leads, clinic, etc.)
+migrations/            # Postgres schema migrations
 ```
 
-## Development Environment
+## Local Development
 
-### Prerequisites
+### Prereqs
 
-- Go 1.22 or higher
-- Task (task runner) - [Installation guide](https://taskfile.dev/installation/)
-- Terraform 1.0+ (for infrastructure)
-- Docker (optional, for local services)
+- Go 1.24+ (`go.mod` sets `go 1.24.0`)
+- Docker (recommended for Postgres/Redis/LocalStack)
+- Task and/or Make (both are supported by this repo)
 
-### Setup
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/wolfman30/medspa-ai-platform.git
-   cd medspa-ai-platform
-   ```
-
-2. Install dependencies:
-   ```bash
-   go mod download
-   ```
-
-3. Copy environment template:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Run tests:
-   ```bash
-   task test
-   ```
-
-5. Start the API server:
-   ```bash
-   task run
-   ```
-
-### Running with Docker + LocalStack
-
-For full integration testing (API + Postgres + Redis + mocked AWS services), use Docker Compose:
+### Quickstart (Docker Compose)
 
 ```bash
-cp .env.example .env        # if you haven't already
-docker compose up --build   # or: task docker-up
+cp .env.example .env
+docker compose up --build
+DATABASE_URL=postgresql://medspa:medspa@localhost:5432/medspa?sslmode=disable go run ./cmd/migrate
+curl http://localhost:8082/health
 ```
 
-This starts:
+Notes:
 
-- Go API container (port 8080)
-- PostgreSQL 15 (port 5432) with `medspa/medspa` credentials
-- Redis 7 (port 6379)
-- LocalStack (port 4566) emulating Secrets Manager/SQS/SNS/Lambda/CloudWatch Logs
+- `docker-compose.yml` exposes the API at `http://localhost:8082` (container port `8080`).
+- LocalStack is used for SQS/Dynamo when `USE_MEMORY_QUEUE=false`. Use `AWS_ENDPOINT_OVERRIDE=http://localstack:4566` (already set in `.env.example`).
+- Bedrock calls are real AWS (LocalStack does not emulate Bedrock). Unit tests don’t require Bedrock; E2E does.
 
-Shut everything down with `docker compose down -v` (or `task docker-down`). When using LocalStack, point AWS SDK clients at `AWS_ENDPOINT_URL=http://localstack:4566` and use the dummy credentials already present in `.env.example`.
+### Bootstrap Mode (Inline Workers)
 
-### Bootstrap Deployment (Lightsail + Neon) (deprecated)
+If you want to avoid SQS/Dynamo entirely, run with `USE_MEMORY_QUEUE=true` (inline workers + Postgres-backed job store). See `.env.bootstrap.example` and `docker-compose.bootstrap.yml` (deprecated for prod, still useful for local bootstrap).
 
-This path is retained for historical reference only. New deployments should use ECS Fargate (Spot) + Lambda voice ingress + ElastiCache Redis:
+## E2E Test Harness
 
-- `docs/DEPLOYMENT_ECS.md`
-
-### Available Tasks
-
-Run `task --list` to see all available tasks:
-
-- `task build` - Build the API server
-- `task test` - Run all tests
-- `task lint` - Run linters
-- `task run` - Run the API server locally
-- `task fmt` - Format code
-
-## Production Environment
-
-- `PORT` - HTTP server port (default: 8080)
-- `ENV` - Environment name (development, staging, production)
-- `LOG_LEVEL` - Logging level (debug, info, warn, error)
-- `CORS_ALLOWED_ORIGINS` - Comma-separated allowlist for browser Origins (e.g. `https://aiwolfsolutions.com,https://wolfman30.github.io`)
-- `SMS_PROVIDER` - `auto` (default), `telnyx`, or `twilio`; forces which outbound SMS provider workers should use when multiple credentials exist
-- `DATABASE_URL` - PostgreSQL connection string
-- `TELNYX_API_KEY` / `TELNYX_MESSAGING_PROFILE_ID` / `TELNYX_WEBHOOK_SECRET` - Telnyx Hosted Messaging creds
-- `TELNYX_STOP_REPLY` / `TELNYX_HELP_REPLY` - Templates for STOP/HELP autoresponses
-- `TELNYX_RETRY_MAX_ATTEMPTS` / `TELNYX_RETRY_BASE_DELAY` - Retry policy for the messaging worker
-- `TELNYX_HOSTED_POLL_INTERVAL` - Poll cadence for hosted number orders
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_SECRET` - Existing Twilio integration (legacy inbound); leave `TWILIO_WEBHOOK_SECRET` empty to reuse the Auth Token for webhook validation
-- `ADMIN_JWT_SECRET` - HMAC secret used to protect `/admin/*` endpoints
-- `PAYMENT_PROVIDER_KEY` - Payment provider API key
-
-### Architecture Reference
-
-The detailed platform design lives in `docs/ARCHITECTURE_V3.md`. Keep it updated as components evolve.
-
-### Deployment
-
-The application is deployed on AWS using:
-
-- **ECS/Fargate** - Primary API + worker services (always-on Go binaries)
-- **Lambda (optional)** - Lightweight event/webhook processors
-- **API Gateway / ALB** - External ingress
-- **RDS PostgreSQL** - Managed database
-- **VPC** - Network isolation
-- **Secrets Manager** - Secure credential storage
-
-Deployment is managed through Terraform:
+With the API running:
 
 ```bash
-cd infra/terraform
-terraform init
-terraform plan
-terraform apply
+make e2e
 ```
 
-### CI/CD
+- Quick mode: `make e2e-quick`
+- Results/notes live in: `docs/E2E_TEST_RESULTS.md`
 
-GitHub Actions automatically:
+## Key HTTP Endpoints
 
-- Runs tests on every push
-- Checks code formatting with `gofmt`
-- Validates Terraform configurations
-- Deploys to staging/production on merge to main
+### Public (no auth)
 
-## API Endpoints
+- `GET /health`
+- `GET /metrics` (when enabled)
+- `POST /webhooks/telnyx/messages` (Telnyx inbound SMS + receipts)
+- `POST /webhooks/telnyx/voice` (Telnyx missed-call trigger)
+- `POST /webhooks/telnyx/hosted` (Telnyx hosted-order webhooks)
+- `POST /messaging/twilio/webhook` (legacy Twilio inbound SMS)
+- `POST /webhooks/twilio/voice` (Twilio missed-call trigger)
+- `POST /webhooks/square` (Square payments webhook)
+- `GET /oauth/square/callback` (Square OAuth callback)
 
-### Leads
+### Admin (JWT)
 
-- `POST /leads/web` - Capture web form lead submission
+Protected by `ADMIN_JWT_SECRET` via `Authorization: Bearer <token>`:
 
-### Messaging (Telnyx)
+- `POST /admin/hosted/orders` (start Telnyx hosted messaging order)
+- `POST /admin/10dlc/brands`, `POST /admin/10dlc/campaigns` (Telnyx 10DLC onboarding)
+- `POST /admin/messages:send` (send SMS/MMS via Telnyx with compliance checks)
+- `GET /admin/clinics/{orgID}/stats` (Revenue MVP counters)
+- `GET /admin/clinics/{orgID}/dashboard` (conversion + LLM latency snapshot)
+- `GET /admin/clinics/{orgID}/square/connect` (initiate Square OAuth)
+- `GET /admin/clinics/{orgID}/square/status` (Square connection status)
 
-Set `SMS_PROVIDER=twilio` to temporarily run outbound replies through your Twilio toll-free test number while keeping Telnyx credentials in place. Switch back to `telnyx` (or the default `auto` preference) once 10DLC registration is approved so hosted customer numbers are used in production.
+### Tenant-scoped (X-Org-Id)
 
-- `POST /admin/hosted/orders` – start a hosted messaging order for a clinic (requires admin JWT)
-- `POST /admin/10dlc/brands` / `/admin/10dlc/campaigns` – onboard 10DLC brand + campaign metadata
-- `POST /admin/messages:send` – send SMS/MMS via Telnyx with quiet-hours + STOP enforcement
-- `POST /webhooks/telnyx/messages` – inbound message + delivery receipt webhook (signature validated, idempotent)
-- `POST /webhooks/telnyx/hosted` – hosted order status webhooks
-- `GET /admin/clinics/{orgID}/stats` – per-clinic Revenue MVP counters (requires admin JWT)
-- `GET /admin/clinics/{orgID}/dashboard` – missed-call conversion + LLM latency snapshot (requires admin JWT)
-- `GET /metrics` – Prometheus metrics (`medspa_messaging_*` counters/histograms)
+All tenant APIs require `X-Org-Id: <org-uuid>`:
 
-Run `make run-worker` (or deploy `cmd/messaging-worker`) alongside the API to poll hosted orders and retry failed outbound sends.
+- `POST /leads/web` (capture web lead)
+- `POST /payments/checkout` (create deposit checkout link)
+- `POST /conversations/start`, `POST /conversations/message`, `GET /conversations/jobs/{jobID}`
+- `POST /knowledge/{clinicID}` (seed clinic knowledge for RAG)
 
-Use `scripts/check_package_coverage.sh` or `make ci-cover` to ensure all new messaging packages stay above the 90% coverage gate enforced in CI.
+## CI/CD + Testing
 
-### Messaging
-
-- `POST /messaging/twilio/webhook` - Handle incoming Twilio messages
-
-## Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Run tests and linters
-4. Submit a pull request
+- CI: `.github/workflows/ci.yml` runs `go test`, `gofmt` check, `govulncheck`, and Terraform validation.
+- Messaging packages have a 90% coverage gate: `make ci-cover` (`scripts/check_package_coverage.sh`).
 
 ## License
 
