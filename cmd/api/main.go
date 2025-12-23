@@ -26,6 +26,7 @@ import (
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -167,6 +168,7 @@ func main() {
 
 	var clinicHandler *clinic.Handler
 	var clinicStatsHandler *clinic.StatsHandler
+	var clinicDashboardHandler *clinic.DashboardHandler
 	if redisClient != nil {
 		clinicStore := clinic.NewStore(redisClient)
 		clinicHandler = clinic.NewHandler(clinicStore, logger)
@@ -174,6 +176,9 @@ func main() {
 	if dbPool != nil {
 		statsRepo := clinic.NewStatsRepository(dbPool)
 		clinicStatsHandler = clinic.NewStatsHandler(statsRepo, logger)
+
+		dashboardRepo := clinic.NewDashboardRepository(dbPool)
+		clinicDashboardHandler = clinic.NewDashboardHandler(dashboardRepo, prometheus.DefaultGatherer, logger)
 	}
 
 	var adminClinicDataHandler *handlers.AdminClinicDataHandler
@@ -316,8 +321,10 @@ func main() {
 		TelnyxWebhooks:      telnyxWebhookHandler,
 		ClinicHandler:       clinicHandler,
 		ClinicStatsHandler:  clinicStatsHandler,
+		ClinicDashboard:     clinicDashboardHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
 		MetricsHandler:      metricsHandler,
+		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 	}
 	r := router.New(routerCfg)
 
@@ -479,7 +486,7 @@ func setupInlineWorker(
 		if !hasSquareProvider {
 			if cfg.AllowFakePayments {
 				fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
-				depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, logger)
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, logger)
 				logger.Warn("deposit sender initialized in fake payments mode (Square credentials not configured)")
 			} else {
 				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
@@ -501,7 +508,7 @@ func setupInlineWorker(
 				numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 				logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
 			}
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, logger)
 			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "")
 		}
 	} else {
@@ -554,6 +561,20 @@ func setupInlineWorker(
 		processedStore = events.NewProcessedStore(dbPool)
 	}
 
+	var autoPurger conversation.SandboxAutoPurger
+	if cfg.Env != "production" && cfg.SquareSandbox && dbPool != nil {
+		phones := clinicdata.ParsePhoneDigitsList(cfg.SandboxAutoPurgePhones)
+		if len(phones) > 0 {
+			purger := clinicdata.NewPurger(dbPool, redisClient, logger)
+			autoPurger = clinicdata.NewSandboxAutoPurger(purger, clinicdata.AutoPurgeConfig{
+				Enabled:            true,
+				AllowedPhoneDigits: phones,
+				Delay:              cfg.SandboxAutoPurgeDelay,
+			}, logger)
+			logger.Info("sandbox auto purge enabled for inline workers", "delay", cfg.SandboxAutoPurgeDelay.String())
+		}
+	}
+
 	worker := conversation.NewWorker(
 		processor,
 		memoryQueue,
@@ -564,6 +585,7 @@ func setupInlineWorker(
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
 		conversation.WithPaymentNotifier(notifier),
+		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 	)
 	worker.Start(ctx)

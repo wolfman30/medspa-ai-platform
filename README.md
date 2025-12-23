@@ -101,6 +101,7 @@ Run `task --list` to see all available tasks:
 - `PORT` - HTTP server port (default: 8080)
 - `ENV` - Environment name (development, staging, production)
 - `LOG_LEVEL` - Logging level (debug, info, warn, error)
+- `CORS_ALLOWED_ORIGINS` - Comma-separated allowlist for browser Origins (e.g. `https://aiwolfsolutions.com,https://wolfman30.github.io`)
 - `SMS_PROVIDER` - `auto` (default), `telnyx`, or `twilio`; forces which outbound SMS provider workers should use when multiple credentials exist
 - `DATABASE_URL` - PostgreSQL connection string
 - `TELNYX_API_KEY` / `TELNYX_MESSAGING_PROFILE_ID` / `TELNYX_WEBHOOK_SECRET` - Telnyx Hosted Messaging creds
@@ -108,6 +109,7 @@ Run `task --list` to see all available tasks:
 - `TELNYX_RETRY_MAX_ATTEMPTS` / `TELNYX_RETRY_BASE_DELAY` - Retry policy for the messaging worker
 - `TELNYX_HOSTED_POLL_INTERVAL` - Poll cadence for hosted number orders
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_SECRET` - Existing Twilio integration (legacy inbound); leave `TWILIO_WEBHOOK_SECRET` empty to reuse the Auth Token for webhook validation
+- `ADMIN_JWT_SECRET` - HMAC secret used to protect `/admin/*` endpoints
 - `PAYMENT_PROVIDER_KEY` - Payment provider API key
 
 ### Architecture Reference
@@ -158,6 +160,8 @@ Set `SMS_PROVIDER=twilio` to temporarily run outbound replies through your Twili
 - `POST /admin/messages:send` – send SMS/MMS via Telnyx with quiet-hours + STOP enforcement
 - `POST /webhooks/telnyx/messages` – inbound message + delivery receipt webhook (signature validated, idempotent)
 - `POST /webhooks/telnyx/hosted` – hosted order status webhooks
+- `GET /admin/clinics/{orgID}/stats` – per-clinic Revenue MVP counters (requires admin JWT)
+- `GET /admin/clinics/{orgID}/dashboard` – missed-call conversion + LLM latency snapshot (requires admin JWT)
 - `GET /metrics` – Prometheus metrics (`medspa_messaging_*` counters/histograms)
 
 Run `make run-worker` (or deploy `cmd/messaging-worker`) alongside the API to poll hosted orders and retry failed outbound sends.

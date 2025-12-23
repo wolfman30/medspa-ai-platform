@@ -104,6 +104,9 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	mock.ExpectExec("INSERT INTO outbox").
 		WithArgs(pgxmock.AnyArg(), "clinic:"+clinicID.String(), "messaging.message.received.v1", pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT 1 FROM unsubscribes").
+		WithArgs(clinicID, "+15550001111").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectCommit()
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(loadFixture(t, "telnyx_inbound_message.json")))
@@ -271,8 +274,8 @@ func TestTelnyxWebhookInvalidSignature(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(loadFixture(t, "telnyx_inbound_stop.json")))
 	rec := httptest.NewRecorder()
 	handler.HandleMessages(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rec.Code)
 	}
 }
 
@@ -374,6 +377,9 @@ func TestTelnyxHelpAutoReply(t *testing.T) {
 	mock.ExpectExec("INSERT INTO outbox").
 		WithArgs(pgxmock.AnyArg(), "clinic:"+clinicID.String(), "messaging.message.received.v1", pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT 1 FROM unsubscribes").
+		WithArgs(clinicID, "+15550001111").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectCommit()
 
 	payload := bytes.ReplaceAll(loadFixture(t, "telnyx_inbound_stop.json"), []byte(`"STOP"`), []byte(`"HELP"`))

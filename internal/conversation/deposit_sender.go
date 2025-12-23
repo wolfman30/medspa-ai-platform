@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	paymentsql "github.com/wolfman30/medspa-ai-platform/internal/payments/sqlc"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -21,6 +22,7 @@ type depositDispatcher struct {
 	outbox   outboxWriter
 	sms      ReplyMessenger
 	numbers  payments.OrgNumberResolver
+	leads    leads.Repository
 	logger   *logging.Logger
 }
 
@@ -41,7 +43,7 @@ type paymentIntentChecker interface {
 }
 
 // NewDepositDispatcher wires a deposit sender with the required dependencies.
-func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, logger *logging.Logger) DepositSender {
+func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, logger *logging.Logger) DepositSender {
 	if logger == nil {
 		logger = logging.Default()
 	}
@@ -51,6 +53,7 @@ func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLin
 		outbox:   outbox,
 		sms:      sms,
 		numbers:  numbers,
+		leads:    leadsRepo,
 		logger:   logger,
 	}
 }
@@ -100,6 +103,11 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 	if err != nil {
 		return fmt.Errorf("deposit: create intent: %w", err)
 	}
+	if d.leads != nil {
+		if err := d.leads.UpdateDepositStatus(ctx, msg.LeadID, "pending", "normal"); err != nil {
+			d.logger.Warn("deposit: failed to update lead deposit status", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
+		}
+	}
 	var paymentID uuid.UUID
 	if paymentRow.ID.Valid {
 		paymentID = uuid.UUID(paymentRow.ID.Bytes)
@@ -141,7 +149,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			"from", fromNumber,
 			"payment_id", paymentID,
 		)
-		body := fmt.Sprintf("Please secure your spot with a deposit: %s", link.URL)
+		body := fmt.Sprintf("To secure priority booking, please place a refundable $%.2f deposit: %s", float64(intent.AmountCents)/100, link.URL)
 		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		reply := OutboundReply{

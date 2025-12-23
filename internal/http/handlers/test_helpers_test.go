@@ -13,6 +13,8 @@ import (
 type testTelnyxClient struct {
 	sendResp     *telnyxclient.MessageResponse
 	lastSendReq  *telnyxclient.SendMessageRequest
+	sendCalls    int
+	sentRequests []telnyxclient.SendMessageRequest
 	verifyCalled bool
 	sendErr      error
 	checkErr     error
@@ -58,6 +60,8 @@ func (s *testTelnyxClient) CreateCampaign(ctx context.Context, req telnyxclient.
 
 func (s *testTelnyxClient) SendMessage(ctx context.Context, req telnyxclient.SendMessageRequest) (*telnyxclient.MessageResponse, error) {
 	s.lastSendReq = &req
+	s.sendCalls++
+	s.sentRequests = append(s.sentRequests, req)
 	if s.sendErr != nil {
 		return nil, s.sendErr
 	}

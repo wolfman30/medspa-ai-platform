@@ -186,6 +186,9 @@ func (h *FakePaymentsHandler) completePayment(ctx context.Context, paymentID uui
 	if err != nil {
 		return fmt.Errorf("payments: fake lead lookup: %w", err)
 	}
+	if err := h.leads.UpdateDepositStatus(ctx, leadID, "paid", "priority"); err != nil {
+		h.logger.Warn("payments: failed to update lead deposit status", "error", err, "org_id", updated.OrgID, "lead_id", leadID)
+	}
 
 	var scheduledFor *time.Time
 	if updated.ScheduledFor.Valid {

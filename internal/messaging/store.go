@@ -245,6 +245,20 @@ func (s *Store) InsertUnsubscribe(ctx context.Context, q Querier, clinicID uuid.
 	return nil
 }
 
+func (s *Store) DeleteUnsubscribe(ctx context.Context, q Querier, clinicID uuid.UUID, recipient string) error {
+	if q == nil {
+		q = s.pool
+	}
+	query := `
+		DELETE FROM unsubscribes
+		WHERE clinic_id = $1 AND recipient_e164 = $2
+	`
+	if _, err := q.Exec(ctx, query, clinicID, recipient); err != nil {
+		return fmt.Errorf("messaging: delete unsubscribe: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) IsUnsubscribed(ctx context.Context, clinicID uuid.UUID, recipient string) (bool, error) {
 	query := `
 		SELECT 1 FROM unsubscribes

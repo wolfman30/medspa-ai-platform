@@ -95,7 +95,7 @@ func (h *TelnyxWebhookHandler) HandleMessages(w http.ResponseWriter, r *http.Req
 	}
 	if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
 		h.logger.Warn("invalid telnyx webhook signature", "error", err)
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
 	evt, err := parseTelnyxEvent(body)
@@ -152,7 +152,7 @@ func (h *TelnyxWebhookHandler) HandleHosted(w http.ResponseWriter, r *http.Reque
 	}
 	if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
 		h.logger.Warn("invalid telnyx hosted signature", "error", err)
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
 	evt, err := parseTelnyxEvent(body)
@@ -192,7 +192,7 @@ func (h *TelnyxWebhookHandler) HandleVoice(w http.ResponseWriter, r *http.Reques
 	}
 	if err := h.telnyx.VerifyWebhookSignature(r.Header.Get("Telnyx-Timestamp"), r.Header.Get("Telnyx-Signature"), body); err != nil {
 		h.logger.Warn("invalid telnyx voice signature", "error", err)
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
 	evt, err := parseTelnyxEvent(body)
@@ -228,6 +228,16 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	if err := json.Unmarshal(evt.Payload, &payload); err != nil {
 		return fmt.Errorf("decode inbound payload: %w", err)
 	}
+	// Idempotency: Telnyx may retry webhook delivery. Dedupe by provider message ID when present.
+	if h.processed != nil && strings.TrimSpace(payload.ID) != "" {
+		processed, err := h.processed.AlreadyProcessed(ctx, "telnyx.message_id", payload.ID)
+		if err != nil {
+			return fmt.Errorf("processed lookup failed: %w", err)
+		}
+		if processed {
+			return nil
+		}
+	}
 	from := messaging.NormalizeE164(payload.FromNumber())
 	to := messaging.NormalizeE164(payload.ToNumber())
 	if from == "" || to == "" {
@@ -246,12 +256,16 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	}
 	defer tx.Rollback(ctx)
 	media := payload.MediaURLs
+
+	// Redact PCI card data from anything we persist or propagate.
+	body := payload.Text
+	body, sawPAN := compliance.RedactPAN(body)
 	msgRecord := messaging.MessageRecord{
 		ClinicID:          clinicID,
 		From:              from,
 		To:                to,
 		Direction:         "inbound",
-		Body:              payload.Text,
+		Body:              body,
 		Media:             media,
 		ProviderStatus:    payload.Status,
 		ProviderMessageID: payload.ID,
@@ -265,7 +279,7 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		ClinicID:      clinicID.String(),
 		FromE164:      from,
 		ToE164:        to,
-		Body:          payload.Text,
+		Body:          body,
 		MediaURLs:     media,
 		Provider:      "telnyx",
 		ReceivedAt:    evt.OccurredAt,
@@ -276,17 +290,36 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	}
 	var stop bool
 	var help bool
+	var start bool
 	if h.detector != nil {
 		stop = h.detector.IsStop(payload.Text)
 		help = h.detector.IsHelp(payload.Text)
+		start = h.detector.IsStart(payload.Text)
+	}
+	unsubscribed := false
+	if !stop && !start {
+		unsubscribed, err = h.store.IsUnsubscribed(ctx, clinicID, from)
+		if err != nil {
+			return fmt.Errorf("check unsubscribe: %w", err)
+		}
 	}
 	if stop {
 		if err := h.store.InsertUnsubscribe(ctx, tx, clinicID, from, "STOP"); err != nil {
 			return fmt.Errorf("record unsubscribe: %w", err)
 		}
 	}
+	if start {
+		if err := h.store.DeleteUnsubscribe(ctx, tx, clinicID, from); err != nil {
+			return fmt.Errorf("record resubscribe: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit inbound tx: %w", err)
+	}
+	if h.processed != nil && strings.TrimSpace(payload.ID) != "" {
+		if _, err := h.processed.MarkProcessed(ctx, "telnyx.message_id", payload.ID); err != nil {
+			h.logger.Error("failed to mark telnyx message processed", "error", err, "telnyx_message_id", payload.ID)
+		}
 	}
 	if h.metrics != nil {
 		h.metrics.ObserveInbound(evt.EventType, payload.Status)
@@ -295,8 +328,15 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		h.sendAutoReply(context.Background(), to, from, h.stopAck)
 	} else if help {
 		h.sendAutoReply(context.Background(), to, from, h.helpAck)
+	} else if start {
+		h.sendAutoReply(context.Background(), to, from, "You're opted back in. Reply STOP to opt out.")
+	} else if unsubscribed {
+		// TCPA/A2P compliance: do not send messages when opted out.
+		return nil
+	} else if sawPAN {
+		h.sendAutoReply(context.Background(), to, from, messaging.PCIGuardrailMessage)
 	} else {
-		h.sendAutoReply(context.Background(), to, from, messaging.InstantAckMessage)
+		h.sendAutoReply(context.Background(), to, from, messaging.SmsAckMessageFirst)
 		h.dispatchConversation(context.Background(), evt, payload, clinicID)
 	}
 	return nil

@@ -9,13 +9,15 @@ import (
 type Detector struct {
 	stopRegex *regexp.Regexp
 	helpRegex *regexp.Regexp
+	startRegex *regexp.Regexp
 }
 
 // NewDetector returns a keyword detector with sane defaults.
 func NewDetector() *Detector {
 	return &Detector{
-		stopRegex: regexp.MustCompile(`(?i)^(?:please\s+)?(stop|stopall|unsubscribe|cancel|end|quit)\b`),
-		helpRegex: regexp.MustCompile(`(?i)^(?:please\s+)?(help|info)\b`),
+		stopRegex:  regexp.MustCompile(`(?i)^(?:please\s+)?(stop|stopall|unsubscribe|cancel|end|quit)\b`),
+		helpRegex:  regexp.MustCompile(`(?i)^(?:please\s+)?(help|info)\b`),
+		startRegex: regexp.MustCompile(`(?i)^(?:please\s+)?(start|unstop|subscribe)\b`),
 	}
 }
 
@@ -33,4 +35,12 @@ func (d *Detector) IsHelp(body string) bool {
 		return false
 	}
 	return d.helpRegex.MatchString(strings.TrimSpace(body))
+}
+
+// IsStart returns true when body contains a START keyword (opt-in).
+func (d *Detector) IsStart(body string) bool {
+	if d == nil || d.startRegex == nil {
+		return false
+	}
+	return d.startRegex.MatchString(strings.TrimSpace(body))
 }

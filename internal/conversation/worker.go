@@ -20,6 +20,12 @@ type PaymentNotifier interface {
 	NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSucceededV1) error
 }
 
+// SandboxAutoPurger optionally purges demo/test data after sandbox payments complete.
+// Implementations must be safe to call in production (no-ops unless explicitly enabled).
+type SandboxAutoPurger interface {
+	MaybePurgeAfterPayment(ctx context.Context, evt events.PaymentSucceededV1) error
+}
+
 // Worker consumes conversation jobs from the queue and invokes the processor.
 type Worker struct {
 	processor Service
@@ -29,6 +35,7 @@ type Worker struct {
 	bookings  bookingConfirmer
 	deposits  DepositSender
 	notifier  PaymentNotifier
+	autoPurge SandboxAutoPurger
 	processed processedEventStore
 	logger    *logging.Logger
 
@@ -42,6 +49,7 @@ type workerConfig struct {
 	receiveBatchSize int
 	deposit          DepositSender
 	notifier         PaymentNotifier
+	autoPurge        SandboxAutoPurger
 	processed        processedEventStore
 }
 
@@ -111,6 +119,13 @@ func WithPaymentNotifier(notifier PaymentNotifier) WorkerOption {
 	}
 }
 
+// WithSandboxAutoPurger wires a sandbox auto purge hook that runs after payment success events.
+func WithSandboxAutoPurger(purger SandboxAutoPurger) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.autoPurge = purger
+	}
+}
+
 // WithProcessedEventsStore provides an idempotency store for event handling (e.g. payment confirmations).
 func WithProcessedEventsStore(store processedEventStore) WorkerOption {
 	return func(cfg *workerConfig) {
@@ -158,6 +173,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		bookings:  bookings,
 		deposits:  cfg.deposit,
 		notifier:  cfg.notifier,
+		autoPurge: cfg.autoPurge,
 		processed: cfg.processed,
 		logger:    logger,
 		cfg:       cfg,
@@ -230,6 +246,8 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
 	case jobTypePayment:
 		err = w.handlePaymentEvent(ctx, payload.Payment)
+	case jobTypePaymentFailed:
+		err = w.handlePaymentFailedEvent(ctx, payload.PaymentFailed)
 	default:
 		err = fmt.Errorf("conversation: unknown job type %q", payload.Kind)
 	}
@@ -245,7 +263,7 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			w.logger.Warn("sending fallback reply after conversation failure", "job_id", payload.ID, "org_id", payload.Message.OrgID)
 			w.sendReply(ctx, payload, &Response{
 				ConversationID: payload.Message.ConversationID,
-				Message:        "Sorry — I’m having trouble responding right now. Please reply again in a moment.",
+				Message:        "Sorry - I'm having trouble responding right now. Please reply again in a moment.",
 				Timestamp:      time.Now().UTC(),
 			})
 		}
@@ -394,6 +412,59 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	if w.processed != nil && idempotencyKey != "" {
 		if _, err := w.processed.MarkProcessed(ctx, "conversation.payment_succeeded.v1", idempotencyKey); err != nil {
 			w.logger.Warn("failed to mark payment event processed", "error", err, "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+		}
+	}
+	if w.autoPurge != nil {
+		if err := w.autoPurge.MaybePurgeAfterPayment(ctx, *evt); err != nil {
+			w.logger.Warn("sandbox auto purge hook failed", "error", err, "org_id", evt.OrgID, "lead_id", evt.LeadID, "provider_ref", evt.ProviderRef)
+		}
+	}
+	return nil
+}
+
+func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.PaymentFailedV1) error {
+	if evt == nil {
+		return errors.New("conversation: missing payment failed payload")
+	}
+	idempotencyKey := strings.TrimSpace(evt.ProviderRef)
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(evt.BookingIntentID)
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(evt.EventID)
+	}
+	if w.processed != nil && idempotencyKey != "" {
+		already, err := w.processed.AlreadyProcessed(ctx, "conversation.payment_failed.v1", idempotencyKey)
+		if err != nil {
+			w.logger.Warn("failed to check payment failed event idempotency", "error", err, "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+		} else if already {
+			w.logger.Info("skipping duplicate payment failed event", "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+			return nil
+		}
+	}
+
+	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
+		body := "Payment failed - we didn't receive your deposit. If you'd still like to book, please reply and we can send a new secure payment link. Our team can also help by phone."
+		reply := OutboundReply{
+			OrgID:          evt.OrgID,
+			LeadID:         evt.LeadID,
+			ConversationID: "",
+			To:             evt.LeadPhone,
+			From:           evt.FromNumber,
+			Body:           body,
+			Metadata: map[string]string{
+				"event_id": evt.EventID,
+			},
+		}
+		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+			w.logger.Error("failed to send payment failed sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+		}
+	}
+	if w.processed != nil && idempotencyKey != "" {
+		if _, err := w.processed.MarkProcessed(ctx, "conversation.payment_failed.v1", idempotencyKey); err != nil {
+			w.logger.Warn("failed to mark payment failed event processed", "error", err, "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
 		}
 	}
 	return nil

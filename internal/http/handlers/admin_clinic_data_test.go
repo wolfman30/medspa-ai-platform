@@ -31,6 +31,7 @@ func TestAdminClinicDataHandler_PurgePhone_DeletesRowsAndRedisKey(t *testing.T) 
 	digits := "19378962713"
 	e164 := "+19378962713"
 	conversationID := "sms:" + orgID + ":" + digits
+	conversationIDE164 := "sms:" + orgID + ":" + e164
 	redisKey := "conversation:" + conversationID
 
 	if err := redisClient.Set(context.Background(), redisKey, "[]", 0).Err(); err != nil {
@@ -44,7 +45,7 @@ func TestAdminClinicDataHandler_PurgePhone_DeletesRowsAndRedisKey(t *testing.T) 
 	})
 
 	mock.ExpectBegin()
-	mock.ExpectExec("DELETE FROM conversation_jobs").WithArgs(conversationID).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectExec("DELETE FROM conversation_jobs").WithArgs(conversationID, conversationIDE164).WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	mock.ExpectExec("DELETE FROM outbox").WithArgs(orgID, digits).WillReturnResult(pgxmock.NewResult("DELETE", 2))
 	mock.ExpectExec("DELETE FROM payments").WithArgs(orgID, digits).WillReturnResult(pgxmock.NewResult("DELETE", 3))
 	mock.ExpectExec("DELETE FROM bookings").WithArgs(orgID, digits).WillReturnResult(pgxmock.NewResult("DELETE", 4))

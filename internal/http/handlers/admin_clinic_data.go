@@ -3,14 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -75,175 +74,37 @@ func (h *AdminClinicDataHandler) PurgePhone(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	orgUUID, err := uuid.Parse(orgID)
+	result, err := clinicdata.NewPurger(h.db, h.redis, h.logger).PurgePhone(r.Context(), orgID, phone)
 	if err != nil {
-		http.Error(w, "orgID must be a UUID", http.StatusBadRequest)
-		return
-	}
-
-	digits := sanitizeDigits(phone)
-	if digits == "" {
-		http.Error(w, "invalid phone", http.StatusBadRequest)
-		return
-	}
-	digits = normalizeUSDigits(digits)
-	e164 := "+" + digits
-	conversationID := fmt.Sprintf("sms:%s:%s", orgID, digits)
-	redisKey := fmt.Sprintf("conversation:%s", conversationID)
-
-	ctx := r.Context()
-	tx, err := h.db.Begin(ctx)
-	if err != nil {
-		h.logger.Error("admin purge: begin tx failed", "error", err)
-		http.Error(w, "failed to start transaction", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback(ctx)
-
-	var resp PurgePhoneResponse
-	resp.OrgID = orgID
-	resp.Phone = phone
-	resp.PhoneDigits = digits
-	resp.PhoneE164 = e164
-	resp.ConversationID = conversationID
-
-	resp.Deleted.ConversationJobs, err = execRowsAffected(ctx, tx, `
-		DELETE FROM conversation_jobs
-		WHERE conversation_id = $1
-	`, conversationID)
-	if err != nil {
-		h.logger.Error("admin purge: delete conversation_jobs failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge conversation jobs", http.StatusInternalServerError)
-		return
-	}
-
-	resp.Deleted.Outbox, err = execRowsAffected(ctx, tx, `
-		DELETE FROM outbox
-		WHERE event_type LIKE 'payments.deposit.%'
-		  AND (payload->>'lead_id') IN (
-			SELECT id::text
-			FROM leads
-			WHERE org_id = $1
-			  AND regexp_replace(phone, '\D', '', 'g') = $2
-		  )
-	`, orgID, digits)
-	if err != nil {
-		h.logger.Error("admin purge: delete outbox failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge outbox", http.StatusInternalServerError)
-		return
-	}
-
-	resp.Deleted.Payments, err = execRowsAffected(ctx, tx, `
-		DELETE FROM payments
-		WHERE org_id = $1
-		  AND lead_id IN (
-			SELECT id
-			FROM leads
-			WHERE org_id = $1
-			  AND regexp_replace(phone, '\D', '', 'g') = $2
-		  )
-	`, orgID, digits)
-	if err != nil {
-		h.logger.Error("admin purge: delete payments failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge payments", http.StatusInternalServerError)
-		return
-	}
-
-	resp.Deleted.Bookings, err = execRowsAffected(ctx, tx, `
-		DELETE FROM bookings
-		WHERE org_id = $1
-		  AND lead_id IN (
-			SELECT id
-			FROM leads
-			WHERE org_id = $1
-			  AND regexp_replace(phone, '\D', '', 'g') = $2
-		  )
-	`, orgID, digits)
-	if err != nil {
-		h.logger.Error("admin purge: delete bookings failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge bookings", http.StatusInternalServerError)
-		return
-	}
-
-	resp.Deleted.Leads, err = execRowsAffected(ctx, tx, `
-		DELETE FROM leads
-		WHERE org_id = $1
-		  AND regexp_replace(phone, '\D', '', 'g') = $2
-	`, orgID, digits)
-	if err != nil {
-		h.logger.Error("admin purge: delete leads failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge leads", http.StatusInternalServerError)
-		return
-	}
-
-	resp.Deleted.Messages, err = execRowsAffected(ctx, tx, `
-		DELETE FROM messages
-		WHERE clinic_id = $1
-		  AND (from_e164 = $2 OR to_e164 = $2)
-	`, orgUUID, e164)
-	if err != nil {
-		h.logger.Error("admin purge: delete messages failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge messages", http.StatusInternalServerError)
-		return
-	}
-
-	resp.Deleted.Unsubscribes, err = execRowsAffected(ctx, tx, `
-		DELETE FROM unsubscribes
-		WHERE clinic_id = $1
-		  AND recipient_e164 = $2
-	`, orgUUID, e164)
-	if err != nil {
-		h.logger.Error("admin purge: delete unsubscribes failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to purge unsubscribes", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		h.logger.Error("admin purge: commit failed", "error", err, "org_id", orgID)
-		http.Error(w, "failed to commit purge", http.StatusInternalServerError)
-		return
-	}
-
-	if h.redis != nil {
-		res := h.redis.Del(ctx, redisKey)
-		if err := res.Err(); err != nil {
-			h.logger.Warn("admin purge: redis DEL failed", "error", err, "key", redisKey)
-		} else {
-			resp.RedisDeleted = res.Val()
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "missing orgID") || strings.Contains(msg, "invalid phone") || strings.Contains(msg, "orgID must be a UUID"):
+			http.Error(w, msg, http.StatusBadRequest)
+		case strings.Contains(msg, "database not configured"):
+			http.Error(w, msg, http.StatusServiceUnavailable)
+		default:
+			h.logger.Error("admin purge failed", "error", err, "org_id", orgID)
+			http.Error(w, "failed to purge phone", http.StatusInternalServerError)
 		}
+		return
 	}
+
+	resp := PurgePhoneResponse{
+		OrgID:          result.OrgID,
+		Phone:          result.Phone,
+		PhoneDigits:    result.PhoneDigits,
+		PhoneE164:      result.PhoneE164,
+		ConversationID: result.ConversationID,
+		RedisDeleted:   result.RedisDeleted,
+	}
+	resp.Deleted.ConversationJobs = result.Deleted.ConversationJobs
+	resp.Deleted.Outbox = result.Deleted.Outbox
+	resp.Deleted.Payments = result.Deleted.Payments
+	resp.Deleted.Bookings = result.Deleted.Bookings
+	resp.Deleted.Leads = result.Deleted.Leads
+	resp.Deleted.Messages = result.Deleted.Messages
+	resp.Deleted.Unsubscribes = result.Deleted.Unsubscribes
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func execRowsAffected(ctx context.Context, tx pgx.Tx, query string, args ...any) (int64, error) {
-	tag, err := tx.Exec(ctx, query, args...)
-	if err != nil {
-		return 0, err
-	}
-	return tag.RowsAffected(), nil
-}
-
-func sanitizeDigits(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	var b strings.Builder
-	b.Grow(len(value))
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
-// normalizeUSDigits converts 10-digit US numbers to E.164 digits by prefixing "1".
-func normalizeUSDigits(digits string) string {
-	if len(digits) == 10 {
-		return "1" + digits
-	}
-	return digits
 }

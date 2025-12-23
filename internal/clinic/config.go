@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -51,6 +52,10 @@ type Config struct {
 	BusinessHours      BusinessHours     `json:"business_hours"`
 	CallbackSLAHours   int               `json:"callback_sla_hours"`   // e.g., 12
 	DepositAmountCents int               `json:"deposit_amount_cents"` // e.g., 5000
+	// ServiceDepositAmountCents overrides the default deposit per service (keyed by normalized service name).
+	ServiceDepositAmountCents map[string]int `json:"service_deposit_amount_cents,omitempty"`
+	// ServicePriceText provides a human-readable price string per service (keyed by normalized service name).
+	ServicePriceText map[string]string `json:"service_price_text,omitempty"`
 	Services           []string          `json:"services,omitempty"`   // e.g., ["Botox", "Fillers"]
 	Notifications      NotificationPrefs `json:"notifications"`
 }
@@ -72,6 +77,8 @@ func DefaultConfig(orgID string) *Config {
 		},
 		CallbackSLAHours:   12,
 		DepositAmountCents: 5000,
+		ServiceDepositAmountCents: map[string]int{},
+		ServicePriceText:          map[string]string{},
 		Services:           []string{"Botox", "Fillers", "Laser Treatments"},
 		Notifications: NotificationPrefs{
 			EmailEnabled:    false, // Disabled by default until configured
@@ -80,6 +87,44 @@ func DefaultConfig(orgID string) *Config {
 			NotifyOnNewLead: false,
 		},
 	}
+}
+
+func normalizeServiceKey(service string) string {
+	return strings.ToLower(strings.TrimSpace(service))
+}
+
+// DepositAmountForService returns the configured deposit amount (in cents) for a service,
+// falling back to the clinic default when no override is present.
+func (c *Config) DepositAmountForService(service string) int {
+	if c == nil {
+		return 0
+	}
+	key := normalizeServiceKey(service)
+	if key != "" && c.ServiceDepositAmountCents != nil {
+		if amount, ok := c.ServiceDepositAmountCents[key]; ok && amount > 0 {
+			return amount
+		}
+	}
+	if c.DepositAmountCents > 0 {
+		return c.DepositAmountCents
+	}
+	return 0
+}
+
+// PriceTextForService returns a configured price string for a service when available.
+func (c *Config) PriceTextForService(service string) (string, bool) {
+	if c == nil || c.ServicePriceText == nil {
+		return "", false
+	}
+	key := normalizeServiceKey(service)
+	if key == "" {
+		return "", false
+	}
+	price := strings.TrimSpace(c.ServicePriceText[key])
+	if price == "" {
+		return "", false
+	}
+	return price, true
 }
 
 // GetHoursForDay returns the hours for a given weekday (0=Sunday, 6=Saturday).
