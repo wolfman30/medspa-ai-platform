@@ -49,13 +49,13 @@ type LLMLatencyBucket struct {
 }
 
 type ClinicDashboard struct {
-	OrgID                   string               `json:"org_id"`
-	PeriodStart             string               `json:"period_start"`
-	PeriodEnd               string               `json:"period_end"`
-	MissedCallLeads         int64                `json:"missed_call_leads"`
-	MissedCallPaidLeads     int64                `json:"missed_call_paid_leads"`
-	MissedCallConversionPct float64              `json:"missed_call_conversion_pct"`
-	LLMLatency              LLMLatencySnapshot   `json:"llm_latency"`
+	OrgID                   string                `json:"org_id"`
+	PeriodStart             string                `json:"period_start"`
+	PeriodEnd               string                `json:"period_end"`
+	MissedCallLeads         int64                 `json:"missed_call_leads"`
+	MissedCallPaidLeads     int64                 `json:"missed_call_paid_leads"`
+	MissedCallConversionPct float64               `json:"missed_call_conversion_pct"`
+	LLMLatency              LLMLatencySnapshot    `json:"llm_latency"`
 	Daily                   []MissedCallCohortDay `json:"daily"`
 }
 

@@ -116,4 +116,3 @@ func last4(digits string) string {
 	}
 	return fmt.Sprintf("...%s", digits[len(digits)-4:])
 }
-

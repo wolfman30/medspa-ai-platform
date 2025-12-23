@@ -356,9 +356,9 @@ func buildSquarePayload(t *testing.T, eventID string, paymentID string, status s
 		Data      struct {
 			Object struct {
 				Payment struct {
-					ID          string            `json:"id"`
-					Status      string            `json:"status"`
-					OrderID     string            `json:"order_id"`
+					ID          string `json:"id"`
+					Status      string `json:"status"`
+					OrderID     string `json:"order_id"`
 					AmountMoney struct {
 						Amount   int64  `json:"amount"`
 						Currency string `json:"currency"`

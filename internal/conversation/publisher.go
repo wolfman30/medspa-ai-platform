@@ -66,8 +66,8 @@ func (p *Publisher) EnqueuePaymentSucceeded(ctx context.Context, event events.Pa
 // EnqueuePaymentFailed publishes a failed payment event for downstream processors.
 func (p *Publisher) EnqueuePaymentFailed(ctx context.Context, event events.PaymentFailedV1) error {
 	payload := queuePayload{
-		ID:           event.EventID,
-		Kind:         jobTypePaymentFailed,
+		ID:            event.EventID,
+		Kind:          jobTypePaymentFailed,
 		PaymentFailed: &event,
 	}
 	return p.enqueue(ctx, payload, WithoutJobTracking())

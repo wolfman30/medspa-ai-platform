@@ -223,4 +223,3 @@ func normalizeUSDigits(digits string) string {
 	}
 	return digits
 }
-

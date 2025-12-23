@@ -51,4 +51,3 @@ func isAllowedOrigin(allow map[string]struct{}, origin string) bool {
 	_, ok := allow[origin]
 	return ok
 }
-

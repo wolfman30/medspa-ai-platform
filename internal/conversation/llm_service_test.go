@@ -228,10 +228,10 @@ func TestTierA_CI12_DepositRulesCorrectness_ServiceOverridesApply(t *testing.T) 
 	scripted := &stubLLMClient{
 		responses: []LLMResponse{
 			{Text: "Hello!"}, // start #1
-			{Text: "We do require a refundable deposit to hold your spot."}, // reply #1
+			{Text: "We do require a refundable deposit to hold your spot."},                                                                      // reply #1
 			{Text: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`}, // classifier #1
 			{Text: "Hello!"}, // start #2
-			{Text: "We do require a refundable deposit to hold your spot."}, // reply #2
+			{Text: "We do require a refundable deposit to hold your spot."},                                                                      // reply #2
 			{Text: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`}, // classifier #2
 		},
 	}

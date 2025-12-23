@@ -150,4 +150,3 @@ func ptrString(v string) *string { return &v }
 func ptrUint64(v uint64) *uint64 { return &v }
 
 func ptrFloat64(v float64) *float64 { return &v }
-

@@ -25,20 +25,20 @@ type queueMessage struct {
 type jobType string
 
 const (
-	jobTypeStart   jobType = "start"
-	jobTypeMessage jobType = "message"
-	jobTypePayment jobType = "payment_succeeded.v1"
+	jobTypeStart         jobType = "start"
+	jobTypeMessage       jobType = "message"
+	jobTypePayment       jobType = "payment_succeeded.v1"
 	jobTypePaymentFailed jobType = "payment_failed.v1"
 )
 
 type queuePayload struct {
-	ID          string                     `json:"id"`
-	Kind        jobType                    `json:"kind"`
-	Start       StartRequest               `json:"start,omitempty"`
-	Message     MessageRequest             `json:"message,omitempty"`
-	TrackStatus bool                       `json:"track_status"`
-	Payment     *events.PaymentSucceededV1 `json:"payment,omitempty"`
-	PaymentFailed *events.PaymentFailedV1  `json:"payment_failed,omitempty"`
+	ID            string                     `json:"id"`
+	Kind          jobType                    `json:"kind"`
+	Start         StartRequest               `json:"start,omitempty"`
+	Message       MessageRequest             `json:"message,omitempty"`
+	TrackStatus   bool                       `json:"track_status"`
+	Payment       *events.PaymentSucceededV1 `json:"payment,omitempty"`
+	PaymentFailed *events.PaymentFailedV1    `json:"payment_failed,omitempty"`
 }
 
 type PublishOption func(*queuePayload)
