@@ -17,8 +17,8 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
-	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -165,40 +165,40 @@ func main() {
 	// Initialize notification service for clinic operator alerts
 	var notifier conversation.PaymentNotifier
 	if redisClient != nil {
-			clinicStore := clinic.NewStore(redisClient)
+		clinicStore := clinic.NewStore(redisClient)
 
-			// Setup email sender
-			var emailSender notify.EmailSender
-			if cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
-				emailSender = notify.NewSendGridSender(notify.SendGridConfig{
-					APIKey:    cfg.SendGridAPIKey,
-					FromEmail: cfg.SendGridFromEmail,
-					FromName:  cfg.SendGridFromName,
-				}, logger)
-				logger.Info("sendgrid email sender initialized for notifications")
-			} else {
-				emailSender = notify.NewStubEmailSender(logger)
-				logger.Warn("email notifications disabled (SENDGRID_API_KEY or SENDGRID_FROM_EMAIL not set)")
-			}
+		// Setup email sender
+		var emailSender notify.EmailSender
+		if cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
+			emailSender = notify.NewSendGridSender(notify.SendGridConfig{
+				APIKey:    cfg.SendGridAPIKey,
+				FromEmail: cfg.SendGridFromEmail,
+				FromName:  cfg.SendGridFromName,
+			}, logger)
+			logger.Info("sendgrid email sender initialized for notifications")
+		} else {
+			emailSender = notify.NewStubEmailSender(logger)
+			logger.Warn("email notifications disabled (SENDGRID_API_KEY or SENDGRID_FROM_EMAIL not set)")
+		}
 
-			// Setup SMS sender for operator notifications (reuse existing messenger)
-			var smsSender notify.SMSSender
-			if messenger != nil && cfg.TwilioFromNumber != "" {
-				smsSender = notify.NewSimpleSMSSender(cfg.TwilioFromNumber, func(ctx context.Context, to, from, body string) error {
-					return messenger.SendReply(ctx, conversation.OutboundReply{
-						To:   to,
-						From: from,
-						Body: body,
-					})
-				}, logger)
-				logger.Info("sms sender initialized for operator notifications")
-			} else {
-				smsSender = notify.NewStubSMSSender(logger)
-				logger.Warn("operator SMS notifications disabled (messenger not available)")
-			}
+		// Setup SMS sender for operator notifications (reuse existing messenger)
+		var smsSender notify.SMSSender
+		if messenger != nil && cfg.TwilioFromNumber != "" {
+			smsSender = notify.NewSimpleSMSSender(cfg.TwilioFromNumber, func(ctx context.Context, to, from, body string) error {
+				return messenger.SendReply(ctx, conversation.OutboundReply{
+					To:   to,
+					From: from,
+					Body: body,
+				})
+			}, logger)
+			logger.Info("sms sender initialized for operator notifications")
+		} else {
+			smsSender = notify.NewStubSMSSender(logger)
+			logger.Warn("operator SMS notifications disabled (messenger not available)")
+		}
 
-			notifier = notify.NewService(emailSender, smsSender, clinicStore, leadsRepo, logger)
-			logger.Info("notification service initialized for clinic operator alerts")
+		notifier = notify.NewService(emailSender, smsSender, clinicStore, leadsRepo, logger)
+		logger.Info("notification service initialized for clinic operator alerts")
 	}
 
 	var processedStore *events.ProcessedStore

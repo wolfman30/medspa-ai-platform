@@ -46,18 +46,18 @@ type NotificationPrefs struct {
 
 // Config holds clinic-specific configuration.
 type Config struct {
-	OrgID              string            `json:"org_id"`
-	Name               string            `json:"name"`
-	Timezone           string            `json:"timezone"` // e.g., "America/New_York"
-	BusinessHours      BusinessHours     `json:"business_hours"`
-	CallbackSLAHours   int               `json:"callback_sla_hours"`   // e.g., 12
-	DepositAmountCents int               `json:"deposit_amount_cents"` // e.g., 5000
+	OrgID              string        `json:"org_id"`
+	Name               string        `json:"name"`
+	Timezone           string        `json:"timezone"` // e.g., "America/New_York"
+	BusinessHours      BusinessHours `json:"business_hours"`
+	CallbackSLAHours   int           `json:"callback_sla_hours"`   // e.g., 12
+	DepositAmountCents int           `json:"deposit_amount_cents"` // e.g., 5000
 	// ServiceDepositAmountCents overrides the default deposit per service (keyed by normalized service name).
 	ServiceDepositAmountCents map[string]int `json:"service_deposit_amount_cents,omitempty"`
 	// ServicePriceText provides a human-readable price string per service (keyed by normalized service name).
 	ServicePriceText map[string]string `json:"service_price_text,omitempty"`
-	Services           []string          `json:"services,omitempty"`   // e.g., ["Botox", "Fillers"]
-	Notifications      NotificationPrefs `json:"notifications"`
+	Services         []string          `json:"services,omitempty"` // e.g., ["Botox", "Fillers"]
+	Notifications    NotificationPrefs `json:"notifications"`
 }
 
 // DefaultConfig returns a sensible default configuration.
@@ -75,11 +75,11 @@ func DefaultConfig(orgID string) *Config {
 			Saturday:  nil, // Closed
 			Sunday:    nil, // Closed
 		},
-		CallbackSLAHours:   12,
-		DepositAmountCents: 5000,
+		CallbackSLAHours:          12,
+		DepositAmountCents:        5000,
 		ServiceDepositAmountCents: map[string]int{},
 		ServicePriceText:          map[string]string{},
-		Services:           []string{"Botox", "Fillers", "Laser Treatments"},
+		Services:                  []string{"Botox", "Fillers", "Laser Treatments"},
 		Notifications: NotificationPrefs{
 			EmailEnabled:    false, // Disabled by default until configured
 			SMSEnabled:      false,

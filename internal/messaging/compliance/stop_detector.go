@@ -7,8 +7,8 @@ import (
 
 // Detector identifies STOP/HELP keywords in inbound messages.
 type Detector struct {
-	stopRegex *regexp.Regexp
-	helpRegex *regexp.Regexp
+	stopRegex  *regexp.Regexp
+	helpRegex  *regexp.Regexp
 	startRegex *regexp.Regexp
 }
 

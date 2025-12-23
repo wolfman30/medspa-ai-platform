@@ -283,9 +283,9 @@ func TestTierA_CI14_PCIGuardrail(t *testing.T) {
 	mock.ExpectCommit()
 
 	pci := loadTelnyxInboundFixture(t, "telnyx_inbound_message.json", telnyxInboundOverrides{
-		EventID:      "evt-pci",
-		MessageID:    "msg-pci",
-		MessageText:  "My card is 4111 1111 1111 1111",
+		EventID:     "evt-pci",
+		MessageID:   "msg-pci",
+		MessageText: "My card is 4111 1111 1111 1111",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(pci))
 	req.Header.Set("Telnyx-Timestamp", "123")
@@ -383,9 +383,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectCommit()
 
 	unsub := loadTelnyxInboundFixture(t, "telnyx_inbound_message.json", telnyxInboundOverrides{
-		EventID:      "evt-unsub",
-		MessageID:    "msg-ignored",
-		MessageText:  "hello?",
+		EventID:     "evt-unsub",
+		MessageID:   "msg-ignored",
+		MessageText: "hello?",
 	})
 	reqUnsub := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(unsub))
 	reqUnsub.Header.Set("Telnyx-Timestamp", "123")
@@ -419,9 +419,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectCommit()
 
 	start := loadTelnyxInboundFixture(t, "telnyx_inbound_stop.json", telnyxInboundOverrides{
-		EventID:      "evt-start",
-		MessageID:    "msg-start",
-		MessageText:  "START",
+		EventID:     "evt-start",
+		MessageID:   "msg-start",
+		MessageText: "START",
 	})
 	reqStart := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(start))
 	reqStart.Header.Set("Telnyx-Timestamp", "123")
@@ -455,9 +455,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectCommit()
 
 	after := loadTelnyxInboundFixture(t, "telnyx_inbound_message.json", telnyxInboundOverrides{
-		EventID:      "evt-after-start",
-		MessageID:    "msg-after-start",
-		MessageText:  "book botox",
+		EventID:     "evt-after-start",
+		MessageID:   "msg-after-start",
+		MessageText: "book botox",
 	})
 	reqAfter := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(after))
 	reqAfter.Header.Set("Telnyx-Timestamp", "123")
@@ -579,9 +579,9 @@ func TestTierA_CI19_UnifiedLeadIdentity_VoiceThenSMS(t *testing.T) {
 	mock.ExpectCommit()
 
 	sms := loadTelnyxInboundFixture(t, "telnyx_inbound_message.json", telnyxInboundOverrides{
-		EventID:      "evt-sms",
-		MessageID:    "msg-unified",
-		From:         "+15550003333",
+		EventID:   "evt-sms",
+		MessageID: "msg-unified",
+		From:      "+15550003333",
 	})
 	reqSMS := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(sms))
 	reqSMS.Header.Set("Telnyx-Timestamp", "123")
@@ -711,9 +711,9 @@ func loadTelnyxInboundFixture(t *testing.T, name string, o telnyxInboundOverride
 			EventType string `json:"event_type"`
 			Occurred  string `json:"occurred_at"`
 			Payload   struct {
-				ID        string `json:"id"`
-				Direction string `json:"direction"`
-				Text      string `json:"text"`
+				ID        string   `json:"id"`
+				Direction string   `json:"direction"`
+				Text      string   `json:"text"`
 				MediaURLs []string `json:"media_urls"`
 				Status    string   `json:"status"`
 				From      struct {
