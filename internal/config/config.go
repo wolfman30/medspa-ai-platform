@@ -82,6 +82,11 @@ type Config struct {
 	AestheticRecordSyncInterval      time.Duration
 	AestheticRecordSyncWindowDays    int
 	AestheticRecordSyncDurationMins  int
+
+	// AWS Cognito Configuration
+	CognitoUserPoolID string
+	CognitoClientID   string
+	CognitoRegion     string // defaults to AWSRegion if not set
 }
 
 // Load reads configuration from environment variables
@@ -171,6 +176,11 @@ func Load() *Config {
 		AestheticRecordSyncInterval:      getEnvAsDuration("AESTHETIC_RECORD_SYNC_INTERVAL", 30*time.Minute),
 		AestheticRecordSyncWindowDays:    getEnvAsInt("AESTHETIC_RECORD_SYNC_WINDOW_DAYS", 7),
 		AestheticRecordSyncDurationMins:  getEnvAsInt("AESTHETIC_RECORD_SYNC_DURATION_MINS", 30),
+
+		// AWS Cognito Configuration
+		CognitoUserPoolID: getEnv("COGNITO_USER_POOL_ID", ""),
+		CognitoClientID:   getEnv("COGNITO_CLIENT_ID", ""),
+		CognitoRegion:     getEnv("COGNITO_REGION", getEnv("AWS_REGION", "us-east-1")),
 	}
 }
 
