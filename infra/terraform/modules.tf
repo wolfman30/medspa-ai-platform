@@ -69,6 +69,7 @@ module "ecs_fargate" {
     AWS_MAX_ATTEMPTS           = var.environment == "production" ? "3" : "10"
     AWS_REGION                 = var.aws_region
     PUBLIC_BASE_URL            = var.api_public_base_url
+    CORS_ALLOWED_ORIGINS       = var.environment == "production" ? "https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://wolfman30.github.io" : "http://localhost:8000,https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://wolfman30.github.io"
     ALLOW_FAKE_PAYMENTS        = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
     REDIS_ADDR                 = "${module.redis.primary_endpoint_address}:${module.redis.port}"
     REDIS_TLS                  = "true"

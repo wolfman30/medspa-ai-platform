@@ -383,6 +383,56 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		Content: req.Message,
 	})
 
+	// Deterministic guardrails (avoid the LLM for sensitive or highly structured requests).
+	var cfg *clinic.Config
+	if s.clinicStore != nil && req.OrgID != "" {
+		if loaded, err := s.clinicStore.Get(ctx, req.OrgID); err == nil {
+			cfg = loaded
+		}
+	}
+	if detectPHI(req.Message) {
+		reply := "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
+		history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: reply})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
+	}
+	if cfg != nil && isPriceInquiry(req.Message) {
+		service := detectServiceKey(req.Message, cfg)
+		if service != "" {
+			if price, ok := cfg.PriceTextForService(service); ok {
+				depositCents := cfg.DepositAmountForService(service)
+				depositDollars := float64(depositCents) / 100.0
+				reply := fmt.Sprintf("%s pricing: %s. To secure priority booking, we collect a small refundable deposit of $%.0f that applies toward your treatment. Would you like to proceed?", strings.Title(service), price, depositDollars)
+				// Best-effort tagging for analytics/triage.
+				s.appendLeadNote(ctx, req.OrgID, req.LeadID, "tag:price_shopper")
+
+				history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: reply})
+				history = trimHistory(history, maxHistoryMessages)
+				if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+					span.RecordError(err)
+					return nil, err
+				}
+				return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
+			}
+		}
+	}
+	if isAmbiguousHelp(req.Message) {
+		reply := "Happy to help. Are you looking to book an appointment, or do you have a question about a specific service (Botox, fillers, facials, lasers)?"
+		s.appendLeadNote(ctx, req.OrgID, req.LeadID, "state:needs_intent")
+
+		history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: reply})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
+	}
+
 	reply, err := s.generateResponse(ctx, history)
 	if err != nil {
 		return nil, err
@@ -429,6 +479,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if req.LeadID != "" && s.leadsRepo != nil {
 		if err := s.extractAndSavePreferences(ctx, req.LeadID, history); err != nil {
 			s.logger.Warn("failed to save scheduling preferences", "lead_id", req.LeadID, "error", err)
+		}
+	}
+
+	// Enforce clinic-configured deposit amounts (override LLM amounts when a rule exists).
+	if depositIntent != nil && s.clinicStore != nil && req.OrgID != "" {
+		if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
+			if prefs, ok := extractPreferences(history); ok && prefs.ServiceInterest != "" {
+				if amount := cfg.DepositAmountForService(prefs.ServiceInterest); amount > 0 {
+					depositIntent.AmountCents = int32(amount)
+				}
+			}
 		}
 	}
 
@@ -983,17 +1044,23 @@ func conversationHasDepositAgreement(history []ChatMessage) bool {
 	return false
 }
 
-// extractAndSavePreferences extracts scheduling preferences from conversation history and saves them
+// extractAndSavePreferences extracts scheduling preferences from conversation history and saves them.
 func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID string, history []ChatMessage) error {
+	prefs, ok := extractPreferences(history)
+	if !ok {
+		return nil
+	}
+	prefs.Notes = fmt.Sprintf("Auto-extracted from conversation at %s", time.Now().Format(time.RFC3339))
+	return s.leadsRepo.UpdateSchedulingPreferences(ctx, leadID, prefs)
+}
+
+func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, bool) {
 	prefs := leads.SchedulingPreferences{}
 	hasPreferences := false
 
-	// Scan the conversation for scheduling-related keywords
-	conversation := strings.ToLower(summarizeHistory(history, 8))
-
-	// Extract preferred days (only from user messages to avoid confusion with business hours)
+	// Extract preferred days (only from user messages to avoid confusion with business hours).
 	userMessages := ""
-	userMessagesOriginal := "" // Keep original case for name extraction
+	userMessagesOriginal := "" // Keep original case for name extraction.
 	for _, msg := range history {
 		if msg.Role == ChatRoleUser {
 			userMessages += strings.ToLower(msg.Content) + " "
@@ -1001,8 +1068,7 @@ func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID strin
 		}
 	}
 
-	// Extract patient name from user messages
-	// Patterns: "my name is X", "I'm X", "this is X", "call me X", "it's X"
+	// Extract patient name from user messages.
 	namePatterns := []*regexp.Regexp{
 		regexp.MustCompile(`(?i)my name is\s+([A-Z][a-z]+)`),
 		regexp.MustCompile(`(?i)i'?m\s+([A-Z][a-z]+)(?:\s|,|\.|\!|$)`),
@@ -1011,11 +1077,9 @@ func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID strin
 		regexp.MustCompile(`(?i)it'?s\s+([A-Z][a-z]+)(?:\s|,|\.|\!|$)`),
 		regexp.MustCompile(`(?i)name'?s\s+([A-Z][a-z]+)`),
 	}
-
 	for _, pattern := range namePatterns {
 		if matches := pattern.FindStringSubmatch(userMessagesOriginal); len(matches) > 1 {
 			name := strings.TrimSpace(matches[1])
-			// Validate it looks like a name (2-20 chars, not a common word)
 			if len(name) >= 2 && len(name) <= 20 && !isCommonWord(name) {
 				prefs.Name = name
 				hasPreferences = true
@@ -1024,45 +1088,58 @@ func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID strin
 		}
 	}
 
-	// Also check for standalone name response (single capitalized word after AI asked for name)
+	// Standalone name response (single capitalized word after an explicit name ask).
 	if prefs.Name == "" {
 		for i, msg := range history {
-			if msg.Role == ChatRoleUser {
-				// Check if previous assistant message asked for name
-				if i > 0 && history[i-1].Role == ChatRoleAssistant {
-					prevMsg := strings.ToLower(history[i-1].Content)
-					if strings.Contains(prevMsg, "name") && (strings.Contains(prevMsg, "may i") || strings.Contains(prevMsg, "what") || strings.Contains(prevMsg, "your")) {
-						// This user message might be just their name
-						content := strings.TrimSpace(msg.Content)
-						words := strings.Fields(content)
-						if len(words) >= 1 && len(words) <= 3 {
-							// Take first word that looks like a name
-							for _, word := range words {
-								cleaned := strings.Trim(word, ".,!?")
-								if len(cleaned) >= 2 && len(cleaned) <= 20 && isCapitalized(cleaned) && !isCommonWord(cleaned) {
-									prefs.Name = cleaned
-									hasPreferences = true
-									break
-								}
-							}
-						}
-					}
+			if msg.Role != ChatRoleUser {
+				continue
+			}
+			if i == 0 || history[i-1].Role != ChatRoleAssistant {
+				continue
+			}
+			prev := strings.ToLower(history[i-1].Content)
+			if !strings.Contains(prev, "name") || (!strings.Contains(prev, "may i") && !strings.Contains(prev, "what") && !strings.Contains(prev, "your")) {
+				continue
+			}
+			content := strings.TrimSpace(msg.Content)
+			words := strings.Fields(content)
+			if len(words) < 1 || len(words) > 3 {
+				continue
+			}
+			for _, word := range words {
+				cleaned := strings.Trim(word, ".,!?")
+				if len(cleaned) >= 2 && len(cleaned) <= 20 && isCapitalized(cleaned) && !isCommonWord(cleaned) {
+					prefs.Name = cleaned
+					hasPreferences = true
+					break
 				}
+			}
+			if prefs.Name != "" {
+				break
 			}
 		}
 	}
 
-	// Only extract booking preferences if conversation contains booking-related intent
-	hasBookingIntent := strings.Contains(conversation, "book") ||
-		strings.Contains(conversation, "appointment") ||
-		strings.Contains(conversation, "schedule") ||
-		strings.Contains(conversation, "available")
+	// Extract patient type.
+	if strings.Contains(userMessages, "new patient") || strings.Contains(userMessages, "first time") || strings.Contains(userMessages, "i'm new") || strings.Contains(userMessages, "i am new") {
+		prefs.PatientType = "new"
+		hasPreferences = true
+	} else if strings.Contains(userMessages, "returning") || strings.Contains(userMessages, "existing patient") || strings.Contains(userMessages, "i've been") || strings.Contains(userMessages, "i have been") {
+		prefs.PatientType = "existing"
+		hasPreferences = true
+	}
+
+	// Only extract booking preferences if user messages contain booking-related intent.
+	// Avoid scanning system prompts, which may include service names and cause false positives.
+	hasBookingIntent := strings.Contains(userMessages, "book") ||
+		strings.Contains(userMessages, "appointment") ||
+		strings.Contains(userMessages, "schedule") ||
+		strings.Contains(userMessages, "available")
 
 	if hasBookingIntent {
-		// Extract service interest
 		services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
 		for _, service := range services {
-			if strings.Contains(conversation, service) {
+			if strings.Contains(userMessages, service) {
 				prefs.ServiceInterest = service
 				hasPreferences = true
 				break
@@ -1081,7 +1158,6 @@ func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID strin
 		hasPreferences = true
 	}
 
-	// Extract preferred times (only from user messages)
 	if strings.Contains(userMessages, "morning") {
 		prefs.PreferredTimes = "morning"
 		hasPreferences = true
@@ -1093,15 +1169,115 @@ func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID strin
 		hasPreferences = true
 	}
 
-	// Only save if we found any preferences
-	if !hasPreferences {
-		return nil
+	return prefs, hasPreferences
+}
+
+var (
+	priceInquiryRE = regexp.MustCompile(`(?i)\b(?:how much|price|pricing|cost|rate|rates|charge)\b`)
+	phiPrefaceRE   = regexp.MustCompile(`(?i)\b(?:diagnosed|diagnosis|my condition|my symptoms|i have|i've had|i am|i'm)\b`)
+)
+
+func isPriceInquiry(message string) bool {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return false
 	}
+	return priceInquiryRE.MatchString(message) || strings.Contains(message, "$")
+}
 
-	// Add conversation notes for context
-	prefs.Notes = fmt.Sprintf("Auto-extracted from conversation at %s", time.Now().Format(time.RFC3339))
+func isAmbiguousHelp(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	if !(strings.Contains(message, "help") || strings.Contains(message, "question") || strings.Contains(message, "info")) {
+		return false
+	}
+	// If the user already mentioned booking or a service, let the LLM handle it.
+	for _, kw := range []string{"book", "appointment", "schedule", "botox", "filler", "facial", "laser", "peel", "microneedling"} {
+		if strings.Contains(message, kw) {
+			return false
+		}
+	}
+	return true
+}
 
-	return s.leadsRepo.UpdateSchedulingPreferences(ctx, leadID, prefs)
+func detectServiceKey(message string, cfg *clinic.Config) string {
+	message = strings.ToLower(message)
+	if strings.TrimSpace(message) == "" {
+		return ""
+	}
+	candidates := make([]string, 0, 16)
+	if cfg != nil {
+		for key := range cfg.ServicePriceText {
+			candidates = append(candidates, key)
+		}
+		for key := range cfg.ServiceDepositAmountCents {
+			candidates = append(candidates, key)
+		}
+		for _, svc := range cfg.Services {
+			candidates = append(candidates, svc)
+		}
+	}
+	candidates = append(candidates, "botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling")
+
+	for _, candidate := range candidates {
+		key := strings.ToLower(strings.TrimSpace(candidate))
+		if key == "" {
+			continue
+		}
+		if strings.Contains(message, key) {
+			return key
+		}
+	}
+	return ""
+}
+
+func detectPHI(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	if !phiPrefaceRE.MatchString(message) {
+		return false
+	}
+	// Minimal deterministic PHI keywords for deflection; expand as needed.
+	for _, kw := range []string{
+		"diabetes", "hiv", "aids", "cancer", "hepatitis", "pregnant", "pregnancy",
+		"depression", "anxiety", "bipolar", "schizophrenia", "asthma", "hypertension",
+		"blood pressure", "infection", "herpes", "std", "sti",
+	} {
+		if strings.Contains(message, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *LLMService) appendLeadNote(ctx context.Context, orgID, leadID, note string) {
+	if s == nil || s.leadsRepo == nil {
+		return
+	}
+	orgID = strings.TrimSpace(orgID)
+	leadID = strings.TrimSpace(leadID)
+	note = strings.TrimSpace(note)
+	if orgID == "" || leadID == "" || note == "" {
+		return
+	}
+	lead, err := s.leadsRepo.GetByID(ctx, orgID, leadID)
+	if err != nil || lead == nil {
+		return
+	}
+	existing := strings.TrimSpace(lead.SchedulingNotes)
+	switch {
+	case existing == "":
+		existing = note
+	case strings.Contains(existing, note):
+		// Avoid duplication.
+	default:
+		existing = existing + " | " + note
+	}
+	_ = s.leadsRepo.UpdateSchedulingPreferences(ctx, leadID, leads.SchedulingPreferences{Notes: existing})
 }
 
 // isCapitalized checks if a string starts with an uppercase letter

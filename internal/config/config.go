@@ -13,6 +13,7 @@ type Config struct {
 	Env                      string
 	PublicBaseURL            string
 	LogLevel                 string
+	CORSAllowedOrigins       []string
 	UseMemoryQueue           bool
 	WorkerCount              int
 	DatabaseURL              string
@@ -44,6 +45,8 @@ type Config struct {
 	SquareSandbox            bool
 	AllowFakePayments        bool
 	DepositAmountCents       int
+	SandboxAutoPurgePhones   string
+	SandboxAutoPurgeDelay    time.Duration
 	AdminJWTSecret           string
 	QuietHoursStart          string
 	QuietHoursEnd            string
@@ -83,11 +86,23 @@ type Config struct {
 
 // Load reads configuration from environment variables
 func Load() *Config {
+	corsAllowedOrigins := []string{}
+	if raw := strings.TrimSpace(getEnv("CORS_ALLOWED_ORIGINS", "")); raw != "" {
+		for _, origin := range strings.Split(raw, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin == "" {
+				continue
+			}
+			corsAllowedOrigins = append(corsAllowedOrigins, origin)
+		}
+	}
+
 	return &Config{
 		Port:                     getEnv("PORT", "8080"),
 		Env:                      getEnv("ENV", "development"),
 		PublicBaseURL:            getEnv("PUBLIC_BASE_URL", ""),
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
+		CORSAllowedOrigins:       corsAllowedOrigins,
 		UseMemoryQueue:           getEnvAsBool("USE_MEMORY_QUEUE", false),
 		WorkerCount:              getEnvAsInt("WORKER_COUNT", 2),
 		DatabaseURL:              getEnv("DATABASE_URL", ""),
@@ -119,6 +134,8 @@ func Load() *Config {
 		SquareSandbox:            getEnvAsBool("SQUARE_SANDBOX", true),
 		AllowFakePayments:        getEnvAsBool("ALLOW_FAKE_PAYMENTS", false),
 		DepositAmountCents:       getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
+		SandboxAutoPurgePhones:   getEnv("SANDBOX_AUTO_PURGE_PHONE_DIGITS", ""),
+		SandboxAutoPurgeDelay:    getEnvAsDuration("SANDBOX_AUTO_PURGE_DELAY", 0),
 		AdminJWTSecret:           getEnv("ADMIN_JWT_SECRET", ""),
 		QuietHoursStart:          getEnv("QUIET_HOURS_START", ""),
 		QuietHoursEnd:            getEnv("QUIET_HOURS_END", ""),

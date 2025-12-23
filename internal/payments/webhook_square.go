@@ -69,7 +69,7 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !verifySquareSignature(h.signatureKey, buildAbsoluteURL(r), payload, r.Header.Get("X-Square-Signature")) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -98,7 +98,24 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if evt.Data.Object.Payment.Status != "COMPLETED" {
+	status := strings.ToUpper(strings.TrimSpace(evt.Data.Object.Payment.Status))
+	switch status {
+	case "COMPLETED":
+		// continue
+	case "FAILED", "CANCELED", "CANCELLED":
+		code, msg, err := h.handleFailure(r, evt, eventID)
+		if err != nil {
+			h.logger.Error("square failure webhook handling failed", "error", err, "event_id", eventID)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if code != http.StatusOK {
+			http.Error(w, msg, code)
+			return
+		}
+		w.WriteHeader(code)
+		return
+	default:
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -224,6 +241,9 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "lead not found", http.StatusNotFound)
 		return
 	}
+	if err := h.leads.UpdateDepositStatus(r.Context(), leadID, "paid", "priority"); err != nil {
+		h.logger.Warn("failed to update lead deposit status", "error", err, "lead_id", leadID, "org_id", orgID)
+	}
 
 	event := events.PaymentSucceededV1{
 		EventID:         eventID,
@@ -255,6 +275,128 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("failed to record processed event", "error", err)
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *SquareWebhookHandler) handleFailure(r *http.Request, evt squarePaymentEvent, eventID string) (int, string, error) {
+	metadata := evt.Data.Object.Payment.Metadata
+	orgID := metadata["org_id"]
+	leadID := metadata["lead_id"]
+	intentID := metadata["booking_intent_id"]
+	paymentID := strings.TrimSpace(evt.Data.Object.Payment.ID)
+	orderID := evt.Data.Object.Payment.OrderID
+	status := strings.ToUpper(strings.TrimSpace(evt.Data.Object.Payment.Status))
+
+	if paymentID != "" {
+		if processed, err := h.processed.AlreadyProcessed(r.Context(), "square.payment_failed", paymentID); err != nil {
+			h.logger.Error("processed lookup failed", "error", err)
+			return http.StatusInternalServerError, "", err
+		} else if processed {
+			if _, err := h.processed.MarkProcessed(r.Context(), "square", eventID); err != nil {
+				h.logger.Error("failed to record processed event", "error", err)
+			}
+			return http.StatusOK, "", nil
+		}
+	}
+
+	var paymentRow *paymentsql.Payment
+	if orgID == "" || leadID == "" || intentID == "" {
+		if paymentID == "" {
+			return http.StatusBadRequest, "missing metadata", nil
+		}
+		var (
+			orderMeta map[string]string
+			perr      error
+		)
+		paymentRow, perr = h.payments.GetByProviderRef(r.Context(), paymentID)
+		if perr != nil || paymentRow == nil {
+			if h.orders != nil && orderID != "" {
+				if ometa, oerr := h.orders.FetchMetadata(r.Context(), orderID); oerr == nil && len(ometa) > 0 {
+					orderMeta = ometa
+					orgID = orderMeta["org_id"]
+					leadID = orderMeta["lead_id"]
+					intentID = orderMeta["booking_intent_id"]
+				} else {
+					h.logger.Warn("square failure webhook missing metadata and payment/order lookup failed", "payment_err", perr, "order_err", oerr, "payment_id", paymentID, "order_id", orderID)
+					return http.StatusOK, "", nil
+				}
+			} else {
+				h.logger.Warn("square failure webhook missing metadata and payment lookup failed", "error", perr, "payment_id", paymentID)
+				return http.StatusOK, "", nil
+			}
+		}
+		if paymentRow != nil {
+			orgID = paymentRow.OrgID
+			if paymentRow.LeadID.Valid {
+				leadUUID, _ := uuid.FromBytes(paymentRow.LeadID.Bytes[:])
+				leadID = leadUUID.String()
+			}
+			if paymentRow.ID.Valid {
+				intentID = uuid.UUID(paymentRow.ID.Bytes).String()
+			}
+		}
+	}
+
+	orgUUID, err := uuid.Parse(orgID)
+	if err != nil {
+		return http.StatusBadRequest, "invalid org id", nil
+	}
+	orgID = orgUUID.String()
+
+	leadUUID, err := uuid.Parse(leadID)
+	if err != nil {
+		return http.StatusBadRequest, "invalid lead id", nil
+	}
+	leadID = leadUUID.String()
+
+	if intentID == "" {
+		return http.StatusBadRequest, "missing booking intent id", nil
+	}
+	intentUUID, err := uuid.Parse(intentID)
+	if err != nil {
+		return http.StatusBadRequest, "invalid booking intent id", nil
+	}
+
+	providerRef := paymentID
+	if _, err := h.payments.UpdateStatusByID(r.Context(), intentUUID, "failed", providerRef); err != nil {
+		return http.StatusInternalServerError, "", err
+	}
+
+	lead, err := h.leads.GetByID(r.Context(), orgID, leadID)
+	if err != nil {
+		return http.StatusNotFound, "lead not found", nil
+	}
+	if err := h.leads.UpdateDepositStatus(r.Context(), leadID, "failed", "normal"); err != nil {
+		h.logger.Warn("failed to update lead deposit status", "error", err, "lead_id", leadID, "org_id", orgID)
+	}
+
+	failEvt := events.PaymentFailedV1{
+		EventID:         eventID,
+		OrgID:           orgID,
+		LeadID:          leadID,
+		BookingIntentID: intentUUID.String(),
+		Provider:        "square",
+		ProviderRef:     providerRef,
+		AmountCents:     evt.Data.Object.Payment.AmountMoney.Amount,
+		OccurredAt:      evt.CreatedAt,
+		LeadPhone:       lead.Phone,
+		FailureStatus:   status,
+	}
+	if h.numbers != nil {
+		failEvt.FromNumber = h.numbers.DefaultFromNumber(orgID)
+	}
+	if _, err := h.outbox.Insert(r.Context(), orgID, "payment_failed.v1", failEvt); err != nil {
+		return http.StatusInternalServerError, "", err
+	}
+
+	if providerRef != "" {
+		if _, err := h.processed.MarkProcessed(r.Context(), "square.payment_failed", providerRef); err != nil {
+			h.logger.Error("failed to record processed payment failure", "error", err, "provider_ref", providerRef)
+		}
+	}
+	if _, err := h.processed.MarkProcessed(r.Context(), "square", eventID); err != nil {
+		h.logger.Error("failed to record processed event", "error", err)
+	}
+	return http.StatusOK, "", nil
 }
 
 func verifySquareSignature(key, url string, body []byte, header string) bool {

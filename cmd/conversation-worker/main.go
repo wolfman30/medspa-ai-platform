@@ -17,6 +17,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
@@ -138,15 +139,14 @@ func main() {
 		}
 		if squareSvc != nil {
 			outbox := events.NewOutboxStore(dbPool)
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, leadsRepo, logger)
 			logger.Info("deposit sender initialized for async workers", "has_oauth", oauthSvc != nil, "square_location_id", cfg.SquareLocationID)
 		} else {
 			logger.Warn("deposit sender NOT initialized for async workers", "has_square_token", cfg.SquareAccessToken != "", "has_oauth", oauthSvc != nil)
 		}
 	}
 
-	// Initialize notification service for clinic operator alerts
-	var notifier conversation.PaymentNotifier
+	var redisClient *redis.Client
 	if cfg.RedisAddr != "" {
 		redisOptions := &redis.Options{
 			Addr:     cfg.RedisAddr,
@@ -155,10 +155,16 @@ func main() {
 		if cfg.RedisTLS {
 			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		}
-		redisClient := redis.NewClient(redisOptions)
+		redisClient = redis.NewClient(redisOptions)
 		if err := redisClient.Ping(ctx).Err(); err != nil {
-			logger.Warn("redis not available, clinic notifications disabled", "error", err)
-		} else {
+			logger.Warn("redis not available", "error", err)
+			redisClient = nil
+		}
+	}
+
+	// Initialize notification service for clinic operator alerts
+	var notifier conversation.PaymentNotifier
+	if redisClient != nil {
 			clinicStore := clinic.NewStore(redisClient)
 
 			// Setup email sender
@@ -193,12 +199,29 @@ func main() {
 
 			notifier = notify.NewService(emailSender, smsSender, clinicStore, leadsRepo, logger)
 			logger.Info("notification service initialized for clinic operator alerts")
-		}
 	}
 
 	var processedStore *events.ProcessedStore
 	if dbPool != nil {
 		processedStore = events.NewProcessedStore(dbPool)
+	}
+
+	var autoPurger conversation.SandboxAutoPurger
+	if cfg.Env != "production" && cfg.SquareSandbox && dbPool != nil {
+		phones := clinicdata.ParsePhoneDigitsList(cfg.SandboxAutoPurgePhones)
+		if len(phones) > 0 {
+			if redisClient == nil {
+				logger.Warn("sandbox auto purge disabled: redis not configured")
+			} else {
+				purger := clinicdata.NewPurger(dbPool, redisClient, logger)
+				autoPurger = clinicdata.NewSandboxAutoPurger(purger, clinicdata.AutoPurgeConfig{
+					Enabled:            true,
+					AllowedPhoneDigits: phones,
+					Delay:              cfg.SandboxAutoPurgeDelay,
+				}, logger)
+				logger.Info("sandbox auto purge enabled", "delay", cfg.SandboxAutoPurgeDelay.String())
+			}
+		}
 	}
 
 	worker := conversation.NewWorker(
@@ -211,6 +234,7 @@ func main() {
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
 		conversation.WithPaymentNotifier(notifier),
+		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 	)
 

@@ -10,8 +10,343 @@ import (
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
+
+func TestTierA_CI03_ExistingLeadResumes_NoDuplicateWelcome(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	scripted := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Welcome!"},
+			{Text: "Follow-up reply"},
+		},
+	}
+	service := NewLLMService(scripted, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
+
+	start, err := service.StartConversation(context.Background(), StartRequest{
+		ConversationID: "conv-resume",
+		LeadID:         "lead-1",
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	resp, err := service.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: start.ConversationID,
+		Message:        "hello again",
+		Channel:        ChannelSMS,
+		OrgID:          "org-1",
+	})
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if resp.Message != "Follow-up reply" {
+		t.Fatalf("expected follow-up reply, got %q", resp.Message)
+	}
+
+	raw, err := mr.DB(0).Get(conversationKey(start.ConversationID))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	var history []ChatMessage
+	if err := json.Unmarshal([]byte(raw), &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	welcomeCount := 0
+	for _, msg := range history {
+		if msg.Role == ChatRoleAssistant && msg.Content == "Welcome!" {
+			welcomeCount++
+		}
+	}
+	if welcomeCount != 1 {
+		t.Fatalf("expected welcome message once, got %d", welcomeCount)
+	}
+}
+
+func TestTierA_CI04_PriceServiceInquiry_UsesClinicConfigAndTagsLead(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(client)
+
+	cfg := clinic.DefaultConfig("org-1")
+	cfg.ServicePriceText = map[string]string{"botox": "$12/unit"}
+	cfg.ServiceDepositAmountCents = map[string]int{"botox": 5000}
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("set clinic config: %v", err)
+	}
+
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Lead",
+		Phone:   "+15550000000",
+		Source:  "sms",
+		Message: "",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{responses: []LLMResponse{{Text: "Hello!"}}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithClinicStore(clinicStore), WithLeadsRepo(leadsRepo))
+
+	start, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-price",
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	resp, err := service.ProcessMessage(ctx, MessageRequest{
+		ConversationID: start.ConversationID,
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Message:        "How much is Botox?",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !strings.Contains(resp.Message, "Botox pricing: $12/unit") {
+		t.Fatalf("expected price response, got %q", resp.Message)
+	}
+	if !strings.Contains(resp.Message, "refundable deposit") || !strings.Contains(resp.Message, "$50") {
+		t.Fatalf("expected deposit policy in reply, got %q", resp.Message)
+	}
+	if len(mockLLM.requests) != 1 {
+		t.Fatalf("expected no extra LLM calls for price inquiry, got %d", len(mockLLM.requests))
+	}
+	updated, err := leadsRepo.GetByID(ctx, "org-1", lead.ID)
+	if err != nil {
+		t.Fatalf("load lead: %v", err)
+	}
+	if !strings.Contains(updated.SchedulingNotes, "tag:price_shopper") {
+		t.Fatalf("expected lead tagged as price_shopper, got %q", updated.SchedulingNotes)
+	}
+}
+
+func TestTierA_CI05_AmbiguousMessage_AsksClarifyingQuestionAndTagsLead(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Lead",
+		Phone:   "+15550000001",
+		Source:  "sms",
+		Message: "",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{responses: []LLMResponse{{Text: "Hello!"}}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithLeadsRepo(leadsRepo))
+
+	start, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-help",
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	resp, err := service.ProcessMessage(ctx, MessageRequest{
+		ConversationID: start.ConversationID,
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Message:        "I need help",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(resp.Message), "are you looking to book") {
+		t.Fatalf("expected clarifying question, got %q", resp.Message)
+	}
+	if len(mockLLM.requests) != 1 {
+		t.Fatalf("expected no extra LLM calls for ambiguous help, got %d", len(mockLLM.requests))
+	}
+	updated, err := leadsRepo.GetByID(ctx, "org-1", lead.ID)
+	if err != nil {
+		t.Fatalf("load lead: %v", err)
+	}
+	if !strings.Contains(updated.SchedulingNotes, "state:needs_intent") {
+		t.Fatalf("expected lead tagged needs_intent, got %q", updated.SchedulingNotes)
+	}
+}
+
+func TestTierA_CI12_DepositRulesCorrectness_ServiceOverridesApply(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(client)
+
+	cfg := clinic.DefaultConfig("org-1")
+	cfg.ServiceDepositAmountCents = map[string]int{
+		"botox":  5000,
+		"filler": 10000,
+	}
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("set clinic config: %v", err)
+	}
+
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Lead",
+		Phone:   "+15550000002",
+		Source:  "sms",
+		Message: "",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	scripted := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Hello!"}, // start #1
+			{Text: "We do require a refundable deposit to hold your spot."}, // reply #1
+			{Text: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`}, // classifier #1
+			{Text: "Hello!"}, // start #2
+			{Text: "We do require a refundable deposit to hold your spot."}, // reply #2
+			{Text: `{"collect":true,"amount_cents":7500,"success_url":"http://ok","cancel_url":"http://cancel","description":"Hold your spot"}`}, // classifier #2
+		},
+	}
+
+	service := NewLLMService(scripted, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithClinicStore(clinicStore), WithLeadsRepo(leadsRepo), WithDepositConfig(DepositConfig{
+		DefaultAmountCents: 5000,
+		SuccessURL:         "http://default-success",
+		CancelURL:          "http://default-cancel",
+	}))
+
+	start1, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-botox",
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start #1 failed: %v", err)
+	}
+	resp1, err := service.ProcessMessage(ctx, MessageRequest{
+		ConversationID: start1.ConversationID,
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Message:        "I want to book botox",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("process #1 failed: %v", err)
+	}
+	if resp1.DepositIntent == nil || resp1.DepositIntent.AmountCents != 5000 {
+		t.Fatalf("expected botox deposit override to 5000, got %#v", resp1.DepositIntent)
+	}
+
+	start2, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-filler",
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start #2 failed: %v", err)
+	}
+	resp2, err := service.ProcessMessage(ctx, MessageRequest{
+		ConversationID: start2.ConversationID,
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Message:        "I want to book filler",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("process #2 failed: %v", err)
+	}
+	if resp2.DepositIntent == nil || resp2.DepositIntent.AmountCents != 10000 {
+		t.Fatalf("expected filler deposit override to 10000, got %#v", resp2.DepositIntent)
+	}
+}
+
+func TestTierA_CI13_HIPAA_PHIDeflection_NoLeadDiagnosisUpdates(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Lead",
+		Phone:   "+15550000003",
+		Source:  "sms",
+		Message: "",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{responses: []LLMResponse{{Text: "Hello!"}}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithLeadsRepo(leadsRepo))
+
+	start, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-phi",
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	resp, err := service.ProcessMessage(ctx, MessageRequest{
+		ConversationID: start.ConversationID,
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Message:        "I have diabetes and I'm worried about botox side effects",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(resp.Message), "can't provide medical advice") {
+		t.Fatalf("expected PHI deflection reply, got %q", resp.Message)
+	}
+	if len(mockLLM.requests) != 1 {
+		t.Fatalf("expected no extra LLM calls for PHI deflection, got %d", len(mockLLM.requests))
+	}
+	updated, err := leadsRepo.GetByID(ctx, "org-1", lead.ID)
+	if err != nil {
+		t.Fatalf("load lead: %v", err)
+	}
+	if updated.ServiceInterest != "" || updated.PatientType != "" {
+		t.Fatalf("expected lead profile not updated with PHI, got %#v", updated)
+	}
+}
 
 func TestLLMService_StartConversation_PersistsHistory(t *testing.T) {
 	mr := miniredis.RunT(t)

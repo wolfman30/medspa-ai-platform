@@ -130,6 +130,9 @@ func (h *CheckoutHandler) CreateCheckout(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "failed to create payment intent", http.StatusInternalServerError)
 		return
 	}
+	if err := h.leads.UpdateDepositStatus(r.Context(), req.LeadID, "pending", "normal"); err != nil {
+		h.logger.Warn("failed to update lead deposit status", "error", err, "org_id", orgID, "lead_id", req.LeadID)
+	}
 	var paymentID uuid.UUID
 	if intent.ID.Valid {
 		paymentID = uuid.UUID(intent.ID.Bytes)

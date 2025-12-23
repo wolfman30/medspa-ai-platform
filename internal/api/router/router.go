@@ -30,8 +30,10 @@ type Config struct {
 	TelnyxWebhooks      *handlers.TelnyxWebhookHandler
 	ClinicHandler       *clinic.Handler
 	ClinicStatsHandler  *clinic.StatsHandler
+	ClinicDashboard     *clinic.DashboardHandler
 	AdminAuthSecret     string
 	MetricsHandler      http.Handler
+	CORSAllowedOrigins  []string
 }
 
 // New creates a new Chi router with all routes configured
@@ -44,6 +46,9 @@ func New(cfg *Config) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
+	if len(cfg.CORSAllowedOrigins) > 0 {
+		r.Use(httpmiddleware.CORS(cfg.CORSAllowedOrigins))
+	}
 	if cfg.Logger != nil {
 		r.Use(httpmiddleware.RequestLogger(cfg.Logger))
 	}
@@ -96,6 +101,9 @@ func New(cfg *Config) http.Handler {
 				}
 				if cfg.ClinicStatsHandler != nil {
 					clinicRoutes.Get("/stats", cfg.ClinicStatsHandler.GetStats)
+				}
+				if cfg.ClinicDashboard != nil {
+					clinicRoutes.Get("/dashboard", cfg.ClinicDashboard.GetDashboard)
 				}
 				if cfg.LeadsHandler != nil {
 					clinicRoutes.Get("/leads", cfg.LeadsHandler.ListLeads)

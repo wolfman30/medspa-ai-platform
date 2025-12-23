@@ -10,19 +10,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	paymentsql "github.com/wolfman30/medspa-ai-platform/internal/payments/sqlc"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-func TestDepositDispatcherHappyPath(t *testing.T) {
+func TestTierA_CI07_Qualify_DepositOffered(t *testing.T) {
 	payRepo := &stubPaymentRepo{}
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
+	leadsRepo := &stubLeadsRepo{}
 	logger := logging.Default()
 
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logger)
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, leadsRepo, logger)
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+2"}
 	now := time.Now()
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test", ScheduledFor: &now}}
@@ -45,13 +47,19 @@ func TestDepositDispatcherHappyPath(t *testing.T) {
 	if !strings.Contains(sms.last.Body, "http://pay") {
 		t.Fatalf("expected sms body to contain checkout link, got %q", sms.last.Body)
 	}
+	if !strings.Contains(sms.last.Body, "$50.00") {
+		t.Fatalf("expected sms body to include amount, got %q", sms.last.Body)
+	}
 	if !outbox.called {
 		t.Fatalf("expected outbox event inserted")
+	}
+	if !leadsRepo.called || leadsRepo.status != "pending" || leadsRepo.priority != "normal" {
+		t.Fatalf("expected lead deposit status pending/normal, got called=%v status=%q priority=%q", leadsRepo.called, leadsRepo.status, leadsRepo.priority)
 	}
 }
 
 func TestDepositDispatcherMissingDeps(t *testing.T) {
-	dispatcher := NewDepositDispatcher(nil, nil, nil, nil, nil, logging.Default())
+	dispatcher := NewDepositDispatcher(nil, nil, nil, nil, nil, nil, logging.Default())
 	msg := MessageRequest{OrgID: "org-1", LeadID: uuid.New().String()}
 	resp := &Response{DepositIntent: &DepositIntent{AmountCents: 1000, ScheduledFor: ptrTime(time.Now())}}
 	if err := dispatcher.SendDeposit(context.Background(), msg, resp); err == nil {
@@ -65,7 +73,7 @@ func TestDepositDispatcherProceedsWithoutSchedule(t *testing.T) {
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, nil, logging.Default())
 
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+2"}
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "No time"}}
@@ -79,12 +87,12 @@ func TestDepositDispatcherProceedsWithoutSchedule(t *testing.T) {
 	}
 }
 
-func TestDepositDispatcherSkipsDuplicate(t *testing.T) {
+func TestTierA_CI08_DepositIdempotency(t *testing.T) {
 	payRepo := &stubPaymentRepo{hasDeposit: true}
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, nil, logging.Default())
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+2"}
 	now := time.Now()
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test", ScheduledFor: &now}}
@@ -102,7 +110,7 @@ func TestDepositDispatcherUsesMetadataSchedule(t *testing.T) {
 	checkout := &stubCheckout{resp: &payments.CheckoutResponse{URL: "http://pay", ProviderID: "sq_123"}}
 	outbox := &stubOutbox{}
 	sms := &stubReplyMessenger{}
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, nil, nil, logging.Default())
 
 	when := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
 	msg := MessageRequest{
@@ -132,7 +140,7 @@ func TestDepositDispatcherUsesResolverFromNumber(t *testing.T) {
 	sms := &stubReplyMessenger{}
 	resolver := &stubNumberResolver{from: "+18885550100"}
 
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, nil, logging.Default())
 	// When msg.To is set, it should be used as the SMS from number (same clinic number the patient texted).
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: "+19998887777"}
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test"}}
@@ -152,7 +160,7 @@ func TestDepositDispatcherFallsBackToResolverFromNumber(t *testing.T) {
 	sms := &stubReplyMessenger{}
 	resolver := &stubNumberResolver{from: "+18885550100"}
 
-	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, logging.Default())
+	dispatcher := NewDepositDispatcher(payRepo, checkout, outbox, sms, resolver, nil, logging.Default())
 	msg := MessageRequest{OrgID: uuid.New().String(), LeadID: uuid.New().String(), From: "+1", To: ""}
 	resp := &Response{ConversationID: "conv-1", DepositIntent: &DepositIntent{AmountCents: 5000, Description: "Test"}}
 
@@ -227,6 +235,41 @@ type stubNumberResolver struct {
 
 func (s *stubNumberResolver) DefaultFromNumber(orgID string) string {
 	return s.from
+}
+
+type stubLeadsRepo struct {
+	called   bool
+	leadID   string
+	status   string
+	priority string
+}
+
+func (s *stubLeadsRepo) Create(context.Context, *leads.CreateLeadRequest) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) GetByID(context.Context, string, string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) GetOrCreateByPhone(context.Context, string, string, string, string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) UpdateSchedulingPreferences(context.Context, string, leads.SchedulingPreferences) error {
+	return nil
+}
+
+func (s *stubLeadsRepo) UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error {
+	s.called = true
+	s.leadID = leadID
+	s.status = status
+	s.priority = priority
+	return nil
+}
+
+func (s *stubLeadsRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter) ([]*leads.Lead, error) {
+	return nil, nil
 }
 
 // helper to satisfy repository expectations

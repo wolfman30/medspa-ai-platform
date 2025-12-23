@@ -324,6 +324,53 @@ func TestWorkerSkipsMalformedPayload(t *testing.T) {
 	}
 }
 
+func TestTierA_CI06_LLMOutputInvalid_SendsFallbackReply(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &failingMessageService{}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	worker := NewWorker(service, queue, store, messenger, nil, logging.Default(), WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-msg-fail",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "hi",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-fail", Body: string(body), ReceiptHandle: "rh-fail"})
+
+	waitFor(func() bool {
+		return messenger.wasCalled()
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	last := messenger.lastReply()
+	if last.Body != "Sorry - I'm having trouble responding right now. Please reply again in a moment." {
+		t.Fatalf("unexpected fallback reply: %q", last.Body)
+	}
+	if last.Metadata["job_id"] != "job-msg-fail" {
+		t.Fatalf("expected correlation job_id, got %#v", last.Metadata)
+	}
+	if messenger.callCount() != 1 {
+		t.Fatalf("expected exactly one fallback sms, got %d", messenger.callCount())
+	}
+}
+
 func TestWorkerConfigOptions(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &recordingService{}
@@ -350,6 +397,20 @@ func TestWorkerConfigOptions(t *testing.T) {
 	if worker.cfg.receiveWaitSecs != maxWaitSeconds {
 		t.Fatalf("expected wait seconds capped at %d, got %d", maxWaitSeconds, worker.cfg.receiveWaitSecs)
 	}
+}
+
+type failingMessageService struct{}
+
+func (s *failingMessageService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
+	return &Response{}, nil
+}
+
+func (s *failingMessageService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
+	return nil, errors.New("malformed tool output")
+}
+
+func (s *failingMessageService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	return []Message{}, nil
 }
 
 type recordingService struct {

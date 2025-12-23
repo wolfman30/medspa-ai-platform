@@ -28,6 +28,7 @@ const (
 	jobTypeStart   jobType = "start"
 	jobTypeMessage jobType = "message"
 	jobTypePayment jobType = "payment_succeeded.v1"
+	jobTypePaymentFailed jobType = "payment_failed.v1"
 )
 
 type queuePayload struct {
@@ -37,6 +38,7 @@ type queuePayload struct {
 	Message     MessageRequest             `json:"message,omitempty"`
 	TrackStatus bool                       `json:"track_status"`
 	Payment     *events.PaymentSucceededV1 `json:"payment,omitempty"`
+	PaymentFailed *events.PaymentFailedV1  `json:"payment_failed,omitempty"`
 }
 
 type PublishOption func(*queuePayload)

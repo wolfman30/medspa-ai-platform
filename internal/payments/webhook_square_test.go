@@ -206,8 +206,8 @@ func TestSquareWebhookHandler_InvalidSignature(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	handler.Handle(rr, req)
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for bad signature, got %d", rr.Code)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for bad signature, got %d", rr.Code)
 	}
 }
 

@@ -50,6 +50,12 @@ func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry)
 			return fmt.Errorf("conversation: decode payment event: %w", err)
 		}
 		return d.publisher.EnqueuePaymentSucceeded(ctx, evt)
+	case "payment_failed.v1":
+		var evt events.PaymentFailedV1
+		if err := json.Unmarshal(entry.Payload, &evt); err != nil {
+			return fmt.Errorf("conversation: decode payment failed event: %w", err)
+		}
+		return d.publisher.EnqueuePaymentFailed(ctx, evt)
 	case "payments.deposit.requested.v1":
 		// Conversation layer does not consume deposit requests; ignore gracefully.
 		return nil

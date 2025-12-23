@@ -17,6 +17,7 @@ type messagingStore interface {
 	UpsertHostedOrder(ctx context.Context, q messaging.Querier, record messaging.HostedOrderRecord) error
 	IsUnsubscribed(ctx context.Context, clinicID uuid.UUID, recipient string) (bool, error)
 	InsertUnsubscribe(ctx context.Context, q messaging.Querier, clinicID uuid.UUID, recipient string, source string) error
+	DeleteUnsubscribe(ctx context.Context, q messaging.Querier, clinicID uuid.UUID, recipient string) error
 	LookupClinicByNumber(ctx context.Context, number string) (uuid.UUID, error)
 	UpdateMessageStatus(ctx context.Context, providerMessageID, status string, deliveredAt, failedAt *time.Time) error
 	ScheduleRetry(ctx context.Context, q messaging.Querier, id uuid.UUID, status string, nextRetry time.Time) error
