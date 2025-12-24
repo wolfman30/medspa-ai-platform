@@ -87,6 +87,11 @@ type Config struct {
 	CognitoUserPoolID string
 	CognitoClientID   string
 	CognitoRegion     string // defaults to AWSRegion if not set
+
+	// Demo Mode Configuration (for 10DLC campaign compliance during testing)
+	DemoMode       bool   // Wraps outbound messages with demo disclaimers
+	DemoModePrefix string // e.g., "AI Wolf Solutions: "
+	DemoModeSuffix string // e.g., " Demo only; no real services. Reply STOP to opt out."
 }
 
 // Load reads configuration from environment variables
@@ -181,6 +186,11 @@ func Load() *Config {
 		CognitoUserPoolID: getEnv("COGNITO_USER_POOL_ID", ""),
 		CognitoClientID:   getEnv("COGNITO_CLIENT_ID", ""),
 		CognitoRegion:     getEnv("COGNITO_REGION", getEnv("AWS_REGION", "us-east-1")),
+
+		// Demo Mode Configuration
+		DemoMode:       getEnvAsBool("DEMO_MODE", false),
+		DemoModePrefix: getEnv("DEMO_MODE_PREFIX", "AI Wolf Solutions: "),
+		DemoModeSuffix: getEnv("DEMO_MODE_SUFFIX", " Demo only; no real services. Reply STOP to opt out."),
 	}
 }
 
