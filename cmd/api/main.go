@@ -108,6 +108,13 @@ func main() {
 			"provider", webhookMessengerProvider,
 			"preference", cfg.SMSProvider,
 		)
+		// Wrap with demo mode if enabled (adds 10DLC-compliant disclaimers)
+		webhookMessenger = messaging.WrapWithDemoMode(webhookMessenger, messaging.DemoModeConfig{
+			Enabled: cfg.DemoMode,
+			Prefix:  cfg.DemoModePrefix,
+			Suffix:  cfg.DemoModeSuffix,
+			Logger:  logger,
+		})
 	} else {
 		logger.Warn("sms replies disabled for webhooks",
 			"preference", cfg.SMSProvider,
