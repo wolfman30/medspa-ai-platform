@@ -190,6 +190,19 @@ func main() {
 		})
 	}
 
+	// Initialize onboarding handler
+	var adminOnboardingHandler *handlers.AdminOnboardingHandler
+	if redisClient != nil {
+		clinicStore := clinic.NewStore(redisClient)
+		adminOnboardingHandler = handlers.NewAdminOnboardingHandler(handlers.AdminOnboardingConfig{
+			DB:          dbPool,
+			Redis:       redisClient,
+			ClinicStore: clinicStore,
+			Logger:      logger,
+		})
+		logger.Info("onboarding handler initialized")
+	}
+
 	var knowledgeRepo conversation.KnowledgeRepository
 	var ragIngestor conversation.RAGIngestor
 	if redisClient != nil && cfg.BedrockEmbeddingModelID != "" {
@@ -322,6 +335,7 @@ func main() {
 		ClinicHandler:       clinicHandler,
 		ClinicStatsHandler:  clinicStatsHandler,
 		ClinicDashboard:     clinicDashboardHandler,
+		AdminOnboarding:     adminOnboardingHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
 		MetricsHandler:      metricsHandler,
 		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,

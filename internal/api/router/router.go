@@ -31,6 +31,7 @@ type Config struct {
 	ClinicHandler       *clinic.Handler
 	ClinicStatsHandler  *clinic.StatsHandler
 	ClinicDashboard     *clinic.DashboardHandler
+	AdminOnboarding     *handlers.AdminOnboardingHandler
 	AdminAuthSecret     string
 	MetricsHandler      http.Handler
 	CORSAllowedOrigins  []string
@@ -102,8 +103,15 @@ func New(cfg *Config) http.Handler {
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
 			}
+			// Clinic onboarding endpoints
+			if cfg.AdminOnboarding != nil {
+				admin.Post("/clinics", cfg.AdminOnboarding.CreateClinic)
+			}
 			// Clinic routes (config + Square OAuth)
 			admin.Route("/clinics/{orgID}", func(clinicRoutes chi.Router) {
+				if cfg.AdminOnboarding != nil {
+					clinicRoutes.Get("/onboarding-status", cfg.AdminOnboarding.GetOnboardingStatus)
+				}
 				if cfg.ClinicHandler != nil {
 					clinicRoutes.Get("/config", cfg.ClinicHandler.GetConfig)
 					clinicRoutes.Put("/config", cfg.ClinicHandler.UpdateConfig)
