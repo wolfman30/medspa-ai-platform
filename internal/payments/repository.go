@@ -3,6 +3,8 @@ package payments
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,16 +17,20 @@ import (
 
 // Repository persists payment intents and lifecycle transitions.
 type Repository struct {
-	queries paymentsql.Querier
+	queries         paymentsql.Querier
+	disableCooldown bool // When true, always returns false from HasOpenDeposit (for testing)
 }
 
 // NewRepository creates a repository backed by pgx.
+// Set DISABLE_PAYMENT_COOLDOWN=true to bypass the 72-hour cooldown check (for testing).
 func NewRepository(pool *pgxpool.Pool) *Repository {
 	if pool == nil {
 		panic("payments: pgx pool required")
 	}
+	disableCooldown := strings.EqualFold(os.Getenv("DISABLE_PAYMENT_COOLDOWN"), "true")
 	return &Repository{
-		queries: paymentsql.New(pool),
+		queries:         paymentsql.New(pool),
+		disableCooldown: disableCooldown,
 	}
 }
 
@@ -36,7 +42,11 @@ func NewRepositoryWithQuerier(q paymentsql.Querier) *Repository {
 }
 
 // HasOpenDeposit returns true if a deposit intent already exists for the lead/org in pending or succeeded state.
+// If DISABLE_PAYMENT_COOLDOWN=true, this always returns false to allow repeated testing.
 func (r *Repository) HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error) {
+	if r.disableCooldown {
+		return false, nil
+	}
 	arg := paymentsql.GetOpenDepositByOrgAndLeadParams{
 		OrgID:  orgID.String(),
 		LeadID: toPGUUID(leadID),
