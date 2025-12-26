@@ -1,4 +1,4 @@
-package conversation
+﻿package conversation
 
 import (
 	"context"
@@ -73,12 +73,6 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 
 	jobID := uuid.NewString()
 
-	if err := h.recordPendingJob(r.Context(), jobID, jobTypeStart, &req, nil); err != nil {
-		h.logger.Error("failed to persist job record", "error", err)
-		http.Error(w, "Failed to persist job record", http.StatusInternalServerError)
-		return
-	}
-
 	if err := h.enqueuer.EnqueueStart(r.Context(), jobID, req); err != nil {
 		h.logger.Error("failed to enqueue start conversation", "error", err)
 		http.Error(w, "Failed to schedule conversation start", http.StatusInternalServerError)
@@ -114,12 +108,6 @@ func (h *Handler) Message(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jobID := uuid.NewString()
-
-	if err := h.recordPendingJob(r.Context(), jobID, jobTypeMessage, nil, &req); err != nil {
-		h.logger.Error("failed to persist job record", "error", err)
-		http.Error(w, "Failed to persist job record", http.StatusInternalServerError)
-		return
-	}
 
 	if err := h.enqueuer.EnqueueMessage(r.Context(), jobID, req); err != nil {
 		h.logger.Error("failed to enqueue message", "error", err)
@@ -170,26 +158,9 @@ func (h *Handler) writeAccepted(w http.ResponseWriter, jobID string) {
 	})
 }
 
-func (h *Handler) recordPendingJob(ctx context.Context, jobID string, kind jobType, start *StartRequest, message *MessageRequest) error {
-	if jobID == "" {
-		return errors.New("missing job ID")
-	}
-
-	job := &JobRecord{
-		JobID:          jobID,
-		RequestType:    kind,
-		StartRequest:   start,
-		MessageRequest: message,
-	}
-	if message != nil {
-		job.ConversationID = message.ConversationID
-	}
-	return h.jobs.PutPending(ctx, job)
-}
-
 // AddKnowledge handles POST /knowledge/{clinicID}.
 func (h *Handler) AddKnowledge(w http.ResponseWriter, r *http.Request) {
-	if h.knowledge == nil || h.rag == nil {
+	if h.knowledge == nil {
 		http.Error(w, "knowledge ingestion not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -200,7 +171,7 @@ func (h *Handler) AddKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var payload struct {
-		Documents []string `json:"documents"`
+		Documents json.RawMessage `json:"documents"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
@@ -211,34 +182,69 @@ func (h *Handler) AddKnowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var documents []string
+	if err := json.Unmarshal(payload.Documents, &documents); err != nil {
+		type titledDocument struct {
+			Title   string `json:"title"`
+			Content string `json:"content"`
+		}
+		var titled []titledDocument
+		if err := json.Unmarshal(payload.Documents, &titled); err != nil {
+			http.Error(w, "documents must be an array of strings or {title, content} objects", http.StatusBadRequest)
+			return
+		}
+		documents = make([]string, 0, len(titled))
+		for _, doc := range titled {
+			title := strings.TrimSpace(doc.Title)
+			content := strings.TrimSpace(doc.Content)
+			switch {
+			case title != "" && content != "":
+				documents = append(documents, title+"\n\n"+content)
+			case content != "":
+				documents = append(documents, content)
+			case title != "":
+				documents = append(documents, title)
+			}
+		}
+	}
+	if len(documents) == 0 {
+		http.Error(w, "documents required", http.StatusBadRequest)
+		return
+	}
+
 	const maxDocs = 20
-	if len(payload.Documents) > maxDocs {
+	if len(documents) > maxDocs {
 		http.Error(w, fmt.Sprintf("maximum %d documents per request", maxDocs), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.knowledge.AppendDocuments(r.Context(), clinicID, payload.Documents); err != nil {
+	if err := h.knowledge.AppendDocuments(r.Context(), clinicID, documents); err != nil {
 		h.logger.Error("failed to append knowledge", "error", err)
 		http.Error(w, "failed to persist documents", http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.rag.AddDocuments(r.Context(), clinicID, payload.Documents); err != nil {
-		h.logger.Error("failed to embed knowledge", "error", err)
-		http.Error(w, "failed to embed documents", http.StatusInternalServerError)
-		return
+	embedded := false
+	if h.rag != nil {
+		if err := h.rag.AddDocuments(r.Context(), clinicID, documents); err != nil {
+			h.logger.Error("failed to embed knowledge", "error", err)
+			http.Error(w, "failed to embed documents", http.StatusInternalServerError)
+			return
+		}
+		embedded = true
 	}
 
 	h.writeJSON(w, http.StatusCreated, map[string]any{
 		"clinicId":  clinicID,
-		"documents": len(payload.Documents),
+		"documents": len(documents),
+		"embedded":  embedded,
 		"status":    "stored",
 	})
 }
 
 // KnowledgeForm serves a responsive HTML form for uploading clinic knowledge.
 func (h *Handler) KnowledgeForm(w http.ResponseWriter, r *http.Request) {
-	if h.knowledge == nil || h.rag == nil {
+	if h.knowledge == nil {
 		http.Error(w, "knowledge ingestion not configured", http.StatusServiceUnavailable)
 		return
 	}

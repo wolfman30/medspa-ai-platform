@@ -13,7 +13,7 @@ Usage:
     python scripts/e2e_full_flow.py
 
     # With custom settings:
-    API_URL=http://localhost:8080 python scripts/e2e_full_flow.py
+    API_URL=http://localhost:8082 python scripts/e2e_full_flow.py
 
     # Skip database checks (if no psql access):
     SKIP_DB_CHECK=1 python scripts/e2e_full_flow.py
@@ -26,9 +26,39 @@ import json
 import uuid
 import hmac
 import hashlib
+import re
+import html as html_lib
 import subprocess
+import shutil
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse, urldefrag
+from typing import Optional, Dict, Any, List, Tuple
+
+# =============================================================================
+# Optional .env Loading (so the runner matches the Go API's env behavior)
+# =============================================================================
+
+def load_dotenv(path: str) -> None:
+    """Best-effort .env loader (no external deps)."""
+    if not path or not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception:
+        return
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+load_dotenv(os.getenv("DOTENV_PATH", os.path.join(_PROJECT_ROOT, ".env")))
 
 # Fix Windows console encoding for Unicode
 if sys.platform == 'win32':
@@ -50,12 +80,19 @@ PROD_API_URL = os.getenv("PROD_API_URL", "https://api.aiwolfsolutions.com")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://medspa:medspa@localhost:5432/medspa?sslmode=disable")
 SKIP_DB_CHECK = os.getenv("SKIP_DB_CHECK", "").lower() in ("1", "true", "yes")
 
-# Square checkout redirect URLs (must be HTTPS for production)
-SUCCESS_URL = os.getenv("SUCCESS_URL", f"{PROD_API_URL}/payments/success")
-CANCEL_URL = os.getenv("CANCEL_URL", f"{PROD_API_URL}/payments/cancel")
+# Square checkout redirect URLs.
+# Note: Square can reject redirect_url values that aren't whitelisted for the app.
+# For local dev runs, default to example.com (override with SUCCESS_URL/CANCEL_URL as needed).
+_DEFAULT_SUCCESS_URL_LOCAL = "https://example.com/success"
+_DEFAULT_CANCEL_URL_LOCAL = "https://example.com/cancel"
+_DEFAULT_SUCCESS_URL_REMOTE = f"{PROD_API_URL}/payments/success"
+_DEFAULT_CANCEL_URL_REMOTE = f"{PROD_API_URL}/payments/cancel"
+_is_local_api = API_URL.startswith("http://localhost") or API_URL.startswith("http://127.0.0.1")
+SUCCESS_URL = os.getenv("SUCCESS_URL", _DEFAULT_SUCCESS_URL_LOCAL if _is_local_api else _DEFAULT_SUCCESS_URL_REMOTE)
+CANCEL_URL = os.getenv("CANCEL_URL", _DEFAULT_CANCEL_URL_LOCAL if _is_local_api else _DEFAULT_CANCEL_URL_REMOTE)
 
 # Telnyx webhook secret for signature validation (from .env)
-TELNYX_WEBHOOK_SECRET = os.getenv("TELNYX_WEBHOOK_SECRET", "wqWSgpS4Hw1lv8MUinbDcmWbGoH6QuWZ2uW5g8limtE=")
+TELNYX_WEBHOOK_SECRET = os.getenv("TELNYX_WEBHOOK_SECRET", "").strip()
 
 # Test identifiers - using UUIDs for production-like behavior
 TEST_ORG_ID = os.getenv("TEST_ORG_ID", "11111111-1111-1111-1111-111111111111")
@@ -64,9 +101,25 @@ TEST_CLINIC_PHONE = os.getenv("TEST_CLINIC_PHONE", "+18662894911")      # Clinic
 TEST_CUSTOMER_NAME = "E2E Automated Test"
 TEST_CUSTOMER_EMAIL = "e2e-automated@test.dev"
 
+# E2E behavior toggles
+SMS_PROVIDER = os.getenv("SMS_PROVIDER", "").strip().lower()
+DEMO_MODE = os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+E2E_REQUIRE_TELNYX = os.getenv("E2E_REQUIRE_TELNYX", "").strip().lower() in ("1", "true", "yes", "on")
+
 # Conversation simulation delays
 AI_RESPONSE_WAIT = int(os.getenv("AI_RESPONSE_WAIT", "8"))  # seconds to wait for AI processing
 STEP_DELAY = float(os.getenv("STEP_DELAY", "2"))  # delay between steps
+
+# Knowledge seeding / scraping
+# Default prospect uses Boulevard (case study: Skin House Facial Bar).
+DEFAULT_KNOWLEDGE_SCRAPE_URL = "https://skinhousefacialbar.com"
+_scrape_url_raw = os.getenv("KNOWLEDGE_SCRAPE_URL", DEFAULT_KNOWLEDGE_SCRAPE_URL).strip()
+KNOWLEDGE_SCRAPE_URL = "" if _scrape_url_raw.lower() in ("", "0", "false", "off", "none") else _scrape_url_raw
+KNOWLEDGE_SCRAPE_MAX_PAGES = int(os.getenv("KNOWLEDGE_SCRAPE_MAX_PAGES", "5"))
+KNOWLEDGE_SCRAPE_MAX_DOCS = int(os.getenv("KNOWLEDGE_SCRAPE_MAX_DOCS", "12"))
+KNOWLEDGE_SCRAPE_MAX_CHARS = int(os.getenv("KNOWLEDGE_SCRAPE_MAX_CHARS", "2500"))
+KNOWLEDGE_SCRAPE_TIMEOUT = int(os.getenv("KNOWLEDGE_SCRAPE_TIMEOUT", "15"))
+KNOWLEDGE_PREVIEW_FILE = os.getenv("KNOWLEDGE_PREVIEW_FILE", "tmp/knowledge_preview.json")
 
 # Colors for terminal output
 class Colors:
@@ -123,6 +176,34 @@ def wait_with_countdown(seconds: int, message: str = "Waiting"):
         time.sleep(1)
     print(" done!")
 
+def docker_compose_cmd() -> Optional[list]:
+    """Return the docker compose command as a list (supports both plugins + legacy)."""
+    if shutil.which("docker") is not None:
+        return ["docker", "compose"]
+    if shutil.which("docker-compose") is not None:
+        return ["docker-compose"]
+    return None
+
+def run_psql(sql: str, *, tuples_only: bool = False, timeout: int = 10) -> Optional[subprocess.CompletedProcess]:
+    """Run a SQL query using psql, with a Docker fallback when psql isn't installed locally."""
+    if SKIP_DB_CHECK:
+        return None
+
+    psql_args = ["psql", DATABASE_URL]
+    if tuples_only:
+        psql_args.append("-t")
+    psql_args += ["-c", sql]
+
+    if shutil.which("psql") is not None:
+        return subprocess.run(psql_args, capture_output=True, text=True, timeout=timeout)
+
+    compose = docker_compose_cmd()
+    if compose is None:
+        return None
+
+    docker_args = compose + ["exec", "-T", "postgres"] + psql_args
+    return subprocess.run(docker_args, capture_output=True, text=True, timeout=timeout)
+
 # =============================================================================
 # API Interaction Functions
 # =============================================================================
@@ -141,38 +222,271 @@ def check_health() -> bool:
         print_error(f"Cannot connect to API at {API_URL}: {e}")
         return False
 
+# =============================================================================
+# Knowledge Scraping Utilities
+# =============================================================================
+
+class _HTMLKnowledgeExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title_parts: List[str] = []
+        self.text_parts: List[str] = []
+        self.links: List[str] = []
+        self._in_title = False
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in ("script", "style", "noscript", "svg"):
+            self._skip_depth += 1
+            return
+        if tag == "title":
+            self._in_title = True
+        if tag == "a":
+            for k, v in attrs:
+                if k.lower() == "href" and v:
+                    self.links.append(v)
+        if tag in ("p", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6"):
+            self.text_parts.append("\n")
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in ("script", "style", "noscript", "svg") and self._skip_depth > 0:
+            self._skip_depth -= 1
+            return
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._skip_depth > 0:
+            return
+        if not data:
+            return
+        if self._in_title:
+            self.title_parts.append(data.strip())
+        self.text_parts.append(data)
+
+
+def _normalize_url(base_url: str, href: str) -> Optional[str]:
+    if not href:
+        return None
+    href = href.strip()
+    if not href or href.startswith("#"):
+        return None
+    if href.lower().startswith(("mailto:", "tel:", "javascript:")):
+        return None
+
+    full = urljoin(base_url, href)
+    full, _ = urldefrag(full)
+    parsed = urlparse(full)
+    if parsed.scheme not in ("http", "https"):
+        return None
+
+    # Drop query params to reduce tracking/noise.
+    parsed = parsed._replace(query="")
+    return parsed.geturl()
+
+
+def _is_same_site(base_url: str, other_url: str) -> bool:
+    base = urlparse(base_url)
+    other = urlparse(other_url)
+    if not base.netloc or not other.netloc:
+        return False
+    base_host = base.netloc.lower().lstrip("www.")
+    other_host = other.netloc.lower().lstrip("www.")
+    return base_host == other_host
+
+
+def _looks_like_html_page(url: str) -> bool:
+    path = urlparse(url).path.lower()
+    for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".css", ".js", ".pdf", ".zip", ".mp4", ".mov"):
+        if path.endswith(ext):
+            return False
+    return True
+
+
+def _score_url(url: str) -> int:
+    path = urlparse(url).path.lower()
+    score = 0
+    for kw, weight in [
+        ("services", 50),
+        ("treatments", 45),
+        ("pricing", 45),
+        ("prices", 45),
+        ("membership", 40),
+        ("memberships", 40),
+        ("packages", 35),
+        ("faq", 35),
+        ("policies", 30),
+        ("policy", 30),
+        ("about", 20),
+        ("contact", 15),
+        ("locations", 15),
+        ("hours", 10),
+    ]:
+        if kw in path:
+            score += weight
+    return score
+
+
+def _extract_page(url: str) -> Tuple[str, str, List[str]]:
+    resp = requests.get(url, timeout=KNOWLEDGE_SCRAPE_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+    resp.raise_for_status()
+
+    parser = _HTMLKnowledgeExtractor()
+    parser.feed(resp.text)
+
+    title = html_lib.unescape(" ".join(parser.title_parts)).strip()
+    if not title:
+        title = urlparse(url).path.strip("/") or url
+
+    text = html_lib.unescape(" ".join(parser.text_parts))
+    text = re.sub(r"\\s+", " ", text).strip()
+    return title, text, parser.links
+
+
+def scrape_site_to_documents(base_url: str) -> Tuple[List[str], Dict[str, Any]]:
+    if not base_url.startswith(("http://", "https://")):
+        base_url = "https://" + base_url
+
+    title, text, links = _extract_page(base_url)
+    domain = urlparse(base_url).netloc.lower().lstrip("www.")
+
+    candidates: List[str] = []
+    for href in links:
+        norm = _normalize_url(base_url, href)
+        if not norm:
+            continue
+        if not _looks_like_html_page(norm):
+            continue
+        if not _is_same_site(base_url, norm):
+            continue
+        candidates.append(norm)
+
+    for slug in ("/services", "/pricing", "/faq", "/policies", "/about", "/contact", "/membership", "/memberships", "/packages"):
+        candidates.append(_normalize_url(base_url, slug) or "")
+
+    uniq = sorted({u for u in candidates if u and u != base_url}, key=lambda u: (_score_url(u), -len(u)), reverse=True)
+    urls = [base_url] + uniq[: max(0, KNOWLEDGE_SCRAPE_MAX_PAGES - 1)]
+
+    documents: List[str] = []
+    pages: List[Dict[str, Any]] = []
+    seen_hashes: set[str] = set()
+
+    # Always include an explicit "website" fact document so simple questions like
+    # "what's your website url" have a high-recall match in retrieval.
+    website_doc = f"Clinic Website\nSource: {base_url}\n\nOfficial website: {base_url}\nDomain: {domain}\nBusiness: {title}"
+    documents.append(website_doc)
+    pages.append({"url": base_url, "title": "Clinic Website", "chars": len(website_doc), "preview": website_doc[:240]})
+
+    for url in urls:
+        if len(documents) >= KNOWLEDGE_SCRAPE_MAX_DOCS:
+            break
+        try:
+            page_title, page_text, _ = _extract_page(url)
+        except Exception as e:
+            pages.append({"url": url, "error": str(e)})
+            continue
+
+        if len(page_text) < 250:
+            pages.append({"url": url, "title": page_title, "skipped": "too_short"})
+            continue
+
+        snippet = page_text[:KNOWLEDGE_SCRAPE_MAX_CHARS].strip()
+        content_hash = hashlib.sha256(snippet.encode("utf-8")).hexdigest()
+        if content_hash in seen_hashes:
+            pages.append({"url": url, "title": page_title, "skipped": "duplicate"})
+            continue
+        seen_hashes.add(content_hash)
+
+        doc = f"{page_title}\nSource: {url}\n\n{snippet}"
+        documents.append(doc)
+        pages.append({"url": url, "title": page_title, "chars": len(snippet), "preview": snippet[:240]})
+
+    preview = {
+        "source_url": base_url,
+        "pages": pages,
+        "documents_count": len(documents),
+    }
+    return documents, preview
+
+
 def seed_knowledge() -> bool:
     """Seed the knowledge base for the test org."""
-    knowledge_file = "testdata/demo-clinic-knowledge.json"
-
-    if not os.path.exists(knowledge_file):
-        print_warning(f"Knowledge file not found: {knowledge_file}")
-        print_info("Skipping knowledge seeding - using defaults")
-        return True
+    knowledge_file = os.getenv("KNOWLEDGE_FILE", "testdata/demo-clinic-knowledge.json")
 
     try:
-        with open(knowledge_file, 'r') as f:
-            knowledge_data = json.load(f)
+        documents: List[str] = []
+        preview: Optional[Dict[str, Any]] = None
+
+        if KNOWLEDGE_SCRAPE_URL:
+            print_info(f"Scraping prospect website for knowledge: {KNOWLEDGE_SCRAPE_URL}")
+            documents, preview = scrape_site_to_documents(KNOWLEDGE_SCRAPE_URL)
+            if not documents:
+                raise ValueError("scrape produced no usable documents")
+
+            preview_dir = os.path.dirname(KNOWLEDGE_PREVIEW_FILE)
+            if preview_dir:
+                os.makedirs(preview_dir, exist_ok=True)
+            with open(KNOWLEDGE_PREVIEW_FILE, "w", encoding="utf-8") as f:
+                json.dump(preview, f, indent=2, ensure_ascii=False)
+            print_info(f"Knowledge preview saved to: {KNOWLEDGE_PREVIEW_FILE}")
+
+            for i, doc in enumerate(documents[:3], start=1):
+                excerpt = doc.split("\n\n", 1)[-1][:200].strip()
+                title_line = doc.splitlines()[0].strip()
+                print_info(f"Preview doc {i}: {title_line} — {excerpt}...")
+        else:
+            if not os.path.exists(knowledge_file):
+                raise FileNotFoundError(f"Knowledge file not found: {knowledge_file}")
+            with open(knowledge_file, 'r') as f:
+                knowledge_data = json.load(f)
+
+            raw_docs = knowledge_data.get("documents", [])
+            if not isinstance(raw_docs, list):
+                raise ValueError("knowledge JSON must include a 'documents' array")
+
+            for doc in raw_docs:
+                if isinstance(doc, str):
+                    text = doc.strip()
+                elif isinstance(doc, dict):
+                    title = str(doc.get("title", "")).strip()
+                    content = str(doc.get("content", "")).strip()
+                    if title and content:
+                        text = f"{title}\n\n{content}"
+                    else:
+                        text = (content or title).strip()
+                else:
+                    raise ValueError("documents must be strings or {title, content} objects")
+
+                if text:
+                    documents.append(text)
+
+            if not documents:
+                raise ValueError("knowledge documents cannot be empty")
+
+        payload = {"documents": documents}
+        print_info(f"Uploading {len(documents)} knowledge snippets to org {TEST_ORG_ID}")
 
         resp = requests.post(
             f"{API_URL}/knowledge/{TEST_ORG_ID}",
-            json=knowledge_data,
+            json=payload,
             headers={
                 "Content-Type": "application/json",
                 "X-Org-ID": TEST_ORG_ID
             },
-            timeout=30
+            timeout=120
         )
 
         if resp.status_code in (200, 201, 204):
             print_success("Knowledge base seeded")
             return True
         else:
-            print_warning(f"Knowledge seeding returned {resp.status_code}: {resp.text[:200]}")
-            return True  # Non-fatal
+            print_error(f"Knowledge seeding returned {resp.status_code}: {resp.text[:200]}")
+            return False
     except Exception as e:
-        print_warning(f"Knowledge seeding failed: {e}")
-        return True  # Non-fatal
+        print_error(f"Knowledge seeding failed: {e}")
+        return False
 
 def seed_hosted_number() -> bool:
     """Seed the hosted number mapping so webhooks can find the clinic."""
@@ -181,30 +495,168 @@ def seed_hosted_number() -> bool:
         return True
 
     try:
-        # Insert a hosted number order mapping the clinic phone to the org ID
-        # Use ON CONFLICT with the composite key (clinic_id, e164_number)
-        result = subprocess.run(
-            ["psql", DATABASE_URL, "-c",
-             f"""INSERT INTO hosted_number_orders (id, clinic_id, e164_number, status, created_at, updated_at)
-                 VALUES (gen_random_uuid(), '{TEST_ORG_ID}', '{TEST_CLINIC_PHONE}', 'activated', NOW(), NOW())
-                 ON CONFLICT (clinic_id, e164_number) DO UPDATE SET status = 'activated', updated_at = NOW();"""],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        sql = f"""
+            INSERT INTO hosted_number_orders (clinic_id, e164_number, status, created_at, updated_at)
+            VALUES ('{TEST_ORG_ID}', '{TEST_CLINIC_PHONE}', 'activated', NOW(), NOW())
+            ON CONFLICT (clinic_id, e164_number) DO UPDATE SET status = 'activated', updated_at = NOW();
+        """
+        result = run_psql(sql, timeout=10)
 
-        if result.returncode == 0:
+        if result is not None and result.returncode == 0:
             print_success(f"Hosted number {TEST_CLINIC_PHONE} mapped to org {TEST_ORG_ID}")
             return True
         else:
-            print_warning(f"Hosted number seeding failed: {result.stderr[:100]}")
+            stderr = ""
+            if result is not None and result.stderr:
+                stderr = result.stderr[:200]
+            print_warning(f"Hosted number seeding failed (webhooks may 404): {stderr or 'psql not available'}")
             return True  # Non-fatal
-    except FileNotFoundError:
-        print_warning("psql not found - skipping hosted number seeding")
-        return True
     except Exception as e:
         print_warning(f"Hosted number seeding failed: {e}")
         return True  # Non-fatal
+
+def _wait_for_conversation_job(job_id: str, timeout_seconds: int = 240) -> Optional[Dict[str, Any]]:
+    """Poll the conversation job endpoint until completed/failed."""
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            resp = requests.get(
+                f"{API_URL}/conversations/jobs/{job_id}",
+                headers={"X-Org-ID": TEST_ORG_ID},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                time.sleep(1)
+                continue
+
+            job = resp.json()
+            status = str(job.get("status", "")).lower()
+            if status in ("completed", "failed"):
+                return job
+        except Exception:
+            pass
+
+        time.sleep(1)
+
+    return None
+
+def _extract_conversation_id(job: Dict[str, Any]) -> str:
+    convo_id = str(job.get("conversationId", "") or "").strip()
+    if convo_id:
+        return convo_id
+    response = job.get("response") or {}
+    if isinstance(response, dict):
+        for key in ("ConversationID", "conversationId", "conversationID"):
+            value = response.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+def _extract_conversation_message(job: Dict[str, Any]) -> str:
+    response = job.get("response") or {}
+    if isinstance(response, dict):
+        for key in ("Message", "message"):
+            value = response.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+def verify_rag_knowledge() -> bool:
+    """Verify that the assistant can answer a question using seeded knowledge (RAG)."""
+    if not KNOWLEDGE_SCRAPE_URL:
+        print_warning("KNOWLEDGE_SCRAPE_URL disabled; skipping RAG verification")
+        return True
+
+    expected_domain = urlparse(KNOWLEDGE_SCRAPE_URL).netloc.lower().lstrip("www.")
+    if not expected_domain:
+        print_warning("Could not derive expected domain from KNOWLEDGE_SCRAPE_URL; skipping RAG verification")
+        return True
+
+    lead_id = f"e2e_knowledge_{uuid.uuid4().hex[:10]}"
+
+    try:
+        start_payload = {
+            "OrgID": TEST_ORG_ID,
+            "LeadID": lead_id,
+            "Intro": "Admin check: verifying clinic knowledge is available.",
+            "Source": "e2e_knowledge_check",
+            "ClinicID": TEST_ORG_ID,
+            "Channel": "sms",
+            "From": TEST_CUSTOMER_PHONE,
+            "To": TEST_CLINIC_PHONE,
+        }
+
+        start_resp = requests.post(
+            f"{API_URL}/conversations/start",
+            json=start_payload,
+            headers={"Content-Type": "application/json", "X-Org-ID": TEST_ORG_ID},
+            timeout=15,
+        )
+        if start_resp.status_code not in (200, 202):
+            print_error(f"Conversation start failed: {start_resp.status_code} - {start_resp.text[:200]}")
+            return False
+
+        start_job_id = (start_resp.json() or {}).get("jobId", "")
+        if not start_job_id:
+            print_error("Conversation start did not return jobId")
+            return False
+
+        start_job = _wait_for_conversation_job(start_job_id, timeout_seconds=240)
+        if not start_job or str(start_job.get("status", "")).lower() != "completed":
+            print_error(f"Conversation start job did not complete: {start_job or 'timeout'}")
+            return False
+
+        conversation_id = _extract_conversation_id(start_job)
+        if not conversation_id:
+            print_error("Could not extract ConversationID from start job")
+            return False
+
+        msg_payload = {
+            "OrgID": TEST_ORG_ID,
+            "LeadID": lead_id,
+            "ConversationID": conversation_id,
+            "Message": "What is the business website URL? Reply with the full URL.",
+            "ClinicID": TEST_ORG_ID,
+            "Channel": "sms",
+            "From": TEST_CUSTOMER_PHONE,
+            "To": TEST_CLINIC_PHONE,
+        }
+        msg_resp = requests.post(
+            f"{API_URL}/conversations/message",
+            json=msg_payload,
+            headers={"Content-Type": "application/json", "X-Org-ID": TEST_ORG_ID},
+            timeout=15,
+        )
+        if msg_resp.status_code not in (200, 202):
+            print_error(f"Conversation message enqueue failed: {msg_resp.status_code} - {msg_resp.text[:200]}")
+            return False
+
+        msg_job_id = (msg_resp.json() or {}).get("jobId", "")
+        if not msg_job_id:
+            print_error("Conversation message did not return jobId")
+            return False
+
+        msg_job = _wait_for_conversation_job(msg_job_id, timeout_seconds=300)
+        if not msg_job or str(msg_job.get("status", "")).lower() != "completed":
+            print_error(f"Conversation message job did not complete: {msg_job or 'timeout'}")
+            return False
+
+        answer = _extract_conversation_message(msg_job)
+        if not answer:
+            print_error("Conversation message completed but returned no Message")
+            return False
+
+        answer_lc = answer.lower()
+        if expected_domain in answer_lc:
+            print_success(f"RAG verified (found {expected_domain} in assistant response)")
+            return True
+
+        print_error(f"RAG verification failed; expected domain '{expected_domain}' not found in response: {answer[:220]}")
+        return False
+
+    except Exception as e:
+        print_error(f"RAG verification failed: {e}")
+        return False
 
 def create_lead() -> Optional[Dict[str, Any]]:
     """Create a test lead."""
@@ -432,26 +884,20 @@ def check_database(query: str, description: str) -> Optional[str]:
         return None
 
     try:
-        result = subprocess.run(
-            ["psql", DATABASE_URL, "-t", "-c", query],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            if output:
-                print_success(f"{description}: {output[:100]}")
-            else:
-                print_info(f"{description}: (no results)")
-            return output
-        else:
-            print_warning(f"DB query failed: {result.stderr[:100]}")
+        result = run_psql(query, tuples_only=True, timeout=10)
+        if result is None:
+            print_warning("psql not available - skipping database checks")
             return None
-    except FileNotFoundError:
-        print_warning("psql not found - skipping database checks")
-        return None
+        if result.returncode != 0:
+            print_warning(f"DB query failed: {result.stderr[:200]}")
+            return None
+
+        output = result.stdout.strip()
+        if output:
+            print_success(f"{description}: {output[:100]}")
+        else:
+            print_info(f"{description}: (no results)")
+        return output
     except Exception as e:
         print_warning(f"DB check failed: {e}")
         return None
@@ -462,19 +908,12 @@ def get_payment_id_for_lead(lead_id: str) -> Optional[str]:
         return None
 
     try:
-        result = subprocess.run(
-            ["psql", DATABASE_URL, "-t", "-c",
-             f"SELECT id FROM payments WHERE lead_id = '{lead_id}' ORDER BY created_at DESC LIMIT 1;"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            if output:
-                return output
-        return None
+        sql = f"SELECT id FROM payments WHERE lead_id = '{lead_id}' ORDER BY created_at DESC LIMIT 1;"
+        result = run_psql(sql, tuples_only=True, timeout=10)
+        if result is None or result.returncode != 0:
+            return None
+        output = result.stdout.strip()
+        return output or None
     except Exception:
         return None
 
@@ -484,6 +923,16 @@ def get_payment_id_for_lead(lead_id: str) -> Optional[str]:
 
 def run_e2e_test():
     """Run the complete end-to-end test."""
+
+    if not TELNYX_WEBHOOK_SECRET:
+        raise RuntimeError("TELNYX_WEBHOOK_SECRET is required (set it in .env or the environment) to sign test webhooks.")
+
+    require_telnyx_number = E2E_REQUIRE_TELNYX or DEMO_MODE
+    if require_telnyx_number:
+        if SMS_PROVIDER != "telnyx":
+            raise RuntimeError(f"E2E is configured to require Telnyx, but SMS_PROVIDER={SMS_PROVIDER!r}. Set SMS_PROVIDER=telnyx.")
+        if TEST_CLINIC_PHONE == "+18662894911":
+            raise RuntimeError("E2E requires the Telnyx long-code, but TEST_CLINIC_PHONE is still the default Twilio verified number. Set TEST_CLINIC_PHONE to your Telnyx number (E164).")
 
     print_header("MedSpa AI Platform - Full E2E Automated Test")
 
@@ -521,7 +970,14 @@ def run_e2e_test():
     # Step 2: Seed Knowledge Base and Hosted Number
     # =========================================================================
     print_step(2, "Seeding Knowledge Base and Hosted Number Mapping")
-    seed_knowledge()  # Non-fatal if fails
+    if not seed_knowledge():
+        results["failed"] += 1
+        print_error("FATAL: Knowledge seeding failed. Aborting test.")
+        sys.exit(1)
+    if not verify_rag_knowledge():
+        results["failed"] += 1
+        print_error("FATAL: RAG verification failed. Aborting test.")
+        sys.exit(1)
     seed_hosted_number()  # Maps clinic phone to org ID for webhook routing
     results["passed"] += 1
 

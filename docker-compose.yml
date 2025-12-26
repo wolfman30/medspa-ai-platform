@@ -11,6 +11,7 @@ services:
       REDIS_ADDR: redis:6379
       # Bedrock model for AI conversations
       BEDROCK_MODEL_ID: us.anthropic.claude-3-5-haiku-20241022-v1:0
+      BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v1
       AWS_REGION: us-east-1
       # Pass AWS credentials from host environment
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
@@ -58,6 +59,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://medspa:medspa@postgres:5432/medspa?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       BEDROCK_MODEL_ID: us.anthropic.claude-3-5-haiku-20241022-v1:0
+      BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v1
       AWS_REGION: us-east-1
       # Pass AWS credentials from host environment
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}

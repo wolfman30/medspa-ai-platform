@@ -1,4 +1,4 @@
-package bootstrap
+﻿package bootstrap
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		if err := hydrateRAGFromRedis(ctx, knowledgeRepo, ragStore, logger); err != nil {
 			logger.Warn("failed to hydrate RAG store", "error", err)
 		}
-		rag = ragStore
+		rag = conversation.NewHydratingRAGRetriever(ctx, knowledgeRepo, ragStore, logger)
 	}
 
 	// Build LLM service options

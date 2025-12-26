@@ -86,7 +86,7 @@ func (h *OAuthHandler) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	// Generate authorization URL and redirect
 	authURL := h.oauthService.AuthorizationURL(orgID, randomState)
 
-	h.logger.Info("initiating square oauth", "org_id", orgID)
+	h.logger.Info("initiating square oauth", "org_id", orgID, "auth_url", authURL, "redirect_uri", h.oauthService.config.RedirectURI)
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 

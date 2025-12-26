@@ -86,6 +86,24 @@ func New(cfg *Config) http.Handler {
 		if cfg.SquareOAuth != nil {
 			public.Mount("/oauth", cfg.SquareOAuth.Routes())
 		}
+		// Public onboarding routes (self-service)
+		if cfg.AdminOnboarding != nil {
+			public.Route("/onboarding", func(r chi.Router) {
+				r.Post("/clinics", cfg.AdminOnboarding.CreateClinic)
+				r.Route("/clinics/{orgID}", func(clinic chi.Router) {
+					clinic.Get("/status", cfg.AdminOnboarding.GetOnboardingStatus)
+					if cfg.ClinicHandler != nil {
+						clinic.Get("/config", cfg.ClinicHandler.GetConfig)
+						clinic.Put("/config", cfg.ClinicHandler.UpdateConfig)
+					}
+					// Square OAuth for onboarding (public)
+					if cfg.SquareOAuth != nil {
+						clinic.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
+						clinic.Get("/square/status", cfg.SquareOAuth.HandleStatus)
+					}
+				})
+			})
+		}
 	})
 
 	// Admin routes (protected by JWT - supports both legacy HMAC and Cognito RS256)

@@ -1,4 +1,4 @@
-package conversation
+﻿package conversation
 
 import (
 	"bytes"
@@ -45,10 +45,6 @@ func TestHandler_Start_AcceptsJob(t *testing.T) {
 
 	if enqueuer.lastStartReq.LeadID != payload.LeadID {
 		t.Fatalf("expected LeadID %s, got %s", payload.LeadID, enqueuer.lastStartReq.LeadID)
-	}
-
-	if store.lastPut == nil || store.lastPut.JobID != resp.JobID || store.lastPut.RequestType != jobTypeStart {
-		t.Fatalf("expected job store to capture pending job, got %#v", store.lastPut)
 	}
 
 	if enqueuer.lastStartJobID != resp.JobID {
@@ -120,10 +116,6 @@ func TestHandler_Message_AcceptsJob(t *testing.T) {
 
 	if enqueuer.lastMessageReq.ConversationID != payload.ConversationID {
 		t.Fatalf("expected conversation ID %s, got %s", payload.ConversationID, enqueuer.lastMessageReq.ConversationID)
-	}
-
-	if store.lastPut == nil || store.lastPut.MessageRequest == nil || store.lastPut.MessageRequest.ConversationID != payload.ConversationID {
-		t.Fatalf("expected job store to capture message job, got %#v", store.lastPut)
 	}
 
 	if enqueuer.lastMessageJobID != resp.JobID {
@@ -329,6 +321,68 @@ func TestHandler_AddKnowledge_Success(t *testing.T) {
 	}
 	if rag.calls != 1 {
 		t.Fatalf("expected rag ingestor to be called once, got %d", rag.calls)
+	}
+}
+
+func TestHandler_AddKnowledge_AcceptsTitledDocuments(t *testing.T) {
+	repo := &stubKnowledgeRepo{}
+	rag := &stubRAGIngestor{}
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, repo, rag, logging.Default())
+
+	payload := map[string]any{
+		"documents": []map[string]any{
+			{"title": "Doc 1", "content": "Content 1"},
+			{"title": "Doc 2", "content": "Content 2"},
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/knowledge/clinic-1", bytes.NewReader(body))
+	req = routeWithClinicID(req, "clinic-1")
+	w := httptest.NewRecorder()
+
+	handler.AddKnowledge(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", w.Code)
+	}
+	if len(repo.appended["clinic-1"]) != 2 {
+		t.Fatalf("expected repo to store docs, got %#v", repo.appended)
+	}
+	if !strings.Contains(repo.appended["clinic-1"][0], "Doc 1") || !strings.Contains(repo.appended["clinic-1"][0], "Content 1") {
+		t.Fatalf("expected titled doc conversion, got %q", repo.appended["clinic-1"][0])
+	}
+	if rag.calls != 1 {
+		t.Fatalf("expected rag ingestor to be called once, got %d", rag.calls)
+	}
+}
+
+func TestHandler_AddKnowledge_AllowsStoreWhenRAGMissing(t *testing.T) {
+	repo := &stubKnowledgeRepo{}
+	handler := NewHandler(&stubEnqueuer{}, &stubJobStore{}, repo, nil, logging.Default())
+
+	payload := map[string]any{"documents": []string{"Doc A"}}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/knowledge/clinic-1", bytes.NewReader(body))
+	req = routeWithClinicID(req, "clinic-1")
+	w := httptest.NewRecorder()
+
+	handler.AddKnowledge(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", w.Code)
+	}
+	if len(repo.appended["clinic-1"]) != 1 {
+		t.Fatalf("expected repo to store docs, got %#v", repo.appended)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if embedded, ok := resp["embedded"].(bool); !ok || embedded {
+		t.Fatalf("expected embedded=false, got %#v", resp["embedded"])
 	}
 }
 

@@ -121,6 +121,9 @@ func TestTierA_CI02_InboundSMS_LeadAndAI(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "Need info", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -195,6 +198,9 @@ func TestTierA_CI11_TelcoInboundIdempotency_ByMessageID(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "Need info", pgxmock.AnyArg(), "received", "msg-dup", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -270,6 +276,9 @@ func TestTierA_CI14_PCIGuardrail(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "My card is [REDACTED_CARD_1111]", pgxmock.AnyArg(), "received", "msg-pci", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -335,6 +344,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "STOP", pgxmock.AnyArg(), "received", "msg-stop", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -370,6 +382,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "hello?", pgxmock.AnyArg(), "received", "msg-ignored", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -406,6 +421,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "START", pgxmock.AnyArg(), "received", "msg-start", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -442,6 +460,9 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "book botox", pgxmock.AnyArg(), "received", "msg-after-start", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -566,6 +587,9 @@ func TestTierA_CI19_UnifiedLeadIdentity_VoiceThenSMS(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550003333", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550003333", "+15559998888", "inbound", "Need info", pgxmock.AnyArg(), "received", "msg-unified", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).

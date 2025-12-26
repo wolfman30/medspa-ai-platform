@@ -23,6 +23,9 @@ type Config struct {
 	TelnyxWebhookSecret      string
 	TelnyxStopReply          string
 	TelnyxHelpReply          string
+	TelnyxStartReply         string
+	TelnyxFirstContactReply  string
+	TelnyxVoiceAckReply      string
 	TelnyxRetryMaxAttempts   int
 	TelnyxRetryBaseDelay     time.Duration
 	TelnyxHostedPollInterval time.Duration
@@ -122,6 +125,9 @@ func Load() *Config {
 		TelnyxWebhookSecret:      getEnv("TELNYX_WEBHOOK_SECRET", ""),
 		TelnyxStopReply:          getEnv("TELNYX_STOP_REPLY", "You have been opted out. Reply HELP for info."),
 		TelnyxHelpReply:          getEnv("TELNYX_HELP_REPLY", "Reply STOP to opt out or contact support@medspa.ai."),
+		TelnyxStartReply:         getEnv("TELNYX_START_REPLY", "You're opted back in. Reply STOP to opt out."),
+		TelnyxFirstContactReply:  getEnv("TELNYX_FIRST_CONTACT_REPLY", ""),
+		TelnyxVoiceAckReply:      getEnv("TELNYX_VOICE_ACK_REPLY", ""),
 		TelnyxRetryMaxAttempts:   getEnvAsInt("TELNYX_RETRY_MAX_ATTEMPTS", 5),
 		TelnyxRetryBaseDelay:     getEnvAsDuration("TELNYX_RETRY_BASE_DELAY", 5*time.Minute),
 		TelnyxHostedPollInterval: getEnvAsDuration("TELNYX_HOSTED_POLL_INTERVAL", 15*time.Minute),

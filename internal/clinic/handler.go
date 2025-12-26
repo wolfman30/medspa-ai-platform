@@ -1,7 +1,9 @@
 package clinic
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -75,8 +77,18 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Debug: read and log the request body
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Error("failed to read request body", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "failed to read body"}`, http.StatusBadRequest)
+		return
+	}
+	h.logger.Info("received config update request", "org_id", orgID, "body", string(bodyBytes))
+
 	var req UpdateConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&req); err != nil {
+		h.logger.Error("JSON decode failed", "org_id", orgID, "error", err, "body", string(bodyBytes))
 		http.Error(w, `{"error": "invalid JSON body"}`, http.StatusBadRequest)
 		return
 	}

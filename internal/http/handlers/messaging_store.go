@@ -15,6 +15,7 @@ type messagingStore interface {
 	InsertBrand(ctx context.Context, q messaging.Querier, rec messaging.BrandRecord) error
 	InsertCampaign(ctx context.Context, q messaging.Querier, rec messaging.CampaignRecord) error
 	UpsertHostedOrder(ctx context.Context, q messaging.Querier, record messaging.HostedOrderRecord) error
+	HasInboundMessage(ctx context.Context, clinicID uuid.UUID, from string, to string) (bool, error)
 	IsUnsubscribed(ctx context.Context, clinicID uuid.UUID, recipient string) (bool, error)
 	InsertUnsubscribe(ctx context.Context, q messaging.Querier, clinicID uuid.UUID, recipient string, source string) error
 	DeleteUnsubscribe(ctx context.Context, q messaging.Querier, clinicID uuid.UUID, recipient string) error

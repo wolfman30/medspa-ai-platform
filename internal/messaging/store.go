@@ -212,6 +212,25 @@ func (s *Store) InsertMessage(ctx context.Context, q Querier, rec MessageRecord)
 	return id, nil
 }
 
+func (s *Store) HasInboundMessage(ctx context.Context, clinicID uuid.UUID, from string, to string) (bool, error) {
+	query := `
+		SELECT 1 FROM messages
+		WHERE clinic_id = $1
+			AND direction = 'inbound'
+			AND from_e164 = $2
+			AND to_e164 = $3
+		LIMIT 1
+	`
+	var exists int
+	if err := s.pool.QueryRow(ctx, query, clinicID, from, to).Scan(&exists); err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("messaging: check inbound message: %w", err)
+	}
+	return true, nil
+}
+
 func (s *Store) UpdateMessageStatus(ctx context.Context, providerMessageID, status string, deliveredAt, failedAt *time.Time) error {
 	query := `
 		UPDATE messages
