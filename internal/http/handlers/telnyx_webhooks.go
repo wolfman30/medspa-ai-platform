@@ -45,6 +45,10 @@ type TelnyxWebhookHandler struct {
 	messagingProfile string
 	stopAck          string
 	helpAck          string
+	startAck         string
+	firstContactAck  string
+	voiceAck         string
+	demoMode         bool
 	detector         *compliance.Detector
 	metrics          *observemetrics.MessagingMetrics
 }
@@ -59,6 +63,10 @@ type TelnyxWebhookConfig struct {
 	MessagingProfile string
 	StopAck          string
 	HelpAck          string
+	StartAck         string
+	FirstContactAck  string
+	VoiceAck         string
+	DemoMode         bool
 	Metrics          *observemetrics.MessagingMetrics
 }
 
@@ -76,6 +84,10 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		messagingProfile: cfg.MessagingProfile,
 		stopAck:          defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
 		helpAck:          defaultString(cfg.HelpAck, "Reply STOP to opt out or contact support@medspa.ai."),
+		startAck:         defaultString(cfg.StartAck, "You're opted back in. Reply STOP to opt out."),
+		firstContactAck:  strings.TrimSpace(cfg.FirstContactAck),
+		voiceAck:         defaultString(cfg.VoiceAck, messaging.InstantAckMessage),
+		demoMode:         cfg.DemoMode,
 		detector:         compliance.NewDetector(),
 		metrics:          cfg.Metrics,
 	}
@@ -250,6 +262,11 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		}
 		return fmt.Errorf("lookup clinic for %s: %w", to, err)
 	}
+	seenInbound, err := h.store.HasInboundMessage(ctx, clinicID, from, to)
+	if err != nil {
+		return fmt.Errorf("check inbound history: %w", err)
+	}
+	isFirstInbound := !seenInbound
 	tx, err := h.store.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -296,6 +313,10 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		help = h.detector.IsHelp(payload.Text)
 		start = h.detector.IsStart(payload.Text)
 	}
+	yesKeyword := h.demoMode && strings.EqualFold(strings.TrimSpace(payload.Text), "YES")
+	if yesKeyword {
+		start = true
+	}
 	unsubscribed := false
 	if !stop && !start {
 		unsubscribed, err = h.store.IsUnsubscribed(ctx, clinicID, from)
@@ -329,14 +350,18 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	} else if help {
 		h.sendAutoReply(context.Background(), to, from, h.helpAck)
 	} else if start {
-		h.sendAutoReply(context.Background(), to, from, "You're opted back in. Reply STOP to opt out.")
+		h.sendAutoReply(context.Background(), to, from, h.startAck)
 	} else if unsubscribed {
 		// TCPA/A2P compliance: do not send messages when opted out.
 		return nil
 	} else if sawPAN {
 		h.sendAutoReply(context.Background(), to, from, messaging.PCIGuardrailMessage)
 	} else {
-		h.sendAutoReply(context.Background(), to, from, messaging.SmsAckMessageFirst)
+		ack := messaging.SmsAckMessageFirst
+		if h.demoMode && isFirstInbound && h.firstContactAck != "" {
+			ack = h.firstContactAck
+		}
+		h.sendAutoReply(context.Background(), to, from, ack)
 		h.dispatchConversation(context.Background(), evt, payload, clinicID)
 	}
 	return nil
@@ -648,7 +673,7 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, conversation.WithoutJobTracking()); err != nil {
 		return fmt.Errorf("enqueue missed-call start: %w", err)
 	}
-	h.sendAutoReply(context.Background(), to, from, messaging.InstantAckMessage)
+	h.sendAutoReply(context.Background(), to, from, h.voiceAck)
 	return nil
 }
 

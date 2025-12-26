@@ -21,10 +21,25 @@ make e2e-quick
 ./scripts/run-e2e-test.sh --no-db  # Skip database checks
 ```
 
+### Windows PowerShell
+
+```powershell
+# Full test (8s waits between steps)
+.\scripts\run-e2e-test.ps1
+
+# Quick test (3s waits)
+.\scripts\run-e2e-test.ps1 -Quick
+
+# Skip database checks
+.\scripts\run-e2e-test.ps1 -NoDb
+```
+
 **Prerequisites:**
 - API running (`make run-api` or `docker compose up`)
 - Python 3 with `requests` module
 - PostgreSQL accessible (or use `--no-db` flag)
+
+Note: `docker-compose.yml` exposes the API at `http://localhost:8082`; `make run-api` defaults to `http://localhost:8080`. Set `API_URL` accordingly.
 
 ---
 
@@ -33,7 +48,7 @@ make e2e-quick
 The `scripts/e2e_full_flow.py` script simulates the complete production flow:
 
 1. **Health Check** - Verifies API is running
-2. **Seed Knowledge** - Loads clinic knowledge base
+2. **Seed Knowledge** - Scrapes a prospect website (Boulevard client: Skin House Facial Bar) into knowledge snippets, uploads them, and verifies RAG is working
 3. **Create Lead** - Creates a test lead record
 4. **Missed Call Webhook** - Simulates Telnyx voice webhook (call.hangup with no_answer)
 5. **Customer SMS #1** - "Hi, I want to book Botox for weekday afternoons"
@@ -103,13 +118,18 @@ Environment variables for customization:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_URL` | http://localhost:8080 | API endpoint |
+| `API_URL` | http://localhost:8082 | API endpoint |
 | `DATABASE_URL` | postgresql://medspa:medspa@localhost:5432/medspa | PostgreSQL connection |
 | `TEST_ORG_ID` | 11111111-1111-1111-1111-111111111111 | Test organization UUID |
 | `TEST_CUSTOMER_PHONE` | +15550001234 | Simulated customer phone |
 | `TEST_CLINIC_PHONE` | +15559998888 | Clinic's hosted number |
 | `AI_RESPONSE_WAIT` | 8 | Seconds to wait for AI processing |
 | `SKIP_DB_CHECK` | false | Set to 1 to skip database queries |
+| `KNOWLEDGE_SCRAPE_URL` | https://skinhousefacialbar.com | Website to scrape into knowledge (set to `off` to disable scraping) |
+| `KNOWLEDGE_SCRAPE_MAX_PAGES` | 5 | Max pages to fetch from the site |
+| `KNOWLEDGE_SCRAPE_TIMEOUT` | 15 | Per-page HTTP timeout (seconds) |
+| `KNOWLEDGE_PREVIEW_FILE` | tmp/knowledge_preview.json | Where the scraper writes a safe preview (titles + short excerpts) |
+| `KNOWLEDGE_FILE` | testdata/demo-clinic-knowledge.json | Used only when scraping is disabled |
 
 ---
 

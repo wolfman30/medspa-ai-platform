@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -211,20 +209,10 @@ func main() {
 	}
 
 	var knowledgeRepo conversation.KnowledgeRepository
-	var ragIngestor conversation.RAGIngestor
-	if redisClient != nil && cfg.BedrockEmbeddingModelID != "" {
+	if redisClient != nil {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
-
-		awsCfg, err := awsconfig.LoadDefaultConfig(appCtx, awsconfig.WithRegion(cfg.AWSRegion))
-		if err != nil {
-			logger.Warn("failed to configure Bedrock embedding client; RAG disabled", "error", err)
-		} else {
-			bedrockClient := bedrockruntime.NewFromConfig(awsCfg)
-			embedder := conversation.NewBedrockEmbeddingClient(bedrockClient)
-			ragIngestor = conversation.NewMemoryRAGStore(embedder, cfg.BedrockEmbeddingModelID, logger)
-		}
 	}
-	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, ragIngestor, logger)
+	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, nil, logger)
 
 	inlineWorker, conversationService := setupInlineWorker(
 		appCtx,
@@ -319,6 +307,10 @@ func main() {
 			MessagingProfile: cfg.TelnyxMessagingProfileID,
 			StopAck:          cfg.TelnyxStopReply,
 			HelpAck:          cfg.TelnyxHelpReply,
+			StartAck:         cfg.TelnyxStartReply,
+			FirstContactAck:  cfg.TelnyxFirstContactReply,
+			VoiceAck:         cfg.TelnyxVoiceAckReply,
+			DemoMode:         cfg.DemoMode,
 			Metrics:          messagingMetrics,
 		})
 		logger.Info("telnyx webhook handler initialized", "profile_id", cfg.TelnyxMessagingProfileID)

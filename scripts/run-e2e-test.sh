@@ -13,7 +13,7 @@ set -euo pipefail
 #   ./scripts/run-e2e-test.sh --no-db      # Skip database checks
 #
 # Environment variables:
-#   API_URL              - API endpoint (default: http://localhost:8080)
+#   API_URL              - API endpoint (default: http://localhost:8082)
 #   DATABASE_URL         - PostgreSQL connection string
 #   TEST_ORG_ID          - Organization ID for testing
 #   TEST_CUSTOMER_PHONE  - Simulated customer phone
@@ -31,7 +31,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Defaults
-export API_URL="${API_URL:-http://localhost:8080}"
+export API_URL="${API_URL:-http://localhost:8082}"
 export AI_RESPONSE_WAIT="${AI_RESPONSE_WAIT:-8}"
 export STEP_DELAY="${STEP_DELAY:-2}"
 export SKIP_DB_CHECK="${SKIP_DB_CHECK:-}"
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --help     Show this help message"
             echo ""
             echo "Environment Variables:"
-            echo "  API_URL              API endpoint (default: http://localhost:8080)"
+            echo "  API_URL              API endpoint (default: http://localhost:8082)"
             echo "  DATABASE_URL         PostgreSQL connection string"
             echo "  TEST_ORG_ID          Organization ID for testing"
             echo "  TEST_CUSTOMER_PHONE  Customer phone number"

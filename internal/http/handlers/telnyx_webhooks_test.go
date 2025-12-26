@@ -41,6 +41,9 @@ func TestTelnyxInboundStop(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "STOP", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -97,6 +100,9 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "Need info", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -130,6 +136,130 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	}
 	if conv.last.Metadata["telnyx_message_id"] != "msg_inbound" {
 		t.Fatalf("expected telnyx metadata to propagate")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestTelnyxFirstContactAck_DemoMode(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+	defer mock.Close()
+	store := messaging.NewStore(mock)
+	conv := &stubConversationPublisher{}
+	telnyxStub := &testTelnyxClient{}
+
+	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
+		Store:            store,
+		Processed:        &stubProcessedTracker{},
+		Telnyx:           telnyxStub,
+		Conversation:     conv,
+		Logger:           logging.Default(),
+		MessagingProfile: "profile",
+		FirstContactAck:  "FIRST CONTACT",
+		DemoMode:         true,
+	})
+
+	clinicID := uuid.New()
+	mock.ExpectQuery("SELECT clinic_id").
+		WithArgs("+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "Need info", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(uuid.New()))
+	mock.ExpectExec("INSERT INTO outbox").
+		WithArgs(pgxmock.AnyArg(), "clinic:"+clinicID.String(), "messaging.message.received.v1", pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectQuery("SELECT 1 FROM unsubscribes").
+		WithArgs(clinicID, "+15550001111").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
+	mock.ExpectCommit()
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(loadFixture(t, "telnyx_inbound_message.json")))
+	req.Header.Set("Telnyx-Timestamp", "123")
+	req.Header.Set("Telnyx-Signature", "abc")
+	rec := httptest.NewRecorder()
+
+	handler.HandleMessages(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if telnyxStub.lastSendReq == nil || telnyxStub.lastSendReq.Body != "FIRST CONTACT" {
+		t.Fatalf("expected demo first-contact ack, got %#v", telnyxStub.lastSendReq)
+	}
+	if conv.calls != 1 {
+		t.Fatalf("expected conversation to be enqueued, got %d", conv.calls)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestTelnyxYesOptIn_DemoMode(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+	defer mock.Close()
+	store := messaging.NewStore(mock)
+	processed := &stubProcessedTracker{}
+	telnyxStub := &testTelnyxClient{}
+	conv := &stubConversationPublisher{}
+
+	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
+		Store:            store,
+		Processed:        processed,
+		Telnyx:           telnyxStub,
+		Conversation:     conv,
+		Logger:           logging.Default(),
+		MessagingProfile: "profile",
+		StartAck:         "START ACK",
+		DemoMode:         true,
+	})
+
+	clinicID := uuid.New()
+	mock.ExpectQuery("SELECT clinic_id").
+		WithArgs("+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "YES", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(uuid.New()))
+	mock.ExpectExec("INSERT INTO outbox").
+		WithArgs(pgxmock.AnyArg(), "clinic:"+clinicID.String(), "messaging.message.received.v1", pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("DELETE FROM unsubscribes").
+		WithArgs(clinicID, "+15550001111").
+		WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectCommit()
+
+	payload := bytes.ReplaceAll(loadFixture(t, "telnyx_inbound_stop.json"), []byte(`"STOP"`), []byte(`"YES"`))
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(payload))
+	req.Header.Set("Telnyx-Timestamp", "123")
+	req.Header.Set("Telnyx-Signature", "abc")
+	rec := httptest.NewRecorder()
+
+	handler.HandleMessages(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if telnyxStub.lastSendReq == nil || telnyxStub.lastSendReq.Body != "START ACK" {
+		t.Fatalf("expected opt-in ack, got %#v", telnyxStub.lastSendReq)
+	}
+	if conv.calls != 0 {
+		t.Fatalf("expected conversation not to be enqueued on YES opt-in, got %d", conv.calls)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
@@ -370,6 +500,9 @@ func TestTelnyxHelpAutoReply(t *testing.T) {
 	mock.ExpectQuery("SELECT clinic_id").
 		WithArgs("+15559998888").
 		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO messages").
 		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "HELP", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).

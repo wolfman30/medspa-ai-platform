@@ -1,0 +1,228 @@
+import { useState, useEffect } from 'react';
+import { StepIndicator } from './StepIndicator';
+import { ClinicInfoForm } from './ClinicInfoForm';
+import { ServicesForm } from './ServicesForm';
+import { PaymentSetup } from './PaymentSetup';
+import { SMSSetup } from './SMSSetup';
+import { createClinic, getOnboardingStatus, updateClinicConfig } from '../api/client';
+
+const STEPS = [
+  { id: 'clinic', name: 'Clinic Info' },
+  { id: 'services', name: 'Services' },
+  { id: 'payments', name: 'Payments' },
+  { id: 'sms', name: 'SMS' },
+];
+
+interface OnboardingState {
+  orgId: string | null;
+  currentStep: number;
+  clinicInfo: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    timezone: string;
+  } | null;
+  services: Array<{
+    name: string;
+    description: string;
+    durationMinutes: number;
+    priceRange: string;
+  }>;
+  squareConnected: boolean;
+  merchantId?: string;
+  smsStatus: 'not_started' | 'pending' | 'verified' | 'active';
+  phoneNumber?: string;
+}
+
+export function OnboardingWizard() {
+  const [state, setState] = useState<OnboardingState>({
+    orgId: null,
+    currentStep: 0,
+    clinicInfo: null,
+    services: [],
+    squareConnected: false,
+    smsStatus: 'not_started',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check URL for orgId (returning from Square OAuth)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orgId = params.get('org_id');
+    if (orgId) {
+      loadOnboardingStatus(orgId);
+    }
+  }, []);
+
+  async function loadOnboardingStatus(orgId: string) {
+    try {
+      setLoading(true);
+      const status = await getOnboardingStatus(orgId);
+
+      // Determine current step based on what's completed
+      let step = 0;
+      const squareStep = status.steps.find(s => s.id === 'square_connected');
+      const phoneStep = status.steps.find(s => s.id === 'phone_configured');
+
+      if (status.steps.find(s => s.id === 'clinic_config')?.completed) step = 1;
+      if (squareStep?.completed) step = 2;
+      if (phoneStep?.completed) step = 3;
+
+      setState(prev => ({
+        ...prev,
+        orgId,
+        currentStep: step,
+        squareConnected: squareStep?.completed || false,
+        smsStatus: phoneStep?.completed ? 'active' : 'not_started',
+      }));
+    } catch (err) {
+      console.error('Failed to load status:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleClinicSubmit(data: NonNullable<OnboardingState['clinicInfo']>) {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!state.orgId) {
+        // Create new clinic
+        const result = await createClinic({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          timezone: data.timezone,
+        });
+
+        setState(prev => ({
+          ...prev,
+          orgId: result.org_id,
+          clinicInfo: data,
+          currentStep: 1,
+        }));
+      } else {
+        // Update existing
+        await updateClinicConfig(state.orgId, data);
+        setState(prev => ({
+          ...prev,
+          clinicInfo: data,
+          currentStep: 1,
+        }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save clinic info');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleServicesSubmit(data: { services: OnboardingState['services'] }) {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (state.orgId && data.services && data.services.length > 0) {
+        // Backend expects service names as strings, convert from rich objects
+        const serviceNames = data.services.map(s => s.name);
+        await updateClinicConfig(state.orgId, { services: serviceNames });
+      }
+
+      setState(prev => ({
+        ...prev,
+        services: data.services,
+        currentStep: 2,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save services');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function goBack() {
+    setState(prev => ({ ...prev, currentStep: Math.max(0, prev.currentStep - 1) }));
+  }
+
+  function goNext() {
+    setState(prev => ({ ...prev, currentStep: prev.currentStep + 1 }));
+  }
+
+  if (loading && !state.orgId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-12">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Welcome to MedSpa AI</h1>
+          <p className="mt-2 text-gray-600">
+            Let's set up your AI receptionist in a few simple steps.
+          </p>
+        </div>
+
+        <StepIndicator steps={STEPS} currentStep={state.currentStep} />
+
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        <div className="bg-white shadow rounded-lg p-6 sm:p-8">
+          {state.currentStep === 0 && (
+            <ClinicInfoForm
+              defaultValues={state.clinicInfo || undefined}
+              onSubmit={handleClinicSubmit}
+            />
+          )}
+
+          {state.currentStep === 1 && (
+            <ServicesForm
+              defaultValues={state.services.length > 0 ? { services: state.services } : undefined}
+              onSubmit={handleServicesSubmit}
+              onBack={goBack}
+            />
+          )}
+
+          {state.currentStep === 2 && state.orgId && (
+            <PaymentSetup
+              orgId={state.orgId}
+              isConnected={state.squareConnected}
+              merchantId={state.merchantId}
+              onBack={goBack}
+              onContinue={goNext}
+            />
+          )}
+
+          {state.currentStep === 3 && (
+            <SMSSetup
+              phoneNumber={state.phoneNumber}
+              status={state.smsStatus}
+              onBack={goBack}
+              onComplete={() => {
+                // Show completion screen or redirect
+                alert('Onboarding complete! Your AI receptionist will be ready once SMS is activated.');
+              }}
+            />
+          )}
+        </div>
+
+        <p className="mt-6 text-center text-sm text-gray-500">
+          Need help? Contact support@aiwolfsolutions.com
+        </p>
+      </div>
+    </div>
+  );
+}
