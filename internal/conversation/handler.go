@@ -1,4 +1,4 @@
-﻿package conversation
+package conversation
 
 import (
 	"context"
@@ -544,7 +544,7 @@ func normalizeUSDigits(digits string) string {
 }
 
 type SMSTranscriptResponse struct {
-	ConversationID string               `json:"conversation_id"`
+	ConversationID string                 `json:"conversation_id"`
 	Messages       []SMSTranscriptMessage `json:"messages"`
 }
 

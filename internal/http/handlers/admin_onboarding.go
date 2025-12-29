@@ -118,13 +118,13 @@ type OnboardingStep struct {
 
 // OnboardingStatusResponse returns the clinic's onboarding progress.
 type OnboardingStatusResponse struct {
-	OrgID            string           `json:"org_id"`
-	ClinicName       string           `json:"clinic_name"`
-	OverallProgress  int              `json:"overall_progress"` // Percentage 0-100
-	ReadyForLaunch   bool             `json:"ready_for_launch"`
-	Steps            []OnboardingStep `json:"steps"`
-	NextAction       string           `json:"next_action,omitempty"`
-	NextActionURL    string           `json:"next_action_url,omitempty"`
+	OrgID           string           `json:"org_id"`
+	ClinicName      string           `json:"clinic_name"`
+	OverallProgress int              `json:"overall_progress"` // Percentage 0-100
+	ReadyForLaunch  bool             `json:"ready_for_launch"`
+	Steps           []OnboardingStep `json:"steps"`
+	NextAction      string           `json:"next_action,omitempty"`
+	NextActionURL   string           `json:"next_action_url,omitempty"`
 }
 
 // GetOnboardingStatus returns the onboarding progress for a clinic.

@@ -128,4 +128,3 @@ func (s *SMSTranscriptStore) List(ctx context.Context, conversationID string, li
 func smsTranscriptKey(conversationID string) string {
 	return smsTranscriptKeyPrefix + conversationID
 }
-

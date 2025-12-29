@@ -28,18 +28,18 @@ type SandboxAutoPurger interface {
 
 // Worker consumes conversation jobs from the queue and invokes the processor.
 type Worker struct {
-	processor Service
-	queue     queueClient
-	jobs      JobUpdater
-	messenger ReplyMessenger
-	bookings  bookingConfirmer
-	deposits  DepositSender
-	notifier  PaymentNotifier
-	autoPurge SandboxAutoPurger
-	processed processedEventStore
+	processor     Service
+	queue         queueClient
+	jobs          JobUpdater
+	messenger     ReplyMessenger
+	bookings      bookingConfirmer
+	deposits      DepositSender
+	notifier      PaymentNotifier
+	autoPurge     SandboxAutoPurger
+	processed     processedEventStore
 	optOutChecker OptOutChecker
-	transcript *SMSTranscriptStore
-	logger    *logging.Logger
+	transcript    *SMSTranscriptStore
+	logger        *logging.Logger
 
 	cfg workerConfig
 	wg  sync.WaitGroup
@@ -189,19 +189,19 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 	}
 
 	return &Worker{
-		processor: processor,
-		queue:     queue,
-		jobs:      jobs,
-		messenger: messenger,
-		bookings:  bookings,
-		deposits:  cfg.deposit,
-		notifier:  cfg.notifier,
-		autoPurge: cfg.autoPurge,
-		processed: cfg.processed,
+		processor:     processor,
+		queue:         queue,
+		jobs:          jobs,
+		messenger:     messenger,
+		bookings:      bookings,
+		deposits:      cfg.deposit,
+		notifier:      cfg.notifier,
+		autoPurge:     cfg.autoPurge,
+		processed:     cfg.processed,
 		optOutChecker: cfg.optOutChecker,
-		transcript: cfg.transcript,
-		logger:    logger,
-		cfg:       cfg,
+		transcript:    cfg.transcript,
+		logger:        logger,
+		cfg:           cfg,
 	}
 }
 
@@ -490,22 +490,22 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 			if w.messenger == nil {
 				// Transcript is still recorded even when SMS sending is disabled.
 			} else {
-			reply := OutboundReply{
-				OrgID:          evt.OrgID,
-				LeadID:         evt.LeadID,
-				ConversationID: "",
-				To:             evt.LeadPhone,
-				From:           evt.FromNumber,
-				Body:           body,
-				Metadata: map[string]string{
-					"event_id": evt.EventID,
-				},
-			}
-			sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-			if err := w.messenger.SendReply(sendCtx, reply); err != nil {
-				w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
-			}
+				reply := OutboundReply{
+					OrgID:          evt.OrgID,
+					LeadID:         evt.LeadID,
+					ConversationID: "",
+					To:             evt.LeadPhone,
+					From:           evt.FromNumber,
+					Body:           body,
+					Metadata: map[string]string{
+						"event_id": evt.EventID,
+					},
+				}
+				sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+					w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+				}
 			}
 		}
 	}
