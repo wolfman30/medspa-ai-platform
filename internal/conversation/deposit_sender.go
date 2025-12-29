@@ -17,14 +17,14 @@ import (
 
 // depositDispatcher creates a payment intent, generates a checkout link, emits an event, and sends an SMS.
 type depositDispatcher struct {
-	payments paymentIntentCreator
-	checkout paymentLinkCreator
-	outbox   outboxWriter
-	sms      ReplyMessenger
-	numbers  payments.OrgNumberResolver
-	leads    leads.Repository
+	payments   paymentIntentCreator
+	checkout   paymentLinkCreator
+	outbox     outboxWriter
+	sms        ReplyMessenger
+	numbers    payments.OrgNumberResolver
+	leads      leads.Repository
 	transcript *SMSTranscriptStore
-	logger   *logging.Logger
+	logger     *logging.Logger
 }
 
 type outboxWriter interface {
@@ -49,14 +49,14 @@ func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLin
 		logger = logging.Default()
 	}
 	return &depositDispatcher{
-		payments: paymentsRepo,
-		checkout: checkout,
-		outbox:   outbox,
-		sms:      sms,
-		numbers:  numbers,
-		leads:    leadsRepo,
+		payments:   paymentsRepo,
+		checkout:   checkout,
+		outbox:     outbox,
+		sms:        sms,
+		numbers:    numbers,
+		leads:      leadsRepo,
 		transcript: transcript,
-		logger:   logger,
+		logger:     logger,
 	}
 }
 
