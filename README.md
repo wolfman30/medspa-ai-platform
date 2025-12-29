@@ -80,6 +80,7 @@ make e2e
 
 - Quick mode: `make e2e-quick`
 - Results/notes live in: `docs/E2E_TEST_RESULTS.md`
+- Phone-view video recording (Windows-friendly): `powershell -File scripts/run-e2e-with-video.ps1 -ApiUrl http://localhost:8082` (docs: `docs/E2E_WITH_VIDEO.md`, artifacts: `tmp/e2e_videos/` + `tmp/e2e_artifacts/`)
 
 ## Key HTTP Endpoints
 

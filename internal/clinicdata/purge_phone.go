@@ -81,6 +81,8 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (Pu
 	conversationIDE164 := fmt.Sprintf("sms:%s:%s", orgID, e164)
 	redisKeyDigits := fmt.Sprintf("conversation:%s", conversationIDDigits)
 	redisKeyE164 := fmt.Sprintf("conversation:%s", conversationIDE164)
+	smsKeyDigits := fmt.Sprintf("sms_transcript:%s", conversationIDDigits)
+	smsKeyE164 := fmt.Sprintf("sms_transcript:%s", conversationIDE164)
 
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
@@ -181,6 +183,10 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (Pu
 		keys := []string{redisKeyDigits}
 		if redisKeyE164 != redisKeyDigits {
 			keys = append(keys, redisKeyE164)
+		}
+		keys = append(keys, smsKeyDigits)
+		if smsKeyE164 != smsKeyDigits {
+			keys = append(keys, smsKeyE164)
 		}
 		res := p.redis.Del(ctx, keys...)
 		if err := res.Err(); err != nil {

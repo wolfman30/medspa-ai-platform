@@ -109,6 +109,67 @@ func TestWorkerSendsReplies(t *testing.T) {
 	}
 }
 
+func TestWorkerSuppressesRepliesWhenOptedOut(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &replyService{}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	optOut := &stubOptOutChecker{unsubscribed: true}
+	orgID := uuid.New().String()
+
+	worker := NewWorker(
+		service,
+		queue,
+		store,
+		messenger,
+		nil,
+		logging.Default(),
+		WithWorkerCount(1),
+		WithReceiveBatchSize(1),
+		WithReceiveWaitSeconds(0),
+		WithOptOutChecker(optOut),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-msg-optout",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          orgID,
+			LeadID:         "lead-1",
+			Message:        "hi",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-optout",
+		Body:          string(body),
+		ReceiptHandle: "rh-optout",
+	})
+
+	waitFor(func() bool {
+		return len(store.completedJobs()) > 0
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if messenger.wasCalled() {
+		t.Fatalf("expected outbound sms suppressed for opted-out recipient")
+	}
+	if optOut.callCount() == 0 {
+		t.Fatalf("expected opt-out checker to be called")
+	}
+}
+
 func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &recordingService{}
@@ -675,4 +736,23 @@ func (s *stubBookingConfirmer) firstScheduled() *time.Time {
 		return nil
 	}
 	return s.calls[0].scheduled
+}
+
+type stubOptOutChecker struct {
+	unsubscribed bool
+	calls        int
+	mu           sync.Mutex
+}
+
+func (s *stubOptOutChecker) IsUnsubscribed(ctx context.Context, clinicID uuid.UUID, recipient string) (bool, error) {
+	s.mu.Lock()
+	s.calls++
+	s.mu.Unlock()
+	return s.unsubscribed, nil
+}
+
+func (s *stubOptOutChecker) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
 }

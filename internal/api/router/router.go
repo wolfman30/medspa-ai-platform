@@ -115,6 +115,9 @@ func New(cfg *Config) http.Handler {
 				ClientID:   cfg.CognitoClientID,
 			}
 			admin.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
+			if cfg.ConversationHandler != nil {
+				admin.Get("/e2e/phone-simulator", cfg.ConversationHandler.PhoneSimulator)
+			}
 			if cfg.AdminMessaging != nil {
 				admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)
 				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
@@ -146,6 +149,7 @@ func New(cfg *Config) http.Handler {
 				}
 				if cfg.ConversationHandler != nil {
 					clinicRoutes.Get("/conversations/{phone}", cfg.ConversationHandler.GetTranscript)
+					clinicRoutes.Get("/sms/{phone}", cfg.ConversationHandler.GetSMSTranscript)
 				}
 				if cfg.AdminClinicData != nil {
 					clinicRoutes.Delete("/phones/{phone}", cfg.AdminClinicData.PurgePhone)
