@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -68,7 +69,13 @@ func (h *AdminClinicDataHandler) PurgePhone(w http.ResponseWriter, r *http.Reque
 	}
 
 	orgID := strings.TrimSpace(chi.URLParam(r, "orgID"))
-	phone := strings.TrimSpace(chi.URLParam(r, "phone"))
+	phoneParam := chi.URLParam(r, "phone")
+	phone, err := url.PathUnescape(phoneParam)
+	if err != nil {
+		http.Error(w, "invalid phone encoding", http.StatusBadRequest)
+		return
+	}
+	phone = strings.TrimSpace(phone)
 	if orgID == "" || phone == "" {
 		http.Error(w, "missing orgID or phone", http.StatusBadRequest)
 		return

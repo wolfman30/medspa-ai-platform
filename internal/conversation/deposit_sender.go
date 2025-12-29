@@ -23,6 +23,7 @@ type depositDispatcher struct {
 	sms      ReplyMessenger
 	numbers  payments.OrgNumberResolver
 	leads    leads.Repository
+	transcript *SMSTranscriptStore
 	logger   *logging.Logger
 }
 
@@ -43,7 +44,7 @@ type paymentIntentChecker interface {
 }
 
 // NewDepositDispatcher wires a deposit sender with the required dependencies.
-func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, logger *logging.Logger) DepositSender {
+func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, transcript *SMSTranscriptStore, logger *logging.Logger) DepositSender {
 	if logger == nil {
 		logger = logging.Default()
 	}
@@ -54,6 +55,7 @@ func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLin
 		sms:      sms,
 		numbers:  numbers,
 		leads:    leadsRepo,
+		transcript: transcript,
 		logger:   logger,
 	}
 }
@@ -134,7 +136,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		"provider_link_id", link.ProviderID,
 	)
 
-	if d.sms != nil && link.URL != "" {
+	if link.URL != "" {
 		// Prefer the inbound destination number for this conversation (msg.To). This ensures
 		// the deposit link is sent from the same clinic number the patient texted/called.
 		// Only fall back to an org-level default when msg.To is missing (e.g. web lead flow).
@@ -150,27 +152,42 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			"payment_id", paymentID,
 		)
 		body := fmt.Sprintf("To secure priority booking, please place a refundable $%.2f deposit: %s", float64(intent.AmountCents)/100, link.URL)
+		conversationID := strings.TrimSpace(resp.ConversationID)
+		if conversationID == "" {
+			conversationID = strings.TrimSpace(msg.ConversationID)
+		}
+		if d.transcript != nil && conversationID != "" {
+			_ = d.transcript.Append(context.Background(), conversationID, SMSTranscriptMessage{
+				Role: "assistant",
+				From: fromNumber,
+				To:   msg.From,
+				Body: body,
+				Kind: "deposit_link",
+			})
+		}
 		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		reply := OutboundReply{
-			OrgID:          msg.OrgID,
-			LeadID:         msg.LeadID,
-			ConversationID: resp.ConversationID,
-			To:             msg.From,
-			From:           fromNumber,
-			Body:           body,
-			Metadata: map[string]string{
-				"provider":   "square",
-				"payment_id": paymentID.String(),
-			},
-		}
-		if err := d.sms.SendReply(sendCtx, reply); err != nil {
-			d.logger.Error("deposit: failed to send sms", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
+		if d.sms != nil {
+			reply := OutboundReply{
+				OrgID:          msg.OrgID,
+				LeadID:         msg.LeadID,
+				ConversationID: resp.ConversationID,
+				To:             msg.From,
+				From:           fromNumber,
+				Body:           body,
+				Metadata: map[string]string{
+					"provider":   "square",
+					"payment_id": paymentID.String(),
+				},
+			}
+			if err := d.sms.SendReply(sendCtx, reply); err != nil {
+				d.logger.Error("deposit: failed to send sms", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
+			} else {
+				d.logger.Info("deposit: sms sent", "to", msg.From, "payment_id", paymentID)
+			}
 		} else {
-			d.logger.Info("deposit: sms sent", "to", msg.From, "payment_id", paymentID)
+			d.logger.Warn("deposit: sms messenger nil; link not sent", "org_id", msg.OrgID, "lead_id", msg.LeadID)
 		}
-	} else if link.URL != "" && d.sms == nil {
-		d.logger.Warn("deposit: sms messenger nil; link not sent", "org_id", msg.OrgID, "lead_id", msg.LeadID)
 	}
 
 	if d.outbox != nil {

@@ -37,6 +37,8 @@ type Worker struct {
 	notifier  PaymentNotifier
 	autoPurge SandboxAutoPurger
 	processed processedEventStore
+	optOutChecker OptOutChecker
+	transcript *SMSTranscriptStore
 	logger    *logging.Logger
 
 	cfg workerConfig
@@ -51,6 +53,8 @@ type workerConfig struct {
 	notifier         PaymentNotifier
 	autoPurge        SandboxAutoPurger
 	processed        processedEventStore
+	optOutChecker    OptOutChecker
+	transcript       *SMSTranscriptStore
 }
 
 const (
@@ -68,6 +72,11 @@ type WorkerOption func(*workerConfig)
 type processedEventStore interface {
 	AlreadyProcessed(ctx context.Context, provider, eventID string) (bool, error)
 	MarkProcessed(ctx context.Context, provider, eventID string) (bool, error)
+}
+
+// OptOutChecker verifies whether a recipient has opted out of SMS.
+type OptOutChecker interface {
+	IsUnsubscribed(ctx context.Context, clinicID uuid.UUID, recipient string) (bool, error)
 }
 
 // WithWorkerCount sets the number of concurrent consumer goroutines.
@@ -119,6 +128,13 @@ func WithPaymentNotifier(notifier PaymentNotifier) WorkerOption {
 	}
 }
 
+// WithSMSTranscriptStore wires a Redis-backed SMS transcript store (for phone view / E2E recordings).
+func WithSMSTranscriptStore(store *SMSTranscriptStore) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.transcript = store
+	}
+}
+
 // WithSandboxAutoPurger wires a sandbox auto purge hook that runs after payment success events.
 func WithSandboxAutoPurger(purger SandboxAutoPurger) WorkerOption {
 	return func(cfg *workerConfig) {
@@ -130,6 +146,13 @@ func WithSandboxAutoPurger(purger SandboxAutoPurger) WorkerOption {
 func WithProcessedEventsStore(store processedEventStore) WorkerOption {
 	return func(cfg *workerConfig) {
 		cfg.processed = store
+	}
+}
+
+// WithOptOutChecker wires a checker to suppress outbound SMS for opted-out recipients.
+func WithOptOutChecker(checker OptOutChecker) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.optOutChecker = checker
 	}
 }
 
@@ -175,9 +198,48 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		notifier:  cfg.notifier,
 		autoPurge: cfg.autoPurge,
 		processed: cfg.processed,
+		optOutChecker: cfg.optOutChecker,
+		transcript: cfg.transcript,
 		logger:    logger,
 		cfg:       cfg,
 	}
+}
+
+func (w *Worker) appendTranscript(ctx context.Context, conversationID string, msg SMSTranscriptMessage) {
+	if w == nil || w.transcript == nil || strings.TrimSpace(conversationID) == "" {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := w.transcript.Append(ctx, conversationID, msg); err != nil {
+		w.logger.Warn("failed to append sms transcript", "error", err, "conversation_id", conversationID)
+	}
+}
+
+func (w *Worker) isOptedOut(ctx context.Context, orgID string, recipient string) bool {
+	if w == nil || w.optOutChecker == nil {
+		return false
+	}
+	orgID = strings.TrimSpace(orgID)
+	recipient = strings.TrimSpace(recipient)
+	if orgID == "" || recipient == "" {
+		return false
+	}
+	clinicID, err := uuid.Parse(orgID)
+	if err != nil {
+		w.logger.Warn("opt-out check skipped: invalid org id", "org_id", orgID)
+		return false
+	}
+	unsubscribed, err := w.optOutChecker.IsUnsubscribed(ctx, clinicID, recipient)
+	if err != nil {
+		w.logger.Warn("opt-out check failed", "error", err, "org_id", orgID)
+		return false
+	}
+	if unsubscribed {
+		w.logger.Info("suppressing sms for opted-out recipient", "org_id", orgID, "to", recipient)
+	}
+	return unsubscribed
 }
 
 // Start launches worker goroutines until ctx is cancelled.
@@ -304,7 +366,7 @@ func (w *Worker) deleteMessage(ctx context.Context, receiptHandle string) {
 }
 
 func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Response) {
-	if w.messenger == nil || resp == nil || resp.Message == "" {
+	if resp == nil || resp.Message == "" {
 		return
 	}
 	msg := payload.Message
@@ -312,6 +374,26 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		return
 	}
 	if msg.From == "" || msg.To == "" {
+		return
+	}
+	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
+		return
+	}
+
+	conversationID := strings.TrimSpace(resp.ConversationID)
+	if conversationID == "" {
+		conversationID = strings.TrimSpace(msg.ConversationID)
+	}
+	w.appendTranscript(context.Background(), conversationID, SMSTranscriptMessage{
+		Role:      "assistant",
+		From:      msg.To,
+		To:        msg.From,
+		Body:      resp.Message,
+		Timestamp: resp.Timestamp,
+		Kind:      "ai_reply",
+	})
+
+	if w.messenger == nil {
 		return
 	}
 
@@ -337,6 +419,9 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 
 func (w *Worker) handleDepositIntent(ctx context.Context, msg MessageRequest, resp *Response) {
 	if w.deposits == nil || resp == nil || resp.DepositIntent == nil {
+		return
+	}
+	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
 		return
 	}
 	if err := w.deposits.SendDeposit(ctx, msg, resp); err != nil {
@@ -387,26 +472,41 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		}
 	}
 
-	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
-		body := fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", float64(evt.AmountCents)/100)
-		if evt.ScheduledFor != nil {
-			body = fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
-		}
-		reply := OutboundReply{
-			OrgID:          evt.OrgID,
-			LeadID:         evt.LeadID,
-			ConversationID: "",
-			To:             evt.LeadPhone,
-			From:           evt.FromNumber,
-			Body:           body,
-			Metadata: map[string]string{
-				"event_id": evt.EventID,
-			},
-		}
-		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
-			w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+	if evt.LeadPhone != "" && evt.FromNumber != "" {
+		if !w.isOptedOut(ctx, evt.OrgID, evt.LeadPhone) {
+			body := fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", float64(evt.AmountCents)/100)
+			if evt.ScheduledFor != nil {
+				body = fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
+			}
+
+			w.appendTranscript(context.Background(), smsConversationID(evt.OrgID, evt.LeadPhone), SMSTranscriptMessage{
+				Role: "assistant",
+				From: evt.FromNumber,
+				To:   evt.LeadPhone,
+				Body: body,
+				Kind: "payment_confirmation",
+			})
+
+			if w.messenger == nil {
+				// Transcript is still recorded even when SMS sending is disabled.
+			} else {
+			reply := OutboundReply{
+				OrgID:          evt.OrgID,
+				LeadID:         evt.LeadID,
+				ConversationID: "",
+				To:             evt.LeadPhone,
+				From:           evt.FromNumber,
+				Body:           body,
+				Metadata: map[string]string{
+					"event_id": evt.EventID,
+				},
+			}
+			sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+				w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+			}
+			}
 		}
 	}
 	if w.processed != nil && idempotencyKey != "" {
@@ -444,22 +544,24 @@ func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.Payme
 	}
 
 	if w.messenger != nil && evt.LeadPhone != "" && evt.FromNumber != "" {
-		body := "Payment failed - we didn't receive your deposit. If you'd still like to book, please reply and we can send a new secure payment link. Our team can also help by phone."
-		reply := OutboundReply{
-			OrgID:          evt.OrgID,
-			LeadID:         evt.LeadID,
-			ConversationID: "",
-			To:             evt.LeadPhone,
-			From:           evt.FromNumber,
-			Body:           body,
-			Metadata: map[string]string{
-				"event_id": evt.EventID,
-			},
-		}
-		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
-			w.logger.Error("failed to send payment failed sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+		if !w.isOptedOut(ctx, evt.OrgID, evt.LeadPhone) {
+			body := "Payment failed - we didn't receive your deposit. If you'd still like to book, please reply and we can send a new secure payment link. Our team can also help by phone."
+			reply := OutboundReply{
+				OrgID:          evt.OrgID,
+				LeadID:         evt.LeadID,
+				ConversationID: "",
+				To:             evt.LeadPhone,
+				From:           evt.FromNumber,
+				Body:           body,
+				Metadata: map[string]string{
+					"event_id": evt.EventID,
+				},
+			}
+			sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+				w.logger.Error("failed to send payment failed sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
+			}
 		}
 	}
 	if w.processed != nil && idempotencyKey != "" {
@@ -468,4 +570,17 @@ func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.Payme
 		}
 	}
 	return nil
+}
+
+func smsConversationID(orgID string, phone string) string {
+	orgID = strings.TrimSpace(orgID)
+	if orgID == "" {
+		return ""
+	}
+	digits := sanitizeDigits(phone)
+	digits = normalizeUSDigits(digits)
+	if digits == "" {
+		return ""
+	}
+	return fmt.Sprintf("sms:%s:%s", orgID, digits)
 }

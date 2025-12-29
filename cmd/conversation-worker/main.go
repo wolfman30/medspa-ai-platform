@@ -68,6 +68,7 @@ func main() {
 		leadsRepo = leads.NewPostgresRepository(dbPool)
 		paymentChecker = payments.NewRepository(dbPool)
 	}
+	msgStore := messaging.NewStore(dbPool)
 
 	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, logger)
 	if err != nil {
@@ -139,7 +140,7 @@ func main() {
 		}
 		if squareSvc != nil {
 			outbox := events.NewOutboxStore(dbPool)
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, leadsRepo, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, leadsRepo, nil, logger)
 			logger.Info("deposit sender initialized for async workers", "has_oauth", oauthSvc != nil, "square_location_id", cfg.SquareLocationID)
 		} else {
 			logger.Warn("deposit sender NOT initialized for async workers", "has_square_token", cfg.SquareAccessToken != "", "has_oauth", oauthSvc != nil)
@@ -236,6 +237,7 @@ func main() {
 		conversation.WithPaymentNotifier(notifier),
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
+		conversation.WithOptOutChecker(msgStore),
 	)
 
 	worker.Start(ctx)

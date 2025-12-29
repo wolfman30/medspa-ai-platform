@@ -42,6 +42,7 @@ type TelnyxWebhookHandler struct {
 	conversation     conversationPublisher
 	leads            leads.Repository
 	logger           *logging.Logger
+	transcript       *conversation.SMSTranscriptStore
 	messagingProfile string
 	stopAck          string
 	helpAck          string
@@ -49,6 +50,7 @@ type TelnyxWebhookHandler struct {
 	firstContactAck  string
 	voiceAck         string
 	demoMode         bool
+	trackJobs        bool
 	detector         *compliance.Detector
 	metrics          *observemetrics.MessagingMetrics
 }
@@ -60,6 +62,7 @@ type TelnyxWebhookConfig struct {
 	Conversation     conversationPublisher
 	Leads            leads.Repository
 	Logger           *logging.Logger
+	Transcript       *conversation.SMSTranscriptStore
 	MessagingProfile string
 	StopAck          string
 	HelpAck          string
@@ -67,6 +70,7 @@ type TelnyxWebhookConfig struct {
 	FirstContactAck  string
 	VoiceAck         string
 	DemoMode         bool
+	TrackJobs        bool
 	Metrics          *observemetrics.MessagingMetrics
 }
 
@@ -81,6 +85,7 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		conversation:     cfg.Conversation,
 		leads:            cfg.Leads,
 		logger:           cfg.Logger,
+		transcript:       cfg.Transcript,
 		messagingProfile: cfg.MessagingProfile,
 		stopAck:          defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
 		helpAck:          defaultString(cfg.HelpAck, "Reply STOP to opt out or contact support@medspa.ai."),
@@ -88,8 +93,18 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		firstContactAck:  strings.TrimSpace(cfg.FirstContactAck),
 		voiceAck:         defaultString(cfg.VoiceAck, messaging.InstantAckMessage),
 		demoMode:         cfg.DemoMode,
+		trackJobs:        cfg.TrackJobs,
 		detector:         compliance.NewDetector(),
 		metrics:          cfg.Metrics,
+	}
+}
+
+func (h *TelnyxWebhookHandler) appendTranscript(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) {
+	if h == nil || h.transcript == nil {
+		return
+	}
+	if err := h.transcript.Append(ctx, conversationID, msg); err != nil {
+		h.logger.Warn("failed to append sms transcript", "error", err, "conversation_id", conversationID)
 	}
 }
 
@@ -262,6 +277,8 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		}
 		return fmt.Errorf("lookup clinic for %s: %w", to, err)
 	}
+	orgID := clinicID.String()
+	conversationID := telnyxConversationID(orgID, from)
 	seenInbound, err := h.store.HasInboundMessage(ctx, clinicID, from, to)
 	if err != nil {
 		return fmt.Errorf("check inbound history: %w", err)
@@ -345,24 +362,70 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	if h.metrics != nil {
 		h.metrics.ObserveInbound(evt.EventType, payload.Status)
 	}
+
+	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+		Role: "user",
+		From: from,
+		To:   to,
+		Body: body,
+		Kind: "inbound",
+	})
+
 	if stop {
+		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+			Role: "assistant",
+			From: to,
+			To:   from,
+			Body: h.stopAck,
+			Kind: "stop_ack",
+		})
 		h.sendAutoReply(context.Background(), to, from, h.stopAck)
 	} else if help {
+		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+			Role: "assistant",
+			From: to,
+			To:   from,
+			Body: h.helpAck,
+			Kind: "help_ack",
+		})
 		h.sendAutoReply(context.Background(), to, from, h.helpAck)
 	} else if start {
+		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+			Role: "assistant",
+			From: to,
+			To:   from,
+			Body: h.startAck,
+			Kind: "start_ack",
+		})
 		h.sendAutoReply(context.Background(), to, from, h.startAck)
 	} else if unsubscribed {
 		// TCPA/A2P compliance: do not send messages when opted out.
 		return nil
 	} else if sawPAN {
+		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+			Role: "assistant",
+			From: to,
+			To:   from,
+			Body: messaging.PCIGuardrailMessage,
+			Kind: "pci_guardrail",
+		})
 		h.sendAutoReply(context.Background(), to, from, messaging.PCIGuardrailMessage)
 	} else {
 		ack := messaging.SmsAckMessageFirst
+		ackKind := "ack"
 		if h.demoMode && isFirstInbound && h.firstContactAck != "" {
 			ack = h.firstContactAck
+			ackKind = "first_contact_ack"
 		}
+		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+			Role: "assistant",
+			From: to,
+			To:   from,
+			Body: ack,
+			Kind: ackKind,
+		})
 		h.sendAutoReply(context.Background(), to, from, ack)
-		h.dispatchConversation(context.Background(), evt, payload, clinicID)
+		h.dispatchConversation(context.Background(), evt, payload, clinicID, conversationID, body)
 	}
 	return nil
 }
@@ -577,14 +640,14 @@ type telnyxHostedPayload struct {
 	LastError   string `json:"last_error"`
 }
 
-func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt telnyxEvent, payload telnyxMessagePayload, clinicID uuid.UUID) {
+func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt telnyxEvent, payload telnyxMessagePayload, clinicID uuid.UUID, conversationID string, body string) {
 	if h.conversation == nil {
 		return
 	}
 	orgID := clinicID.String()
 	from := messaging.NormalizeE164(payload.FromNumber())
 	to := messaging.NormalizeE164(payload.ToNumber())
-	if from == "" || to == "" || strings.TrimSpace(payload.Text) == "" {
+	if from == "" || to == "" || strings.TrimSpace(body) == "" {
 		return
 	}
 	leadID := fmt.Sprintf("%s:%s", orgID, from)
@@ -601,8 +664,8 @@ func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt tel
 	req := conversation.MessageRequest{
 		OrgID:          orgID,
 		LeadID:         leadID,
-		ConversationID: fmt.Sprintf("sms:%s:%s", orgID, from),
-		Message:        payload.Text,
+		ConversationID: conversationID,
+		Message:        body,
 		Channel:        conversation.ChannelSMS,
 		From:           from,
 		To:             to,
@@ -615,7 +678,11 @@ func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt tel
 	jobID := fmt.Sprintf("telnyx:%s", payload.ID)
 	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := h.conversation.EnqueueMessage(publishCtx, jobID, req, conversation.WithoutJobTracking()); err != nil {
+	opts := []conversation.PublishOption{conversation.WithoutJobTracking()}
+	if h.trackJobs {
+		opts = nil
+	}
+	if err := h.conversation.EnqueueMessage(publishCtx, jobID, req, opts...); err != nil {
 		h.logger.Error("failed to enqueue telnyx conversation job", "error", err, "job_id", jobID)
 	}
 }
@@ -651,7 +718,7 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 			leadID = lead.ID
 		}
 	}
-	conversationID := fmt.Sprintf("sms:%s:%s", orgID, from)
+	conversationID := telnyxConversationID(orgID, from)
 	startReq := conversation.StartRequest{
 		OrgID:          orgID,
 		LeadID:         leadID,
@@ -670,9 +737,20 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	jobID := fmt.Sprintf("telnyx:voice:%s", payload.ID)
 	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, conversation.WithoutJobTracking()); err != nil {
+	opts := []conversation.PublishOption{conversation.WithoutJobTracking()}
+	if h.trackJobs {
+		opts = nil
+	}
+	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, opts...); err != nil {
 		return fmt.Errorf("enqueue missed-call start: %w", err)
 	}
+	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+		Role: "assistant",
+		From: to,
+		To:   from,
+		Body: h.voiceAck,
+		Kind: "voice_ack",
+	})
 	h.sendAutoReply(context.Background(), to, from, h.voiceAck)
 	return nil
 }
@@ -690,4 +768,32 @@ func isTelnyxMissedCall(eventType, status, hangup string) bool {
 	}
 	et := strings.ToLower(eventType)
 	return strings.Contains(et, "hangup") || strings.Contains(et, "no_answer")
+}
+
+func telnyxConversationID(orgID string, fromE164 string) string {
+	digits := sanitizeDigits(fromE164)
+	digits = normalizeUSDigits(digits)
+	return fmt.Sprintf("sms:%s:%s", orgID, digits)
+}
+
+func sanitizeDigits(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func normalizeUSDigits(digits string) string {
+	if len(digits) == 10 {
+		return "1" + digits
+	}
+	return digits
 }

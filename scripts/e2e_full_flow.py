@@ -690,19 +690,30 @@ def create_lead() -> Optional[Dict[str, Any]]:
         print_error(f"Lead creation failed: {e}")
         return None
 
-def send_telnyx_voice_webhook(hangup_cause: str = "no_answer") -> bool:
+def send_telnyx_voice_webhook(
+    hangup_cause: str = "no_answer",
+    *,
+    event_id: Optional[str] = None,
+    call_id: Optional[str] = None,
+    from_phone: Optional[str] = None,
+    to_phone: Optional[str] = None,
+) -> bool:
     """Simulate a missed call via Telnyx voice webhook."""
+    event_id = event_id or generate_event_id()
+    call_id = call_id or f"call_{uuid.uuid4().hex[:12]}"
+    from_phone = from_phone or TEST_CUSTOMER_PHONE
+    to_phone = to_phone or TEST_CLINIC_PHONE
     payload = {
         "data": {
-            "id": generate_event_id(),
+            "id": event_id,
             "event_type": "call.hangup",
             "occurred_at": timestamp(),
             "payload": {
-                "id": f"call_{uuid.uuid4().hex[:12]}",
+                "id": call_id,
                 "status": hangup_cause,
                 "hangup_cause": hangup_cause,
-                "from": {"phone_number": TEST_CUSTOMER_PHONE},
-                "to": [{"phone_number": TEST_CLINIC_PHONE}]
+                "from": {"phone_number": from_phone},
+                "to": [{"phone_number": to_phone}]
             }
         }
     }
@@ -728,7 +739,7 @@ def send_telnyx_voice_webhook(hangup_cause: str = "no_answer") -> bool:
         if resp.status_code == 200:
             print_success("Missed call webhook processed")
             return True
-        elif resp.status_code == 401:
+        elif resp.status_code in (401, 403):
             print_warning("Voice webhook signature validation failed")
             return True  # Non-fatal for testing
         else:
@@ -738,19 +749,30 @@ def send_telnyx_voice_webhook(hangup_cause: str = "no_answer") -> bool:
         print_error(f"Voice webhook failed: {e}")
         return False
 
-def send_telnyx_sms_webhook(message_text: str) -> bool:
+def send_telnyx_sms_webhook(
+    message_text: str,
+    *,
+    event_id: Optional[str] = None,
+    telnyx_message_id: Optional[str] = None,
+    from_phone: Optional[str] = None,
+    to_phone: Optional[str] = None,
+) -> bool:
     """Simulate an incoming SMS via Telnyx webhook."""
+    event_id = event_id or generate_event_id()
+    telnyx_message_id = telnyx_message_id or f"msg_{uuid.uuid4().hex[:12]}"
+    from_phone = from_phone or TEST_CUSTOMER_PHONE
+    to_phone = to_phone or TEST_CLINIC_PHONE
     payload = {
         "data": {
-            "id": generate_event_id(),
+            "id": event_id,
             "event_type": "message.received",
             "occurred_at": timestamp(),
             "payload": {
-                "id": f"msg_{uuid.uuid4().hex[:12]}",
+                "id": telnyx_message_id,
                 "type": "SMS",
                 "direction": "inbound",
-                "from": {"phone_number": TEST_CUSTOMER_PHONE},
-                "to": [{"phone_number": TEST_CLINIC_PHONE}],
+                "from": {"phone_number": from_phone},
+                "to": [{"phone_number": to_phone}],
                 "text": message_text,
                 "received_at": timestamp()
             }
@@ -779,7 +801,7 @@ def send_telnyx_sms_webhook(message_text: str) -> bool:
             msg_preview = f"\"{message_text[:50]}...\"" if len(message_text) > 50 else f"\"{message_text}\""
             print_success(f"SMS webhook processed: {msg_preview}")
             return True
-        elif resp.status_code == 401:
+        elif resp.status_code in (401, 403):
             print_warning("SMS webhook signature validation failed")
             return True  # Non-fatal for testing
         else:

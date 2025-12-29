@@ -212,7 +212,9 @@ func main() {
 	if redisClient != nil {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
 	}
+	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
 	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, nil, logger)
+	conversationHandler.SetSMSTranscriptStore(smsTranscript)
 
 	inlineWorker, conversationService := setupInlineWorker(
 		appCtx,
@@ -225,7 +227,9 @@ func main() {
 		dbPool,
 		outboxStore,
 		resolver,
+		msgStore,
 		redisClient,
+		smsTranscript,
 	)
 	if conversationService != nil {
 		conversationHandler.SetService(conversationService)
@@ -304,6 +308,7 @@ func main() {
 			Conversation:     conversationPublisher,
 			Leads:            leadsRepo,
 			Logger:           logger,
+			Transcript:       smsTranscript,
 			MessagingProfile: cfg.TelnyxMessagingProfileID,
 			StopAck:          cfg.TelnyxStopReply,
 			HelpAck:          cfg.TelnyxHelpReply,
@@ -311,6 +316,7 @@ func main() {
 			FirstContactAck:  cfg.TelnyxFirstContactReply,
 			VoiceAck:         cfg.TelnyxVoiceAckReply,
 			DemoMode:         cfg.DemoMode,
+			TrackJobs:        cfg.TelnyxTrackJobs,
 			Metrics:          messagingMetrics,
 		})
 		logger.Info("telnyx webhook handler initialized", "profile_id", cfg.TelnyxMessagingProfileID)
@@ -460,7 +466,9 @@ func setupInlineWorker(
 	dbPool *pgxpool.Pool,
 	outboxStore *events.OutboxStore,
 	resolver payments.OrgNumberResolver,
+	optOutChecker conversation.OptOutChecker,
 	redisClient *redis.Client,
+	smsTranscript *conversation.SMSTranscriptStore,
 ) (*conversation.Worker, conversation.Service) {
 	if !cfg.UseMemoryQueue || memoryQueue == nil {
 		return nil, nil
@@ -499,7 +507,7 @@ func setupInlineWorker(
 		if !hasSquareProvider {
 			if cfg.AllowFakePayments {
 				fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
-				depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, logger)
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, logger)
 				logger.Warn("deposit sender initialized in fake payments mode (Square credentials not configured)")
 			} else {
 				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
@@ -521,7 +529,7 @@ func setupInlineWorker(
 				numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 				logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
 			}
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, logger)
 			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "")
 		}
 	} else {
@@ -600,6 +608,8 @@ func setupInlineWorker(
 		conversation.WithPaymentNotifier(notifier),
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
+		conversation.WithOptOutChecker(optOutChecker),
+		conversation.WithSMSTranscriptStore(smsTranscript),
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)
