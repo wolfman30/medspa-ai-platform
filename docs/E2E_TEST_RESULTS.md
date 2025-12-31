@@ -99,7 +99,7 @@ FROM payments
 ORDER BY created_at DESC LIMIT 5;
 
 -- Outbox events
-SELECT event_type, processed_at, created_at
+SELECT event_type, dispatched_at, created_at
 FROM outbox
 ORDER BY created_at DESC LIMIT 10;
 ```
@@ -107,8 +107,10 @@ ORDER BY created_at DESC LIMIT 10;
 ### 3. Check Redis (Conversation History)
 ```bash
 redis-cli
-KEYS conv_*
-GET conv_{conversation_id}
+KEYS conversation:*
+GET conversation:{conversation_id}
+KEYS sms_transcript:*
+LRANGE sms_transcript:{conversation_id} 0 -1
 ```
 
 ---
@@ -138,11 +140,11 @@ Environment variables for customization:
 
 Record observations from test runs here:
 
-### Run: [DATE]
-- Square webhook payload:
-- Payment ID:
-- Errors observed:
-- SMS delivery status:
+### Run: 2025-12-31 11:50:46 -05:00
+- Square webhook payload: simulated `payment.completed` (Square sandbox)
+- Payment ID: sq_pay_f538ce75ee31483a
+- Errors observed: none (note: knowledge-check conversation ID format warning in logs, SMS flow OK)
+- SMS delivery status: Telnyx SMS sent (log confirms outbound messages)
 
 ---
 
