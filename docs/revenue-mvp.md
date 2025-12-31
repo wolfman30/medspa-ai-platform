@@ -56,6 +56,13 @@ There is **no direct EMR booking write** in this phase. Staff still finalize app
     - `deposits_paid`
     - `deposit_amount_total`
 
+- **Clinic Onboarding (Paid Access Portal)**
+  - Registration + login for clinic admins.
+  - Clinic profile setup (hours, services, deposit rules).
+  - Square OAuth connect + status checks.
+  - Telnyx hosted messaging + A2P 10DLC onboarding.
+  - Onboarding status + go-live checklist.
+
 - **Compliance Guardrails**
   - TCPA/A2P basics:
     - STOP/HELP handling.

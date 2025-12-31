@@ -64,14 +64,15 @@ The `scripts/e2e_full_flow.py` script simulates the complete production flow:
 
 ## Latest Run
 
-- **Date:** _update after running_
-- **Environment:** local API + workers
+- **Date:** 2025-12-31 11:45:44 -05:00
+- **Environment:** local Docker Compose (API + workers)
 - **Numbers:** Telnyx hosted (`/webhooks/telnyx/*`)
 - **Org/Clinic:** 11111111-1111-1111-1111-111111111111
-- **Test Phone:** +15550001234 (simulated customer)
-- **Clinic Phone:** +15559998888 (simulated clinic)
-- **Flow exercised:** missed call → SMS conversation → AI preference extraction → checkout → Square webhook → confirmation
-- **Outcome:** _pending execution_
+- **Test Phone:** +1********713 (redacted)
+- **Clinic Phone:** +1********937 (redacted)
+- **Flow exercised:** missed call + SMS conversation + AI preference extraction + checkout + Square webhook + confirmation
+- **Outcome:** PASSED (RAG verified, checkout link created, payment succeeded, deposit status = paid)
+- **Notes:** Square sandbox checkout link created; outbox shows `payment_succeeded.v1` and `payments.deposit.requested.v1`
 
 ---
 
