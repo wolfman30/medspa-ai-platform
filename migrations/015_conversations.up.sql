@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Messages table for persistent message history
-CREATE TABLE IF NOT EXISTS messages (
+-- Conversation messages table for persistent message history
+CREATE TABLE IF NOT EXISTS conversation_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id TEXT NOT NULL REFERENCES conversations(conversation_id),
     role TEXT NOT NULL,  -- 'user' or 'assistant'
@@ -41,14 +41,14 @@ CREATE INDEX IF NOT EXISTS idx_conversations_started_at ON conversations(started
 CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_org_started ON conversations(org_id, started_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
-CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id ON conversation_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_created_at ON conversation_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_role ON conversation_messages(role);
 
 -- Full-text search index for message content (optional but useful for search)
-CREATE INDEX IF NOT EXISTS idx_messages_content_search ON messages USING gin(to_tsvector('english', content));
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_content_search ON conversation_messages USING gin(to_tsvector('english', content));
 
 -- Comments
 COMMENT ON TABLE conversations IS 'Long-term conversation history for analytics and review';
-COMMENT ON TABLE messages IS 'Persistent message storage for conversation history';
+COMMENT ON TABLE conversation_messages IS 'Persistent message storage for conversation history';
 COMMENT ON COLUMN conversations.conversation_id IS 'Format: sms:{orgID}:{phone}';
