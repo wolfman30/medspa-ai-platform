@@ -1,3 +1,15 @@
+-- Organizations table (required by foreign keys in this migration)
+-- Note: This is duplicated here to avoid ordering failures when running from scratch.
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    operator_phone VARCHAR(20),
+    contact_email VARCHAR(255),
+    timezone VARCHAR(50) DEFAULT 'America/New_York',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Payment disputes table for tracking Square chargebacks/disputes
 CREATE TABLE IF NOT EXISTS payment_disputes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

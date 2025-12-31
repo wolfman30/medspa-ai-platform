@@ -146,7 +146,7 @@ func (s *ConversationStore) AppendMessage(ctx context.Context, conversationID st
 	}
 
 	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO messages (
+		INSERT INTO conversation_messages (
 			id, conversation_id, role, content, from_phone, to_phone, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (id) DO NOTHING
@@ -260,7 +260,7 @@ func (s *ConversationStore) GetMessages(ctx context.Context, conversationID stri
 		SELECT id, conversation_id, role, content, from_phone, to_phone,
 			   COALESCE(provider_message_id, ''), COALESCE(status, 'delivered'),
 			   COALESCE(error_reason, ''), created_at
-		FROM messages
+		FROM conversation_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC
 	`
@@ -322,7 +322,7 @@ func (s *ConversationStore) HasAssistantMessage(ctx context.Context, conversatio
 
 	var exists int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT 1 FROM messages
+		SELECT 1 FROM conversation_messages
 		WHERE conversation_id = $1 AND role = 'assistant'
 		LIMIT 1
 	`, conversationID).Scan(&exists)

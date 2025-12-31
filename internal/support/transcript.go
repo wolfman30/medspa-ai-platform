@@ -70,10 +70,10 @@ func (s *TranscriptService) GetTranscript(ctx context.Context, conversationID st
 	var endedAt sql.NullTime
 
 	metaQuery := `
-		SELECT c.id, c.org_id, c.lead_id, c.from_phone, l.name, c.created_at, c.ended_at
+		SELECT c.conversation_id, c.org_id, c.lead_id, c.phone, l.name, c.started_at, c.ended_at
 		FROM conversations c
 		LEFT JOIN leads l ON c.lead_id = l.id
-		WHERE c.id = $1
+		WHERE c.conversation_id = $1
 	`
 	err := s.db.QueryRowContext(ctx, metaQuery, conversationID).Scan(
 		&transcript.ConversationID,
@@ -97,7 +97,7 @@ func (s *TranscriptService) GetTranscript(ctx context.Context, conversationID st
 	// Get messages
 	msgQuery := `
 		SELECT id, role, content, created_at
-		FROM messages
+		FROM conversation_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC
 	`
@@ -126,10 +126,10 @@ func (s *TranscriptService) GetTranscript(ctx context.Context, conversationID st
 // GetRecentTranscripts retrieves recent conversation transcripts for an org.
 func (s *TranscriptService) GetRecentTranscripts(ctx context.Context, orgID string, limit int) ([]*ConversationTranscript, error) {
 	query := `
-		SELECT DISTINCT c.id
+		SELECT DISTINCT c.conversation_id
 		FROM conversations c
 		WHERE c.org_id = $1
-		ORDER BY c.created_at DESC
+		ORDER BY c.started_at DESC
 		LIMIT $2
 	`
 	rows, err := s.db.QueryContext(ctx, query, orgID, limit)
@@ -288,7 +288,7 @@ func (s *TranscriptService) formatTranscriptEmail(transcript *ConversationTransc
 // GetTranscriptsByLead retrieves all conversation transcripts for a lead.
 func (s *TranscriptService) GetTranscriptsByLead(ctx context.Context, leadID string) ([]*ConversationTranscript, error) {
 	query := `
-		SELECT id FROM conversations WHERE lead_id = $1 ORDER BY created_at DESC
+		SELECT conversation_id FROM conversations WHERE lead_id = $1 ORDER BY started_at DESC
 	`
 	rows, err := s.db.QueryContext(ctx, query, leadID)
 	if err != nil {
@@ -315,11 +315,11 @@ func (s *TranscriptService) GetTranscriptsByLead(ctx context.Context, leadID str
 // SearchTranscripts searches for conversations containing specific text.
 func (s *TranscriptService) SearchTranscripts(ctx context.Context, orgID, searchText string, limit int) ([]*ConversationTranscript, error) {
 	query := `
-		SELECT DISTINCT c.id
+		SELECT DISTINCT c.conversation_id
 		FROM conversations c
-		JOIN messages m ON c.id = m.conversation_id
+		JOIN conversation_messages m ON c.conversation_id = m.conversation_id
 		WHERE c.org_id = $1 AND m.content ILIKE $2
-		ORDER BY c.created_at DESC
+		ORDER BY c.started_at DESC
 		LIMIT $3
 	`
 	searchPattern := "%" + searchText + "%"

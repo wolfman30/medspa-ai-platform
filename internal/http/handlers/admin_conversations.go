@@ -15,7 +15,7 @@ import (
 )
 
 // AdminConversationsHandler handles admin API endpoints for conversation viewing.
-// Uses conversations/messages tables for long-term history, with fallback to Redis for recent messages.
+// Uses conversations/conversation_messages tables for long-term history, with fallback to Redis for recent messages.
 type AdminConversationsHandler struct {
 	db              *sql.DB
 	transcriptStore *conversation.SMSTranscriptStore
@@ -370,7 +370,7 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 			conv.LastMessageAt = &formatted
 		}
 
-		// Get messages from messages table
+		// Get messages from conversation_messages table
 		messages, _ := h.getMessagesFromDB(r, conversationID)
 		if len(messages) > 0 {
 			conv.Messages = messages
@@ -417,7 +417,7 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 func (h *AdminConversationsHandler) getMessagesFromDB(r *http.Request, conversationID string) ([]MessageResponse, error) {
 	rows, err := h.db.QueryContext(r.Context(), `
 		SELECT id, role, content, from_phone, to_phone, created_at
-		FROM messages
+		FROM conversation_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC
 	`, conversationID)
