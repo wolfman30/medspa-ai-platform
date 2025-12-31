@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"name": "ai-agency",
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"terminal.integrated.defaultProfile.windows": "Git Bash"
+	}
+}

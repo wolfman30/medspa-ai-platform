@@ -20,13 +20,26 @@ What is intentionally *not* in scope for the first paid client:
 
 ## Current State
 
-Revenue MVP core plumbing exists (Telnyx webhooks + compliance, conversation engine, Square checkout + webhook + OAuth, workers, metrics). Remaining work is primarily operational validation and clinic-specific knowledge content.
+Revenue MVP core plumbing exists (Telnyx webhooks + compliance, conversation engine, Square checkout + webhook + OAuth, workers, metrics). Remaining work is primarily operational validation, clinic-specific knowledge content, and an authenticated client portal for paid onboarding (registration/login + clinic setup).
 
 - Status + gaps: `docs/MVP_STATUS.md`
 - Product scope + flows: `docs/revenue-mvp.md`
 - Live validation checklist: `docs/LIVE_DEV_CHECKS.md`
 - ECS deployment: `docs/DEPLOYMENT_ECS.md` (preferred), `docs/BOOTSTRAP_DEPLOYMENT.md` (deprecated)
 - E2E harness + results log: `scripts/e2e_full_flow.py`, `docs/E2E_TEST_RESULTS.md`
+
+## Client Portal (Paid Access) — In Progress
+
+For paid clients, onboarding should happen through a login-protected portal (not via public endpoints).
+Planned portal workflow:
+
+- Register + log in (clinic admin)
+- Complete clinic profile (hours, services, deposit rules)
+- Connect Square OAuth for deposits
+- Submit Telnyx hosted messaging + 10DLC registration
+- Verify onboarding status and go live
+
+Current implementation relies on admin endpoints and scripts; portal auth and user/org membership are not yet implemented.
 
 ## Repo Layout
 
