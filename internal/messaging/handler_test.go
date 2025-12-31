@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -128,6 +129,80 @@ func TestTwilioWebhookHandler(t *testing.T) {
 	}
 	if pub.lastReq.OrgID != "org-test" {
 		t.Fatalf("expected org-test, got %s", pub.lastReq.OrgID)
+	}
+}
+
+func TestTwilioWebhookPersistsInboundTranscript(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{
+		"+15551234567": "org-test",
+	})
+	leadID := uuid.New().String()
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: leadID, OrgID: "org-test"}}
+	pub := &stubPublisher{}
+	handler := NewHandler("", pub, resolver, nil, leadRepo, logging.Default())
+	store := &stubConversationStore{}
+	handler.SetConversationStore(store)
+
+	formData := url.Values{}
+	formData.Set("MessageSid", "SM123")
+	formData.Set("From", "+1234567890")
+	formData.Set("To", "+15551234567")
+	formData.Set("Body", "Hello")
+
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if !store.appended {
+		t.Fatalf("expected transcript append to be called")
+	}
+	if store.lastConversationID != "sms:org-test:1234567890" {
+		t.Fatalf("unexpected conversation id: %s", store.lastConversationID)
+	}
+	if store.lastMsg.Role != "user" || store.lastMsg.Body != "Hello" {
+		t.Fatalf("unexpected transcript message: %#v", store.lastMsg)
+	}
+	if store.linkedLead != leadID {
+		t.Fatalf("expected lead link %s, got %s", leadID, store.linkedLead)
+	}
+}
+
+func TestTwilioWebhookRedactsPHIInTranscript(t *testing.T) {
+	resolver := NewStaticOrgResolver(map[string]string{
+		"+15551234567": "org-test",
+	})
+	leadID := uuid.New().String()
+	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: leadID, OrgID: "org-test"}}
+	pub := &stubPublisher{}
+	handler := NewHandler("", pub, resolver, nil, leadRepo, logging.Default())
+	store := &stubConversationStore{}
+	handler.SetConversationStore(store)
+
+	formData := url.Values{}
+	formData.Set("MessageSid", "SM123")
+	formData.Set("From", "+1234567890")
+	formData.Set("To", "+15551234567")
+	formData.Set("Body", "I have diabetes and need advice")
+
+	req := httptest.NewRequest(http.MethodPost, "/messaging/twilio/webhook", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.TwilioWebhook(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	if store.lastMsg.Body != "[REDACTED]" {
+		t.Fatalf("expected redacted transcript body, got %q", store.lastMsg.Body)
+	}
+	if pub.lastReq.Message != "I have diabetes and need advice" {
+		t.Fatalf("expected raw message to reach conversation service, got %q", pub.lastReq.Message)
 	}
 }
 
@@ -310,6 +385,25 @@ func (s *stubLeadsRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter
 	return nil, nil
 }
 
+type stubConversationStore struct {
+	appended           bool
+	lastConversationID string
+	lastMsg            conversation.SMSTranscriptMessage
+	linkedLead         string
+}
+
+func (s *stubConversationStore) AppendMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) error {
+	s.appended = true
+	s.lastConversationID = conversationID
+	s.lastMsg = msg
+	return nil
+}
+
+func (s *stubConversationStore) LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error {
+	s.linkedLead = leadID.String()
+	return nil
+}
+
 func newTestHandler(t *testing.T, secret string, pubErr error, resolver OrgResolver) (*Handler, *stubPublisher) {
 	t.Helper()
 	pub := &stubPublisher{err: pubErr}
@@ -367,13 +461,13 @@ func TestTwilioWebhook_UpsertsLead(t *testing.T) {
 	}
 }
 
-type stubMessenger struct {
+type stubSMSMessenger struct {
 	called bool
 	last   conversation.OutboundReply
 	err    error
 }
 
-func (s *stubMessenger) SendReply(ctx context.Context, reply conversation.OutboundReply) error {
+func (s *stubSMSMessenger) SendReply(ctx context.Context, reply conversation.OutboundReply) error {
 	s.called = true
 	s.last = reply
 	return s.err
@@ -389,7 +483,7 @@ func TestTwilioWebhook_SendsAckSMS(t *testing.T) {
 		OrgID:     "org-test",
 		CreatedAt: time.Now().UTC(),
 	}}
-	messenger := &stubMessenger{}
+	messenger := &stubSMSMessenger{}
 	handler := NewHandler("", pub, resolver, messenger, leadRepo, logging.Default())
 
 	formData := url.Values{}
@@ -428,7 +522,7 @@ func TestTwilioVoiceWebhook_MissedCall_SendsInstantAck(t *testing.T) {
 	})
 	pub := &stubPublisher{}
 	leadRepo := &stubLeadsRepo{lead: &leads.Lead{ID: "lead-123", OrgID: "org-test"}}
-	messenger := &stubMessenger{}
+	messenger := &stubSMSMessenger{}
 	handler := NewHandler("", pub, resolver, messenger, leadRepo, logging.Default())
 
 	formData := url.Values{}
@@ -481,7 +575,7 @@ func TestTwilioVoiceWebhook_NotMissedCall_ReturnsRejectTwiML(t *testing.T) {
 		"+15551234567": "org-test",
 	})
 	pub := &stubPublisher{}
-	messenger := &stubMessenger{}
+	messenger := &stubSMSMessenger{}
 	handler := NewHandler("", pub, resolver, messenger, leads.NewInMemoryRepository(), logging.Default())
 
 	formData := url.Values{}

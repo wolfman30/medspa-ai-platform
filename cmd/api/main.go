@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -25,6 +27,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
+	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -68,6 +71,18 @@ func main() {
 	if dbPool != nil {
 		defer dbPool.Close()
 	}
+	sqlDB := connectSQLDB(dbPool, logger)
+	if sqlDB != nil {
+		defer sqlDB.Close()
+	}
+	var conversationStore *conversation.ConversationStore
+	if cfg.PersistConversationHistory {
+		conversationStore = conversation.NewConversationStore(sqlDB)
+	}
+	var auditSvc *auditcompliance.AuditService
+	if sqlDB != nil {
+		auditSvc = auditcompliance.NewAuditService(sqlDB)
+	}
 
 	// Initialize repositories and services
 	leadsRepo := initializeLeadsRepository(dbPool)
@@ -75,6 +90,20 @@ func main() {
 	msgStore := messaging.NewStore(dbPool)
 
 	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := setupConversation(appCtx, cfg, dbPool, logger)
+
+	// Create Redis client for knowledge repo and clinic config
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisOptions := &redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+		}
+		if cfg.RedisTLS {
+			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		redisClient = redis.NewClient(redisOptions)
+	}
+	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
@@ -113,6 +142,15 @@ func main() {
 			Suffix:  cfg.DemoModeSuffix,
 			Logger:  logger,
 		})
+		webhookMessenger = messaging.WrapWithDisclaimers(webhookMessenger, messaging.DisclaimerWrapperConfig{
+			Enabled:           cfg.DisclaimerEnabled,
+			Level:             cfg.DisclaimerLevel,
+			FirstMessageOnly:  cfg.DisclaimerFirstOnly,
+			Logger:            logger,
+			Audit:             auditSvc,
+			ConversationStore: conversationStore,
+			TranscriptStore:   smsTranscript,
+		})
 	} else {
 		logger.Warn("sms replies disabled for webhooks",
 			"preference", cfg.SMSProvider,
@@ -120,6 +158,7 @@ func main() {
 		)
 	}
 	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, webhookMessenger, leadsRepo, logger)
+	messagingHandler.SetConversationStore(conversationStore)
 
 	telnyxClient := setupTelnyxClient(cfg, logger)
 
@@ -156,19 +195,6 @@ func main() {
 		paymentsRepo = payments.NewRepository(dbPool)
 		outboxStore = events.NewOutboxStore(dbPool)
 		processedStore = events.NewProcessedStore(dbPool)
-	}
-
-	// Create Redis client for knowledge repo and clinic config
-	var redisClient *redis.Client
-	if cfg.RedisAddr != "" {
-		redisOptions := &redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-		}
-		if cfg.RedisTLS {
-			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		}
-		redisClient = redis.NewClient(redisOptions)
 	}
 
 	var clinicHandler *clinic.Handler
@@ -212,9 +238,14 @@ func main() {
 	if redisClient != nil {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
 	}
-	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
 	conversationHandler := conversation.NewHandler(conversationPublisher, jobRecorder, knowledgeRepo, nil, logger)
 	conversationHandler.SetSMSTranscriptStore(smsTranscript)
+
+	supervisor, err := appbootstrap.BuildSupervisor(appCtx, cfg, logger)
+	if err != nil {
+		logger.Error("failed to configure supervisor", "error", err)
+		os.Exit(1)
+	}
 
 	inlineWorker, conversationService := setupInlineWorker(
 		appCtx,
@@ -225,9 +256,12 @@ func main() {
 		jobUpdater,
 		memoryQueue,
 		dbPool,
+		sqlDB,
+		auditSvc,
 		outboxStore,
 		resolver,
 		msgStore,
+		supervisor,
 		redisClient,
 		smsTranscript,
 	)
@@ -302,22 +336,23 @@ func main() {
 	if msgStore != nil && telnyxClient != nil && processedStore != nil {
 		logger.Debug("creating telnyx webhook handler")
 		telnyxWebhookHandler = handlers.NewTelnyxWebhookHandler(handlers.TelnyxWebhookConfig{
-			Store:            msgStore,
-			Processed:        processedStore,
-			Telnyx:           telnyxClient,
-			Conversation:     conversationPublisher,
-			Leads:            leadsRepo,
-			Logger:           logger,
-			Transcript:       smsTranscript,
-			MessagingProfile: cfg.TelnyxMessagingProfileID,
-			StopAck:          cfg.TelnyxStopReply,
-			HelpAck:          cfg.TelnyxHelpReply,
-			StartAck:         cfg.TelnyxStartReply,
-			FirstContactAck:  cfg.TelnyxFirstContactReply,
-			VoiceAck:         cfg.TelnyxVoiceAckReply,
-			DemoMode:         cfg.DemoMode,
-			TrackJobs:        cfg.TelnyxTrackJobs,
-			Metrics:          messagingMetrics,
+			Store:             msgStore,
+			Processed:         processedStore,
+			Telnyx:            telnyxClient,
+			Conversation:      conversationPublisher,
+			Leads:             leadsRepo,
+			Logger:            logger,
+			Transcript:        smsTranscript,
+			ConversationStore: conversationStore,
+			MessagingProfile:  cfg.TelnyxMessagingProfileID,
+			StopAck:           cfg.TelnyxStopReply,
+			HelpAck:           cfg.TelnyxHelpReply,
+			StartAck:          cfg.TelnyxStartReply,
+			FirstContactAck:   cfg.TelnyxFirstContactReply,
+			VoiceAck:          cfg.TelnyxVoiceAckReply,
+			DemoMode:          cfg.DemoMode,
+			TrackJobs:         cfg.TelnyxTrackJobs,
+			Metrics:           messagingMetrics,
 		})
 		logger.Info("telnyx webhook handler initialized", "profile_id", cfg.TelnyxMessagingProfileID)
 	} else {
@@ -342,6 +377,8 @@ func main() {
 		ClinicDashboard:     clinicDashboardHandler,
 		AdminOnboarding:     adminOnboardingHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
+		DB:                  sqlDB,
+		TranscriptStore:     smsTranscript,
 		MetricsHandler:      metricsHandler,
 		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 	}
@@ -416,6 +453,17 @@ func connectPostgresPool(ctx context.Context, dbURL string, logger *logging.Logg
 	return pool
 }
 
+func connectSQLDB(pool *pgxpool.Pool, logger *logging.Logger) *sql.DB {
+	if pool == nil {
+		return nil
+	}
+	db := stdlib.OpenDBFromPool(pool)
+	if logger != nil {
+		logger.Info("sql db wrapper initialized")
+	}
+	return db
+}
+
 func setupConversation(
 	ctx context.Context,
 	cfg *appconfig.Config,
@@ -464,9 +512,12 @@ func setupInlineWorker(
 	jobUpdater conversation.JobUpdater,
 	memoryQueue *conversation.MemoryQueue,
 	dbPool *pgxpool.Pool,
+	sqlDB *sql.DB,
+	audit *auditcompliance.AuditService,
 	outboxStore *events.OutboxStore,
 	resolver payments.OrgNumberResolver,
 	optOutChecker conversation.OptOutChecker,
+	supervisor conversation.Supervisor,
 	redisClient *redis.Client,
 	smsTranscript *conversation.SMSTranscriptStore,
 ) (*conversation.Worker, conversation.Service) {
@@ -479,7 +530,7 @@ func setupInlineWorker(
 	if dbPool != nil {
 		paymentChecker = payments.NewRepository(dbPool)
 	}
-	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, logger)
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, audit, logger)
 	if err != nil {
 		logger.Error("failed to configure inline conversation service", "error", err)
 		os.Exit(1)
@@ -501,13 +552,17 @@ func setupInlineWorker(
 	}
 
 	var depositSender conversation.DepositSender
+	var convStore *conversation.ConversationStore
+	if cfg.PersistConversationHistory {
+		convStore = conversation.NewConversationStore(sqlDB)
+	}
 	if dbPool != nil && outboxStore != nil && paymentChecker != nil {
 		numberResolver := resolver
 		hasSquareProvider := strings.TrimSpace(cfg.SquareAccessToken) != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "")
 		if !hasSquareProvider {
 			if cfg.AllowFakePayments {
 				fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
-				depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, logger)
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
 				logger.Warn("deposit sender initialized in fake payments mode (Square credentials not configured)")
 			} else {
 				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
@@ -529,7 +584,7 @@ func setupInlineWorker(
 				numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 				logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
 			}
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
 			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "")
 		}
 	} else {
@@ -610,6 +665,9 @@ func setupInlineWorker(
 		conversation.WithProcessedEventsStore(processedStore),
 		conversation.WithOptOutChecker(optOutChecker),
 		conversation.WithSMSTranscriptStore(smsTranscript),
+		conversation.WithConversationStore(convStore),
+		conversation.WithSupervisor(supervisor),
+		conversation.WithSupervisorMode(conversation.ParseSupervisorMode(cfg.SupervisorMode)),
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)

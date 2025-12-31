@@ -24,6 +24,7 @@ type depositDispatcher struct {
 	numbers    payments.OrgNumberResolver
 	leads      leads.Repository
 	transcript *SMSTranscriptStore
+	convStore  conversationWriter
 	logger     *logging.Logger
 }
 
@@ -43,8 +44,12 @@ type paymentIntentChecker interface {
 	HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error)
 }
 
+type conversationWriter interface {
+	AppendMessage(ctx context.Context, conversationID string, msg SMSTranscriptMessage) error
+}
+
 // NewDepositDispatcher wires a deposit sender with the required dependencies.
-func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, transcript *SMSTranscriptStore, logger *logging.Logger) DepositSender {
+func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, transcript *SMSTranscriptStore, convStore conversationWriter, logger *logging.Logger) DepositSender {
 	if logger == nil {
 		logger = logging.Default()
 	}
@@ -56,6 +61,7 @@ func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLin
 		numbers:    numbers,
 		leads:      leadsRepo,
 		transcript: transcript,
+		convStore:  convStore,
 		logger:     logger,
 	}
 }
@@ -156,15 +162,6 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		if conversationID == "" {
 			conversationID = strings.TrimSpace(msg.ConversationID)
 		}
-		if d.transcript != nil && conversationID != "" {
-			_ = d.transcript.Append(context.Background(), conversationID, SMSTranscriptMessage{
-				Role: "assistant",
-				From: fromNumber,
-				To:   msg.From,
-				Body: body,
-				Kind: "deposit_link",
-			})
-		}
 		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if d.sms != nil {
@@ -188,6 +185,13 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		} else {
 			d.logger.Warn("deposit: sms messenger nil; link not sent", "org_id", msg.OrgID, "lead_id", msg.LeadID)
 		}
+		d.appendTranscript(context.Background(), conversationID, SMSTranscriptMessage{
+			Role: "assistant",
+			From: fromNumber,
+			To:   msg.From,
+			Body: body,
+			Kind: "deposit_link",
+		})
 	}
 
 	if d.outbox != nil {
@@ -214,6 +218,25 @@ func defaultString(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func (d *depositDispatcher) appendTranscript(ctx context.Context, conversationID string, msg SMSTranscriptMessage) {
+	if conversationID == "" {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if d.transcript != nil {
+		if err := d.transcript.Append(ctx, conversationID, msg); err != nil {
+			d.logger.Warn("deposit: failed to append sms transcript", "error", err, "conversation_id", conversationID)
+		}
+	}
+	if d.convStore != nil {
+		if err := d.convStore.AppendMessage(ctx, conversationID, msg); err != nil {
+			d.logger.Warn("deposit: failed to persist transcript", "error", err, "conversation_id", conversationID)
+		}
+	}
 }
 
 func scheduledFromMetadata(meta map[string]string) *time.Time {

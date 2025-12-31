@@ -125,6 +125,23 @@ func (s *SMSTranscriptStore) List(ctx context.Context, conversationID string, li
 	return out, nil
 }
 
+// HasAssistantMessage returns true if any assistant message exists in the transcript list.
+func (s *SMSTranscriptStore) HasAssistantMessage(ctx context.Context, conversationID string) (bool, error) {
+	if s == nil || s.redis == nil {
+		return false, nil
+	}
+	messages, err := s.List(ctx, conversationID, 0)
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range messages {
+		if msg.Role == "assistant" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func smsTranscriptKey(conversationID string) string {
 	return smsTranscriptKeyPrefix + conversationID
 }

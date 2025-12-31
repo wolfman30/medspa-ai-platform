@@ -1,6 +1,7 @@
 package router
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -40,6 +41,10 @@ type Config struct {
 	CognitoUserPoolID string
 	CognitoClientID   string
 	CognitoRegion     string
+
+	// Admin dashboard dependencies (optional)
+	DB              *sql.DB
+	TranscriptStore *conversation.SMSTranscriptStore
 }
 
 // New creates a new Chi router with all routes configured
@@ -162,6 +167,11 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Put("/phone", cfg.SquareOAuth.HandleUpdatePhone)
 				}
 			})
+
+			// Admin dashboard, leads, and conversations routes
+			if cfg.DB != nil {
+				handlers.RegisterAdminRoutes(admin, cfg.DB, cfg.TranscriptStore, cfg.Logger)
+			}
 		})
 	}
 

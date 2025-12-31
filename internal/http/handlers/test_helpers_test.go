@@ -68,7 +68,7 @@ func (s *testTelnyxClient) SendMessage(ctx context.Context, req telnyxclient.Sen
 	if s.sendResp != nil {
 		return s.sendResp, nil
 	}
-	return &telnyxclient.MessageResponse{ID: "msg_test", Status: "queued", From: req.From, To: req.To}, nil
+	return &telnyxclient.MessageResponse{ID: "msg_test", Status: "queued", FromRaw: []byte(`"` + req.From + `"`), ToRaw: []byte(`"` + req.To + `"`)}, nil
 }
 
 func (s *testTelnyxClient) VerifyWebhookSignature(timestamp, signature string, payload []byte) error {
@@ -98,8 +98,9 @@ func (s *stubProcessedTracker) MarkProcessed(ctx context.Context, provider, even
 	if s.seen == nil {
 		s.seen = make(map[string]bool)
 	}
+	already := s.seen[eventID]
 	s.seen[eventID] = true
-	return true, nil
+	return !already, nil
 }
 
 type recordedMessage struct {
@@ -127,6 +128,25 @@ func (s *stubConversationPublisher) EnqueueStart(ctx context.Context, jobID stri
 	s.startCalls++
 	s.lastJob = jobID
 	s.lastStart = req
+	return nil
+}
+
+type stubConversationStore struct {
+	appended bool
+	lastID   string
+	lastMsg  conversation.SMSTranscriptMessage
+	leadID   uuid.UUID
+}
+
+func (s *stubConversationStore) AppendMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) error {
+	s.appended = true
+	s.lastID = conversationID
+	s.lastMsg = msg
+	return nil
+}
+
+func (s *stubConversationStore) LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error {
+	s.leadID = leadID
 	return nil
 }
 

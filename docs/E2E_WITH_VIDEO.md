@@ -53,6 +53,7 @@ Optional knobs:
 - `E2E_MAX_AI_STEP_SECONDS` (default `45`)
 - `E2E_FAIL_ON_AI_LATENCY=true|false`
 - `E2E_HTTP_TIMEOUT` (default `20`)
+- `E2E_STEP_DELAY_SECONDS` (adds a pause between webhook steps to avoid Bedrock throttling; set back to `0` later)
 
 ## Artifacts
 

@@ -5,32 +5,274 @@
     {
       "title": "Services & Pricing - Injectables",
       "category": "services",
-      "content": "BOTOX COSMETIC:\n- Price: $12 per unit\n- Typical areas require 20-50 units\n- Common treatment areas: Forehead lines (10-30 units), Frown lines (10-25 units), Crow's feet (5-15 units per side)\n- Results last 3-4 months\n- Treatment time: 10-15 minutes\n- No downtime required\n\nDERMAL FILLERS:\n- Juvederm: $650 per syringe\n- Restylane: $650 per syringe\n- Sculptra: $850 per vial\n- Common areas: Lips (1-2 syringes), Cheeks (2-3 syringes), Nasolabial folds (1-2 syringes)\n- Results last 6-18 months depending on product\n- Treatment time: 30-45 minutes\n\nLIP FILLER:\n- Price: $650 per syringe\n- Most clients need 1 syringe for subtle enhancement, 2 for dramatic results\n- Includes numbing for comfort\n- Results immediate, last 6-12 months"
+      "content": "BOTOX COSMETIC:\n- Price: $12 per unit\n- Typical areas require 20-50 units\n- Common treatment areas: Forehead lines (10-30 units), Frown lines (10-25 units), Crow's feet (5-15 units per side)\n- Results last 3-4 months\n- Treatment time: 10-15 minutes\n- No downtime required\n\nDERMAL FILLERS:\n- Juvederm: $650 per syringe\n- Restylane: $650 per syringe\n- Sculptra: $850 per vial\n- Common areas: Lips (1-2 syringes), Cheeks (2-3 syringes), Nasolabial folds (1-2 syringes)\n- Results last 6-18 months depending on product\n- Treatment time: 30-45 minutes\n\nLIP FILLER:\n- Price: $650 per syringe\n- Most clients need 1 syringe for subtle enhancement, 2 for dramatic results\n- Includes numbing for comfort\n- Results immediate, last 6-12 months",
+      "structured_services": [
+        {
+          "id": "botox",
+          "name": "Botox Cosmetic",
+          "price_type": "per_unit",
+          "price_usd": 12.00,
+          "duration_minutes": 15,
+          "description": "FDA-approved treatment to temporarily make moderate to severe frown lines, crow's feet and forehead lines look better in adults."
+        },
+        {
+          "id": "juvederm",
+          "name": "Juvederm Dermal Filler",
+          "price_type": "per_syringe",
+          "price_usd": 650.00,
+          "duration_minutes": 45,
+          "description": "Hyaluronic acid facial filler."
+        },
+        {
+          "id": "restylane",
+          "name": "Restylane Dermal Filler",
+          "price_type": "per_syringe",
+          "price_usd": 650.00,
+          "duration_minutes": 45,
+          "description": "Hyaluronic acid filler for facial wrinkles and folds."
+        },
+        {
+          "id": "sculptra",
+          "name": "Sculptra Aesthetic",
+          "price_type": "per_vial",
+          "price_usd": 850.00,
+          "duration_minutes": 45,
+          "description": "Poly-L-lactic acid (PLLA) collagen stimulator."
+        },
+        {
+          "id": "lip_filler",
+          "name": "Lip Filler Enhancement",
+          "price_type": "per_syringe",
+          "price_usd": 650.00,
+          "duration_minutes": 30,
+          "description": "Lip augmentation using hyaluronic acid fillers."
+        }
+      ]
     },
     {
       "title": "Services & Pricing - Skin Treatments",
       "category": "services",
-      "content": "LASER HAIR REMOVAL:\n- Small area (upper lip, chin): $75 per session\n- Medium area (underarms, bikini): $150 per session\n- Large area (legs, back): $300 per session\n- Package of 6 sessions: 15% discount\n- Results typically require 6-8 sessions\n- Sessions spaced 4-6 weeks apart\n\nCHEMICAL PEELS:\n- Light peel: $150\n- Medium peel: $250\n- Deep peel: $400\n- Treats fine lines, sun damage, acne scars, uneven tone\n- Downtime: 3-7 days depending on depth\n\nMICRONEEDLING:\n- Face: $350 per session\n- Face + Neck: $450 per session\n- Series of 3: $900 (save $150)\n- Improves texture, scars, fine lines, and pores\n- Results improve over 3-6 months\n- Minimal downtime (1-2 days redness)\n\nHYDRAFACIAL:\n- Signature HydraFacial: $199\n- Deluxe (includes booster): $250\n- Platinum (includes LED therapy): $325\n- No downtime, immediate glow\n- Recommended monthly for best results"
+      "content": "LASER HAIR REMOVAL:\n- Small area (upper lip, chin): $75 per session\n- Medium area (underarms, bikini): $150 per session\n- Large area (legs, back): $300 per session\n- Package of 6 sessions: 15% discount\n- Results typically require 6-8 sessions\n- Sessions spaced 4-6 weeks apart\n\nCHEMICAL PEELS:\n- Light peel: $150\n- Medium peel: $250\n- Deep peel: $400\n- Treats fine lines, sun damage, acne scars, uneven tone\n- Downtime: 3-7 days depending on depth\n\nMICRONEEDLING:\n- Face: $350 per session\n- Face + Neck: $450 per session\n- Series of 3: $900 (save $150)\n- Improves texture, scars, fine lines, and pores\n- Results improve over 3-6 months\n- Minimal downtime (1-2 days redness)\n\nHYDRAFACIAL:\n- Signature HydraFacial: $199\n- Deluxe (includes booster): $250\n- Platinum (includes LED therapy): $325\n- No downtime, immediate glow\n- Recommended monthly for best results",
+      "structured_services": [
+        {
+          "id": "lhr_small",
+          "name": "Laser Hair Removal - Small Area",
+          "price_type": "per_session",
+          "price_usd": 75.00,
+          "duration_minutes": 15,
+          "description": "Upper lip, chin, or similar small areas."
+        },
+        {
+          "id": "lhr_medium",
+          "name": "Laser Hair Removal - Medium Area",
+          "price_type": "per_session",
+          "price_usd": 150.00,
+          "duration_minutes": 30,
+          "description": "Underarms, bikini line, or similar medium areas."
+        },
+        {
+          "id": "lhr_large",
+          "name": "Laser Hair Removal - Large Area",
+          "price_type": "per_session",
+          "price_usd": 300.00,
+          "duration_minutes": 45,
+          "description": "Legs, back, or similar large areas."
+        },
+        {
+          "id": "peel_light",
+          "name": "Chemical Peel - Light",
+          "price_type": "per_session",
+          "price_usd": 150.00,
+          "duration_minutes": 30,
+          "description": "Superficial peel for minor skin issues and glow."
+        },
+        {
+          "id": "peel_medium",
+          "name": "Chemical Peel - Medium",
+          "price_type": "per_session",
+          "price_usd": 250.00,
+          "duration_minutes": 30,
+          "description": "Moderate depth peel for fine lines and sun damage."
+        },
+        {
+          "id": "peel_deep",
+          "name": "Chemical Peel - Deep",
+          "price_type": "per_session",
+          "price_usd": 400.00,
+          "duration_minutes": 45,
+          "description": "Deeper peel for acne scars and uneven tone."
+        },
+        {
+          "id": "microneedling_face",
+          "name": "Microneedling - Face",
+          "price_type": "per_session",
+          "price_usd": 350.00,
+          "duration_minutes": 60,
+          "description": "Collagen induction therapy for the face."
+        },
+        {
+          "id": "microneedling_face_neck",
+          "name": "Microneedling - Face & Neck",
+          "price_type": "per_session",
+          "price_usd": 450.00,
+          "duration_minutes": 75,
+          "description": "Collagen induction therapy for face and neck."
+        },
+        {
+          "id": "hydrafacial_sig",
+          "name": "Signature HydraFacial",
+          "price_type": "per_session",
+          "price_usd": 199.00,
+          "duration_minutes": 30,
+          "description": "Deeply cleanse, extract, and hydrate the skin."
+        },
+        {
+          "id": "hydrafacial_deluxe",
+          "name": "Deluxe HydraFacial",
+          "price_type": "per_session",
+          "price_usd": 250.00,
+          "duration_minutes": 45,
+          "description": "Includes a booster to address specific skin concerns."
+        },
+        {
+          "id": "hydrafacial_plat",
+          "name": "Platinum HydraFacial",
+          "price_type": "per_session",
+          "price_usd": 325.00,
+          "duration_minutes": 60,
+          "description": "The ultimate HydraFacial experience with LED therapy."
+        }
+      ]
     },
     {
       "title": "Services & Pricing - Body Contouring",
       "category": "services",
-      "content": "COOLSCULPTING:\n- Small area (chin, arms): $750 per cycle\n- Medium area (abdomen, flanks): $1,200 per cycle\n- Large area (thighs, back): $1,500 per cycle\n- Free consultation to determine number of cycles needed\n- Results appear in 2-3 months\n- Non-invasive, no downtime\n\nEMSCULPT:\n- Abdomen: $3,000 for 4 sessions\n- Buttocks: $3,000 for 4 sessions\n- Arms: $2,000 for 4 sessions\n- Builds muscle and burns fat\n- Each session is 30 minutes\n- Sessions scheduled 2-3 days apart"
+      "content": "COOLSCULPTING:\n- Small area (chin, arms): $750 per cycle\n- Medium area (abdomen, flanks): $1,200 per cycle\n- Large area (thighs, back): $1,500 per cycle\n- Free consultation to determine number of cycles needed\n- Results appear in 2-3 months\n- Non-invasive, no downtime\n\nEMSCULPT:\n- Abdomen: $3,000 for 4 sessions\n- Buttocks: $3,000 for 4 sessions\n- Arms: $2,000 for 4 sessions\n- Builds muscle and burns fat\n- Each session is 30 minutes\n- Sessions scheduled 2-3 days apart",
+      "structured_services": [
+        {
+          "id": "coolsculpting_small",
+          "name": "CoolSculpting - Small Area",
+          "price_type": "per_cycle",
+          "price_usd": 750.00,
+          "duration_minutes": 35,
+          "description": "Fat freezing for chin, arms, or small pockets."
+        },
+        {
+          "id": "coolsculpting_medium",
+          "name": "CoolSculpting - Medium Area",
+          "price_type": "per_cycle",
+          "price_usd": 1200.00,
+          "duration_minutes": 35,
+          "description": "Fat freezing for abdomen or flanks."
+        },
+        {
+          "id": "coolsculpting_large",
+          "name": "CoolSculpting - Large Area",
+          "price_type": "per_cycle",
+          "price_usd": 1500.00,
+          "duration_minutes": 45,
+          "description": "Fat freezing for thighs or back."
+        },
+        {
+          "id": "emsculpt_abdomen",
+          "name": "Emsculpt - Abdomen (Series of 4)",
+          "price_type": "package",
+          "price_usd": 3000.00,
+          "duration_minutes": 30,
+          "description": "Build muscle and burn fat on abdomen. Price for 4 sessions."
+        },
+        {
+          "id": "emsculpt_buttocks",
+          "name": "Emsculpt - Buttocks (Series of 4)",
+          "price_type": "package",
+          "price_usd": 3000.00,
+          "duration_minutes": 30,
+          "description": "Non-invasive butt lift. Price for 4 sessions."
+        },
+        {
+          "id": "emsculpt_arms",
+          "name": "Emsculpt - Arms (Series of 4)",
+          "price_type": "package",
+          "price_usd": 2000.00,
+          "duration_minutes": 30,
+          "description": "Tone and define arms. Price for 4 sessions."
+        }
+      ]
     },
     {
       "title": "Booking Policies & Payment",
       "category": "policies",
-      "content": "DEPOSIT POLICY:\n- New clients: $50 deposit required to secure appointment\n- Returning clients: No deposit required\n- Deposits are refundable and applied to service cost\n- Deposits can be paid via credit card, debit card, or Venmo\n\nCANCELLATION POLICY:\n- Must cancel or reschedule at least 24 hours in advance\n- Cancellations with less than 24 hours notice forfeit deposit\n- No-shows forfeit deposit and may be required to prepay for future appointments\n- We understand emergencies happen - please call us to discuss\n\nPAYMENT OPTIONS:\n- Credit/debit cards accepted (Visa, MasterCard, Amex, Discover)\n- HSA/FSA cards accepted for eligible treatments\n- Financing available through CareCredit and Cherry\n- Payment plans available for treatments over $1,000\n- Cash discount: 5% off for cash payments over $500\n\nFIRST-TIME CLIENT SPECIALS:\n- New clients receive 10% off first Botox or filler treatment\n- Complimentary skin consultation with any facial treatment\n- Refer a friend and both receive $50 credit toward next visit"
+      "content": "DEPOSIT POLICY:\n- New clients: $50 deposit required to secure appointment\n- Returning clients: No deposit required\n- Deposits are refundable and applied to service cost\n- Deposits can be paid via credit card, debit card, or Venmo\n\nCANCELLATION POLICY:\n- Must cancel or reschedule at least 24 hours in advance\n- Cancellations with less than 24 hours notice forfeit deposit\n- No-shows forfeit deposit and may be required to prepay for future appointments\n- We understand emergencies happen - please call us to discuss\n\nPAYMENT OPTIONS:\n- Credit/debit cards accepted (Visa, MasterCard, Amex, Discover)\n- HSA/FSA cards accepted for eligible treatments\n- Financing available through CareCredit and Cherry\n- Payment plans available for treatments over $1,000\n- Cash discount: 5% off for cash payments over $500\n\nFIRST-TIME CLIENT SPECIALS:\n- New clients receive 10% off first Botox or filler treatment\n- Complimentary skin consultation with any facial treatment\n- Refer a friend and both receive $50 credit toward next visit",
+      "structured_policy": {
+        "deposit_amount_usd": 50.00,
+        "deposit_required_for": "new_clients",
+        "cancellation_notice_hours": 24,
+        "financing_available": true
+      }
     },
     {
       "title": "Provider Information",
       "category": "providers",
-      "content": "DR. SARAH CHEN, MD\n- Board-certified dermatologist\n- 12 years of experience in aesthetic medicine\n- Specializes in: Botox, fillers, laser treatments, chemical peels\n- Schedule: Monday, Wednesday, Friday 9am-5pm; Saturday 9am-2pm\n- Known for natural-looking results and conservative approach\n\nJESSICA MARTINEZ, NP\n- Nurse Practitioner with 8 years aesthetic experience\n- Certified in advanced injection techniques\n- Specializes in: Lip filler, facial contouring, Botox, PDO threads\n- Schedule: Tuesday, Thursday 10am-7pm; Saturday 10am-4pm\n- Known for artistic eye and ability to enhance natural beauty\n\nAMANDA WILSON, RN\n- Registered Nurse with 6 years in medical aesthetics\n- Certified laser specialist\n- Specializes in: Laser hair removal, HydraFacial, microneedling, chemical peels\n- Schedule: Monday-Friday 9am-6pm\n- Known for gentle technique and making clients feel comfortable"
+      "content": "DR. SARAH CHEN, MD\n- Board-certified dermatologist\n- 12 years of experience in aesthetic medicine\n- Specializes in: Botox, fillers, laser treatments, chemical peels\n- Schedule: Monday, Wednesday, Friday 9am-5pm; Saturday 9am-2pm\n- Known for natural-looking results and conservative approach\n\nJESSICA MARTINEZ, NP\n- Nurse Practitioner with 8 years aesthetic experience\n- Certified in advanced injection techniques\n- Specializes in: Lip filler, facial contouring, Botox, PDO threads\n- Schedule: Tuesday, Thursday 10am-7pm; Saturday 10am-4pm\n- Known for artistic eye and ability to enhance natural beauty\n\nAMANDA WILSON, RN\n- Registered Nurse with 6 years in medical aesthetics\n- Certified laser specialist\n- Specializes in: Laser hair removal, HydraFacial, microneedling, chemical peels\n- Schedule: Monday-Friday 9am-6pm\n- Known for gentle technique and making clients feel comfortable",
+      "structured_providers": [
+        {
+          "id": "dr_chen",
+          "name": "Dr. Sarah Chen, MD",
+          "role": "Dermatologist",
+          "specialties": ["injectables", "lasers", "peels"],
+          "schedule": {
+            "monday": { "start": "09:00", "end": "17:00" },
+            "wednesday": { "start": "09:00", "end": "17:00" },
+            "friday": { "start": "09:00", "end": "17:00" },
+            "saturday": { "start": "09:00", "end": "14:00" }
+          }
+        },
+        {
+          "id": "jessica_np",
+          "name": "Jessica Martinez, NP",
+          "role": "Nurse Practitioner",
+          "specialties": ["injectables", "threads"],
+          "schedule": {
+            "tuesday": { "start": "10:00", "end": "19:00" },
+            "thursday": { "start": "10:00", "end": "19:00" },
+            "saturday": { "start": "10:00", "end": "16:00" }
+          }
+        },
+        {
+          "id": "amanda_rn",
+          "name": "Amanda Wilson, RN",
+          "role": "Registered Nurse",
+          "specialties": ["lasers", "facials", "peels"],
+          "schedule": {
+            "monday": { "start": "09:00", "end": "18:00" },
+            "tuesday": { "start": "09:00", "end": "18:00" },
+            "wednesday": { "start": "09:00", "end": "18:00" },
+            "thursday": { "start": "09:00", "end": "18:00" },
+            "friday": { "start": "09:00", "end": "18:00" }
+          }
+        }
+      ]
     },
     {
       "title": "Location, Hours & Contact",
       "category": "general",
-      "content": "LOCATION:\nRadiance Medical Spa\n123 Beauty Boulevard, Suite 200\nScottsdale, AZ 85251\n\nEasy to find in the Scottsdale Quarter shopping center, next to Starbucks. Free parking available in covered garage (entrance on Main Street).\n\nHOURS:\n- Monday: 9am-6pm\n- Tuesday: 10am-7pm\n- Wednesday: 9am-6pm\n- Thursday: 10am-7pm\n- Friday: 9am-5pm\n- Saturday: 9am-4pm\n- Sunday: Closed\n\nCONTACT:\n- Phone: (480) 555-GLOW (4569)\n- Text: (480) 555-4569 (preferred for quick questions)\n- Email: hello@radiancemedspa.com\n- Instagram: @radiancemedspa\n- Website: www.radiancemedspa.com\n\nPARKING:\n- Free covered parking in Scottsdale Quarter garage\n- Entrance on Main Street between 1st and 2nd Avenue\n- Validate parking at front desk for 3 hours free\n- Handicap accessible entrance on ground floor"
+      "content": "LOCATION:\nRadiance Medical Spa\n123 Beauty Boulevard, Suite 200\nScottsdale, AZ 85251\n\nEasy to find in the Scottsdale Quarter shopping center, next to Starbucks. Free parking available in covered garage (entrance on Main Street).\n\nHOURS:\n- Monday: 9am-6pm\n- Tuesday: 10am-7pm\n- Wednesday: 9am-6pm\n- Thursday: 10am-7pm\n- Friday: 9am-5pm\n- Saturday: 9am-4pm\n- Sunday: Closed\n\nCONTACT:\n- Phone: (480) 555-GLOW (4569)\n- Text: (480) 555-4569 (preferred for quick questions)\n- Email: hello@radiancemedspa.com\n- Instagram: @radiancemedspa\n- Website: www.radiancemedspa.com\n\nPARKING:\n- Free covered parking in Scottsdale Quarter garage\n- Entrance on Main Street between 1st and 2nd Avenue\n- Validate parking at front desk for 3 hours free\n- Handicap accessible entrance on ground floor",
+      "structured_location": {
+        "address_line1": "123 Beauty Boulevard, Suite 200",
+        "city": "Scottsdale",
+        "state": "AZ",
+        "zip": "85251",
+        "timezone": "America/Phoenix"
+      },
+      "structured_hours": {
+        "monday": { "open": "09:00", "close": "18:00" },
+        "tuesday": { "open": "10:00", "close": "19:00" },
+        "wednesday": { "open": "09:00", "close": "18:00" },
+        "thursday": { "open": "10:00", "close": "19:00" },
+        "friday": { "open": "09:00", "close": "17:00" },
+        "saturday": { "open": "09:00", "close": "16:00" },
+        "sunday": null
+      }
     },
     {
       "title": "Frequently Asked Questions - Botox",

@@ -88,6 +88,12 @@ func (h *AdminOnboardingHandler) CreateClinic(w http.ResponseWriter, r *http.Req
 		cfg.Timezone = req.Timezone
 	}
 
+	if err := h.upsertOrganization(r.Context(), orgID, cfg.Name, strings.TrimSpace(req.Phone), strings.TrimSpace(req.Email), cfg.Timezone); err != nil {
+		h.logger.Error("failed to persist organization", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "failed to create clinic"}`, http.StatusInternalServerError)
+		return
+	}
+
 	// Save to Redis
 	if err := h.clinicStore.Set(r.Context(), cfg); err != nil {
 		h.logger.Error("failed to create clinic config", "org_id", orgID, "error", err)
@@ -105,6 +111,28 @@ func (h *AdminOnboardingHandler) CreateClinic(w http.ResponseWriter, r *http.Req
 		CreatedAt: time.Now().UTC(),
 		Message:   "Clinic created. Next: connect Square OAuth and configure phone number.",
 	})
+}
+
+func (h *AdminOnboardingHandler) upsertOrganization(ctx context.Context, orgID, name, phone, email, timezone string) error {
+	if h == nil || h.db == nil {
+		return nil
+	}
+	row := h.db.QueryRow(ctx, `
+		INSERT INTO organizations (id, name, operator_phone, contact_email, timezone, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		ON CONFLICT (id) DO UPDATE
+		SET name = EXCLUDED.name,
+			operator_phone = EXCLUDED.operator_phone,
+			contact_email = EXCLUDED.contact_email,
+			timezone = EXCLUDED.timezone,
+			updated_at = NOW()
+		RETURNING id
+	`, orgID, name, phone, email, timezone)
+	var insertedID string
+	if err := row.Scan(&insertedID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // OnboardingStep represents a single onboarding step.

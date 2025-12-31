@@ -28,18 +28,21 @@ type SandboxAutoPurger interface {
 
 // Worker consumes conversation jobs from the queue and invokes the processor.
 type Worker struct {
-	processor     Service
-	queue         queueClient
-	jobs          JobUpdater
-	messenger     ReplyMessenger
-	bookings      bookingConfirmer
-	deposits      DepositSender
-	notifier      PaymentNotifier
-	autoPurge     SandboxAutoPurger
-	processed     processedEventStore
-	optOutChecker OptOutChecker
-	transcript    *SMSTranscriptStore
-	logger        *logging.Logger
+	processor      Service
+	queue          queueClient
+	jobs           JobUpdater
+	messenger      ReplyMessenger
+	bookings       bookingConfirmer
+	deposits       DepositSender
+	notifier       PaymentNotifier
+	autoPurge      SandboxAutoPurger
+	processed      processedEventStore
+	optOutChecker  OptOutChecker
+	supervisor     Supervisor
+	supervisorMode SupervisorMode
+	transcript     *SMSTranscriptStore
+	convStore      *ConversationStore
+	logger         *logging.Logger
 
 	cfg workerConfig
 	wg  sync.WaitGroup
@@ -54,16 +57,20 @@ type workerConfig struct {
 	autoPurge        SandboxAutoPurger
 	processed        processedEventStore
 	optOutChecker    OptOutChecker
+	supervisor       Supervisor
+	supervisorMode   SupervisorMode
 	transcript       *SMSTranscriptStore
+	convStore        *ConversationStore
 }
 
 const (
-	defaultWorkerCount   = 2
-	defaultWaitSeconds   = 2
-	defaultBatchSize     = 5
-	maxWaitSeconds       = 20
-	maxReceiveBatchSize  = 10
-	deleteTimeoutSeconds = 5
+	defaultWorkerCount        = 2
+	defaultWaitSeconds        = 2
+	defaultBatchSize          = 5
+	maxWaitSeconds            = 20
+	maxReceiveBatchSize       = 10
+	deleteTimeoutSeconds      = 5
+	defaultSupervisorFallback = "Thanks for your message! A team member will follow up shortly."
 )
 
 // WorkerOption customizes worker behavior.
@@ -156,6 +163,27 @@ func WithOptOutChecker(checker OptOutChecker) WorkerOption {
 	}
 }
 
+// WithSupervisor wires a reply supervisor that can review or edit outgoing messages.
+func WithSupervisor(supervisor Supervisor) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.supervisor = supervisor
+	}
+}
+
+// WithSupervisorMode sets the supervisor handling mode (warn, block, edit).
+func WithSupervisorMode(mode SupervisorMode) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.supervisorMode = ParseSupervisorMode(string(mode))
+	}
+}
+
+// WithConversationStore enables persistent conversation storage in PostgreSQL.
+func WithConversationStore(store *ConversationStore) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.convStore = store
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -183,37 +211,52 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		workers:          defaultWorkerCount,
 		receiveWaitSecs:  defaultWaitSeconds,
 		receiveBatchSize: defaultBatchSize,
+		supervisorMode:   SupervisorModeWarn,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	return &Worker{
-		processor:     processor,
-		queue:         queue,
-		jobs:          jobs,
-		messenger:     messenger,
-		bookings:      bookings,
-		deposits:      cfg.deposit,
-		notifier:      cfg.notifier,
-		autoPurge:     cfg.autoPurge,
-		processed:     cfg.processed,
-		optOutChecker: cfg.optOutChecker,
-		transcript:    cfg.transcript,
-		logger:        logger,
-		cfg:           cfg,
+		processor:      processor,
+		queue:          queue,
+		jobs:           jobs,
+		messenger:      messenger,
+		bookings:       bookings,
+		deposits:       cfg.deposit,
+		notifier:       cfg.notifier,
+		autoPurge:      cfg.autoPurge,
+		processed:      cfg.processed,
+		optOutChecker:  cfg.optOutChecker,
+		supervisor:     cfg.supervisor,
+		supervisorMode: cfg.supervisorMode,
+		transcript:     cfg.transcript,
+		convStore:      cfg.convStore,
+		logger:         logger,
+		cfg:            cfg,
 	}
 }
 
 func (w *Worker) appendTranscript(ctx context.Context, conversationID string, msg SMSTranscriptMessage) {
-	if w == nil || w.transcript == nil || strings.TrimSpace(conversationID) == "" {
+	if w == nil || strings.TrimSpace(conversationID) == "" {
 		return
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := w.transcript.Append(ctx, conversationID, msg); err != nil {
-		w.logger.Warn("failed to append sms transcript", "error", err, "conversation_id", conversationID)
+
+	// Append to Redis (real-time, ephemeral)
+	if w.transcript != nil {
+		if err := w.transcript.Append(ctx, conversationID, msg); err != nil {
+			w.logger.Warn("failed to append sms transcript to Redis", "error", err, "conversation_id", conversationID)
+		}
+	}
+
+	// Persist to PostgreSQL (long-term history)
+	if w.convStore != nil {
+		if err := w.convStore.AppendMessage(ctx, conversationID, msg); err != nil {
+			w.logger.Warn("failed to persist message to database", "error", err, "conversation_id", conversationID)
+		}
 	}
 }
 
@@ -297,14 +340,31 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		return
 	}
 
+	// Debug logging to track job processing
+	w.logger.Info("worker processing job",
+		"job_id", payload.ID,
+		"kind", payload.Kind,
+		"msg_id", msg.ID,
+	)
+	if payload.Kind == jobTypeMessage {
+		w.logger.Info("worker job details",
+			"job_id", payload.ID,
+			"conversation_id", payload.Message.ConversationID,
+			"message", payload.Message.Message,
+			"from", payload.Message.From,
+		)
+	}
+
 	var (
 		err  error
 		resp *Response
 	)
 	switch payload.Kind {
 	case jobTypeStart:
+		w.logger.Info("worker calling StartConversation", "job_id", payload.ID)
 		resp, err = w.processor.StartConversation(ctx, payload.Start)
 	case jobTypeMessage:
+		w.logger.Info("worker calling ProcessMessage", "job_id", payload.ID, "conversation_id", payload.Message.ConversationID)
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
 	case jobTypePayment:
 		err = w.handlePaymentEvent(ctx, payload.Payment)
@@ -344,8 +404,10 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			}
 		}
 		if payload.Kind == jobTypeMessage {
-			w.sendReply(ctx, payload, resp)
-			w.handleDepositIntent(ctx, payload.Message, resp)
+			blocked := w.sendReply(ctx, payload, resp)
+			if !blocked {
+				w.handleDepositIntent(ctx, payload.Message, resp)
+			}
 		}
 	}
 
@@ -365,25 +427,69 @@ func (w *Worker) deleteMessage(ctx context.Context, receiptHandle string) {
 	}
 }
 
-func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Response) {
+func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Response) bool {
 	if resp == nil || resp.Message == "" {
-		return
+		return false
 	}
 	msg := payload.Message
 	if msg.Channel != ChannelSMS {
-		return
+		return false
 	}
 	if msg.From == "" || msg.To == "" {
-		return
+		return false
 	}
 	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
-		return
+		return false
+	}
+
+	outboundText, blocked := w.applySupervisor(ctx, SupervisorRequest{
+		OrgID:          msg.OrgID,
+		ConversationID: msg.ConversationID,
+		LeadID:         msg.LeadID,
+		Channel:        msg.Channel,
+		UserMessage:    msg.Message,
+		DraftMessage:   resp.Message,
+	})
+	if blocked {
+		resp = &Response{
+			ConversationID: resp.ConversationID,
+			Message:        outboundText,
+			Timestamp:      time.Now().UTC(),
+		}
+	} else if outboundText != resp.Message {
+		resp = &Response{
+			ConversationID: resp.ConversationID,
+			Message:        outboundText,
+			Timestamp:      resp.Timestamp,
+		}
 	}
 
 	conversationID := strings.TrimSpace(resp.ConversationID)
 	if conversationID == "" {
 		conversationID = strings.TrimSpace(msg.ConversationID)
 	}
+
+	if w.messenger != nil {
+		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		reply := OutboundReply{
+			OrgID:          msg.OrgID,
+			LeadID:         msg.LeadID,
+			ConversationID: resp.ConversationID,
+			To:             msg.From,
+			From:           msg.To,
+			Body:           resp.Message,
+			Metadata: map[string]string{
+				"job_id": payload.ID,
+			},
+		}
+
+		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+			w.logger.Error("failed to send outbound reply", "error", err, "job_id", payload.ID, "org_id", msg.OrgID)
+		}
+	}
+
 	w.appendTranscript(context.Background(), conversationID, SMSTranscriptMessage{
 		Role:      "assistant",
 		From:      msg.To,
@@ -392,28 +498,66 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		Timestamp: resp.Timestamp,
 		Kind:      "ai_reply",
 	})
+	return blocked
+}
 
-	if w.messenger == nil {
-		return
+func (w *Worker) applySupervisor(ctx context.Context, req SupervisorRequest) (string, bool) {
+	if w == nil || w.supervisor == nil {
+		return req.DraftMessage, false
 	}
-
-	sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	reply := OutboundReply{
-		OrgID:          msg.OrgID,
-		LeadID:         msg.LeadID,
-		ConversationID: resp.ConversationID,
-		To:             msg.From,
-		From:           msg.To,
-		Body:           resp.Message,
-		Metadata: map[string]string{
-			"job_id": payload.ID,
-		},
+	draft := strings.TrimSpace(req.DraftMessage)
+	if draft == "" {
+		return req.DraftMessage, false
 	}
-
-	if err := w.messenger.SendReply(sendCtx, reply); err != nil {
-		w.logger.Error("failed to send outbound reply", "error", err, "job_id", payload.ID, "org_id", msg.OrgID)
+	mode := w.supervisorMode
+	if mode == "" {
+		mode = SupervisorModeWarn
+	}
+	decision, err := w.supervisor.Review(ctx, req)
+	if err != nil {
+		w.logger.Warn("supervisor review failed; allowing reply", "error", err, "mode", mode)
+		return req.DraftMessage, false
+	}
+	action := decision.Action
+	switch mode {
+	case SupervisorModeWarn:
+		if action != SupervisorActionAllow {
+			w.logger.Warn("supervisor flagged reply", "action", action, "reason", decision.Reason)
+		}
+		return req.DraftMessage, false
+	case SupervisorModeBlock:
+		switch action {
+		case SupervisorActionBlock:
+			w.logger.Warn("supervisor blocked reply", "reason", decision.Reason)
+			return defaultSupervisorFallback, true
+		case SupervisorActionEdit:
+			if strings.TrimSpace(decision.EditedText) != "" {
+				w.logger.Info("supervisor edited reply", "reason", decision.Reason)
+				return decision.EditedText, false
+			}
+			w.logger.Warn("supervisor edit missing content; allowing reply", "reason", decision.Reason)
+			return req.DraftMessage, false
+		default:
+			return req.DraftMessage, false
+		}
+	case SupervisorModeEdit:
+		switch action {
+		case SupervisorActionEdit:
+			if strings.TrimSpace(decision.EditedText) != "" {
+				w.logger.Info("supervisor edited reply", "reason", decision.Reason)
+				return decision.EditedText, false
+			}
+			w.logger.Warn("supervisor edit missing content; allowing reply", "reason", decision.Reason)
+			return req.DraftMessage, false
+		case SupervisorActionBlock:
+			w.logger.Warn("supervisor blocked reply", "reason", decision.Reason)
+			return defaultSupervisorFallback, true
+		default:
+			return req.DraftMessage, false
+		}
+	default:
+		w.logger.Warn("supervisor mode unknown; allowing reply", "mode", mode)
+		return req.DraftMessage, false
 	}
 }
 
@@ -479,14 +623,6 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 				body = fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
 			}
 
-			w.appendTranscript(context.Background(), smsConversationID(evt.OrgID, evt.LeadPhone), SMSTranscriptMessage{
-				Role: "assistant",
-				From: evt.FromNumber,
-				To:   evt.LeadPhone,
-				Body: body,
-				Kind: "payment_confirmation",
-			})
-
 			if w.messenger == nil {
 				// Transcript is still recorded even when SMS sending is disabled.
 			} else {
@@ -507,6 +643,14 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 					w.logger.Error("failed to send booking confirmation sms", "error", err, "event_id", evt.EventID, "org_id", evt.OrgID)
 				}
 			}
+
+			w.appendTranscript(context.Background(), smsConversationID(evt.OrgID, evt.LeadPhone), SMSTranscriptMessage{
+				Role: "assistant",
+				From: evt.FromNumber,
+				To:   evt.LeadPhone,
+				Body: body,
+				Kind: "payment_confirmation",
+			})
 		}
 	}
 	if w.processed != nil && idempotencyKey != "" {

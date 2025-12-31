@@ -1,6 +1,7 @@
 package telnyxclient
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -27,18 +28,66 @@ func (r SendMessageRequest) validate() error {
 
 // MessageResponse represents the Telnyx message resource.
 type MessageResponse struct {
-	ID             string    `json:"id"`
-	Status         string    `json:"status"`
-	From           string    `json:"from"`
-	To             string    `json:"to"`
-	Text           string    `json:"text"`
-	CreatedAt      time.Time `json:"created_at"`
-	CompletedAt    time.Time `json:"completed_at"`
-	Direction      string    `json:"direction"`
-	Parts          int       `json:"parts"`
-	Payload        string    `json:"payload"`
-	Media          []string  `json:"media_urls,omitempty"`
-	CarrierMessage string    `json:"carrier_status"`
+	ID          string    `json:"id"`
+	Status      string    `json:"status"`
+	Text        string    `json:"text"`
+	CreatedAt   time.Time `json:"created_at"`
+	CompletedAt time.Time `json:"completed_at"`
+	Direction   string    `json:"direction"`
+	Parts       int       `json:"parts"`
+	Payload     string    `json:"payload"`
+	Media       []string  `json:"media_urls,omitempty"`
+	// Telnyx API returns from/to as objects with phone_number field
+	FromRaw        json.RawMessage `json:"from"`
+	ToRaw          json.RawMessage `json:"to"`
+	CarrierMessage string          `json:"carrier_status"`
+}
+
+// From returns the sender phone number, handling both string and object formats.
+func (m *MessageResponse) From() string {
+	if m.FromRaw == nil {
+		return ""
+	}
+	// Try as string first
+	var s string
+	if err := json.Unmarshal(m.FromRaw, &s); err == nil {
+		return s
+	}
+	// Try as object
+	var obj struct {
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.Unmarshal(m.FromRaw, &obj); err == nil {
+		return obj.PhoneNumber
+	}
+	return ""
+}
+
+// To returns the recipient phone number, handling both string and object formats.
+func (m *MessageResponse) To() string {
+	if m.ToRaw == nil {
+		return ""
+	}
+	// Try as string first
+	var s string
+	if err := json.Unmarshal(m.ToRaw, &s); err == nil {
+		return s
+	}
+	// Try as object
+	var obj struct {
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.Unmarshal(m.ToRaw, &obj); err == nil {
+		return obj.PhoneNumber
+	}
+	// Try as array of objects (Telnyx sometimes returns array for "to")
+	var arr []struct {
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.Unmarshal(m.ToRaw, &arr); err == nil && len(arr) > 0 {
+		return arr[0].PhoneNumber
+	}
+	return ""
 }
 
 // HostedOrderRequest initiates a hosted messaging order.

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"os/signal"
@@ -13,12 +14,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
+	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -50,6 +53,15 @@ func main() {
 		dbPool = pool
 		defer dbPool.Close()
 	}
+	var sqlDB *sql.DB
+	if dbPool != nil {
+		sqlDB = stdlib.OpenDBFromPool(dbPool)
+		defer sqlDB.Close()
+	}
+	var auditSvc *auditcompliance.AuditService
+	if sqlDB != nil {
+		auditSvc = auditcompliance.NewAuditService(sqlDB)
+	}
 
 	awsConfig, err := mainconfig.LoadAWSConfig(context.Background(), cfg)
 	if err != nil {
@@ -70,9 +82,14 @@ func main() {
 	}
 	msgStore := messaging.NewStore(dbPool)
 
-	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, logger)
+	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, auditSvc, logger)
 	if err != nil {
 		logger.Error("failed to configure conversation service", "error", err)
+		os.Exit(1)
+	}
+	supervisor, err := appbootstrap.BuildSupervisor(ctx, cfg, logger)
+	if err != nil {
+		logger.Error("failed to configure supervisor", "error", err)
 		os.Exit(1)
 	}
 	var (
@@ -81,6 +98,26 @@ func main() {
 		messengerReason   string
 		depositSender     conversation.DepositSender
 	)
+	var convStore *conversation.ConversationStore
+	if cfg.PersistConversationHistory {
+		convStore = conversation.NewConversationStore(sqlDB)
+	}
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisOptions := &redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+		}
+		if cfg.RedisTLS {
+			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		redisClient = redis.NewClient(redisOptions)
+		if err := redisClient.Ping(ctx).Err(); err != nil {
+			logger.Warn("redis not available", "error", err)
+			redisClient = nil
+		}
+	}
+	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
 	messengerCfg := messaging.ProviderSelectionConfig{
 		Preference:       cfg.SMSProvider,
 		TelnyxAPIKey:     cfg.TelnyxAPIKey,
@@ -95,6 +132,21 @@ func main() {
 			"provider", messengerProvider,
 			"preference", cfg.SMSProvider,
 		)
+		messenger = messaging.WrapWithDemoMode(messenger, messaging.DemoModeConfig{
+			Enabled: cfg.DemoMode,
+			Prefix:  cfg.DemoModePrefix,
+			Suffix:  cfg.DemoModeSuffix,
+			Logger:  logger,
+		})
+		messenger = messaging.WrapWithDisclaimers(messenger, messaging.DisclaimerWrapperConfig{
+			Enabled:           cfg.DisclaimerEnabled,
+			Level:             cfg.DisclaimerLevel,
+			FirstMessageOnly:  cfg.DisclaimerFirstOnly,
+			Logger:            logger,
+			Audit:             auditSvc,
+			ConversationStore: convStore,
+			TranscriptStore:   smsTranscript,
+		})
 	} else {
 		logger.Warn("sms replies disabled for async workers",
 			"preference", cfg.SMSProvider,
@@ -140,26 +192,10 @@ func main() {
 		}
 		if squareSvc != nil {
 			outbox := events.NewOutboxStore(dbPool)
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, leadsRepo, nil, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outbox, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
 			logger.Info("deposit sender initialized for async workers", "has_oauth", oauthSvc != nil, "square_location_id", cfg.SquareLocationID)
 		} else {
 			logger.Warn("deposit sender NOT initialized for async workers", "has_square_token", cfg.SquareAccessToken != "", "has_oauth", oauthSvc != nil)
-		}
-	}
-
-	var redisClient *redis.Client
-	if cfg.RedisAddr != "" {
-		redisOptions := &redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-		}
-		if cfg.RedisTLS {
-			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		}
-		redisClient = redis.NewClient(redisOptions)
-		if err := redisClient.Ping(ctx).Err(); err != nil {
-			logger.Warn("redis not available", "error", err)
-			redisClient = nil
 		}
 	}
 
@@ -238,6 +274,10 @@ func main() {
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 		conversation.WithOptOutChecker(msgStore),
+		conversation.WithSMSTranscriptStore(smsTranscript),
+		conversation.WithConversationStore(convStore),
+		conversation.WithSupervisor(supervisor),
+		conversation.WithSupervisorMode(conversation.ParseSupervisorMode(cfg.SupervisorMode)),
 	)
 
 	worker.Start(ctx)

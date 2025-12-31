@@ -346,6 +346,70 @@ func TestTierA_CI13_HIPAA_PHIDeflection_NoLeadDiagnosisUpdates(t *testing.T) {
 	if updated.ServiceInterest != "" || updated.PatientType != "" {
 		t.Fatalf("expected lead profile not updated with PHI, got %#v", updated)
 	}
+	raw, err := mr.DB(0).Get(conversationKey(start.ConversationID))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	var history []ChatMessage
+	if err := json.Unmarshal([]byte(raw), &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	foundRedacted := false
+	for _, msg := range history {
+		if msg.Role == ChatRoleUser && msg.Content == "[REDACTED]" {
+			foundRedacted = true
+		}
+		if strings.Contains(strings.ToLower(msg.Content), "diabetes") {
+			t.Fatalf("expected PHI to be redacted from history, got %q", msg.Content)
+		}
+	}
+	if !foundRedacted {
+		t.Fatalf("expected redacted PHI entry in history")
+	}
+}
+
+func TestLLMService_StartConversation_RedactsPHI(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockLLM := &stubLLMClient{response: LLMResponse{Text: "Hello"}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
+
+	resp, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-phi-start",
+		LeadID:         "lead-1",
+		OrgID:          "org-1",
+		Intro:          "I have diabetes and need advice",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(resp.Message), "can't provide medical advice") {
+		t.Fatalf("expected PHI deflection reply, got %q", resp.Message)
+	}
+	if len(mockLLM.requests) != 0 {
+		t.Fatalf("expected no LLM calls for PHI intro, got %d", len(mockLLM.requests))
+	}
+
+	raw, err := mr.DB(0).Get(conversationKey(resp.ConversationID))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	var history []ChatMessage
+	if err := json.Unmarshal([]byte(raw), &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if !strings.Contains(raw, "[REDACTED]") {
+		t.Fatalf("expected redacted PHI in history")
+	}
+	for _, msg := range history {
+		if strings.Contains(strings.ToLower(msg.Content), "diabetes") {
+			t.Fatalf("expected PHI to be redacted from history, got %q", msg.Content)
+		}
+	}
 }
 
 func TestLLMService_StartConversation_PersistsHistory(t *testing.T) {
