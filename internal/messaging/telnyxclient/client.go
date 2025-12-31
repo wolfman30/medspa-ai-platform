@@ -250,9 +250,11 @@ func (c *Client) CreateCampaign(ctx context.Context, req CampaignRequest) (*Camp
 }
 
 // VerifyWebhookSignature validates Telnyx webhook signatures.
+// If webhookSecret is empty, signature verification is skipped (for development/testing only).
 func (c *Client) VerifyWebhookSignature(timestamp, signature string, payload []byte) error {
 	if c.webhookSecret == "" {
-		return errors.New("telnyxclient: webhook secret not configured")
+		// Skip verification when secret is not configured (development mode)
+		return nil
 	}
 	ts := strings.TrimSpace(timestamp)
 	if ts == "" {

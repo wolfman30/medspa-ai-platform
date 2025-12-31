@@ -77,6 +77,30 @@ def fail_on_latency() -> bool:
     return (os.getenv("E2E_FAIL_ON_AI_LATENCY", "") or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def step_delay_seconds() -> float:
+    raw = (os.getenv("E2E_STEP_DELAY_SECONDS") or "").strip()
+    if raw:
+        try:
+            return float(raw)
+        except ValueError:
+            raise RuntimeError(f"Invalid E2E_STEP_DELAY_SECONDS: {raw!r}")
+    raw_ms = (os.getenv("E2E_STEP_DELAY_MS") or "").strip()
+    if raw_ms:
+        try:
+            return float(raw_ms) / 1000.0
+        except ValueError:
+            raise RuntimeError(f"Invalid E2E_STEP_DELAY_MS: {raw_ms!r}")
+    return 0.0
+
+
+def pace(label: str) -> None:
+    delay = step_delay_seconds()
+    if delay <= 0:
+        return
+    print(f"ℹ️  pacing {label}: sleeping {delay:.1f}s", file=sys.stderr)
+    time.sleep(delay)
+
+
 @dataclass(frozen=True)
 class TranscriptMessage:
     id: str
@@ -266,6 +290,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     start_ids = [m.id for m in msgs if m.id]
 
     # 1) First-contact ack only once (when configured)
+    pace("first_contact_1")
     base.send_telnyx_sms_webhook(
         "Hi - quick question",
         telnyx_message_id=f"msg_ci_first_{run_tag}",
@@ -289,6 +314,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids_after_first = [m.id for m in msgs if m.id]
 
+    pace("first_contact_2")
     base.send_telnyx_sms_webhook(
         "Following up",
         telnyx_message_id=f"msg_ci_second_{run_tag}",
@@ -310,6 +336,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     # 2) HELP
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
+    pace("help")
     base.send_telnyx_sms_webhook(
         "HELP",
         telnyx_message_id=f"msg_help_{run_tag}",
@@ -323,6 +350,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     # 3) STOP, then opt-out suppression
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
+    pace("stop")
     base.send_telnyx_sms_webhook(
         "STOP",
         telnyx_message_id=f"msg_stop_{run_tag}",
@@ -335,6 +363,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
 
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
+    pace("after_stop")
     base.send_telnyx_sms_webhook(
         "Are you still there?",
         telnyx_message_id=f"msg_after_stop_{run_tag}",
@@ -345,6 +374,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     # 4) START (or demo YES)
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
+    pace("start")
     base.send_telnyx_sms_webhook(
         "START",
         telnyx_message_id=f"msg_start_{run_tag}",
@@ -359,6 +389,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     if demo_mode:
         _, msgs = get_sms_transcript(api_url, org_id, customer, token)
         ids = [m.id for m in msgs if m.id]
+        pace("demo_stop")
         base.send_telnyx_sms_webhook(
             "STOP",
             telnyx_message_id=f"msg_stop_2_{run_tag}",
@@ -368,6 +399,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
 
         _, msgs = get_sms_transcript(api_url, org_id, customer, token)
         ids = [m.id for m in msgs if m.id]
+        pace("demo_yes")
         base.send_telnyx_sms_webhook(
             "YES",
             telnyx_message_id=f"msg_yes_{run_tag}",
@@ -384,6 +416,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     purge_phone(api_url, org_id, customer, token)
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
+    pace("pci_guardrail")
     base.send_telnyx_sms_webhook(
         "My card is 4111 1111 1111 1111",
         telnyx_message_id=f"msg_pan_{run_tag}",
@@ -402,6 +435,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
     dup_id = f"msg_dup_{run_tag}"
+    pace("idempotency_1")
     base.send_telnyx_sms_webhook("Hello once", telnyx_message_id=dup_id, event_id=f"evt_dup_1_{run_tag}")
     _ = wait_for_new_message(
         api_url,
@@ -416,6 +450,7 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     _ = wait_for_new_message(api_url, org_id, customer, token, since_ids=ids, kind="ai_reply", timeout_s=120.0)
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids2 = [m.id for m in msgs if m.id]
+    pace("idempotency_2")
     base.send_telnyx_sms_webhook("Hello once", telnyx_message_id=dup_id, event_id=f"evt_dup_2_{run_tag}")
     # Expect no new assistant messages (dedup should short-circuit early)
     assert_no_new_assistant_messages(api_url, org_id, customer, token, since_ids=ids2, timeout_s=6.0)
@@ -456,6 +491,7 @@ def run_happy_path(api_url: str, token: str, *, artifacts_dir: Path) -> Dict[str
     # Missed call -> immediate ack
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
+    pace("voice_ack")
     if not base.send_telnyx_voice_webhook(event_id=f"evt_voice_1_{run_tag}", call_id=f"call_voice_1_{run_tag}"):
         raise RuntimeError("Voice webhook failed")
     _ = wait_for_new_message(api_url, org_id, customer, token, since_ids=ids, kind="voice_ack", timeout_s=20.0)
@@ -464,6 +500,7 @@ def run_happy_path(api_url: str, token: str, *, artifacts_dir: Path) -> Dict[str
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
     t0 = time.time()
+    pace("sms_1")
     base.send_telnyx_sms_webhook(
         "Hi, I want to book Botox for weekday afternoons",
         telnyx_message_id=f"msg_hp_1_{run_tag}",
@@ -485,6 +522,7 @@ def run_happy_path(api_url: str, token: str, *, artifacts_dir: Path) -> Dict[str
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
     t0 = time.time()
+    pace("sms_2")
     base.send_telnyx_sms_webhook(
         "Yes, I'm a new patient. What times do you have available?",
         telnyx_message_id=f"msg_hp_2_{run_tag}",
@@ -506,6 +544,7 @@ def run_happy_path(api_url: str, token: str, *, artifacts_dir: Path) -> Dict[str
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]
     t0 = time.time()
+    pace("sms_3")
     base.send_telnyx_sms_webhook(
         "Friday at 3pm works great. Yes, I'll pay the deposit to secure my appointment.",
         telnyx_message_id=f"msg_hp_3_{run_tag}",

@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 	"go.opentelemetry.io/otel"
@@ -124,6 +125,7 @@ WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 - "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
 - "Let me get your preferred times and the clinic will reach out with available options that match."`
 	maxHistoryMessages = 24
+	phiDeflectionReply = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 )
 
 var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
@@ -220,6 +222,13 @@ func WithClinicStore(store *clinic.Store) LLMOption {
 	}
 }
 
+// WithAuditService configures compliance audit logging.
+func WithAuditService(audit *compliance.AuditService) LLMOption {
+	return func(s *LLMService) {
+		s.audit = audit
+	}
+}
+
 // PaymentStatusChecker checks if a lead has an open or completed deposit.
 type PaymentStatusChecker interface {
 	HasOpenDeposit(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID) (bool, error)
@@ -250,6 +259,7 @@ type LLMService struct {
 	deposit        depositConfig
 	leadsRepo      leads.Repository
 	clinicStore    *clinic.Store
+	audit          *compliance.AuditService
 	paymentChecker PaymentStatusChecker
 }
 
@@ -293,6 +303,14 @@ func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever
 
 // StartConversation opens a new thread, generates the first assistant response, and persists context.
 func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
+	redactedIntro, sawPHI := RedactPHI(req.Intro)
+	s.logger.Info("StartConversation called",
+		"conversation_id", req.ConversationID,
+		"org_id", req.OrgID,
+		"intro", redactedIntro,
+		"source", req.Source,
+	)
+
 	ctx, span := llmTracer.Start(ctx, "conversation.start")
 	defer span.End()
 
@@ -309,6 +327,36 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		attribute.String("medspa.conversation_id", conversationID),
 		attribute.String("medspa.channel", string(req.Channel)),
 	)
+
+	if sawPHI {
+		safeReq := req
+		safeReq.Intro = redactedIntro
+		history := []ChatMessage{
+			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+		}
+		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+		history = append(history, ChatMessage{
+			Role:    ChatRoleUser,
+			Content: formatIntroMessage(safeReq, conversationID),
+		})
+		history = append(history, ChatMessage{
+			Role:    ChatRoleAssistant,
+			Content: phiDeflectionReply,
+		})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, conversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+			_ = s.audit.LogPHIDetected(ctx, req.OrgID, conversationID, req.LeadID, req.Intro, "keyword")
+		}
+		return &Response{
+			ConversationID: conversationID,
+			Message:        phiDeflectionReply,
+			Timestamp:      time.Now().UTC(),
+		}, nil
+	}
 
 	history := []ChatMessage{
 		{Role: ChatRoleSystem, Content: defaultSystemPrompt},
@@ -349,6 +397,16 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return nil, errors.New("conversation: conversationID required")
 	}
 
+	rawMessage := req.Message
+	redactedMessage, sawPHI := RedactPHI(rawMessage)
+
+	s.logger.Info("ProcessMessage called",
+		"conversation_id", req.ConversationID,
+		"org_id", req.OrgID,
+		"lead_id", req.LeadID,
+		"message", redactedMessage,
+	)
+
 	ctx, span := llmTracer.Start(ctx, "conversation.message")
 	defer span.End()
 	span.SetAttributes(
@@ -361,12 +419,50 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if err != nil {
 		// If conversation doesn't exist, start a new one
 		if strings.Contains(err.Error(), "unknown conversation") {
+			s.logger.Info("ProcessMessage: conversation not found, starting new",
+				"conversation_id", req.ConversationID,
+				"message", redactedMessage,
+			)
+			if sawPHI {
+				safeStart := StartRequest{
+					OrgID:          req.OrgID,
+					ConversationID: req.ConversationID,
+					LeadID:         req.LeadID,
+					ClinicID:       req.ClinicID,
+					Intro:          redactedMessage,
+					Channel:        req.Channel,
+					From:           req.From,
+					To:             req.To,
+					Metadata:       req.Metadata,
+				}
+				history := []ChatMessage{
+					{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+				}
+				history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+				history = append(history, ChatMessage{
+					Role:    ChatRoleUser,
+					Content: formatIntroMessage(safeStart, req.ConversationID),
+				})
+				history = append(history, ChatMessage{
+					Role:    ChatRoleAssistant,
+					Content: phiDeflectionReply,
+				})
+				history = trimHistory(history, maxHistoryMessages)
+				if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+					span.RecordError(err)
+					return nil, err
+				}
+				if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+					_ = s.audit.LogPHIDetected(ctx, req.OrgID, req.ConversationID, req.LeadID, rawMessage, "keyword")
+				}
+				return &Response{ConversationID: req.ConversationID, Message: phiDeflectionReply, Timestamp: time.Now().UTC()}, nil
+			}
 			return s.StartConversation(ctx, StartRequest{
 				OrgID:          req.OrgID,
 				ConversationID: req.ConversationID,
 				LeadID:         req.LeadID,
 				ClinicID:       req.ClinicID,
-				Intro:          req.Message,
+				Intro:          rawMessage,
 				Channel:        req.Channel,
 				From:           req.From,
 				To:             req.To,
@@ -377,10 +473,33 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return nil, err
 	}
 
-	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Message)
+	s.logger.Info("ProcessMessage: history loaded",
+		"conversation_id", req.ConversationID,
+		"history_length", len(history),
+	)
+
+	if sawPHI {
+		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+		history = append(history, ChatMessage{
+			Role:    ChatRoleUser,
+			Content: redactedMessage,
+		})
+		history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: phiDeflectionReply})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+			_ = s.audit.LogPHIDetected(ctx, req.OrgID, req.ConversationID, req.LeadID, rawMessage, "keyword")
+		}
+		return &Response{ConversationID: req.ConversationID, Message: phiDeflectionReply, Timestamp: time.Now().UTC()}, nil
+	}
+
+	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, rawMessage)
 	history = append(history, ChatMessage{
 		Role:    ChatRoleUser,
-		Content: req.Message,
+		Content: rawMessage,
 	})
 
 	// Deterministic guardrails (avoid the LLM for sensitive or highly structured requests).
@@ -390,18 +509,8 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			cfg = loaded
 		}
 	}
-	if detectPHI(req.Message) {
-		reply := "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
-		history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: reply})
-		history = trimHistory(history, maxHistoryMessages)
-		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
-			span.RecordError(err)
-			return nil, err
-		}
-		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
-	}
-	if cfg != nil && isPriceInquiry(req.Message) {
-		service := detectServiceKey(req.Message, cfg)
+	if cfg != nil && isPriceInquiry(rawMessage) {
+		service := detectServiceKey(rawMessage, cfg)
 		if service != "" {
 			if price, ok := cfg.PriceTextForService(service); ok {
 				depositCents := cfg.DepositAmountForService(service)
@@ -420,7 +529,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			}
 		}
 	}
-	if isAmbiguousHelp(req.Message) {
+	if isAmbiguousHelp(rawMessage) {
 		reply := "Happy to help. Are you looking to book an appointment, or do you have a question about a specific service (Botox, fillers, facials, lasers)?"
 		s.appendLeadNote(ctx, req.OrgID, req.LeadID, "state:needs_intent")
 

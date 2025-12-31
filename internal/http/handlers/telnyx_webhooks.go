@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -32,6 +33,11 @@ type processedTracker interface {
 	MarkProcessed(ctx context.Context, provider, eventID string) (bool, error)
 }
 
+type conversationStore interface {
+	AppendMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) error
+	LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error
+}
+
 var errClinicNotFound = errors.New("clinic not found")
 
 // TelnyxWebhookHandler handles inbound Telnyx webhooks for messaging and hosted orders.
@@ -43,6 +49,7 @@ type TelnyxWebhookHandler struct {
 	leads            leads.Repository
 	logger           *logging.Logger
 	transcript       *conversation.SMSTranscriptStore
+	convStore        conversationStore
 	messagingProfile string
 	stopAck          string
 	helpAck          string
@@ -56,22 +63,23 @@ type TelnyxWebhookHandler struct {
 }
 
 type TelnyxWebhookConfig struct {
-	Store            messagingStore
-	Processed        processedTracker
-	Telnyx           telnyxClient
-	Conversation     conversationPublisher
-	Leads            leads.Repository
-	Logger           *logging.Logger
-	Transcript       *conversation.SMSTranscriptStore
-	MessagingProfile string
-	StopAck          string
-	HelpAck          string
-	StartAck         string
-	FirstContactAck  string
-	VoiceAck         string
-	DemoMode         bool
-	TrackJobs        bool
-	Metrics          *observemetrics.MessagingMetrics
+	Store             messagingStore
+	Processed         processedTracker
+	Telnyx            telnyxClient
+	Conversation      conversationPublisher
+	Leads             leads.Repository
+	Logger            *logging.Logger
+	Transcript        *conversation.SMSTranscriptStore
+	ConversationStore conversationStore
+	MessagingProfile  string
+	StopAck           string
+	HelpAck           string
+	StartAck          string
+	FirstContactAck   string
+	VoiceAck          string
+	DemoMode          bool
+	TrackJobs         bool
+	Metrics           *observemetrics.MessagingMetrics
 }
 
 func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
@@ -86,6 +94,7 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		leads:            cfg.Leads,
 		logger:           cfg.Logger,
 		transcript:       cfg.Transcript,
+		convStore:        cfg.ConversationStore,
 		messagingProfile: cfg.MessagingProfile,
 		stopAck:          defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
 		helpAck:          defaultString(cfg.HelpAck, "Reply STOP to opt out or contact support@medspa.ai."),
@@ -100,11 +109,37 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 }
 
 func (h *TelnyxWebhookHandler) appendTranscript(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) {
-	if h == nil || h.transcript == nil {
+	if h == nil {
 		return
 	}
-	if err := h.transcript.Append(ctx, conversationID, msg); err != nil {
-		h.logger.Warn("failed to append sms transcript", "error", err, "conversation_id", conversationID)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if h.transcript != nil {
+		if err := h.transcript.Append(ctx, conversationID, msg); err != nil {
+			h.logger.Warn("failed to append sms transcript", "error", err, "conversation_id", conversationID)
+		}
+	}
+	if h.convStore != nil {
+		if err := h.convStore.AppendMessage(ctx, conversationID, msg); err != nil {
+			h.logger.Warn("failed to persist sms transcript", "error", err, "conversation_id", conversationID)
+		}
+	}
+}
+
+func (h *TelnyxWebhookHandler) linkLead(ctx context.Context, conversationID, leadID string) {
+	if h == nil || h.convStore == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	leadUUID, err := uuid.Parse(strings.TrimSpace(leadID))
+	if err != nil {
+		return
+	}
+	if err := h.convStore.LinkLead(ctx, conversationID, leadUUID); err != nil {
+		h.logger.Warn("failed to link lead to conversation", "error", err, "conversation_id", conversationID, "lead_id", leadID)
 	}
 }
 
@@ -255,13 +290,28 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	if err := json.Unmarshal(evt.Payload, &payload); err != nil {
 		return fmt.Errorf("decode inbound payload: %w", err)
 	}
-	// Idempotency: Telnyx may retry webhook delivery. Dedupe by provider message ID when present.
-	if h.processed != nil && strings.TrimSpace(payload.ID) != "" {
-		processed, err := h.processed.AlreadyProcessed(ctx, "telnyx.message_id", payload.ID)
+	// Idempotency: Telnyx may retry webhook delivery. Dedupe by message ID.
+	// Use MessageID (the actual message identifier) if available, falling back to ID (event ID).
+	// This ensures retries of the same message are deduplicated correctly.
+	dedupeID := strings.TrimSpace(payload.MessageID)
+	if dedupeID == "" {
+		dedupeID = strings.TrimSpace(payload.ID)
+	}
+	h.logger.Info("telnyx inbound dedupe check",
+		"event_id", evt.ID,
+		"payload_id", payload.ID,
+		"message_id", payload.MessageID,
+		"dedupe_id", dedupeID,
+		"direction", payload.Direction,
+		"from", payload.FromNumber(),
+	)
+	if h.processed != nil && dedupeID != "" {
+		already, err := h.processed.AlreadyProcessed(ctx, "telnyx.message_id", dedupeID)
 		if err != nil {
 			return fmt.Errorf("processed lookup failed: %w", err)
 		}
-		if processed {
+		if already {
+			h.logger.Info("telnyx inbound dedupe: already processed", "dedupe_id", dedupeID)
 			return nil
 		}
 	}
@@ -292,20 +342,25 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	media := payload.MediaURLs
 
 	// Redact PCI card data from anything we persist or propagate.
-	body := payload.Text
-	body, sawPAN := compliance.RedactPAN(body)
+	rawBody := payload.Text
+	panRedacted, sawPAN := compliance.RedactPAN(rawBody)
+	storageBody, _ := conversation.RedactPHI(panRedacted)
 	msgRecord := messaging.MessageRecord{
 		ClinicID:          clinicID,
 		From:              from,
 		To:                to,
 		Direction:         "inbound",
-		Body:              body,
+		Body:              storageBody,
 		Media:             media,
 		ProviderStatus:    payload.Status,
 		ProviderMessageID: payload.ID,
 	}
 	msgID, err := h.store.InsertMessage(ctx, tx, msgRecord)
 	if err != nil {
+		if isDuplicateProviderMessage(err) {
+			h.logger.Info("telnyx inbound duplicate message ignored", "provider_message_id", payload.ID)
+			return nil
+		}
 		return fmt.Errorf("insert inbound message: %w", err)
 	}
 	received := events.MessageReceivedV1{
@@ -313,7 +368,7 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		ClinicID:      clinicID.String(),
 		FromE164:      from,
 		ToE164:        to,
-		Body:          body,
+		Body:          storageBody,
 		MediaURLs:     media,
 		Provider:      "telnyx",
 		ReceivedAt:    evt.OccurredAt,
@@ -354,21 +409,20 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit inbound tx: %w", err)
 	}
-	if h.processed != nil && strings.TrimSpace(payload.ID) != "" {
-		if _, err := h.processed.MarkProcessed(ctx, "telnyx.message_id", payload.ID); err != nil {
-			h.logger.Error("failed to mark telnyx message processed", "error", err, "telnyx_message_id", payload.ID)
-		}
-	}
+	// Note: MarkProcessed is now called atomically at the start of handleInbound
+	// to prevent race conditions with concurrent duplicate webhooks.
 	if h.metrics != nil {
 		h.metrics.ObserveInbound(evt.EventType, payload.Status)
 	}
 
 	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
-		Role: "user",
-		From: from,
-		To:   to,
-		Body: body,
-		Kind: "inbound",
+		ID:        msgID.String(),
+		Role:      "user",
+		From:      from,
+		To:        to,
+		Body:      storageBody,
+		Timestamp: evt.OccurredAt,
+		Kind:      "inbound",
 	})
 
 	if stop {
@@ -400,7 +454,6 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		h.sendAutoReply(context.Background(), to, from, h.startAck)
 	} else if unsubscribed {
 		// TCPA/A2P compliance: do not send messages when opted out.
-		return nil
 	} else if sawPAN {
 		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
 			Role: "assistant",
@@ -425,9 +478,28 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 			Kind: ackKind,
 		})
 		h.sendAutoReply(context.Background(), to, from, ack)
-		h.dispatchConversation(context.Background(), evt, payload, clinicID, conversationID, body)
+		h.dispatchConversation(context.Background(), evt, payload, clinicID, conversationID, panRedacted)
+	}
+	if h.processed != nil && dedupeID != "" {
+		if _, err := h.processed.MarkProcessed(ctx, "telnyx.message_id", dedupeID); err != nil {
+			h.logger.Warn("telnyx inbound dedupe mark failed", "error", err, "dedupe_id", dedupeID)
+		}
 	}
 	return nil
+}
+
+func isDuplicateProviderMessage(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	if pgErr.Code != "23505" {
+		return false
+	}
+	if strings.TrimSpace(pgErr.ConstraintName) == "" {
+		return true
+	}
+	return strings.Contains(pgErr.ConstraintName, "provider_message")
 }
 
 func (h *TelnyxWebhookHandler) handleDeliveryStatus(ctx context.Context, evt telnyxEvent) error {
@@ -603,33 +675,50 @@ type telnyxDeliveryPayload struct {
 }
 
 type telnyxCallPayload struct {
-	ID          string `json:"id"`
-	Status      string `json:"status"`
-	HangupCause string `json:"hangup_cause"`
-	From        struct {
-		PhoneNumber string `json:"phone_number"`
-	} `json:"from"`
-	To []struct {
-		PhoneNumber string `json:"phone_number"`
-	} `json:"to"`
-	FromNumberRaw string `json:"from_number"`
-	ToNumberRaw   string `json:"to_number"`
+	ID            string          `json:"id"`
+	Status        string          `json:"status"`
+	HangupCause   string          `json:"hangup_cause"`
+	FromRaw       json.RawMessage `json:"from"`
+	ToRaw         json.RawMessage `json:"to"`
+	FromNumberRaw string          `json:"from_number"`
+	ToNumberRaw   string          `json:"to_number"`
 }
 
 func (p telnyxCallPayload) FromNumber() string {
-	if v := strings.TrimSpace(p.From.PhoneNumber); v != "" {
+	if v := strings.TrimSpace(parseTelnyxPhone(p.FromRaw)); v != "" {
 		return v
 	}
 	return strings.TrimSpace(p.FromNumberRaw)
 }
 
 func (p telnyxCallPayload) ToNumber() string {
-	if len(p.To) > 0 {
-		if v := strings.TrimSpace(p.To[0].PhoneNumber); v != "" {
-			return v
-		}
+	if v := strings.TrimSpace(parseTelnyxPhone(p.ToRaw)); v != "" {
+		return v
 	}
 	return strings.TrimSpace(p.ToNumberRaw)
+}
+
+func parseTelnyxPhone(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var obj struct {
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		return obj.PhoneNumber
+	}
+	var arr []struct {
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.Unmarshal(raw, &arr); err == nil && len(arr) > 0 {
+		return arr[0].PhoneNumber
+	}
+	return ""
 }
 
 type telnyxHostedPayload struct {
@@ -661,6 +750,7 @@ func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt tel
 			leadID = lead.ID
 		}
 	}
+	h.linkLead(ctx, conversationID, leadID)
 	req := conversation.MessageRequest{
 		OrgID:          orgID,
 		LeadID:         leadID,
@@ -763,7 +853,8 @@ func isTelnyxMissedCall(eventType, status, hangup string) bool {
 		return true
 	}
 	switch hangup {
-	case "no-answer", "no_answer", "busy", "cancel", "canceled", "timeout", "declined":
+	case "no-answer", "no_answer", "busy", "cancel", "canceled", "timeout", "declined",
+		"originator_cancel", "originator-cancel": // caller hung up before answer
 		return true
 	}
 	et := strings.ToLower(eventType)

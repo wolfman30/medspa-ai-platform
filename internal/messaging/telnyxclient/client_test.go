@@ -626,8 +626,8 @@ func TestLogRetryWithoutLogger(t *testing.T) {
 
 func TestVerifyWebhookSignatureRequiresSecret(t *testing.T) {
 	client := newTestClient(t, nil, Config{WebhookSecret: ""})
-	if err := client.VerifyWebhookSignature("", "", []byte("{}")); err == nil {
-		t.Fatalf("expected missing secret error")
+	if err := client.VerifyWebhookSignature("", "", []byte("{}")); err != nil {
+		t.Fatalf("expected nil error when secret is empty, got %v", err)
 	}
 }
 

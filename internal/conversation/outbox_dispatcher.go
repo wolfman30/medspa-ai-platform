@@ -20,30 +20,12 @@ func NewOutboxDispatcher(publisher *Publisher) *OutboxDispatcher {
 func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry) error {
 	switch entry.EventType {
 	case "messaging.message.received.v1":
-		// Unwrap the nested payload structure
-		var wrapper struct {
-			Payload       events.MessageReceivedV1 `json:"payload"`
-			CorrelationID string                   `json:"correlation_id"`
-		}
-		if err := json.Unmarshal(entry.Payload, &wrapper); err != nil {
-			return fmt.Errorf("conversation: decode message event: %w", err)
-		}
-		evt := wrapper.Payload
-		correlationID := wrapper.CorrelationID
-		if correlationID == "" {
-			correlationID = evt.CorrelationID
-		}
-		req := MessageRequest{
-			OrgID:          evt.ClinicID,
-			LeadID:         fmt.Sprintf("%s:%s", evt.ClinicID, evt.FromE164),
-			ConversationID: fmt.Sprintf("sms:%s:%s", evt.ClinicID, evt.FromE164),
-			ClinicID:       evt.ClinicID,
-			From:           evt.FromE164,
-			To:             evt.ToE164,
-			Message:        evt.Body,
-			Channel:        ChannelSMS,
-		}
-		return d.publisher.EnqueueMessage(ctx, correlationID, req)
+		// IMPORTANT: Telnyx webhooks already enqueue conversation jobs directly via dispatchConversation.
+		// Processing this event here would cause DUPLICATE AI responses.
+		// This event is written to the outbox for audit/observability purposes only.
+		// If we ever need outbox-driven message processing (e.g., for a different provider),
+		// we should add a separate event type or use a flag to distinguish.
+		return nil
 	case "payment_succeeded.v1":
 		var evt events.PaymentSucceededV1
 		if err := json.Unmarshal(entry.Payload, &evt); err != nil {

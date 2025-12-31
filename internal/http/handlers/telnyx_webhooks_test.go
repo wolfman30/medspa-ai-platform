@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	pgxmock "github.com/pashagolub/pgxmock/v4"
+	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -136,6 +139,58 @@ func TestTelnyxInboundEnqueuesConversation(t *testing.T) {
 	}
 	if conv.last.Metadata["telnyx_message_id"] != "msg_inbound" {
 		t.Fatalf("expected telnyx metadata to propagate")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestTelnyxInboundDuplicateProviderMessageIsIgnored(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+	defer mock.Close()
+	store := messaging.NewStore(mock)
+	conv := &stubConversationPublisher{}
+	telnyxStub := &testTelnyxClient{}
+	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
+		Store:            store,
+		Processed:        &stubProcessedTracker{},
+		Telnyx:           telnyxStub,
+		Conversation:     conv,
+		Logger:           logging.Default(),
+		MessagingProfile: "profile",
+	})
+
+	clinicID := uuid.New()
+	mock.ExpectQuery("SELECT clinic_id").
+		WithArgs("+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"clinic_id"}).AddRow(clinicID))
+	mock.ExpectQuery("SELECT 1 FROM messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888").
+		WillReturnRows(pgxmock.NewRows([]string{"exists"}))
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO messages").
+		WithArgs(clinicID, "+15550001111", "+15559998888", "inbound", "Need info", pgxmock.AnyArg(), "received", "msg_inbound", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "idx_messages_provider_message"})
+	mock.ExpectRollback()
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(loadFixture(t, "telnyx_inbound_message.json")))
+	req.Header.Set("Telnyx-Timestamp", "123")
+	req.Header.Set("Telnyx-Signature", "abc")
+	rec := httptest.NewRecorder()
+
+	handler.HandleMessages(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if conv.calls != 0 {
+		t.Fatalf("expected conversation not to be enqueued on duplicate, got %d", conv.calls)
+	}
+	if telnyxStub.lastSendReq != nil {
+		t.Fatalf("expected no auto reply on duplicate")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
@@ -531,6 +586,30 @@ func TestTelnyxHelpAutoReply(t *testing.T) {
 		t.Fatalf("expectations: %v", err)
 	}
 }
+
+func TestTelnyxAppendTranscriptPersistsToConversationStore(t *testing.T) {
+	store := &stubConversationStore{}
+	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
+		Logger:            logging.Default(),
+		ConversationStore: store,
+	})
+
+	handler.appendTranscript(context.Background(), "sms:org-1:15551234567", conversation.SMSTranscriptMessage{
+		Role: "user",
+		Body: "Hello",
+	})
+
+	if !store.appended {
+		t.Fatalf("expected conversation store append to be called")
+	}
+	if store.lastID != "sms:org-1:15551234567" {
+		t.Fatalf("unexpected conversation id: %s", store.lastID)
+	}
+	if store.lastMsg.Role != "user" || store.lastMsg.Body != "Hello" {
+		t.Fatalf("unexpected transcript message: %#v", store.lastMsg)
+	}
+}
+
 func loadFixture(t *testing.T, name string) []byte {
 	t.Helper()
 	path := filepath.Join("testdata", name)

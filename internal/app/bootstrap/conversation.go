@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/aesthetic"
@@ -21,7 +22,7 @@ import (
 )
 
 // BuildConversationService wires Redis-backed LLM conversation services from config.
-func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsRepo leads.Repository, paymentChecker conversation.PaymentStatusChecker, logger *logging.Logger) (conversation.Service, error) {
+func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsRepo leads.Repository, paymentChecker conversation.PaymentStatusChecker, audit *compliance.AuditService, logger *logging.Logger) (conversation.Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("bootstrap: config is required")
 	}
@@ -93,18 +94,73 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	opts = append(opts, conversation.WithClinicStore(clinicStore))
 	logger.Info("clinic config store wired into conversation service")
 
+	if audit != nil {
+		opts = append(opts, conversation.WithAuditService(audit))
+	}
+
 	// Wire in payment checker for deposit status awareness
 	if paymentChecker != nil {
 		opts = append(opts, conversation.WithPaymentChecker(paymentChecker))
 		logger.Info("payment checker wired into conversation service")
 	}
 
-	logger.Info("using LLM conversation service", "model", cfg.BedrockModelID, "redis", cfg.RedisAddr)
+	// Build primary LLM client based on provider configuration
+	var primaryClient conversation.LLMClient
+	var modelID string
+
+	switch cfg.LLMProvider {
+	case "gemini":
+		if cfg.GeminiAPIKey == "" {
+			return nil, fmt.Errorf("bootstrap: GEMINI_API_KEY required when LLM_PROVIDER=gemini")
+		}
+		geminiClient, err := conversation.NewGeminiLLMClient(ctx, cfg.GeminiAPIKey, cfg.GeminiModelID)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: create gemini client: %w", err)
+		}
+		primaryClient = geminiClient
+		modelID = cfg.GeminiModelID
+		logger.Info("using Gemini as primary LLM provider", "model", modelID)
+	default: // "bedrock" or empty
+		primaryClient = conversation.NewBedrockLLMClient(bedrockClient)
+		modelID = cfg.BedrockModelID
+		logger.Info("using Bedrock as primary LLM provider", "model", modelID)
+	}
+
+	// Build fallback client if enabled
+	var llmClient conversation.LLMClient = primaryClient
+	if cfg.LLMFallbackEnabled {
+		var fallbackClient conversation.LLMClient
+		switch cfg.LLMFallbackProvider {
+		case "gemini":
+			if cfg.GeminiAPIKey != "" {
+				geminiClient, err := conversation.NewGeminiLLMClient(ctx, cfg.GeminiAPIKey, cfg.GeminiModelID)
+				if err != nil {
+					logger.Warn("failed to create gemini fallback client", "error", err)
+				} else {
+					fallbackClient = geminiClient
+					logger.Info("Gemini fallback LLM enabled", "model", cfg.GeminiModelID)
+				}
+			} else {
+				logger.Warn("LLM fallback enabled but GEMINI_API_KEY not set")
+			}
+		case "bedrock":
+			fallbackClient = conversation.NewBedrockLLMClient(bedrockClient)
+			logger.Info("Bedrock fallback LLM enabled", "model", cfg.BedrockModelID)
+		default:
+			logger.Warn("unknown fallback provider", "provider", cfg.LLMFallbackProvider)
+		}
+
+		if fallbackClient != nil {
+			llmClient = conversation.NewFallbackLLMClient(primaryClient, fallbackClient, logger.Logger)
+		}
+	}
+
+	logger.Info("using LLM conversation service", "model", modelID, "redis", cfg.RedisAddr, "fallback_enabled", cfg.LLMFallbackEnabled)
 	return conversation.NewLLMService(
-		conversation.NewBedrockLLMClient(bedrockClient),
+		llmClient,
 		redisClient,
 		rag,
-		cfg.BedrockModelID,
+		modelID,
 		logger,
 		opts...,
 	), nil

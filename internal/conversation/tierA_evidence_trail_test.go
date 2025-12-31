@@ -57,26 +57,10 @@ func TestTierA_CI20_EvidenceTrailCorrelation_OutboxDispatcher(t *testing.T) {
 		t.Fatalf("dispatcher handle: %v", err)
 	}
 
-	if len(queue.sent) != 1 {
-		t.Fatalf("expected 1 enqueued message, got %d", len(queue.sent))
+	if len(queue.sent) != 0 {
+		t.Fatalf("expected no enqueued messages, got %d", len(queue.sent))
 	}
-	var qp queuePayload
-	if err := json.Unmarshal([]byte(queue.sent[0]), &qp); err != nil {
-		t.Fatalf("decode queued payload: %v", err)
-	}
-	if qp.ID != "corr-123" {
-		t.Fatalf("expected correlation ID used as job id, got %q", qp.ID)
-	}
-	if qp.Kind != jobTypeMessage {
-		t.Fatalf("expected jobTypeMessage, got %q", qp.Kind)
-	}
-	if qp.Message.OrgID != evt.ClinicID || qp.Message.From != evt.FromE164 || qp.Message.To != evt.ToE164 {
-		t.Fatalf("unexpected message mapping: %#v", qp.Message)
-	}
-	if qp.Message.Message != evt.Body {
-		t.Fatalf("expected body propagated, got %q", qp.Message.Message)
-	}
-	if len(jobs.jobs) != 1 || jobs.jobs[0].JobID != "corr-123" {
-		t.Fatalf("expected job record stored with correlation id, got %#v", jobs.jobs)
+	if len(jobs.jobs) != 0 {
+		t.Fatalf("expected no job records, got %#v", jobs.jobs)
 	}
 }

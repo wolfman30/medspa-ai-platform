@@ -170,6 +170,223 @@ func TestWorkerSuppressesRepliesWhenOptedOut(t *testing.T) {
 	}
 }
 
+func TestWorkerSupervisorEditsReply(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &replyService{}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	supervisor := &stubSupervisor{
+		decision: SupervisorDecision{
+			Action:     SupervisorActionEdit,
+			EditedText: "edited reply",
+			Reason:     "tone",
+		},
+	}
+
+	worker := NewWorker(
+		service,
+		queue,
+		store,
+		messenger,
+		nil,
+		logging.Default(),
+		WithWorkerCount(1),
+		WithReceiveBatchSize(1),
+		WithReceiveWaitSeconds(0),
+		WithSupervisor(supervisor),
+		WithSupervisorMode(SupervisorModeEdit),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-msg-edit",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "hi",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-edit",
+		Body:          string(body),
+		ReceiptHandle: "rh-edit",
+	})
+
+	waitFor(func() bool {
+		return messenger.wasCalled()
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if got := messenger.lastReply().Body; got != "edited reply" {
+		t.Fatalf("expected edited reply, got %q", got)
+	}
+	if supervisor.callCount() != 1 {
+		t.Fatalf("expected supervisor to be called once, got %d", supervisor.callCount())
+	}
+}
+
+func TestWorkerSupervisorBlocksReplyAndSkipsDeposit(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &replyService{
+		deposit: &DepositIntent{
+			AmountCents: 5000,
+			SuccessURL:  "http://success",
+			CancelURL:   "http://cancel",
+			Description: "Test deposit",
+		},
+	}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	deposits := &stubDepositSender{}
+	supervisor := &stubSupervisor{
+		decision: SupervisorDecision{
+			Action: SupervisorActionBlock,
+			Reason: "unsafe",
+		},
+	}
+
+	worker := NewWorker(
+		service,
+		queue,
+		store,
+		messenger,
+		nil,
+		logging.Default(),
+		WithWorkerCount(1),
+		WithReceiveBatchSize(1),
+		WithReceiveWaitSeconds(0),
+		WithDepositSender(deposits),
+		WithSupervisor(supervisor),
+		WithSupervisorMode(SupervisorModeBlock),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-msg-block",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "hi",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-block",
+		Body:          string(body),
+		ReceiptHandle: "rh-block",
+	})
+
+	waitFor(func() bool {
+		return messenger.wasCalled()
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if got := messenger.lastReply().Body; got != defaultSupervisorFallback {
+		t.Fatalf("expected fallback reply, got %q", got)
+	}
+	if deposits.called {
+		t.Fatalf("expected deposit to be skipped when supervisor blocks reply")
+	}
+}
+
+func TestWorkerSupervisorWarnsAndAllowsReply(t *testing.T) {
+	queue := newScriptedQueue()
+	service := &replyService{
+		deposit: &DepositIntent{
+			AmountCents: 5000,
+			SuccessURL:  "http://success",
+			CancelURL:   "http://cancel",
+			Description: "Test deposit",
+		},
+	}
+	store := &stubJobUpdater{}
+	messenger := &stubMessenger{}
+	deposits := &stubDepositSender{}
+	supervisor := &stubSupervisor{
+		decision: SupervisorDecision{
+			Action: SupervisorActionBlock,
+			Reason: "unsafe",
+		},
+	}
+
+	worker := NewWorker(
+		service,
+		queue,
+		store,
+		messenger,
+		nil,
+		logging.Default(),
+		WithWorkerCount(1),
+		WithReceiveBatchSize(1),
+		WithReceiveWaitSeconds(0),
+		WithDepositSender(deposits),
+		WithSupervisor(supervisor),
+		WithSupervisorMode(SupervisorModeWarn),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-msg-warn",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Message:        "hi",
+			Channel:        ChannelSMS,
+			From:           "+12223334444",
+			To:             "+15556667777",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-warn",
+		Body:          string(body),
+		ReceiptHandle: "rh-warn",
+	})
+
+	waitFor(func() bool {
+		return messenger.wasCalled() && deposits.called
+	}, time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	if got := messenger.lastReply().Body; got != "auto-reply" {
+		t.Fatalf("expected original reply, got %q", got)
+	}
+	if !deposits.called {
+		t.Fatalf("expected deposit to proceed in warn mode")
+	}
+}
+
 func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	queue := newScriptedQueue()
 	service := &recordingService{}
@@ -752,6 +969,31 @@ func (s *stubOptOutChecker) IsUnsubscribed(ctx context.Context, clinicID uuid.UU
 }
 
 func (s *stubOptOutChecker) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
+}
+
+type stubSupervisor struct {
+	decision SupervisorDecision
+	err      error
+	calls    int
+	lastReq  SupervisorRequest
+	mu       sync.Mutex
+}
+
+func (s *stubSupervisor) Review(ctx context.Context, req SupervisorRequest) (SupervisorDecision, error) {
+	s.mu.Lock()
+	s.calls++
+	s.lastReq = req
+	s.mu.Unlock()
+	if s.err != nil {
+		return SupervisorDecision{}, s.err
+	}
+	return s.decision, nil
+}
+
+func (s *stubSupervisor) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.calls

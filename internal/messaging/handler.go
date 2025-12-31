@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -24,6 +25,11 @@ type conversationPublisher interface {
 	EnqueueMessage(ctx context.Context, jobID string, req conversation.MessageRequest, opts ...conversation.PublishOption) error
 }
 
+type conversationStore interface {
+	AppendMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) error
+	LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error
+}
+
 // Handler handles messaging webhook requests.
 type Handler struct {
 	webhookSecret string
@@ -31,6 +37,7 @@ type Handler struct {
 	orgResolver   OrgResolver
 	messenger     conversation.ReplyMessenger
 	leads         leads.Repository
+	convStore     conversationStore
 	logger        *logging.Logger
 }
 
@@ -53,6 +60,14 @@ func NewHandler(webhookSecret string, publisher conversationPublisher, resolver 
 		leads:         leadsRepo,
 		logger:        logger,
 	}
+}
+
+// SetConversationStore attaches a persistent conversation store for inbound SMS history.
+func (h *Handler) SetConversationStore(store conversationStore) {
+	if h == nil {
+		return
+	}
+	h.convStore = store
 }
 
 // TwilioWebhook handles POST /messaging/twilio/webhook requests.
@@ -111,7 +126,17 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conversationID := deterministicConversationID(orgID, from)
+	redactedBody, _ := conversation.RedactPHI(webhook.Body)
 
+	h.appendConversationMessage(ctx, conversationID, conversation.SMSTranscriptMessage{
+		ID:   twilioMessageUUID(webhook.MessageSid),
+		Role: "user",
+		From: from,
+		To:   to,
+		Body: redactedBody,
+		Kind: "inbound",
+	})
+	h.linkLead(ctx, conversationID, leadID)
 	h.sendSMSAck(from, to, orgID, leadID, conversationID, webhook.MessageSid, isNewLead)
 
 	msgReq := conversation.MessageRequest{
@@ -170,6 +195,13 @@ func (h *Handler) sendSMSAck(to, from, orgID, leadID, conversationID, messageSid
 	if err := h.messenger.SendReply(ctx, reply); err != nil {
 		h.logger.Warn("failed to send sms ack", "error", err, "org_id", orgID)
 	}
+	h.appendConversationMessage(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+		Role: "assistant",
+		From: from,
+		To:   to,
+		Body: ackMsg,
+		Kind: "sms_ack",
+	})
 }
 
 // TwilioVoiceWebhook handles POST /webhooks/twilio/voice for missed-call detection.
@@ -321,6 +353,45 @@ func deterministicLeadID(orgID, from string) string {
 
 func deterministicConversationID(orgID, from string) string {
 	return fmt.Sprintf("sms:%s:%s", orgID, sanitizePhone(from))
+}
+
+func (h *Handler) appendConversationMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) {
+	if h == nil || h.convStore == nil {
+		return
+	}
+	if strings.TrimSpace(conversationID) == "" {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := h.convStore.AppendMessage(ctx, conversationID, msg); err != nil {
+		h.logger.Warn("failed to persist sms transcript", "error", err, "conversation_id", conversationID)
+	}
+}
+
+func (h *Handler) linkLead(ctx context.Context, conversationID, leadID string) {
+	if h == nil || h.convStore == nil {
+		return
+	}
+	leadUUID, err := uuid.Parse(strings.TrimSpace(leadID))
+	if err != nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := h.convStore.LinkLead(ctx, conversationID, leadUUID); err != nil {
+		h.logger.Warn("failed to link lead to conversation", "error", err, "conversation_id", conversationID, "lead_id", leadID)
+	}
+}
+
+func twilioMessageUUID(messageSid string) string {
+	messageSid = strings.TrimSpace(messageSid)
+	if messageSid == "" {
+		return ""
+	}
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("twilio:"+messageSid)).String()
 }
 
 // ensureLead returns (leadID, isNewLead, error)

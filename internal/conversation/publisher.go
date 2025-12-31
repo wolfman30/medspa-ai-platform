@@ -35,6 +35,13 @@ func NewPublisher(queue queueClient, jobs JobRecorder, logger *logging.Logger) *
 
 // EnqueueStart publishes a StartConversation job.
 func (p *Publisher) EnqueueStart(ctx context.Context, jobID string, req StartRequest, opts ...PublishOption) error {
+	p.logger.Info("EnqueueStart called",
+		"job_id", jobID,
+		"conversation_id", req.ConversationID,
+		"intro", req.Intro,
+		"from", req.From,
+		"source", req.Source,
+	)
 	payload := queuePayload{
 		ID:    jobID,
 		Kind:  jobTypeStart,
@@ -45,6 +52,12 @@ func (p *Publisher) EnqueueStart(ctx context.Context, jobID string, req StartReq
 
 // EnqueueMessage publishes a ProcessMessage job.
 func (p *Publisher) EnqueueMessage(ctx context.Context, jobID string, req MessageRequest, opts ...PublishOption) error {
+	p.logger.Info("EnqueueMessage called",
+		"job_id", jobID,
+		"conversation_id", req.ConversationID,
+		"message", req.Message,
+		"from", req.From,
+	)
 	payload := queuePayload{
 		ID:      jobID,
 		Kind:    jobTypeMessage,
