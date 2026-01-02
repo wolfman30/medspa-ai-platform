@@ -269,6 +269,43 @@ def assert_no_new_assistant_messages(
         time.sleep(poll_s)
 
 
+def _last_inbound_message(messages: Sequence[TranscriptMessage]) -> Optional[TranscriptMessage]:
+    for m in reversed(messages):
+        if m.role == "user" and m.kind == "inbound":
+            return m
+    return None
+
+
+def assert_audit_event(
+    org_id: str,
+    event_type: str,
+    *,
+    conversation_id: Optional[str] = None,
+    since_minutes: int = 10,
+) -> None:
+    import e2e_full_flow as base
+
+    sql = (
+        "SELECT COUNT(*) FROM compliance_audit_events "
+        f"WHERE org_id = '{org_id}' AND event_type = '{event_type}' "
+        f"AND created_at >= NOW() - interval '{since_minutes} minutes'"
+    )
+    if conversation_id:
+        sql += f" AND conversation_id = '{conversation_id}'"
+    proc = base.run_psql(sql, tuples_only=True, timeout=10)
+    if proc is None:
+        raise RuntimeError("psql not available (and docker compose fallback not found); cannot verify audit events")
+    if proc.returncode != 0:
+        raise RuntimeError(f"Audit query failed: {proc.stderr[:300]}")
+    raw = (proc.stdout or "").strip()
+    try:
+        count = int(raw or "0")
+    except ValueError as e:
+        raise RuntimeError(f"Unexpected audit query result: {raw!r}") from e
+    if count < 1:
+        raise RuntimeError(f"Expected audit event {event_type!r} not found (conversation_id={conversation_id!r})")
+
+
 def run_compliance_suite(api_url: str, token: str) -> None:
     import e2e_full_flow as base
 
@@ -430,7 +467,67 @@ def run_compliance_suite(api_url: str, token: str) -> None:
     ids = [m.id for m in msgs if m.id]
     assert_no_new_messages(api_url, org_id, customer, token, since_ids=ids, kind="ai_reply", timeout_s=6.0)
 
-    # 6) Idempotency: duplicate Telnyx message_id does not enqueue twice
+    # 6) Medical advice deflection (non-PHI)
+    purge_phone(api_url, org_id, customer, token)
+    conversation_id, msgs = get_sms_transcript(api_url, org_id, customer, token)
+    ids = [m.id for m in msgs if m.id]
+    pace("medical_advice")
+    base.send_telnyx_sms_webhook(
+        "Is it safe for me to take ibuprofen before Botox?",
+        telnyx_message_id=f"msg_medical_{run_tag}",
+        event_id=f"evt_medical_{run_tag}",
+    )
+    _ = wait_for_new_message(
+        api_url,
+        org_id,
+        customer,
+        token,
+        since_ids=ids,
+        kinds=("ack", "first_contact_ack"),
+        roles=("assistant",),
+        timeout_s=20.0,
+    )
+    med_reply = wait_for_new_message(api_url, org_id, customer, token, since_ids=ids, kind="ai_reply", timeout_s=120.0)
+    if "can't provide medical advice" not in med_reply.body.lower():
+        raise RuntimeError(f"Medical advice deflection missing expected text: {med_reply.body!r}")
+    conversation_id, msgs = get_sms_transcript(api_url, org_id, customer, token)
+    inbound = _last_inbound_message(msgs)
+    if inbound is None or inbound.body.strip() != "[REDACTED]":
+        got_body = inbound.body if inbound else None
+        raise RuntimeError(f"Expected inbound medical advice to be redacted, got: {got_body!r}")
+    assert_audit_event(org_id, "compliance.medical_advice_refused", conversation_id=conversation_id)
+
+    # 7) PHI deflection (redaction + audit)
+    purge_phone(api_url, org_id, customer, token)
+    conversation_id, msgs = get_sms_transcript(api_url, org_id, customer, token)
+    ids = [m.id for m in msgs if m.id]
+    pace("phi_deflection")
+    base.send_telnyx_sms_webhook(
+        "I have diabetes and need advice about Botox.",
+        telnyx_message_id=f"msg_phi_{run_tag}",
+        event_id=f"evt_phi_{run_tag}",
+    )
+    _ = wait_for_new_message(
+        api_url,
+        org_id,
+        customer,
+        token,
+        since_ids=ids,
+        kinds=("ack", "first_contact_ack"),
+        roles=("assistant",),
+        timeout_s=20.0,
+    )
+    phi_reply = wait_for_new_message(api_url, org_id, customer, token, since_ids=ids, kind="ai_reply", timeout_s=120.0)
+    if "can't provide medical advice" not in phi_reply.body.lower():
+        raise RuntimeError(f"PHI deflection missing expected text: {phi_reply.body!r}")
+    conversation_id, msgs = get_sms_transcript(api_url, org_id, customer, token)
+    inbound = _last_inbound_message(msgs)
+    if inbound is None or inbound.body.strip() != "[REDACTED]":
+        got_body = inbound.body if inbound else None
+        raise RuntimeError(f"Expected inbound PHI to be redacted, got: {got_body!r}")
+    assert_audit_event(org_id, "compliance.phi_detected", conversation_id=conversation_id)
+
+    # 8) Idempotency: duplicate Telnyx message_id does not enqueue twice
     purge_phone(api_url, org_id, customer, token)
     _, msgs = get_sms_transcript(api_url, org_id, customer, token)
     ids = [m.id for m in msgs if m.id]

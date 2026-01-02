@@ -36,6 +36,7 @@ type Config struct {
 	TwilioWebhookSecret        string
 	TwilioFromNumber           string
 	TwilioOrgMapJSON           string
+	TwilioSkipSignature        bool
 	PaymentProviderKey         string
 	SquareAccessToken          string
 	SquareLocationID           string
@@ -171,6 +172,7 @@ func Load() *Config {
 		TwilioWebhookSecret:        getEnv("TWILIO_WEBHOOK_SECRET", ""),
 		TwilioFromNumber:           getEnv("TWILIO_FROM_NUMBER", ""),
 		TwilioOrgMapJSON:           getEnv("TWILIO_ORG_MAP_JSON", ""),
+		TwilioSkipSignature:        getEnvAsBool("TWILIO_SKIP_SIGNATURE", false),
 		PaymentProviderKey:         getEnv("PAYMENT_PROVIDER_KEY", ""),
 		SquareAccessToken:          getEnv("SQUARE_ACCESS_TOKEN", ""),
 		SquareLocationID:           getEnv("SQUARE_LOCATION_ID", ""),

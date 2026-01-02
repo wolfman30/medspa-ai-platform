@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/google/uuid"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -38,6 +39,9 @@ type Handler struct {
 	messenger     conversation.ReplyMessenger
 	leads         leads.Repository
 	convStore     conversationStore
+	clinicStore   *clinic.Store
+	skipSignature bool
+	publicBaseURL string
 	logger        *logging.Logger
 }
 
@@ -70,13 +74,40 @@ func (h *Handler) SetConversationStore(store conversationStore) {
 	h.convStore = store
 }
 
+// SetClinicStore attaches a clinic config store for personalized messaging.
+func (h *Handler) SetClinicStore(store *clinic.Store) {
+	if h == nil {
+		return
+	}
+	h.clinicStore = store
+}
+
+// SetPublicBaseURL configures the externally-visible base URL for webhook signature validation.
+func (h *Handler) SetPublicBaseURL(baseURL string) {
+	if h == nil {
+		return
+	}
+	h.publicBaseURL = strings.TrimSpace(baseURL)
+}
+
+// SetSkipSignature disables Twilio signature validation (dev/testing only).
+func (h *Handler) SetSkipSignature(skip bool) {
+	if h == nil {
+		return
+	}
+	h.skipSignature = skip
+	if skip && h.logger != nil {
+		h.logger.Warn("twilio signature validation disabled")
+	}
+}
+
 // TwilioWebhook handles POST /messaging/twilio/webhook requests.
 func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx, span := twilioTracer.Start(r.Context(), "messaging.twilio.webhook")
 	defer span.End()
 
-	webhookURL := buildAbsoluteURL(r)
-	if h.webhookSecret != "" {
+	webhookURL := buildAbsoluteURL(r, h.publicBaseURL)
+	if h.webhookSecret != "" && !h.skipSignature {
 		if !ValidateTwilioSignature(r, h.webhookSecret, webhookURL) {
 			h.logger.Warn("invalid twilio signature")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -126,7 +157,7 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conversationID := deterministicConversationID(orgID, from)
-	redactedBody, _ := conversation.RedactPHI(webhook.Body)
+	redactedBody, _ := conversation.RedactSensitive(webhook.Body)
 
 	h.appendConversationMessage(ctx, conversationID, conversation.SMSTranscriptMessage{
 		ID:   twilioMessageUUID(webhook.MessageSid),
@@ -209,8 +240,8 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx, span := twilioTracer.Start(r.Context(), "messaging.twilio.voice")
 	defer span.End()
 
-	webhookURL := buildAbsoluteURL(r)
-	if h.webhookSecret != "" {
+	webhookURL := buildAbsoluteURL(r, h.publicBaseURL)
+	if h.webhookSecret != "" && !h.skipSignature {
 		if !ValidateTwilioSignature(r, h.webhookSecret, webhookURL) {
 			h.logger.Warn("invalid twilio voice signature")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -278,6 +309,7 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		Channel:        conversation.ChannelSMS,
 		From:           from,
 		To:             to,
+		Silent:         true,
 		Metadata: map[string]string{
 			"twilio_call_sid":    callSid,
 			"twilio_call_status": callStatus,
@@ -310,13 +342,14 @@ func (h *Handler) sendImmediateAck(to, from, orgID, leadID, conversationID, call
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	ackMsg := InstantAckMessageForClinic(h.clinicName(ctx, orgID))
 	reply := conversation.OutboundReply{
 		OrgID:          orgID,
 		LeadID:         leadID,
 		ConversationID: conversationID,
 		To:             to,
 		From:           from,
-		Body:           InstantAckMessage,
+		Body:           ackMsg,
 		Metadata: map[string]string{
 			"twilio_call_sid": callSid,
 			"kind":            "missed_call_ack",
@@ -325,6 +358,28 @@ func (h *Handler) sendImmediateAck(to, from, orgID, leadID, conversationID, call
 	if err := h.messenger.SendReply(ctx, reply); err != nil {
 		h.logger.Warn("failed to send missed-call ack sms", "error", err, "org_id", orgID, "call_sid", callSid)
 	}
+}
+
+func (h *Handler) clinicName(ctx context.Context, orgID string) string {
+	if h == nil || h.clinicStore == nil {
+		return ""
+	}
+	orgID = strings.TrimSpace(orgID)
+	if orgID == "" {
+		return ""
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cfg, err := h.clinicStore.Get(ctx, orgID)
+	if err != nil {
+		h.logger.Warn("failed to load clinic config", "error", err, "org_id", orgID)
+		return ""
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Name)
 }
 
 func isMissedCallStatus(status string) bool {
@@ -412,9 +467,12 @@ func (h *Handler) ensureLead(ctx context.Context, orgID, phone, source string) (
 	return lead.ID, isNew, nil
 }
 
-func buildAbsoluteURL(r *http.Request) string {
+func buildAbsoluteURL(r *http.Request, publicBaseURL string) string {
 	if r.URL == nil {
 		return ""
+	}
+	if base := strings.TrimSpace(publicBaseURL); base != "" {
+		return strings.TrimRight(base, "/") + r.URL.RequestURI()
 	}
 	if r.URL.Scheme != "" {
 		return r.URL.String()

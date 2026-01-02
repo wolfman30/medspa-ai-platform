@@ -1,5 +1,5 @@
 # MVP Status Report
-**Last Updated:** 2025-12-31  
+**Last Updated:** 2026-01-02  
 **Target:** Revenue MVP (SMS-only AI receptionist with deposit collection)
 
 ---
@@ -9,7 +9,15 @@ Core plumbing for SMS reception, AI conversations, Square checkout links, and we
 
 ---
 
-## What’s Complete
+## Executive Summary (shareable)
+- **Purpose:** SMS-first AI receptionist for medspas that handles missed calls and inbound texts, qualifies leads, collects deposits via Square, and notifies staff with service/time preferences.
+- **Architecture:** Event-driven voice and messaging webhooks flow into the conversation worker; REST endpoints for onboarding/config; Redis + Postgres with optional SQS; health checks and metrics.
+- **Provider support:** Telnyx primary with Twilio fallback; per-clinic numbers; sandbox auto-purge available for test numbers.
+- **Completion estimate:** 85% - core flows are working; remaining MVP blockers are onboarding portal, real clinic knowledge, and production validation/runbooks.
+
+---
+
+## What's Complete
 - **Messaging stack** (Telnyx primary, Twilio fallback): inbound webhooks with signature validation, STOP/HELP detection, quiet-hours suppression, retry worker, hosted-number + 10DLC onboarding, Prometheus metrics.  
   - `internal/http/handlers/telnyx_webhooks.go`, `internal/messaging/*`, `cmd/messaging-worker`, metrics in `internal/observability/metrics`.
 - **AI conversation engine**: Claude (via AWS Bedrock) prompt tuned for qualification + deposit offer, Redis-backed history, RAG hooks, preference extraction into leads, deposit intent classification, job queue (SQS or in-memory + Postgres job store), worker sends SMS replies and dispatches deposits, payment-success + booking confirmation SMS.  
@@ -40,6 +48,12 @@ Core plumbing for SMS reception, AI conversations, Square checkout links, and we
 3) **Client portal authentication + onboarding (P1)**  
    - Paid clients should register/login, manage clinic profile, connect Square, and complete Telnyx 10DLC in a portal (not via public endpoints).  
 
+4) **Conversation flow QA + deposit link verification (P1)**  
+   - Confirm missed-call ack triggers only once, service question is not repeated after capture, and the deposit link is reliably sent when required.
+
+5) **Prod hardening for provider webhooks (P1)**  
+   - Ensure webhook signature validation is enforced in production and base URL configuration is correct for each environment.
+
 ---
 
 ## Next Steps to Ship Revenue MVP
@@ -55,11 +69,15 @@ Core plumbing for SMS reception, AI conversations, Square checkout links, and we
 4) **Client portal onboarding**  
    - Implement registration/login, org membership, and portal flows for clinic profile, Square connect, and Telnyx 10DLC.
 
+5) **Conversation QA + payment flow validation**  
+   - Verify no repeated greeting/service prompts and confirm deposit link + payment confirmation SMS delivery in both Telnyx and Twilio flows.
+
 ---
 
 ## Current Risk Notes
 - **Payments:** Local E2E is complete; still need live clinic OAuth + phone resolution validation in staging/production.  
 - **AI quality:** Demo knowledge is seeded; production clinics still need detailed service/policy content for strong responses.
+- **Webhook security:** Dev-only signature bypasses must be off in production and verified per provider.
 
 ---
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -38,6 +39,7 @@ type Worker struct {
 	autoPurge      SandboxAutoPurger
 	processed      processedEventStore
 	optOutChecker  OptOutChecker
+	clinicStore    *clinic.Store
 	supervisor     Supervisor
 	supervisorMode SupervisorMode
 	transcript     *SMSTranscriptStore
@@ -57,6 +59,7 @@ type workerConfig struct {
 	autoPurge        SandboxAutoPurger
 	processed        processedEventStore
 	optOutChecker    OptOutChecker
+	clinicStore      *clinic.Store
 	supervisor       Supervisor
 	supervisorMode   SupervisorMode
 	transcript       *SMSTranscriptStore
@@ -184,6 +187,13 @@ func WithConversationStore(store *ConversationStore) WorkerOption {
 	}
 }
 
+// WithClinicConfigStore provides a clinic config store for personalized messaging.
+func WithClinicConfigStore(store *clinic.Store) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.clinicStore = store
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -228,6 +238,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		autoPurge:      cfg.autoPurge,
 		processed:      cfg.processed,
 		optOutChecker:  cfg.optOutChecker,
+		clinicStore:    cfg.clinicStore,
 		supervisor:     cfg.supervisor,
 		supervisorMode: cfg.supervisorMode,
 		transcript:     cfg.transcript,
@@ -283,6 +294,28 @@ func (w *Worker) isOptedOut(ctx context.Context, orgID string, recipient string)
 		w.logger.Info("suppressing sms for opted-out recipient", "org_id", orgID, "to", recipient)
 	}
 	return unsubscribed
+}
+
+func (w *Worker) clinicName(ctx context.Context, orgID string) string {
+	if w == nil || w.clinicStore == nil {
+		return ""
+	}
+	orgID = strings.TrimSpace(orgID)
+	if orgID == "" {
+		return ""
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cfg, err := w.clinicStore.Get(ctx, orgID)
+	if err != nil {
+		w.logger.Warn("failed to load clinic config", "error", err, "org_id", orgID)
+		return ""
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Name)
 }
 
 // Start launches worker goroutines until ctx is cancelled.
@@ -618,10 +651,8 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 
 	if evt.LeadPhone != "" && evt.FromNumber != "" {
 		if !w.isOptedOut(ctx, evt.OrgID, evt.LeadPhone) {
-			body := fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", float64(evt.AmountCents)/100)
-			if evt.ScheduledFor != nil {
-				body = fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
-			}
+			clinicName := w.clinicName(ctx, evt.OrgID)
+			body := paymentConfirmationMessage(evt, clinicName)
 
 			if w.messenger == nil {
 				// Transcript is still recorded even when SMS sending is disabled.
@@ -664,6 +695,25 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		}
 	}
 	return nil
+}
+
+func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName string) string {
+	if evt == nil {
+		return ""
+	}
+	name := strings.TrimSpace(clinicName)
+	if evt.ScheduledFor != nil {
+		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM")
+		if name != "" {
+			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you within 24 hours with final details. See you soon!", date, name)
+		}
+		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", date)
+	}
+	amount := float64(evt.AmountCents) / 100
+	if name != "" {
+		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you within 24 hours to confirm your appointment time.", amount, name)
+	}
+	return fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", amount)
 }
 
 func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.PaymentFailedV1) error {

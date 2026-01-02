@@ -39,6 +39,7 @@ type StartRequest struct {
 	To             string
 	ConversationID string
 	Metadata       map[string]string
+	Silent         bool
 }
 
 // MessageRequest represents a single turn in the conversation.
@@ -84,6 +85,13 @@ func (s *StubService) StartConversation(ctx context.Context, req StartRequest) (
 	id := req.ConversationID
 	if id == "" {
 		id = fmt.Sprintf("conv_%s_%d", req.LeadID, time.Now().UnixNano())
+	}
+	if req.Silent {
+		return &Response{
+			ConversationID: id,
+			Message:        "",
+			Timestamp:      time.Now().UTC(),
+		}, nil
 	}
 	return &Response{
 		ConversationID: id,

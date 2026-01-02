@@ -44,6 +44,7 @@ func TestExtractAndSavePreferences(t *testing.T) {
 		name          string
 		conversation  []ChatMessage
 		expectService string
+		expectPatient string
 		expectDays    string
 		expectTimes   string
 		expectSaved   bool
@@ -70,6 +71,41 @@ func TestExtractAndSavePreferences(t *testing.T) {
 			expectService: "filler",
 			expectDays:    "weekends",
 			expectTimes:   "morning",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts service from short reply",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "Botox"},
+			},
+			expectService: "botox",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts patient type from explicit phrase",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I'm a new patient"},
+			},
+			expectPatient: "new",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts patient type from short reply",
+			conversation: []ChatMessage{
+				{Role: ChatRoleAssistant, Content: "Are you a new patient or have you visited us before?"},
+				{Role: ChatRoleSystem, Content: "Business hours: weekdays 9-5"},
+				{Role: ChatRoleUser, Content: "new"},
+			},
+			expectPatient: "new",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts returning patient from short reply",
+			conversation: []ChatMessage{
+				{Role: ChatRoleAssistant, Content: "Are you a new or returning patient?"},
+				{Role: ChatRoleUser, Content: "returning"},
+			},
+			expectPatient: "existing",
 			expectSaved:   true,
 		},
 		{
@@ -100,6 +136,9 @@ func TestExtractAndSavePreferences(t *testing.T) {
 				}
 				if tt.expectService != "" && !strings.Contains(strings.ToLower(mock.savedPrefs.ServiceInterest), strings.ToLower(tt.expectService)) {
 					t.Errorf("expected service %q, got %q", tt.expectService, mock.savedPrefs.ServiceInterest)
+				}
+				if tt.expectPatient != "" && mock.savedPrefs.PatientType != tt.expectPatient {
+					t.Errorf("expected patient type %q, got %q", tt.expectPatient, mock.savedPrefs.PatientType)
 				}
 				if tt.expectDays != "" && mock.savedPrefs.PreferredDays != tt.expectDays {
 					t.Errorf("expected days %q, got %q", tt.expectDays, mock.savedPrefs.PreferredDays)

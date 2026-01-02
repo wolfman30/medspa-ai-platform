@@ -368,6 +368,65 @@ func TestTierA_CI13_HIPAA_PHIDeflection_NoLeadDiagnosisUpdates(t *testing.T) {
 	}
 }
 
+func TestLLMService_ProcessMessage_MedicalAdviceDeflection(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockLLM := &stubLLMClient{responses: []LLMResponse{{Text: "Hello!"}}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
+
+	start, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-medical-advice",
+		LeadID:         "lead-1",
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	resp, err := service.ProcessMessage(ctx, MessageRequest{
+		ConversationID: start.ConversationID,
+		LeadID:         "lead-1",
+		OrgID:          "org-1",
+		Message:        "Is it safe for me to take ibuprofen before Botox?",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(resp.Message), "can't provide medical advice") {
+		t.Fatalf("expected medical advice deflection reply, got %q", resp.Message)
+	}
+	if len(mockLLM.requests) != 1 {
+		t.Fatalf("expected no extra LLM calls for medical advice deflection, got %d", len(mockLLM.requests))
+	}
+
+	raw, err := mr.DB(0).Get(conversationKey(start.ConversationID))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	var history []ChatMessage
+	if err := json.Unmarshal([]byte(raw), &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	foundRedacted := false
+	for _, msg := range history {
+		if msg.Role == ChatRoleUser && msg.Content == "[REDACTED]" {
+			foundRedacted = true
+		}
+		if strings.Contains(strings.ToLower(msg.Content), "ibuprofen") {
+			t.Fatalf("expected medical advice content to be redacted from history, got %q", msg.Content)
+		}
+	}
+	if !foundRedacted {
+		t.Fatalf("expected redacted medical advice entry in history")
+	}
+}
+
 func TestLLMService_StartConversation_RedactsPHI(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
@@ -408,6 +467,50 @@ func TestLLMService_StartConversation_RedactsPHI(t *testing.T) {
 	for _, msg := range history {
 		if strings.Contains(strings.ToLower(msg.Content), "diabetes") {
 			t.Fatalf("expected PHI to be redacted from history, got %q", msg.Content)
+		}
+	}
+}
+
+func TestLLMService_StartConversation_MedicalAdviceDeflection(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mockLLM := &stubLLMClient{response: LLMResponse{Text: "Hello"}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default())
+
+	resp, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-medical-advice-start",
+		LeadID:         "lead-1",
+		OrgID:          "org-1",
+		Intro:          "Is it safe for me to take ibuprofen before Botox?",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(resp.Message), "can't provide medical advice") {
+		t.Fatalf("expected medical advice deflection reply, got %q", resp.Message)
+	}
+	if len(mockLLM.requests) != 0 {
+		t.Fatalf("expected no LLM calls for medical advice intro, got %d", len(mockLLM.requests))
+	}
+
+	raw, err := mr.DB(0).Get(conversationKey(resp.ConversationID))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if !strings.Contains(raw, "[REDACTED]") {
+		t.Fatalf("expected redacted medical advice in history")
+	}
+	var history []ChatMessage
+	if err := json.Unmarshal([]byte(raw), &history); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	for _, msg := range history {
+		if strings.Contains(strings.ToLower(msg.Content), "ibuprofen") {
+			t.Fatalf("expected medical advice content to be redacted from history, got %q", msg.Content)
 		}
 	}
 }

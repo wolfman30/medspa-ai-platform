@@ -1,11 +1,22 @@
 package messaging
 
 import (
+	"fmt"
 	"math/rand"
+	"strings"
 )
 
 // InstantAckMessage is the fast auto-reply sent immediately for missed-call text-backs.
-const InstantAckMessage = "Hi there! Sorry we missed your call. I'm the virtual receptionist and can answer questions or book an appointment. Which service are you interested in? Reply STOP to opt out."
+const InstantAckMessage = "Hi there! Sorry we missed your call. I'm the virtual receptionist and can help by text. How can I help today - booking an appointment or a quick question? Reply STOP to opt out."
+
+// InstantAckMessageForClinic personalizes the missed-call ack with a clinic name when available.
+func InstantAckMessageForClinic(clinicName string) string {
+	name := strings.TrimSpace(clinicName)
+	if name == "" {
+		return InstantAckMessage
+	}
+	return fmt.Sprintf("Hi there! Sorry we missed your call. I'm the virtual receptionist for %s and can help by text. How can I help today - booking an appointment or a quick question? Reply STOP to opt out.", name)
+}
 
 // PCIGuardrailMessage is sent when inbound SMS appears to contain payment card details.
 const PCIGuardrailMessage = "For your security, please do not send credit card details by text. We can only take payments through our secure checkout link. If you'd like a deposit link, reply \"deposit\" and we'll send it. Reply STOP to opt out."
@@ -13,20 +24,49 @@ const PCIGuardrailMessage = "For your security, please do not send credit card d
 // SmsAckMessageFirst is the ack for the first inbound SMS in a conversation.
 const SmsAckMessageFirst = "Got it - give me a moment to help you."
 
+// smsAckMessagesFirst are varied acks for the first inbound message.
+var smsAckMessagesFirst = []string{
+	SmsAckMessageFirst,
+	"Thanks for reaching out - one moment while I check.",
+	"Thanks! Give me a second to look that up.",
+	"Got it! Let me check on that.",
+}
+
 // smsAckMessagesFollowUp are varied acks for follow-up messages to feel more human.
 var smsAckMessagesFollowUp = []string{
-	"Ok, one moment please...",
-	"Got it. Just a moment...",
-	"One sec...",
-	"Let me check on that...",
-	"Sure, just a moment...",
+	"Thanks - one moment...",
+	"Got it. One sec.",
+	"On it - just a moment.",
+	"Checking now...",
+	"Give me a second...",
 }
 
 // GetSmsAckMessage returns the appropriate ack message.
 // isFirstMessage should be true for the first message in a conversation.
 func GetSmsAckMessage(isFirstMessage bool) string {
 	if isFirstMessage {
-		return SmsAckMessageFirst
+		return smsAckMessagesFirst[rand.Intn(len(smsAckMessagesFirst))]
 	}
 	return smsAckMessagesFollowUp[rand.Intn(len(smsAckMessagesFollowUp))]
+}
+
+// IsSmsAckMessage reports whether a message matches any configured ack response.
+func IsSmsAckMessage(message string) bool {
+	if message == "" {
+		return false
+	}
+	if message == SmsAckMessageFirst {
+		return true
+	}
+	for _, candidate := range smsAckMessagesFirst {
+		if message == candidate {
+			return true
+		}
+	}
+	for _, candidate := range smsAckMessagesFollowUp {
+		if message == candidate {
+			return true
+		}
+	}
+	return false
 }
