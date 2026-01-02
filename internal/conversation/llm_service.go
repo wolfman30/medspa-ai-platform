@@ -124,8 +124,9 @@ You: "I'd love to help with Botox! Are you a new patient or have you visited us 
 WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 - "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
 - "Let me get your preferred times and the clinic will reach out with available options that match."`
-	maxHistoryMessages = 24
-	phiDeflectionReply = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
+	maxHistoryMessages           = 24
+	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
+	medicalAdviceDeflectionReply = "I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 )
 
 var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
@@ -304,6 +305,13 @@ func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever
 // StartConversation opens a new thread, generates the first assistant response, and persists context.
 func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
 	redactedIntro, sawPHI := RedactPHI(req.Intro)
+	medicalKeywords := []string(nil)
+	if !sawPHI {
+		medicalKeywords = detectMedicalAdvice(req.Intro)
+		if len(medicalKeywords) > 0 {
+			redactedIntro = "[REDACTED]"
+		}
+	}
 	s.logger.Info("StartConversation called",
 		"conversation_id", req.ConversationID,
 		"org_id", req.OrgID,
@@ -328,9 +336,36 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		attribute.String("medspa.channel", string(req.Channel)),
 	)
 
+	safeReq := req
 	if sawPHI {
-		safeReq := req
 		safeReq.Intro = redactedIntro
+	}
+
+	if req.Silent {
+		history := []ChatMessage{
+			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+		}
+		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+		history = append(history, ChatMessage{
+			Role:    ChatRoleSystem,
+			Content: "Context: Missed-call auto-reply already sent to the patient. Do NOT repeat the greeting or re-ask the same opener. Respond directly to the patient's next message.",
+		})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, conversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		if sawPHI && s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+			_ = s.audit.LogPHIDetected(ctx, req.OrgID, conversationID, req.LeadID, req.Intro, "keyword")
+		}
+		return &Response{
+			ConversationID: conversationID,
+			Message:        "",
+			Timestamp:      time.Now().UTC(),
+		}, nil
+	}
+
+	if sawPHI {
 		history := []ChatMessage{
 			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
 		}
@@ -358,13 +393,43 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		}, nil
 	}
 
+	if len(medicalKeywords) > 0 {
+		history := []ChatMessage{
+			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+		}
+		safeReq := req
+		safeReq.Intro = "[REDACTED]"
+		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+		history = append(history, ChatMessage{
+			Role:    ChatRoleUser,
+			Content: formatIntroMessage(safeReq, conversationID),
+		})
+		history = append(history, ChatMessage{
+			Role:    ChatRoleAssistant,
+			Content: medicalAdviceDeflectionReply,
+		})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, conversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+			_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, conversationID, req.LeadID, "[REDACTED]", medicalKeywords)
+		}
+		return &Response{
+			ConversationID: conversationID,
+			Message:        medicalAdviceDeflectionReply,
+			Timestamp:      time.Now().UTC(),
+		}, nil
+	}
+
 	history := []ChatMessage{
 		{Role: ChatRoleSystem, Content: defaultSystemPrompt},
 	}
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Intro)
 	history = append(history, ChatMessage{
 		Role:    ChatRoleUser,
-		Content: formatIntroMessage(req, conversationID),
+		Content: formatIntroMessage(safeReq, conversationID),
 	})
 
 	reply, err := s.generateResponse(ctx, history)
@@ -399,6 +464,13 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 	rawMessage := req.Message
 	redactedMessage, sawPHI := RedactPHI(rawMessage)
+	medicalKeywords := []string(nil)
+	if !sawPHI {
+		medicalKeywords = detectMedicalAdvice(rawMessage)
+		if len(medicalKeywords) > 0 {
+			redactedMessage = "[REDACTED]"
+		}
+	}
 
 	s.logger.Info("ProcessMessage called",
 		"conversation_id", req.ConversationID,
@@ -457,6 +529,40 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				}
 				return &Response{ConversationID: req.ConversationID, Message: phiDeflectionReply, Timestamp: time.Now().UTC()}, nil
 			}
+			if len(medicalKeywords) > 0 {
+				safeStart := StartRequest{
+					OrgID:          req.OrgID,
+					ConversationID: req.ConversationID,
+					LeadID:         req.LeadID,
+					ClinicID:       req.ClinicID,
+					Intro:          "[REDACTED]",
+					Channel:        req.Channel,
+					From:           req.From,
+					To:             req.To,
+					Metadata:       req.Metadata,
+				}
+				history := []ChatMessage{
+					{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+				}
+				history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+				history = append(history, ChatMessage{
+					Role:    ChatRoleUser,
+					Content: formatIntroMessage(safeStart, req.ConversationID),
+				})
+				history = append(history, ChatMessage{
+					Role:    ChatRoleAssistant,
+					Content: medicalAdviceDeflectionReply,
+				})
+				history = trimHistory(history, maxHistoryMessages)
+				if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+					span.RecordError(err)
+					return nil, err
+				}
+				if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+					_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, req.ConversationID, req.LeadID, "[REDACTED]", medicalKeywords)
+				}
+				return &Response{ConversationID: req.ConversationID, Message: medicalAdviceDeflectionReply, Timestamp: time.Now().UTC()}, nil
+			}
 			return s.StartConversation(ctx, StartRequest{
 				OrgID:          req.OrgID,
 				ConversationID: req.ConversationID,
@@ -494,6 +600,23 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			_ = s.audit.LogPHIDetected(ctx, req.OrgID, req.ConversationID, req.LeadID, rawMessage, "keyword")
 		}
 		return &Response{ConversationID: req.ConversationID, Message: phiDeflectionReply, Timestamp: time.Now().UTC()}, nil
+	}
+	if len(medicalKeywords) > 0 {
+		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+		history = append(history, ChatMessage{
+			Role:    ChatRoleUser,
+			Content: "[REDACTED]",
+		})
+		history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: medicalAdviceDeflectionReply})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
+			_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, req.ConversationID, req.LeadID, "[REDACTED]", medicalKeywords)
+		}
+		return &Response{ConversationID: req.ConversationID, Message: medicalAdviceDeflectionReply, Timestamp: time.Now().UTC()}, nil
 	}
 
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, rawMessage)
@@ -817,6 +940,23 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 			Role:    ChatRoleSystem,
 			Content: "IMPORTANT: This patient already agreed to the deposit and is in the booking flow. Do NOT restart intake or offer to schedule a consultation again. Answer their questions normally and defer personalized/medical advice to the practitioner during their consultation.",
 		})
+	}
+
+	// Append lead preferences so the assistant doesn't re-ask for captured info.
+	if s.leadsRepo != nil && orgID != "" && leadID != "" {
+		lead, err := s.leadsRepo.GetByID(ctx, orgID, leadID)
+		if err != nil {
+			if !errors.Is(err, leads.ErrLeadNotFound) {
+				s.logger.Warn("failed to fetch lead preferences", "org_id", orgID, "lead_id", leadID, "error", err)
+			}
+		} else if lead != nil {
+			if content := formatLeadPreferenceContext(lead); content != "" {
+				history = append(history, ChatMessage{
+					Role:    ChatRoleSystem,
+					Content: content,
+				})
+			}
+		}
 	}
 
 	// Append clinic business hours context if available
@@ -1237,22 +1377,20 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		prefs.PatientType = "existing"
 		hasPreferences = true
 	}
+	if prefs.PatientType == "" {
+		if patientType := patientTypeFromShortReply(history); patientType != "" {
+			prefs.PatientType = patientType
+			hasPreferences = true
+		}
+	}
 
-	// Only extract booking preferences if user messages contain booking-related intent.
-	// Avoid scanning system prompts, which may include service names and cause false positives.
-	hasBookingIntent := strings.Contains(userMessages, "book") ||
-		strings.Contains(userMessages, "appointment") ||
-		strings.Contains(userMessages, "schedule") ||
-		strings.Contains(userMessages, "available")
-
-	if hasBookingIntent {
-		services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
-		for _, service := range services {
-			if strings.Contains(userMessages, service) {
-				prefs.ServiceInterest = service
-				hasPreferences = true
-				break
-			}
+	// Extract service interest from user messages (users may answer with just a service name).
+	services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
+	for _, service := range services {
+		if strings.Contains(userMessages, service) {
+			prefs.ServiceInterest = service
+			hasPreferences = true
+			break
 		}
 	}
 
@@ -1282,8 +1420,10 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 }
 
 var (
-	priceInquiryRE = regexp.MustCompile(`(?i)\b(?:how much|price|pricing|cost|rate|rates|charge)\b`)
-	phiPrefaceRE   = regexp.MustCompile(`(?i)\b(?:diagnosed|diagnosis|my condition|my symptoms|i have|i've had|i am|i'm)\b`)
+	priceInquiryRE     = regexp.MustCompile(`(?i)\b(?:how much|price|pricing|cost|rate|rates|charge)\b`)
+	phiPrefaceRE       = regexp.MustCompile(`(?i)\b(?:diagnosed|diagnosis|my condition|my symptoms|i have|i've had|i am|i'm)\b`)
+	medicalAdviceCueRE = regexp.MustCompile(`(?i)\b(?:should i|can i|is it safe|safe to|ok to|okay to|contraindications?|side effects?|dosage|dose|mg|milligram|interactions?|mix with|stop taking)\b`)
+	medicalContextRE   = regexp.MustCompile(`(?i)\b(?:botox|filler|laser|microneedling|facial|peel|dermaplaning|prp|injectable|medication|medicine|meds|prescription|ibuprofen|tylenol|acetaminophen|antibiotics?|painkillers?|blood pressure|pregnan(?:t|cy)|breastfeed(?:ing)?|allerg(?:y|ic))\b`)
 )
 
 func isPriceInquiry(message string) bool {
@@ -1363,6 +1503,34 @@ func detectPHI(message string) bool {
 	return false
 }
 
+func detectMedicalAdvice(message string) []string {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return nil
+	}
+	if !medicalAdviceCueRE.MatchString(message) {
+		return nil
+	}
+	if !medicalContextRE.MatchString(message) {
+		return nil
+	}
+	keywords := []string{}
+	for _, kw := range []string{
+		"botox", "filler", "laser", "microneedling", "facial", "peel", "dermaplaning", "prp", "injectable",
+		"medication", "medicine", "meds", "prescription", "ibuprofen", "tylenol", "acetaminophen", "antibiotic", "antibiotics",
+		"painkiller", "painkillers", "blood pressure", "pregnant", "pregnancy", "breastfeeding", "allergy", "allergic",
+		"contraindication", "contraindications", "side effects", "dosage", "dose", "interaction", "interactions", "mix with",
+	} {
+		if strings.Contains(message, kw) {
+			keywords = append(keywords, kw)
+		}
+	}
+	if len(keywords) == 0 {
+		keywords = append(keywords, "medical_advice_request")
+	}
+	return keywords
+}
+
 func (s *LLMService) appendLeadNote(ctx context.Context, orgID, leadID, note string) {
 	if s == nil || s.leadsRepo == nil {
 		return
@@ -1418,4 +1586,120 @@ func isCommonWord(word string) bool {
 		"consultation": true, "treatment": true, "service": true,
 	}
 	return common[strings.ToLower(word)]
+}
+
+func patientTypeFromShortReply(history []ChatMessage) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role != ChatRoleUser {
+			continue
+		}
+		reply := normalizePatientTypeReply(history[i].Content)
+		if reply == "" {
+			continue
+		}
+		if !assistantAskedPatientType(history, i) {
+			continue
+		}
+		return reply
+	}
+	return ""
+}
+
+func normalizePatientTypeReply(message string) string {
+	cleaned := strings.ToLower(strings.TrimSpace(message))
+	cleaned = strings.Trim(cleaned, ".,!?")
+	switch cleaned {
+	case "new", "new patient", "new here", "first time", "first-time", "never been", "never been before", "i'm new", "im new", "i am new":
+		return "new"
+	case "existing", "returning", "existing patient", "returning patient", "been before", "i've been before", "i have been before", "not new":
+		return "existing"
+	default:
+		return ""
+	}
+}
+
+func assistantAskedPatientType(history []ChatMessage, userIndex int) bool {
+	prev := previousAssistantMessage(history, userIndex)
+	if prev == "" {
+		return false
+	}
+	content := strings.ToLower(prev)
+	if strings.Contains(content, "new patient") || strings.Contains(content, "existing patient") || strings.Contains(content, "returning patient") {
+		return true
+	}
+	if strings.Contains(content, "visited") && strings.Contains(content, "before") {
+		return true
+	}
+	if strings.Contains(content, "been") && strings.Contains(content, "before") {
+		return true
+	}
+	if strings.Contains(content, "new") && (strings.Contains(content, "existing") || strings.Contains(content, "returning")) {
+		return true
+	}
+	if strings.Contains(content, "are you new") && (strings.Contains(content, "patient") || strings.Contains(content, "here") || strings.Contains(content, "before")) {
+		return true
+	}
+	return false
+}
+
+func previousAssistantMessage(history []ChatMessage, start int) string {
+	for i := start - 1; i >= 0; i-- {
+		if history[i].Role == ChatRoleSystem {
+			continue
+		}
+		if history[i].Role != ChatRoleAssistant {
+			return ""
+		}
+		return history[i].Content
+	}
+	return ""
+}
+
+func formatLeadPreferenceContext(lead *leads.Lead) string {
+	if lead == nil {
+		return ""
+	}
+	lines := make([]string, 0, 5)
+	name := strings.TrimSpace(lead.Name)
+	if name != "" && !looksLikePhone(name, lead.Phone) {
+		lines = append(lines, fmt.Sprintf("- Name: %s", name))
+	}
+	service := strings.TrimSpace(lead.ServiceInterest)
+	if service != "" {
+		lines = append(lines, fmt.Sprintf("- Service: %s", service))
+	}
+	patientType := strings.TrimSpace(lead.PatientType)
+	if patientType != "" {
+		lines = append(lines, fmt.Sprintf("- Patient type: %s", patientType))
+	}
+	days := strings.TrimSpace(lead.PreferredDays)
+	if days != "" {
+		lines = append(lines, fmt.Sprintf("- Preferred days: %s", days))
+	}
+	times := strings.TrimSpace(lead.PreferredTimes)
+	if times != "" {
+		lines = append(lines, fmt.Sprintf("- Preferred times: %s", times))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "Known scheduling preferences from earlier messages:\n" + strings.Join(lines, "\n")
+}
+
+func looksLikePhone(name string, phone string) bool {
+	name = strings.TrimSpace(name)
+	phone = strings.TrimSpace(phone)
+	if name == "" {
+		return false
+	}
+	if phone != "" && name == phone {
+		return true
+	}
+	digits := 0
+	for i := 0; i < len(name); i++ {
+		if name[i] >= '0' && name[i] <= '9' {
+			digits++
+		}
+	}
+	return digits >= 7
 }

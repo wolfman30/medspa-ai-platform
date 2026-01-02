@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -50,6 +51,7 @@ type TelnyxWebhookHandler struct {
 	logger           *logging.Logger
 	transcript       *conversation.SMSTranscriptStore
 	convStore        conversationStore
+	clinicStore      *clinic.Store
 	messagingProfile string
 	stopAck          string
 	helpAck          string
@@ -71,6 +73,7 @@ type TelnyxWebhookConfig struct {
 	Logger            *logging.Logger
 	Transcript        *conversation.SMSTranscriptStore
 	ConversationStore conversationStore
+	ClinicStore       *clinic.Store
 	MessagingProfile  string
 	StopAck           string
 	HelpAck           string
@@ -95,6 +98,7 @@ func NewTelnyxWebhookHandler(cfg TelnyxWebhookConfig) *TelnyxWebhookHandler {
 		logger:           cfg.Logger,
 		transcript:       cfg.Transcript,
 		convStore:        cfg.ConversationStore,
+		clinicStore:      cfg.ClinicStore,
 		messagingProfile: cfg.MessagingProfile,
 		stopAck:          defaultString(cfg.StopAck, "You have been opted out. Reply HELP for info."),
 		helpAck:          defaultString(cfg.HelpAck, "Reply STOP to opt out or contact support@medspa.ai."),
@@ -125,6 +129,36 @@ func (h *TelnyxWebhookHandler) appendTranscript(ctx context.Context, conversatio
 			h.logger.Warn("failed to persist sms transcript", "error", err, "conversation_id", conversationID)
 		}
 	}
+}
+
+func (h *TelnyxWebhookHandler) clinicName(ctx context.Context, orgID string) string {
+	if h == nil || h.clinicStore == nil {
+		return ""
+	}
+	orgID = strings.TrimSpace(orgID)
+	if orgID == "" {
+		return ""
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cfg, err := h.clinicStore.Get(ctx, orgID)
+	if err != nil {
+		h.logger.Warn("failed to load clinic config", "error", err, "org_id", orgID)
+		return ""
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Name)
+}
+
+func (h *TelnyxWebhookHandler) voiceAckMessage(ctx context.Context, orgID string) string {
+	if strings.TrimSpace(h.voiceAck) != "" && h.voiceAck != messaging.InstantAckMessage {
+		return h.voiceAck
+	}
+	name := h.clinicName(ctx, orgID)
+	return messaging.InstantAckMessageForClinic(name)
 }
 
 func (h *TelnyxWebhookHandler) linkLead(ctx context.Context, conversationID, leadID string) {
@@ -344,7 +378,7 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	// Redact PCI card data from anything we persist or propagate.
 	rawBody := payload.Text
 	panRedacted, sawPAN := compliance.RedactPAN(rawBody)
-	storageBody, _ := conversation.RedactPHI(panRedacted)
+	storageBody, _ := conversation.RedactSensitive(panRedacted)
 	msgRecord := messaging.MessageRecord{
 		ClinicID:          clinicID,
 		From:              from,
@@ -464,7 +498,7 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		})
 		h.sendAutoReply(context.Background(), to, from, messaging.PCIGuardrailMessage)
 	} else {
-		ack := messaging.SmsAckMessageFirst
+		ack := messaging.GetSmsAckMessage(isFirstInbound)
 		ackKind := "ack"
 		if h.demoMode && isFirstInbound && h.firstContactAck != "" {
 			ack = h.firstContactAck
@@ -818,6 +852,7 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 		Channel:        conversation.ChannelSMS,
 		From:           from,
 		To:             to,
+		Silent:         true,
 		Metadata: map[string]string{
 			"telnyx_event_id": evt.ID,
 			"telnyx_call_id":  payload.ID,
@@ -834,14 +869,15 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, opts...); err != nil {
 		return fmt.Errorf("enqueue missed-call start: %w", err)
 	}
+	ack := h.voiceAckMessage(ctx, orgID)
 	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
 		Role: "assistant",
 		From: to,
 		To:   from,
-		Body: h.voiceAck,
+		Body: ack,
 		Kind: "voice_ack",
 	})
-	h.sendAutoReply(context.Background(), to, from, h.voiceAck)
+	h.sendAutoReply(context.Background(), to, from, ack)
 	return nil
 }
 

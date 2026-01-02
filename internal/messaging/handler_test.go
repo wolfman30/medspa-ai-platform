@@ -511,8 +511,8 @@ func TestTwilioWebhook_SendsAckSMS(t *testing.T) {
 	if messenger.last.From != "+15550001111" {
 		t.Fatalf("expected ack from=%s, got %s", "+15550001111", messenger.last.From)
 	}
-	if messenger.last.Body != SmsAckMessageFirst {
-		t.Fatalf("expected ack body %q, got %q", SmsAckMessageFirst, messenger.last.Body)
+	if !IsSmsAckMessage(messenger.last.Body) {
+		t.Fatalf("expected ack body to be a valid ack, got %q", messenger.last.Body)
 	}
 }
 

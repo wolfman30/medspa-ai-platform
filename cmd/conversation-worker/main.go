@@ -118,6 +118,10 @@ func main() {
 		}
 	}
 	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
+	var clinicStore *clinic.Store
+	if redisClient != nil {
+		clinicStore = clinic.NewStore(redisClient)
+	}
 	messengerCfg := messaging.ProviderSelectionConfig{
 		Preference:       cfg.SMSProvider,
 		TelnyxAPIKey:     cfg.TelnyxAPIKey,
@@ -201,9 +205,7 @@ func main() {
 
 	// Initialize notification service for clinic operator alerts
 	var notifier conversation.PaymentNotifier
-	if redisClient != nil {
-		clinicStore := clinic.NewStore(redisClient)
-
+	if clinicStore != nil {
 		// Setup email sender
 		var emailSender notify.EmailSender
 		if cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
@@ -274,6 +276,7 @@ func main() {
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 		conversation.WithOptOutChecker(msgStore),
+		conversation.WithClinicConfigStore(clinicStore),
 		conversation.WithSMSTranscriptStore(smsTranscript),
 		conversation.WithConversationStore(convStore),
 		conversation.WithSupervisor(supervisor),

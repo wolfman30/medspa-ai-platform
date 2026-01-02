@@ -158,7 +158,7 @@ func TestTierA_CI02_InboundSMS_LeadAndAI(t *testing.T) {
 	if messenger.last().Body != "stubbed-ai-reply" {
 		t.Fatalf("unexpected outbound reply: %#v", messenger.last())
 	}
-	if telnyxStub.sendCalls != 1 || telnyxStub.lastSendReq == nil || telnyxStub.lastSendReq.Body != messaging.SmsAckMessageFirst {
+	if telnyxStub.sendCalls != 1 || telnyxStub.lastSendReq == nil || !messaging.IsSmsAckMessage(telnyxStub.lastSendReq.Body) {
 		t.Fatalf("expected 1 SMS ack, got calls=%d last=%#v", telnyxStub.sendCalls, telnyxStub.lastSendReq)
 	}
 	list, err := leadsRepo.ListByOrg(context.Background(), clinicID.String(), leads.ListLeadsFilter{})
@@ -491,7 +491,7 @@ func TestTierA_CI15_CI16_StopStartCompliance(t *testing.T) {
 	if conv.calls != 1 {
 		t.Fatalf("expected conversation enqueue after START, got %d", conv.calls)
 	}
-	if telnyxStub.sendCalls != 3 || telnyxStub.lastSendReq == nil || telnyxStub.lastSendReq.Body != messaging.SmsAckMessageFirst {
+	if telnyxStub.sendCalls != 3 || telnyxStub.lastSendReq == nil || !messaging.IsSmsAckMessage(telnyxStub.lastSendReq.Body) {
 		t.Fatalf("expected ack SMS after START, got calls=%d last=%#v", telnyxStub.sendCalls, telnyxStub.lastSendReq)
 	}
 

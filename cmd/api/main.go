@@ -103,6 +103,10 @@ func main() {
 		}
 		redisClient = redis.NewClient(redisOptions)
 	}
+	var clinicStore *clinic.Store
+	if redisClient != nil {
+		clinicStore = clinic.NewStore(redisClient)
+	}
 	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
 
 	// Initialize handlers
@@ -159,6 +163,9 @@ func main() {
 	}
 	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, webhookMessenger, leadsRepo, logger)
 	messagingHandler.SetConversationStore(conversationStore)
+	messagingHandler.SetClinicStore(clinicStore)
+	messagingHandler.SetPublicBaseURL(cfg.PublicBaseURL)
+	messagingHandler.SetSkipSignature(cfg.TwilioSkipSignature)
 
 	telnyxClient := setupTelnyxClient(cfg, logger)
 
@@ -200,8 +207,7 @@ func main() {
 	var clinicHandler *clinic.Handler
 	var clinicStatsHandler *clinic.StatsHandler
 	var clinicDashboardHandler *clinic.DashboardHandler
-	if redisClient != nil {
-		clinicStore := clinic.NewStore(redisClient)
+	if clinicStore != nil {
 		clinicHandler = clinic.NewHandler(clinicStore, logger)
 	}
 	if dbPool != nil {
@@ -223,8 +229,7 @@ func main() {
 
 	// Initialize onboarding handler
 	var adminOnboardingHandler *handlers.AdminOnboardingHandler
-	if redisClient != nil {
-		clinicStore := clinic.NewStore(redisClient)
+	if clinicStore != nil {
 		adminOnboardingHandler = handlers.NewAdminOnboardingHandler(handlers.AdminOnboardingConfig{
 			DB:          dbPool,
 			Redis:       redisClient,
@@ -344,6 +349,7 @@ func main() {
 			Logger:            logger,
 			Transcript:        smsTranscript,
 			ConversationStore: conversationStore,
+			ClinicStore:       clinicStore,
 			MessagingProfile:  cfg.TelnyxMessagingProfileID,
 			StopAck:           cfg.TelnyxStopReply,
 			HelpAck:           cfg.TelnyxHelpReply,
@@ -591,11 +597,14 @@ func setupInlineWorker(
 		logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "")
 	}
 
+	var clinicStore *clinic.Store
+	if redisClient != nil {
+		clinicStore = clinic.NewStore(redisClient)
+	}
+
 	// Initialize notification service for clinic operator alerts
 	var notifier conversation.PaymentNotifier
-	if redisClient != nil {
-		clinicStore := clinic.NewStore(redisClient)
-
+	if clinicStore != nil {
 		// Setup email sender
 		var emailSender notify.EmailSender
 		if cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
@@ -664,6 +673,7 @@ func setupInlineWorker(
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 		conversation.WithOptOutChecker(optOutChecker),
+		conversation.WithClinicConfigStore(clinicStore),
 		conversation.WithSMSTranscriptStore(smsTranscript),
 		conversation.WithConversationStore(convStore),
 		conversation.WithSupervisor(supervisor),
