@@ -36,6 +36,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write
 
     steps:
     - name: Checkout code
@@ -83,6 +84,7 @@ jobs:
     if: always() && (inputs.stage == 'all' || inputs.stage == 'features')
     permissions:
       contents: write
+      id-token: write
 
     steps:
     - name: Checkout code
@@ -138,6 +140,7 @@ jobs:
     if: always() && (inputs.stage == 'all' || inputs.stage == 'hardening')
     permissions:
       contents: write
+      id-token: write
 
     steps:
     - name: Checkout code
