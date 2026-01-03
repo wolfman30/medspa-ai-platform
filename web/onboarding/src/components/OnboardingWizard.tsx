@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StepIndicator } from './StepIndicator';
 import { ClinicInfoForm } from './ClinicInfoForm';
 import { ServicesForm } from './ServicesForm';
 import { PaymentSetup } from './PaymentSetup';
 import { SMSSetup } from './SMSSetup';
 import { createClinic, getOnboardingStatus, updateClinicConfig, seedKnowledge } from '../api/client';
+import { getStoredOrgId, setStoredOrgId } from '../utils/orgStorage';
 
 const STEPS = [
   { id: 'clinic', name: 'Clinic Info' },
@@ -38,7 +39,12 @@ interface OnboardingState {
   phoneNumber?: string;
 }
 
-export function OnboardingWizard() {
+interface OnboardingWizardProps {
+  orgId?: string | null;
+  onComplete?: () => void;
+}
+
+export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWizardProps) {
   const [state, setState] = useState<OnboardingState>({
     orgId: null,
     currentStep: 0,
@@ -50,19 +56,11 @@ export function OnboardingWizard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check URL for orgId (returning from Square OAuth)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const orgId = params.get('org_id');
-    if (orgId) {
-      loadOnboardingStatus(orgId);
-    }
-  }, []);
-
-  async function loadOnboardingStatus(orgId: string) {
+  const loadOnboardingStatus = useCallback(async (orgId: string) => {
     try {
       setLoading(true);
       const status = await getOnboardingStatus(orgId);
+      setStoredOrgId(orgId);
 
       // Determine current step based on what's completed
       let step = 0;
@@ -85,7 +83,17 @@ export function OnboardingWizard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  // Check URL for orgId (returning from Square OAuth)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orgIdFromUrl = params.get('org_id');
+    const resolvedOrgId = orgIdFromUrl || orgIdProp || getStoredOrgId();
+    if (resolvedOrgId) {
+      loadOnboardingStatus(resolvedOrgId);
+    }
+  }, [orgIdProp, loadOnboardingStatus]);
 
   async function handleClinicSubmit(data: NonNullable<OnboardingState['clinicInfo']>) {
     try {
@@ -101,6 +109,7 @@ export function OnboardingWizard() {
           timezone: data.timezone,
         });
 
+        setStoredOrgId(result.org_id);
         setState(prev => ({
           ...prev,
           orgId: result.org_id,
@@ -110,6 +119,7 @@ export function OnboardingWizard() {
       } else {
         // Update existing
         await updateClinicConfig(state.orgId, data);
+        setStoredOrgId(state.orgId);
         setState(prev => ({
           ...prev,
           clinicInfo: data,
@@ -221,6 +231,7 @@ export function OnboardingWizard() {
               onComplete={() => {
                 // Show completion screen or redirect
                 alert('Onboarding complete! Your AI receptionist will be ready once SMS is activated.');
+                onComplete?.();
               }}
             />
           )}
