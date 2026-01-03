@@ -276,6 +276,7 @@ func main() {
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 		conversation.WithOptOutChecker(msgStore),
+		conversation.WithProviderMessageChecker(msgStore),
 		conversation.WithClinicConfigStore(clinicStore),
 		conversation.WithSMSTranscriptStore(smsTranscript),
 		conversation.WithConversationStore(convStore),

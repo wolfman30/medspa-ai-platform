@@ -196,6 +196,73 @@ func TestTierA_CI05_AmbiguousMessage_AsksClarifyingQuestionAndTagsLead(t *testin
 	}
 }
 
+func TestTierA_CI05b_QuickQuestionPromptsForDetails(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Lead",
+		Phone:   "+15550000001",
+		Source:  "sms",
+		Message: "",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{responses: []LLMResponse{{Text: "Hello!"}}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithLeadsRepo(leadsRepo))
+
+	start, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-question",
+		LeadID:         lead.ID,
+		OrgID:          "org-1",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	for _, msg := range []string{
+		"Quick question.",
+		"I had a quick question.",
+		"I just had a quick question.",
+	} {
+		resp, err := service.ProcessMessage(ctx, MessageRequest{
+			ConversationID: start.ConversationID,
+			LeadID:         lead.ID,
+			OrgID:          "org-1",
+			Message:        msg,
+			Channel:        ChannelSMS,
+		})
+		if err != nil {
+			t.Fatalf("process failed: %v", err)
+		}
+		lowered := strings.ToLower(resp.Message)
+		if strings.Contains(lowered, "are you looking to book") {
+			t.Fatalf("expected no repeated intent question, got %q", resp.Message)
+		}
+		if !strings.Contains(lowered, "what can i help") {
+			t.Fatalf("expected prompt for question details, got %q", resp.Message)
+		}
+	}
+	if len(mockLLM.requests) != 1 {
+		t.Fatalf("expected no extra LLM calls for quick question, got %d", len(mockLLM.requests))
+	}
+	updated, err := leadsRepo.GetByID(ctx, "org-1", lead.ID)
+	if err != nil {
+		t.Fatalf("load lead: %v", err)
+	}
+	if strings.Contains(updated.SchedulingNotes, "state:needs_intent") {
+		t.Fatalf("did not expect needs_intent tag, got %q", updated.SchedulingNotes)
+	}
+}
+
 func TestTierA_CI12_DepositRulesCorrectness_ServiceOverridesApply(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()

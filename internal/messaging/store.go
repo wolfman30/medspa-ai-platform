@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -227,6 +228,27 @@ func (s *Store) HasInboundMessage(ctx context.Context, clinicID uuid.UUID, from 
 			return false, nil
 		}
 		return false, fmt.Errorf("messaging: check inbound message: %w", err)
+	}
+	return true, nil
+}
+
+// HasProviderMessage checks whether a message with the provider message id exists.
+func (s *Store) HasProviderMessage(ctx context.Context, providerMessageID string) (bool, error) {
+	providerMessageID = strings.TrimSpace(providerMessageID)
+	if providerMessageID == "" {
+		return false, nil
+	}
+	query := `
+		SELECT 1 FROM messages
+		WHERE provider_message_id = $1
+		LIMIT 1
+	`
+	var exists int
+	if err := s.pool.QueryRow(ctx, query, providerMessageID).Scan(&exists); err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("messaging: check provider message: %w", err)
 	}
 	return true, nil
 }

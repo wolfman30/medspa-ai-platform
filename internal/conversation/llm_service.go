@@ -652,6 +652,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			}
 		}
 	}
+	if isQuestionSelection(rawMessage) {
+		reply := "Absolutely - what can I help with? If it's about a specific service (Botox, fillers, facials, lasers), let me know which one."
+
+		history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: reply})
+		history = trimHistory(history, maxHistoryMessages)
+		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+			span.RecordError(err)
+			return nil, err
+		}
+		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
+	}
 	if isAmbiguousHelp(rawMessage) {
 		reply := "Happy to help. Are you looking to book an appointment, or do you have a question about a specific service (Botox, fillers, facials, lasers)?"
 		s.appendLeadNote(ctx, req.OrgID, req.LeadID, "state:needs_intent")
@@ -1449,6 +1460,62 @@ func isAmbiguousHelp(message string) bool {
 		}
 	}
 	return true
+}
+
+func isQuestionSelection(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	message = strings.Trim(message, ".!?")
+	message = strings.Join(strings.Fields(message), " ")
+	if strings.Contains(message, "?") {
+		return false
+	}
+
+	for _, kw := range []string{"book", "appointment", "schedule", "botox", "filler", "facial", "laser", "peel", "microneedling"} {
+		if strings.Contains(message, kw) {
+			return false
+		}
+	}
+
+	switch message {
+	case "question",
+		"quick question",
+		"a question",
+		"a quick question",
+		"just a question",
+		"just a quick question",
+		"i had a question",
+		"i had a quick question",
+		"i just had a question",
+		"i just had a quick question",
+		"i have a question",
+		"i have a quick question",
+		"i just have a question",
+		"i just have a quick question",
+		"i got a question",
+		"i got a quick question",
+		"i've got a question",
+		"i've got a quick question",
+		"had a question",
+		"had a quick question",
+		"have a question",
+		"have a quick question",
+		"got a question",
+		"got a quick question",
+		"question please",
+		"quick question please",
+		"quick question for you",
+		"i have a quick question for you",
+		"i had a quick question for you",
+		"i just had a quick question for you",
+		"just a question please",
+		"just a quick question please":
+		return true
+	default:
+		return false
+	}
 }
 
 func detectServiceKey(message string, cfg *clinic.Config) string {

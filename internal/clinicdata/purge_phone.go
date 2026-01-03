@@ -36,13 +36,18 @@ func NewPurger(db db, redis *redis.Client, logger *logging.Logger) *Purger {
 }
 
 type PurgeCounts struct {
-	ConversationJobs int64
-	Outbox           int64
-	Payments         int64
-	Bookings         int64
-	Leads            int64
-	Messages         int64
-	Unsubscribes     int64
+	ConversationJobs      int64
+	ConversationMessages  int64
+	Conversations         int64
+	Outbox                int64
+	Payments              int64
+	Bookings              int64
+	CallbackPromises      int64
+	Escalations           int64
+	ComplianceAuditEvents int64
+	Leads                 int64
+	Messages              int64
+	Unsubscribes          int64
 }
 
 type PurgeResult struct {
@@ -106,6 +111,23 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (Pu
 		return PurgeResult{}, fmt.Errorf("clinicdata: delete conversation jobs: %w", err)
 	}
 
+	resp.Deleted.ConversationMessages, err = execRowsAffected(ctx, tx, `
+		DELETE FROM conversation_messages
+		WHERE conversation_id = $1 OR conversation_id = $2
+	`, conversationIDDigits, conversationIDE164)
+	if err != nil {
+		return PurgeResult{}, fmt.Errorf("clinicdata: delete conversation messages: %w", err)
+	}
+
+	resp.Deleted.Conversations, err = execRowsAffected(ctx, tx, `
+		DELETE FROM conversations
+		WHERE org_id = $1
+		  AND (conversation_id = $2 OR conversation_id = $3 OR regexp_replace(phone, '\D', '', 'g') = $4)
+	`, orgID, conversationIDDigits, conversationIDE164, digits)
+	if err != nil {
+		return PurgeResult{}, fmt.Errorf("clinicdata: delete conversations: %w", err)
+	}
+
 	resp.Deleted.Outbox, err = execRowsAffected(ctx, tx, `
 		DELETE FROM outbox
 		WHERE event_type LIKE 'payments.deposit.%'
@@ -146,6 +168,58 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (Pu
 	`, orgID, digits)
 	if err != nil {
 		return PurgeResult{}, fmt.Errorf("clinicdata: delete bookings: %w", err)
+	}
+
+	resp.Deleted.CallbackPromises, err = execRowsAffected(ctx, tx, `
+		DELETE FROM callback_promises
+		WHERE org_id = $1
+		  AND (
+			regexp_replace(customer_phone, '\D', '', 'g') = $2
+			OR lead_id IN (
+				SELECT id
+				FROM leads
+				WHERE org_id = $3
+				  AND regexp_replace(phone, '\D', '', 'g') = $2
+			)
+		  )
+	`, orgUUID, digits, orgID)
+	if err != nil {
+		return PurgeResult{}, fmt.Errorf("clinicdata: delete callback promises: %w", err)
+	}
+
+	resp.Deleted.Escalations, err = execRowsAffected(ctx, tx, `
+		DELETE FROM escalations
+		WHERE org_id = $1
+		  AND (
+			regexp_replace(customer_phone, '\D', '', 'g') = $2
+			OR lead_id IN (
+				SELECT id
+				FROM leads
+				WHERE org_id = $3
+				  AND regexp_replace(phone, '\D', '', 'g') = $2
+			)
+		  )
+	`, orgUUID, digits, orgID)
+	if err != nil {
+		return PurgeResult{}, fmt.Errorf("clinicdata: delete escalations: %w", err)
+	}
+
+	resp.Deleted.ComplianceAuditEvents, err = execRowsAffected(ctx, tx, `
+		DELETE FROM compliance_audit_events
+		WHERE org_id = $1
+		  AND (
+			conversation_id = $2
+			OR conversation_id = $3
+			OR lead_id IN (
+				SELECT id
+				FROM leads
+				WHERE org_id = $4
+				  AND regexp_replace(phone, '\D', '', 'g') = $5
+			)
+		  )
+	`, orgUUID, conversationIDDigits, conversationIDE164, orgID, digits)
+	if err != nil {
+		return PurgeResult{}, fmt.Errorf("clinicdata: delete compliance events: %w", err)
 	}
 
 	resp.Deleted.Leads, err = execRowsAffected(ctx, tx, `
