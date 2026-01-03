@@ -22,6 +22,59 @@ async function getHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+export interface DashboardStats {
+  org_id: string;
+  org_name: string;
+  period: string;
+  leads: {
+    total: number;
+    new_this_week: number;
+    conversion_rate: number;
+    top_sources?: Array<{
+      source: string;
+      count: number;
+    }>;
+  };
+  conversations: {
+    unique_conversations: number;
+    total_jobs: number;
+    today: number;
+    this_week: number;
+  };
+  payments: {
+    total_collected_cents: number;
+    this_week_cents: number;
+    pending_deposits: number;
+    refunded_cents: number;
+    dispute_count: number;
+  };
+  bookings: {
+    total: number;
+    upcoming: number;
+    this_week: number;
+    cancelled_count: number;
+  };
+  compliance: {
+    audit_events_today: number;
+    supervisor_interventions: number;
+    phi_detections: number;
+    disclaimers_sent: number;
+  };
+  onboarding: {
+    brand_status: string;
+    campaign_status: string;
+    numbers_active: number;
+    fully_compliant: boolean;
+  };
+  pending_actions: Array<{
+    type: string;
+    priority: string;
+    description: string;
+    count: number;
+    link?: string;
+  }> | null;
+}
+
 export async function createClinic(data: {
   name: string;
   email?: string;
@@ -36,6 +89,17 @@ export async function createClinic(data: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || 'Failed to create clinic');
+  }
+  return res.json();
+}
+
+export async function getDashboardStats(orgId: string): Promise<DashboardStats> {
+  const res = await fetch(`${API_BASE}/admin/orgs/${orgId}/dashboard`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to get dashboard stats');
   }
   return res.json();
 }
