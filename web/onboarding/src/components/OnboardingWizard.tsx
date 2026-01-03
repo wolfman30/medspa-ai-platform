@@ -4,7 +4,7 @@ import { ClinicInfoForm } from './ClinicInfoForm';
 import { ServicesForm } from './ServicesForm';
 import { PaymentSetup } from './PaymentSetup';
 import { SMSSetup } from './SMSSetup';
-import { createClinic, getOnboardingStatus, updateClinicConfig } from '../api/client';
+import { createClinic, getOnboardingStatus, updateClinicConfig, seedKnowledge } from '../api/client';
 
 const STEPS = [
   { id: 'clinic', name: 'Clinic Info' },
@@ -129,9 +129,16 @@ export function OnboardingWizard() {
       setError(null);
 
       if (state.orgId && data.services && data.services.length > 0) {
-        // Backend expects service names as strings, convert from rich objects
+        // Save service names to clinic config
         const serviceNames = data.services.map(s => s.name);
         await updateClinicConfig(state.orgId, { services: serviceNames });
+
+        // Convert services to knowledge documents for AI RAG
+        const knowledgeDocs = data.services.map(s => ({
+          title: `${s.name} - Service Info`,
+          content: `${s.name}: ${s.description}. Duration: ${s.durationMinutes} minutes. Price: ${s.priceRange}.`,
+        }));
+        await seedKnowledge(state.orgId, knowledgeDocs);
       }
 
       setState(prev => ({

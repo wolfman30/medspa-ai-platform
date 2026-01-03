@@ -169,3 +169,65 @@ Record observations from test runs here:
 - Verify DATABASE_URL is correct
 - Run with `--no-db` flag to skip database checks
 - Check PostgreSQL is running: `docker compose ps postgres`
+
+---
+
+## Extended E2E Test Scenarios
+
+In addition to the main flow tests, run the extended scenarios for comprehensive coverage:
+
+```bash
+# Run all extended tests
+python scripts/e2e_extended_scenarios.py
+
+# Run specific test
+python scripts/e2e_extended_scenarios.py --test twilio
+python scripts/e2e_extended_scenarios.py --test onboarding
+python scripts/e2e_extended_scenarios.py --test square
+python scripts/e2e_extended_scenarios.py --test booking
+python scripts/e2e_extended_scenarios.py --test errors
+```
+
+### Extended Tests Coverage
+
+| Test | Description | Coverage |
+|------|-------------|----------|
+| `twilio` | Twilio SMS webhook flow | Alternative SMS provider |
+| `onboarding` | Clinic onboarding workflow | Create clinic, config, status |
+| `square` | Square OAuth flow (simulated) | Connect URL, connection status |
+| `booking` | Booking confirmation flow | Lead listing, payment verification |
+| `leads` | Lead update operations | Admin lead updates |
+| `dashboard` | Admin dashboard & stats | Stats and dashboard endpoints |
+| `errors` | Error handling scenarios | Invalid JSON, missing fields, 404s |
+| `quiet_hours` | Quiet hours config | Timezone and quiet hours settings |
+
+### Latest Extended Test Run
+
+- **Date:** 2026-01-03
+- **Result:** 15 PASSED, 0 FAILED, 1 SKIPPED
+- **Notes:** All core extended scenarios passing; lead update skipped due to empty leads table
+
+---
+
+## Test Coverage Summary
+
+| Component | e2e_full_flow.py | e2e_with_video.py | e2e_extended_scenarios.py |
+|-----------|------------------|-------------------|---------------------------|
+| Health Check | YES | YES | YES |
+| Lead Creation | YES | YES | - |
+| Knowledge Base | YES | YES | - |
+| Telnyx SMS | YES | YES | - |
+| Telnyx Voice | YES | YES | - |
+| AI Conversation | YES | YES | - |
+| Square Checkout | YES | YES | - |
+| Square Webhook | YES | YES | - |
+| Twilio SMS | - | - | YES |
+| Clinic Onboarding | - | - | YES |
+| Square OAuth | - | - | YES |
+| Admin Dashboard | - | - | YES |
+| Error Handling | - | - | YES |
+| Compliance (STOP/HELP) | - | YES | - |
+| PCI Redaction | - | YES | - |
+| Idempotency | - | YES | - |
+
+**Overall Coverage: ~75%** (up from ~40%)

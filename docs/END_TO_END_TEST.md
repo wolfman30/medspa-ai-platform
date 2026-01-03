@@ -51,11 +51,18 @@ migrate -path migrations -database "postgresql://medspa:medspa@localhost:5432/me
 
 ## Test Flow
 
+Set your local API base URL:
+
+```bash
+# Docker compose exposes 8082; go run uses 8080.
+export API_BASE="http://localhost:8082"
+```
+
 ### Step 1: Verify Server is Running
 
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl $API_BASE/health
 
 # Expected response:
 # {"status":"ok"}
@@ -65,7 +72,7 @@ curl http://localhost:8080/health
 
 ```bash
 # Create lead via API
-curl -X POST http://localhost:8080/api/leads \
+curl -X POST $API_BASE/api/leads \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Test Customer",
@@ -83,7 +90,8 @@ curl -X POST http://localhost:8080/api/leads \
 **Option A: Using ngrok for real webhooks (Twilio or Telnyx)**
 ```bash
 # Install ngrok: https://ngrok.com/download
-ngrok http 8080
+# Use 8082 for docker compose (default), or 8080 if running go run.
+ngrok http 8082
 
 # Copy the https URL (e.g., https://abc123.ngrok.io)
 
@@ -113,7 +121,7 @@ cat > test-twilio.json << 'EOF'
 EOF
 
 # Send webhook (update To number to match your TWILIO_ORG_MAP_JSON)
-curl -X POST http://localhost:8080/webhooks/twilio \
+curl -X POST $API_BASE/messaging/twilio/webhook \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "MessageSid=SM$(date +%s)" \
   -d "AccountSid=AC1234567890abcdef" \
@@ -149,10 +157,10 @@ cat > test-sms.json << 'EOF'
 }
 EOF
 
-# Send webhook (note: signature verification will fail without real Telnyx secret)
-curl -X POST http://localhost:8080/webhooks/telnyx/messages \
+# Send webhook (note: this will 403 if TELNYX_WEBHOOK_SECRET is set and you don't sign the payload)
+curl -X POST $API_BASE/webhooks/telnyx/messages \
   -H "Content-Type: application/json" \
-  -H "Telnyx-Signature-Ed25519: test-signature" \
+  -H "Telnyx-Signature: test-signature" \
   -H "Telnyx-Timestamp: $(date +%s)" \
   -d @test-sms.json
 ```
@@ -245,7 +253,7 @@ cat > test-deposit.json << 'EOF'
 }
 EOF
 
-curl -X POST http://localhost:8080/webhooks/telnyx/messages \
+curl -X POST $API_BASE/webhooks/telnyx/messages \
   -H "Content-Type: application/json" \
   -d @test-deposit.json
 ```

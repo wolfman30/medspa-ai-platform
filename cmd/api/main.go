@@ -167,6 +167,11 @@ func main() {
 	messagingHandler.SetPublicBaseURL(cfg.PublicBaseURL)
 	messagingHandler.SetSkipSignature(cfg.TwilioSkipSignature)
 
+	// Production safety check: warn loudly if signature validation is disabled
+	if cfg.TwilioSkipSignature && (cfg.Env == "production" || cfg.Env == "staging") {
+		logger.Error("SECURITY WARNING: TWILIO_SKIP_SIGNATURE is enabled in production/staging - this is a security risk!")
+	}
+
 	telnyxClient := setupTelnyxClient(cfg, logger)
 
 	var quietHours compliance.QuietHours
@@ -646,6 +651,13 @@ func setupInlineWorker(
 		processedStore = events.NewProcessedStore(dbPool)
 	}
 
+	var msgChecker conversation.ProviderMessageChecker
+	if optOutChecker != nil {
+		if checker, ok := optOutChecker.(conversation.ProviderMessageChecker); ok {
+			msgChecker = checker
+		}
+	}
+
 	var autoPurger conversation.SandboxAutoPurger
 	if cfg.Env != "production" && cfg.SquareSandbox && dbPool != nil {
 		phones := clinicdata.ParsePhoneDigitsList(cfg.SandboxAutoPurgePhones)
@@ -673,6 +685,7 @@ func setupInlineWorker(
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),
 		conversation.WithOptOutChecker(optOutChecker),
+		conversation.WithProviderMessageChecker(msgChecker),
 		conversation.WithClinicConfigStore(clinicStore),
 		conversation.WithSMSTranscriptStore(smsTranscript),
 		conversation.WithConversationStore(convStore),

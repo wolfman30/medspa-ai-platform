@@ -837,6 +837,14 @@ def main() -> int:
             page.goto(phone_sim_url, wait_until="domcontentloaded", timeout=60_000)
 
             info = run_happy_path(api_url, token, artifacts_dir=artifacts_dir)
+            if page is not None:
+                page.close()
+            if context is not None:
+                context.close()
+            if video is not None:
+                video_path = video.path()
+            if browser is not None:
+                browser.close()
     except Exception:
         if page is not None:
             try:
@@ -866,9 +874,6 @@ def main() -> int:
                 browser.close()
         except Exception:
             pass
-
-    if video is not None:
-        video_path = video.path()
 
     (artifacts_dir / "console.log").write_text("\n".join(console_lines), encoding="utf-8")
     if info is not None:

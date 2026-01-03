@@ -39,6 +39,7 @@ type Worker struct {
 	autoPurge      SandboxAutoPurger
 	processed      processedEventStore
 	optOutChecker  OptOutChecker
+	msgChecker     ProviderMessageChecker
 	clinicStore    *clinic.Store
 	supervisor     Supervisor
 	supervisorMode SupervisorMode
@@ -59,6 +60,7 @@ type workerConfig struct {
 	autoPurge        SandboxAutoPurger
 	processed        processedEventStore
 	optOutChecker    OptOutChecker
+	msgChecker       ProviderMessageChecker
 	clinicStore      *clinic.Store
 	supervisor       Supervisor
 	supervisorMode   SupervisorMode
@@ -87,6 +89,11 @@ type processedEventStore interface {
 // OptOutChecker verifies whether a recipient has opted out of SMS.
 type OptOutChecker interface {
 	IsUnsubscribed(ctx context.Context, clinicID uuid.UUID, recipient string) (bool, error)
+}
+
+// ProviderMessageChecker verifies whether an inbound provider message exists.
+type ProviderMessageChecker interface {
+	HasProviderMessage(ctx context.Context, providerMessageID string) (bool, error)
 }
 
 // WithWorkerCount sets the number of concurrent consumer goroutines.
@@ -121,6 +128,15 @@ func WithReceiveBatchSize(size int) WorkerOption {
 			size = maxReceiveBatchSize
 		}
 		cfg.receiveBatchSize = size
+	}
+}
+
+// WithProviderMessageChecker configures a provider message lookup for stale-job detection.
+func WithProviderMessageChecker(checker ProviderMessageChecker) WorkerOption {
+	return func(cfg *workerConfig) {
+		if checker != nil {
+			cfg.msgChecker = checker
+		}
 	}
 }
 
@@ -238,6 +254,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		autoPurge:      cfg.autoPurge,
 		processed:      cfg.processed,
 		optOutChecker:  cfg.optOutChecker,
+		msgChecker:     cfg.msgChecker,
 		clinicStore:    cfg.clinicStore,
 		supervisor:     cfg.supervisor,
 		supervisorMode: cfg.supervisorMode,
@@ -388,6 +405,25 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		)
 	}
 
+	if payload.Kind == jobTypeMessage && w.msgChecker != nil {
+		providerID := providerMessageID(payload.Message.Metadata)
+		if providerID != "" {
+			exists, err := w.msgChecker.HasProviderMessage(ctx, providerID)
+			if err != nil {
+				w.logger.Warn("provider message lookup failed", "error", err, "provider_message_id", providerID, "job_id", payload.ID)
+			} else if !exists {
+				w.logger.Info("skipping conversation job: inbound message missing", "provider_message_id", providerID, "job_id", payload.ID)
+				if payload.TrackStatus && w.jobs != nil {
+					if storeErr := w.jobs.MarkFailed(ctx, payload.ID, "skipped: inbound message missing"); storeErr != nil {
+						w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+					}
+				}
+				w.deleteMessage(context.Background(), msg.ReceiptHandle)
+				return
+			}
+		}
+	}
+
 	var (
 		err  error
 		resp *Response
@@ -460,6 +496,19 @@ func (w *Worker) deleteMessage(ctx context.Context, receiptHandle string) {
 	}
 }
 
+func providerMessageID(metadata map[string]string) string {
+	if metadata == nil {
+		return ""
+	}
+	if value := strings.TrimSpace(metadata["provider_message_id"]); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(metadata["telnyx_message_id"]); value != "" {
+		return value
+	}
+	return ""
+}
+
 func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Response) bool {
 	if resp == nil || resp.Message == "" {
 		return false
@@ -473,6 +522,18 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 	}
 	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
 		return false
+	}
+	if w.msgChecker != nil {
+		providerID := providerMessageID(msg.Metadata)
+		if providerID != "" {
+			exists, err := w.msgChecker.HasProviderMessage(ctx, providerID)
+			if err != nil {
+				w.logger.Warn("provider message lookup failed", "error", err, "provider_message_id", providerID, "job_id", payload.ID)
+			} else if !exists {
+				w.logger.Info("suppressing reply: inbound message missing", "provider_message_id", providerID, "job_id", payload.ID)
+				return true
+			}
+		}
 	}
 
 	outboundText, blocked := w.applySupervisor(ctx, SupervisorRequest{
