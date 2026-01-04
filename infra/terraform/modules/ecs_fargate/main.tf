@@ -221,7 +221,7 @@ resource "aws_lb_listener" "http" {
   }
 
   lifecycle {
-    ignore_changes = var.enable_blue_green ? [default_action] : []
+    ignore_changes = [default_action]
   }
 }
 
@@ -239,7 +239,7 @@ resource "aws_lb_listener" "https" {
   }
 
   lifecycle {
-    ignore_changes = var.enable_blue_green ? [default_action] : []
+    ignore_changes = [default_action]
   }
 }
 
