@@ -68,6 +68,9 @@ module "ecs_fargate" {
     AWS_RETRY_MODE             = var.environment == "production" ? "standard" : "adaptive"
     AWS_MAX_ATTEMPTS           = var.environment == "production" ? "3" : "10"
     AWS_REGION                 = var.aws_region
+    COGNITO_USER_POOL_ID       = var.cognito_user_pool_id
+    COGNITO_CLIENT_ID          = var.cognito_client_id
+    COGNITO_REGION             = var.cognito_region
     PUBLIC_BASE_URL            = var.api_public_base_url
     CORS_ALLOWED_ORIGINS       = var.environment == "production" ? "https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal.aiwolfsolutions.com,https://wolfman30.github.io" : "http://localhost:8000,https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal-dev.aiwolfsolutions.com,https://wolfman30.github.io"
     ALLOW_FAKE_PAYMENTS        = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
@@ -91,10 +94,6 @@ module "ecs_fargate" {
     TELNYX_API_KEY              = "${module.secrets.secret_arn}:TELNYX_API_KEY::"
     TELNYX_MESSAGING_PROFILE_ID = "${module.secrets.secret_arn}:TELNYX_MESSAGING_PROFILE_ID::"
     TELNYX_WEBHOOK_SECRET       = "${module.secrets.secret_arn}:TELNYX_WEBHOOK_SECRET::"
-
-    COGNITO_USER_POOL_ID = "${module.secrets.secret_arn}:COGNITO_USER_POOL_ID::"
-    COGNITO_CLIENT_ID    = "${module.secrets.secret_arn}:COGNITO_CLIENT_ID::"
-    COGNITO_REGION       = "${module.secrets.secret_arn}:COGNITO_REGION::"
 
     PAYMENT_PROVIDER_KEY         = "${module.secrets.secret_arn}:PAYMENT_PROVIDER_KEY::"
     SQUARE_ACCESS_TOKEN          = "${module.secrets.secret_arn}:SQUARE_ACCESS_TOKEN::"
