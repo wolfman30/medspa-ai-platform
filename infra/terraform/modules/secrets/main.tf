@@ -44,6 +44,11 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
     TELNYX_MESSAGING_PROFILE_ID = ""
     TELNYX_WEBHOOK_SECRET       = ""
 
+    # Cognito (admin dashboard auth)
+    COGNITO_USER_POOL_ID = ""
+    COGNITO_CLIENT_ID    = ""
+    COGNITO_REGION       = ""
+
     # Payments
     PAYMENT_PROVIDER_KEY         = ""
     SQUARE_ACCESS_TOKEN          = ""
