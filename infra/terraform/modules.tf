@@ -142,11 +142,11 @@ module "api_gateway" {
 }
 
 module "onboarding_ui" {
-  count  = var.ui_domain_name != "" ? 1 : 0
+  count  = trimspace(var.ui_domain_name) != "" ? 1 : 0
   source = "./modules/static_site"
 
   environment     = var.environment
-  domain_name     = var.ui_domain_name
+  domain_name     = trimspace(var.ui_domain_name)
   certificate_arn = var.ui_certificate_arn
   price_class     = var.ui_price_class
 }

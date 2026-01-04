@@ -20,5 +20,5 @@ output "distribution_arn" {
 
 output "site_url" {
   description = "Custom domain URL for the onboarding UI"
-  value       = "https://${var.domain_name}"
+  value       = "https://${trimspace(var.domain_name)}"
 }

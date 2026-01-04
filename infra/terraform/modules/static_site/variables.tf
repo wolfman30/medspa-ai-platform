@@ -6,6 +6,10 @@ variable "environment" {
 variable "domain_name" {
   description = "Domain name to serve the UI (e.g., portal-dev.aiwolfsolutions.com)"
   type        = string
+  validation {
+    condition     = length(trimspace(var.domain_name)) >= 3
+    error_message = "domain_name must be at least 3 characters."
+  }
 }
 
 variable "certificate_arn" {

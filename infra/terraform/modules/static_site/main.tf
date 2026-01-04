@@ -4,6 +4,7 @@ locals {
   name_prefix = "medspa-${var.environment}"
   bucket_name = "${local.name_prefix}-portal-${data.aws_caller_identity.current.account_id}"
   origin_id   = "${local.name_prefix}-portal-origin"
+  domain_name = trimspace(var.domain_name)
 }
 
 resource "aws_s3_bucket" "site" {
@@ -59,7 +60,7 @@ resource "aws_cloudfront_distribution" "site" {
   comment             = "${local.name_prefix} onboarding UI"
   default_root_object = "index.html"
   price_class         = var.price_class
-  aliases             = [var.domain_name]
+  aliases             = [local.domain_name]
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
