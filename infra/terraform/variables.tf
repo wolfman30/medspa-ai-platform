@@ -160,3 +160,21 @@ variable "ui_price_class" {
   type        = string
   default     = "PriceClass_100"
 }
+
+variable "cognito_user_pool_id" {
+  description = "Cognito User Pool ID for admin dashboard auth"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_client_id" {
+  description = "Cognito app client ID for admin dashboard auth"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_region" {
+  description = "Cognito region for admin dashboard auth"
+  type        = string
+  default     = ""
+}

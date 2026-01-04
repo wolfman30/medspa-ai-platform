@@ -128,6 +128,9 @@ jobs:
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
             -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
+            -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
+            -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true"
 
       - name: Login to ECR
@@ -188,6 +191,9 @@ jobs:
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
             -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
+            -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
+            -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true"
 
       - name: Read UI outputs
@@ -416,6 +422,9 @@ jobs:
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
             -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
+            -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
+            -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true"
 
       - name: Login to ECR
@@ -476,6 +485,9 @@ jobs:
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
             -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
+            -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
+            -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true"
 
       - name: Read UI outputs
