@@ -343,7 +343,7 @@ func RegisterAdminRoutes(r chi.Router, db *sql.DB, transcriptStore *conversation
 	leadsHandler := NewAdminLeadsHandler(db, logger)
 	conversationsHandler := NewAdminConversationsHandler(db, transcriptStore, logger)
 
-	r.Route("/admin/orgs/{orgID}", func(r chi.Router) {
+	r.Route("/orgs/{orgID}", func(r chi.Router) {
 		// Dashboard
 		r.Get("/dashboard", dashboardHandler.GetDashboardOverview)
 
