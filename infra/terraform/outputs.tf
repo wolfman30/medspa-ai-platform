@@ -100,3 +100,23 @@ output "secrets_manager_arn" {
   value       = module.secrets.secret_arn
   sensitive   = true
 }
+
+output "ui_bucket_name" {
+  description = "S3 bucket name for the onboarding UI"
+  value       = try(module.onboarding_ui[0].bucket_name, "")
+}
+
+output "ui_cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for the onboarding UI"
+  value       = try(module.onboarding_ui[0].distribution_id, "")
+}
+
+output "ui_cloudfront_domain_name" {
+  description = "CloudFront distribution domain name for the onboarding UI"
+  value       = try(module.onboarding_ui[0].distribution_domain_name, "")
+}
+
+output "ui_url" {
+  description = "Custom domain URL for the onboarding UI"
+  value       = try(module.onboarding_ui[0].site_url, "")
+}
