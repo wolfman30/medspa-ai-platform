@@ -14,6 +14,11 @@ on:
         required: true
         type: boolean
         default: false
+      force_redeploy:
+        description: "Force a new deployment even if the commit is unchanged"
+        required: true
+        type: boolean
+        default: false
 
 env:
   AWS_REGION: us-east-1
@@ -47,6 +52,15 @@ jobs:
         with:
           terraform_version: "1.6.0"
 
+      - name: Set image tag
+        id: image_tag
+        run: |
+          if [ "${{ inputs.force_redeploy }}" = "true" ]; then
+            echo "tag=${{ github.sha }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Terraform init
         working-directory: infra/terraform
         run: |
@@ -63,6 +77,22 @@ jobs:
           fi
           if [ -z "${{ secrets.API_PUBLIC_BASE_URL }}" ]; then
             echo "Missing API_PUBLIC_BASE_URL secret (e.g., https://api-dev.example.com)."
+            exit 1
+          fi
+          if [ -z "${{ secrets.UI_DOMAIN_NAME }}" ]; then
+            echo "Missing UI_DOMAIN_NAME secret (e.g., portal-dev.aiwolfsolutions.com)."
+            exit 1
+          fi
+          if [ -z "${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" ]; then
+            echo "Missing ONBOARDING_COGNITO_USER_POOL_ID secret."
+            exit 1
+          fi
+          if [ -z "${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" ]; then
+            echo "Missing ONBOARDING_COGNITO_CLIENT_ID secret."
+            exit 1
+          fi
+          if [ -z "${{ secrets.ONBOARDING_COGNITO_REGION }}" ]; then
+            echo "Missing ONBOARDING_COGNITO_REGION secret."
             exit 1
           fi
 
@@ -90,13 +120,15 @@ jobs:
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=development" \
-            -var="api_image_tag=${{ github.sha }}" \
+            -var="api_image_tag=${{ steps.image_tag.outputs.tag }}" \
             -var="api_desired_count=0" \
             -var="enable_voice_webhooks=false" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
-            -var="enable_blue_green=false"
+            -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
+            -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="enable_blue_green=true"
 
       - name: Login to ECR
         run: |
@@ -105,24 +137,44 @@ jobs:
 
       - name: Build & push API image
         env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-api:${{ github.sha }}
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-api:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target api -t "$IMAGE" .
           docker push "$IMAGE"
 
       - name: Build & push DB migrator image
         env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-api:migrate-${{ github.sha }}
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-api:migrate-${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target migrate -t "$IMAGE" .
           docker push "$IMAGE"
 
       - name: Build & push voice-lambda image
         env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-voice-lambda:${{ github.sha }}
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-voice-lambda:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
           docker push "$IMAGE"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/onboarding/package-lock.json
+
+      - name: Install onboarding dependencies
+        working-directory: web/onboarding
+        run: npm ci
+
+      - name: Build onboarding UI
+        working-directory: web/onboarding
+        env:
+          VITE_API_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_REGION: ${{ secrets.ONBOARDING_COGNITO_REGION }}
+        run: npm run build
 
       - name: Terraform apply (full)
         working-directory: infra/terraform
@@ -130,11 +182,30 @@ jobs:
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=development" \
-            -var="api_image_tag=${{ github.sha }}" \
+            -var="api_image_tag=${{ steps.image_tag.outputs.tag }}" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
-            -var="enable_blue_green=false"
+            -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
+            -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
+            -var="enable_blue_green=true"
+
+      - name: Read UI outputs
+        id: ui
+        working-directory: infra/terraform
+        run: |
+          echo "bucket=$(terraform output -raw ui_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "distribution=$(terraform output -raw ui_cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload onboarding UI
+        if: steps.ui.outputs.bucket != ''
+        run: |
+          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete
+
+      - name: Invalidate onboarding UI cache
+        if: steps.ui.outputs.distribution != ''
+        run: |
+          aws cloudfront create-invalidation --distribution-id "${{ steps.ui.outputs.distribution }}" --paths "/*"
 
       - name: Refresh DATABASE_URL (RDS managed secret)
         run: |
@@ -269,6 +340,15 @@ jobs:
         with:
           terraform_version: "1.6.0"
 
+      - name: Set image tag
+        id: image_tag
+        run: |
+          if [ "${{ inputs.force_redeploy }}" = "true" ]; then
+            echo "tag=${{ github.sha }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Terraform init
         working-directory: infra/terraform
         run: |
@@ -285,6 +365,22 @@ jobs:
           fi
           if [ -z "${{ secrets.API_PUBLIC_BASE_URL }}" ]; then
             echo "Missing API_PUBLIC_BASE_URL secret (e.g., https://api.example.com)."
+            exit 1
+          fi
+          if [ -z "${{ secrets.UI_DOMAIN_NAME }}" ]; then
+            echo "Missing UI_DOMAIN_NAME secret (e.g., portal.aiwolfsolutions.com)."
+            exit 1
+          fi
+          if [ -z "${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" ]; then
+            echo "Missing ONBOARDING_COGNITO_USER_POOL_ID secret."
+            exit 1
+          fi
+          if [ -z "${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" ]; then
+            echo "Missing ONBOARDING_COGNITO_CLIENT_ID secret."
+            exit 1
+          fi
+          if [ -z "${{ secrets.ONBOARDING_COGNITO_REGION }}" ]; then
+            echo "Missing ONBOARDING_COGNITO_REGION secret."
             exit 1
           fi
 
@@ -312,12 +408,14 @@ jobs:
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=production" \
-            -var="api_image_tag=${{ github.sha }}" \
+            -var="api_image_tag=${{ steps.image_tag.outputs.tag }}" \
             -var="api_desired_count=0" \
             -var="enable_voice_webhooks=false" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
+            -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
+            -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="enable_blue_green=true"
 
       - name: Login to ECR
@@ -327,24 +425,44 @@ jobs:
 
       - name: Build & push API image
         env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-api:${{ github.sha }}
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-api:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target api -t "$IMAGE" .
           docker push "$IMAGE"
 
       - name: Build & push DB migrator image
         env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-api:migrate-${{ github.sha }}
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-api:migrate-${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target migrate -t "$IMAGE" .
           docker push "$IMAGE"
 
       - name: Build & push voice-lambda image
         env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-voice-lambda:${{ github.sha }}
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-voice-lambda:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
           docker push "$IMAGE"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/onboarding/package-lock.json
+
+      - name: Install onboarding dependencies
+        working-directory: web/onboarding
+        run: npm ci
+
+      - name: Build onboarding UI
+        working-directory: web/onboarding
+        env:
+          VITE_API_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_REGION: ${{ secrets.ONBOARDING_COGNITO_REGION }}
+        run: npm run build
 
       - name: Terraform apply (full)
         working-directory: infra/terraform
@@ -352,11 +470,30 @@ jobs:
           terraform apply -auto-approve \
             -var="aws_region=${{ env.AWS_REGION }}" \
             -var="environment=production" \
-            -var="api_image_tag=${{ github.sha }}" \
+            -var="api_image_tag=${{ steps.image_tag.outputs.tag }}" \
             -var="api_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="api_public_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
             -var="voice_upstream_base_url=${{ secrets.API_PUBLIC_BASE_URL }}" \
+            -var="ui_domain_name=${{ secrets.UI_DOMAIN_NAME }}" \
+            -var="ui_certificate_arn=${{ secrets.API_CERTIFICATE_ARN }}" \
             -var="enable_blue_green=true"
+
+      - name: Read UI outputs
+        id: ui
+        working-directory: infra/terraform
+        run: |
+          echo "bucket=$(terraform output -raw ui_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "distribution=$(terraform output -raw ui_cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload onboarding UI
+        if: steps.ui.outputs.bucket != ''
+        run: |
+          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete
+
+      - name: Invalidate onboarding UI cache
+        if: steps.ui.outputs.distribution != ''
+        run: |
+          aws cloudfront create-invalidation --distribution-id "${{ steps.ui.outputs.distribution }}" --paths "/*"
 
       - name: Refresh DATABASE_URL (RDS managed secret)
         run: |

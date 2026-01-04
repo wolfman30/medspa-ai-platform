@@ -142,3 +142,21 @@ variable "voice_upstream_base_url" {
   type        = string
   default     = ""
 }
+
+variable "ui_domain_name" {
+  description = "Domain name for the onboarding UI (e.g., portal-dev.aiwolfsolutions.com)"
+  type        = string
+  default     = ""
+}
+
+variable "ui_certificate_arn" {
+  description = "ACM certificate ARN for the onboarding UI CloudFront distribution"
+  type        = string
+  default     = ""
+}
+
+variable "ui_price_class" {
+  description = "CloudFront price class for the onboarding UI distribution"
+  type        = string
+  default     = "PriceClass_100"
+}

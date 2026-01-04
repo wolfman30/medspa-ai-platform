@@ -69,7 +69,7 @@ module "ecs_fargate" {
     AWS_MAX_ATTEMPTS           = var.environment == "production" ? "3" : "10"
     AWS_REGION                 = var.aws_region
     PUBLIC_BASE_URL            = var.api_public_base_url
-    CORS_ALLOWED_ORIGINS       = var.environment == "production" ? "https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://wolfman30.github.io" : "http://localhost:8000,https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://wolfman30.github.io"
+    CORS_ALLOWED_ORIGINS       = var.environment == "production" ? "https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal.aiwolfsolutions.com,https://wolfman30.github.io" : "http://localhost:8000,https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal-dev.aiwolfsolutions.com,https://wolfman30.github.io"
     ALLOW_FAKE_PAYMENTS        = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
     REDIS_ADDR                 = "${module.redis.primary_endpoint_address}:${module.redis.port}"
     REDIS_TLS                  = "true"
@@ -139,4 +139,14 @@ module "api_gateway" {
   environment          = var.environment
   lambda_function_name = module.lambda.function_name
   lambda_invoke_arn    = module.lambda.invoke_arn
+}
+
+module "onboarding_ui" {
+  count  = var.ui_domain_name != "" ? 1 : 0
+  source = "./modules/static_site"
+
+  environment     = var.environment
+  domain_name     = var.ui_domain_name
+  certificate_arn = var.ui_certificate_arn
+  price_class     = var.ui_price_class
 }
