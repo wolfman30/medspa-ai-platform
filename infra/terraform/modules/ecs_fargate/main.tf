@@ -219,6 +219,10 @@ resource "aws_lb_listener" "http" {
       target_group_arn = aws_lb_target_group.api.arn
     }
   }
+
+  lifecycle {
+    ignore_changes = var.enable_blue_green ? [default_action] : []
+  }
 }
 
 resource "aws_lb_listener" "https" {
@@ -232,6 +236,10 @@ resource "aws_lb_listener" "https" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  lifecycle {
+    ignore_changes = var.enable_blue_green ? [default_action] : []
   }
 }
 
