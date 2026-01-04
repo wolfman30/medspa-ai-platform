@@ -92,6 +92,10 @@ module "ecs_fargate" {
     TELNYX_MESSAGING_PROFILE_ID = "${module.secrets.secret_arn}:TELNYX_MESSAGING_PROFILE_ID::"
     TELNYX_WEBHOOK_SECRET       = "${module.secrets.secret_arn}:TELNYX_WEBHOOK_SECRET::"
 
+    COGNITO_USER_POOL_ID = "${module.secrets.secret_arn}:COGNITO_USER_POOL_ID::"
+    COGNITO_CLIENT_ID    = "${module.secrets.secret_arn}:COGNITO_CLIENT_ID::"
+    COGNITO_REGION       = "${module.secrets.secret_arn}:COGNITO_REGION::"
+
     PAYMENT_PROVIDER_KEY         = "${module.secrets.secret_arn}:PAYMENT_PROVIDER_KEY::"
     SQUARE_ACCESS_TOKEN          = "${module.secrets.secret_arn}:SQUARE_ACCESS_TOKEN::"
     SQUARE_LOCATION_ID           = "${module.secrets.secret_arn}:SQUARE_LOCATION_ID::"
