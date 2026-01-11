@@ -223,8 +223,9 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
             />
           )}
 
-          {state.currentStep === 3 && (
+          {state.currentStep === 3 && state.orgId && (
             <SMSSetup
+              orgId={state.orgId}
               phoneNumber={state.phoneNumber}
               status={state.smsStatus}
               onBack={goBack}
@@ -232,6 +233,13 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
                 // Show completion screen or redirect
                 alert('Onboarding complete! Your AI receptionist will be ready once SMS is activated.');
                 onComplete?.();
+              }}
+              onPhoneActivated={(phone) => {
+                setState(prev => ({
+                  ...prev,
+                  phoneNumber: phone,
+                  smsStatus: 'active',
+                }));
               }}
             />
           )}

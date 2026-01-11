@@ -34,8 +34,9 @@ type Worker struct {
 	jobs           JobUpdater
 	messenger      ReplyMessenger
 	bookings       bookingConfirmer
-	deposits       DepositSender
-	notifier       PaymentNotifier
+	deposits         DepositSender
+	depositPreloader *DepositPreloader
+	notifier         PaymentNotifier
 	autoPurge      SandboxAutoPurger
 	processed      processedEventStore
 	optOutChecker  OptOutChecker
@@ -56,6 +57,7 @@ type workerConfig struct {
 	receiveWaitSecs  int
 	receiveBatchSize int
 	deposit          DepositSender
+	depositPreloader *DepositPreloader
 	notifier         PaymentNotifier
 	autoPurge        SandboxAutoPurger
 	processed        processedEventStore
@@ -144,6 +146,13 @@ func WithProviderMessageChecker(checker ProviderMessageChecker) WorkerOption {
 func WithDepositSender(sender DepositSender) WorkerOption {
 	return func(cfg *workerConfig) {
 		cfg.deposit = sender
+	}
+}
+
+// WithDepositPreloader wires a preloader for parallel checkout link generation.
+func WithDepositPreloader(preloader *DepositPreloader) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.depositPreloader = preloader
 	}
 }
 
@@ -244,13 +253,14 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 	}
 
 	return &Worker{
-		processor:      processor,
-		queue:          queue,
-		jobs:           jobs,
-		messenger:      messenger,
-		bookings:       bookings,
-		deposits:       cfg.deposit,
-		notifier:       cfg.notifier,
+		processor:        processor,
+		queue:            queue,
+		jobs:             jobs,
+		messenger:        messenger,
+		bookings:         bookings,
+		deposits:         cfg.deposit,
+		depositPreloader: cfg.depositPreloader,
+		notifier:         cfg.notifier,
 		autoPurge:      cfg.autoPurge,
 		processed:      cfg.processed,
 		optOutChecker:  cfg.optOutChecker,
@@ -433,6 +443,14 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		w.logger.Info("worker calling StartConversation", "job_id", payload.ID)
 		resp, err = w.processor.StartConversation(ctx, payload.Start)
 	case jobTypeMessage:
+		// Pre-detect deposit intent and start parallel checkout generation
+		if w.depositPreloader != nil && ShouldPreloadDeposit(payload.Message.Message) {
+			w.logger.Info("deposit preloader: detected potential deposit agreement, starting parallel generation",
+				"job_id", payload.ID,
+				"conversation_id", payload.Message.ConversationID,
+			)
+			w.depositPreloader.StartPreload(ctx, payload.Message.ConversationID, payload.Message.OrgID, payload.Message.LeadID)
+		}
 		w.logger.Info("worker calling ProcessMessage", "job_id", payload.ID, "conversation_id", payload.Message.ConversationID)
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
 	case jobTypePayment:
@@ -662,6 +680,22 @@ func (w *Worker) handleDepositIntent(ctx context.Context, msg MessageRequest, re
 	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
 		return
 	}
+
+	// Check for preloaded checkout link (generated in parallel with LLM call)
+	if w.depositPreloader != nil {
+		if preloaded := w.depositPreloader.WaitForPreloaded(msg.ConversationID, 2*time.Second); preloaded != nil {
+			if preloaded.Error == nil && preloaded.URL != "" {
+				resp.DepositIntent.PreloadedURL = preloaded.URL
+				resp.DepositIntent.PreloadedPaymentID = preloaded.PrePaymentID.String()
+				w.logger.Info("deposit: using preloaded checkout link",
+					"conversation_id", msg.ConversationID,
+					"preloaded_url", preloaded.URL[:min(50, len(preloaded.URL))]+"...",
+				)
+			}
+			w.depositPreloader.ClearPreloaded(msg.ConversationID)
+		}
+	}
+
 	if err := w.deposits.SendDeposit(ctx, msg, resp); err != nil {
 		w.logger.Error("failed to send deposit intent", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
 	}

@@ -215,12 +215,210 @@ const phoneSimulatorHTML = `<!doctype html>
       color: rgba(255,255,255,0.40);
     }
     .hidden{ display:none; }
+    /* Typing indicator */
+    .typing-indicator{
+      display: flex;
+      gap: 4px;
+      padding: 12px 16px;
+      background: var(--bubble-in);
+      border-radius: 18px 18px 18px 4px;
+      width: fit-content;
+    }
+    .typing-dot{
+      width: 8px;
+      height: 8px;
+      background: var(--muted);
+      border-radius: 50%;
+      animation: typing-bounce 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(1){ animation-delay: 0s; }
+    .typing-dot:nth-child(2){ animation-delay: 0.2s; }
+    .typing-dot:nth-child(3){ animation-delay: 0.4s; }
+    @keyframes typing-bounce{
+      0%, 80%, 100%{ transform: scale(0.6); opacity: 0.4; }
+      40%{ transform: scale(1); opacity: 1; }
+    }
+    .row.typing{ margin-top: 12px; }
+    /* Incoming call overlay */
+    .call-overlay{
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(180deg, #1c1c1e 0%, #2c2c2e 100%);
+      z-index: 200;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 80px;
+      border-radius: 36px;
+    }
+    .call-overlay.active{
+      display: flex;
+    }
+    .call-avatar{
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      color: white;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
+    }
+    .call-name{
+      font-size: 32px;
+      font-weight: 300;
+      color: white;
+      margin-bottom: 8px;
+    }
+    .call-status{
+      font-size: 18px;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 40px;
+    }
+    .call-rings{
+      display: flex;
+      gap: 8px;
+      margin-bottom: 60px;
+    }
+    .call-ring{
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      transition: background 0.3s;
+    }
+    .call-ring.active{
+      background: #34c759;
+      box-shadow: 0 0 12px rgba(52, 199, 89, 0.6);
+    }
+    .call-buttons{
+      display: flex;
+      gap: 60px;
+      margin-top: auto;
+      margin-bottom: 80px;
+    }
+    .call-btn{
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .call-btn:hover{
+      transform: scale(1.1);
+    }
+    .call-btn.decline{
+      background: #ff3b30;
+      color: white;
+    }
+    .call-btn.accept{
+      background: #34c759;
+      color: white;
+    }
+    /* Browser view styles */
+    .browser-view{
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #fff;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      border-radius: 36px;
+      overflow: hidden;
+    }
+    .browser-view.active{
+      display: flex;
+    }
+    .browser-bar{
+      background: #f5f5f5;
+      padding: 52px 12px 10px 12px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .browser-url{
+      flex: 1;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .browser-url .secure{
+      color: #34c759;
+      margin-right: 4px;
+    }
+    .browser-close{
+      background: #e5e5e5;
+      border: none;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      font-size: 16px;
+      color: #666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .browser-frame{
+      flex: 1;
+      border: none;
+      background: #fff;
+    }
   </style>
 </head>
 <body>
   <div class="phone">
     <div class="screen">
       <div class="island" aria-hidden="true"></div>
+      <!-- Incoming call overlay -->
+      <div id="callOverlay" class="call-overlay">
+        <div class="call-avatar">🏥</div>
+        <div class="call-name" id="callName">Cleveland Primecare</div>
+        <div class="call-status" id="callStatus">incoming call...</div>
+        <div class="call-rings">
+          <div class="call-ring" id="ring1"></div>
+          <div class="call-ring" id="ring2"></div>
+          <div class="call-ring" id="ring3"></div>
+          <div class="call-ring" id="ring4"></div>
+        </div>
+        <div class="call-buttons">
+          <button class="call-btn decline" onclick="window.declineCall()" title="Decline">✕</button>
+          <button class="call-btn accept" onclick="window.acceptCall()" title="Accept">📞</button>
+        </div>
+      </div>
+      <!-- Browser view overlay (for showing checkout pages) -->
+      <div id="browserView" class="browser-view">
+        <div class="browser-bar">
+          <div class="browser-url">
+            <span class="secure">🔒</span>
+            <span id="browserUrlText">square.com</span>
+          </div>
+          <button class="browser-close" onclick="window.closeBrowser()" title="Close">✕</button>
+        </div>
+        <iframe id="browserFrame" class="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+      </div>
       <div class="header">
         <div class="title">MedSpa AI - SMS</div>
         <div class="meta">
@@ -325,6 +523,13 @@ const phoneSimulatorHTML = `<!doctype html>
       if (!html) {
         html = '<div class="day">No messages yet</div>';
       }
+      // Show typing indicator if last message was from user (AI is responding)
+      if (messages.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        if ((lastMsg.role || "").toLowerCase() === "user" && window._showTyping) {
+          html += '<div class="row typing assistant"><div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div></div>';
+        }
+      }
       const prevScroll = root.scrollTop;
       const atBottom = (root.scrollHeight - root.clientHeight - prevScroll) < 40;
       root.innerHTML = html;
@@ -332,6 +537,16 @@ const phoneSimulatorHTML = `<!doctype html>
         root.scrollTop = root.scrollHeight;
       }
     }
+
+    // Typing indicator control
+    window._showTyping = false;
+    window.showTyping = function() {
+      window._showTyping = true;
+      pollOnce();
+    };
+    window.hideTyping = function() {
+      window._showTyping = false;
+    };
 
     function setStatus(ok, text) {
       const dot = document.getElementById("dot");
@@ -401,6 +616,107 @@ const phoneSimulatorHTML = `<!doctype html>
     setStatus(false, "Starting...");
     pollOnce();
     setInterval(pollOnce, POLL_MS);
+
+    // Incoming call functions (called from Playwright)
+    let callInterval = null;
+    let ringCount = 0;
+
+    window.showIncomingCall = function(clinicName) {
+      const overlay = document.getElementById("callOverlay");
+      const nameEl = document.getElementById("callName");
+      const statusEl = document.getElementById("callStatus");
+
+      nameEl.textContent = clinicName || "Cleveland Primecare";
+      statusEl.textContent = "incoming call...";
+      ringCount = 0;
+
+      // Reset ring indicators
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById("ring" + i).classList.remove("active");
+      }
+
+      overlay.classList.add("active");
+
+      // Play ring sound and animate rings
+      callInterval = setInterval(function() {
+        ringCount++;
+        if (ringCount <= 4) {
+          document.getElementById("ring" + ringCount).classList.add("active");
+          // Play ring tone
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.setValueAtTime(440, ctx.currentTime);
+            osc.frequency.setValueAtTime(480, ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.4);
+          } catch(e) {}
+        }
+      }, 1200);
+    };
+
+    window.endCall = function(reason) {
+      const overlay = document.getElementById("callOverlay");
+      const statusEl = document.getElementById("callStatus");
+
+      if (callInterval) {
+        clearInterval(callInterval);
+        callInterval = null;
+      }
+
+      statusEl.textContent = reason || "call ended";
+
+      setTimeout(function() {
+        overlay.classList.remove("active");
+      }, 1000);
+    };
+
+    window.declineCall = function() {
+      window.endCall("call declined");
+    };
+
+    window.acceptCall = function() {
+      window.endCall("connected");
+    };
+
+    // Browser view functions (called from Playwright)
+    window.openBrowser = function(url) {
+      const browserView = document.getElementById("browserView");
+      const browserFrame = document.getElementById("browserFrame");
+      const browserUrlText = document.getElementById("browserUrlText");
+
+      // Extract domain for display
+      try {
+        const parsed = new URL(url);
+        browserUrlText.textContent = parsed.hostname + parsed.pathname.substring(0, 30) + (parsed.pathname.length > 30 ? "..." : "");
+      } catch {
+        browserUrlText.textContent = url.substring(0, 40);
+      }
+
+      browserFrame.src = url;
+      browserView.classList.add("active");
+    };
+
+    window.closeBrowser = function() {
+      const browserView = document.getElementById("browserView");
+      const browserFrame = document.getElementById("browserFrame");
+      browserFrame.src = "about:blank";
+      browserView.classList.remove("active");
+    };
+
+    // Intercept link clicks to open in embedded browser
+    document.addEventListener("click", function(e) {
+      const link = e.target.closest("a");
+      if (link && link.href && (link.href.includes("square") || link.href.includes("checkout") || link.href.includes("pay"))) {
+        e.preventDefault();
+        window.openBrowser(link.href);
+      }
+    });
   </script>
 </body>
 </html>`

@@ -1,12 +1,43 @@
+import { useState } from 'react';
+import { activatePhoneNumber } from '../api/client';
+
 interface Props {
+  orgId: string;
   phoneNumber?: string;
   status: 'pending' | 'verified' | 'active' | 'not_started';
   onBack: () => void;
   onComplete: () => void;
+  onPhoneActivated?: (phone: string) => void;
 }
 
-export function SMSSetup({ phoneNumber, status, onBack, onComplete }: Props) {
+export function SMSSetup({ orgId, phoneNumber, status, onBack, onComplete, onPhoneActivated }: Props) {
   const isReady = status === 'active' || status === 'verified';
+  const [manualPhone, setManualPhone] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [activationError, setActivationError] = useState<string | null>(null);
+  const [activationSuccess, setActivationSuccess] = useState(false);
+
+  const handleActivatePhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualPhone.trim()) return;
+
+    setActivating(true);
+    setActivationError(null);
+    setActivationSuccess(false);
+
+    try {
+      const result = await activatePhoneNumber(orgId, manualPhone.trim());
+      setActivationSuccess(true);
+      setManualPhone('');
+      if (onPhoneActivated) {
+        onPhoneActivated(result.phone_number);
+      }
+    } catch (err) {
+      setActivationError(err instanceof Error ? err.message : 'Failed to activate phone number');
+    } finally {
+      setActivating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -15,6 +46,35 @@ export function SMSSetup({ phoneNumber, status, onBack, onComplete }: Props) {
         <p className="mt-1 text-sm text-gray-600">
           Configure your SMS phone number for client communications.
         </p>
+      </div>
+
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-green-800 mb-2">Quick Activation (Dev/Testing)</h3>
+        <p className="text-sm text-green-700 mb-3">
+          If you already have a Telnyx phone number configured externally, enter it here to activate it for this clinic.
+        </p>
+        <form onSubmit={handleActivatePhone} className="flex gap-2">
+          <input
+            type="tel"
+            value={manualPhone}
+            onChange={(e) => setManualPhone(e.target.value)}
+            placeholder="+1234567890"
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+          />
+          <button
+            type="submit"
+            disabled={activating || !manualPhone.trim()}
+            className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
+          >
+            {activating ? 'Activating...' : 'Activate'}
+          </button>
+        </form>
+        {activationError && (
+          <p className="mt-2 text-sm text-red-600">{activationError}</p>
+        )}
+        {activationSuccess && (
+          <p className="mt-2 text-sm text-green-600">Phone number activated successfully!</p>
+        )}
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">

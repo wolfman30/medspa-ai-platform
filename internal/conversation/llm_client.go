@@ -38,3 +38,17 @@ type LLMResponse struct {
 type LLMClient interface {
 	Complete(ctx context.Context, req LLMRequest) (LLMResponse, error)
 }
+
+// StreamChunk represents a partial streaming response
+type StreamChunk struct {
+	Text  string // Partial text chunk
+	Done  bool   // True when streaming is complete
+	Error error  // Non-nil if an error occurred
+	Usage TokenUsage
+}
+
+// StreamingLLMClient extends LLMClient with streaming support
+type StreamingLLMClient interface {
+	LLMClient
+	CompleteStream(ctx context.Context, req LLMRequest) (<-chan StreamChunk, error)
+}

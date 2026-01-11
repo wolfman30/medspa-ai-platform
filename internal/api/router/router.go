@@ -91,6 +91,10 @@ func New(cfg *Config) http.Handler {
 		if cfg.SquareOAuth != nil {
 			public.Mount("/oauth", cfg.SquareOAuth.Routes())
 		}
+		// DEV ONLY: Public phone activation (bypasses auth for development)
+		if cfg.AdminMessaging != nil {
+			public.Post("/dev/activate-phone", cfg.AdminMessaging.ActivateHostedNumber)
+		}
 		// Public onboarding routes (self-service)
 		if cfg.AdminOnboarding != nil {
 			public.Route("/onboarding", func(r chi.Router) {
@@ -122,9 +126,11 @@ func New(cfg *Config) http.Handler {
 			admin.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
 			if cfg.ConversationHandler != nil {
 				admin.Get("/e2e/phone-simulator", cfg.ConversationHandler.PhoneSimulator)
+				admin.Get("/e2e/phone-simulator-demo", cfg.ConversationHandler.EnhancedPhoneSimulator)
 			}
 			if cfg.AdminMessaging != nil {
 				admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)
+				admin.Post("/hosted/activate", cfg.AdminMessaging.ActivateHostedNumber)
 				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)

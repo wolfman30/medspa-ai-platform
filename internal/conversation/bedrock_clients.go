@@ -14,6 +14,7 @@ import (
 
 type bedrockConverseAPI interface {
 	Converse(ctx context.Context, params *bedrockruntime.ConverseInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseOutput, error)
+	ConverseStream(ctx context.Context, params *bedrockruntime.ConverseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseStreamOutput, error)
 }
 
 type bedrockInvokeModelAPI interface {
@@ -118,6 +119,118 @@ func (c *BedrockLLMClient) Complete(ctx context.Context, req LLMRequest) (LLMRes
 		}
 	}
 	return resp, nil
+}
+
+// CompleteStream implements streaming completions using Bedrock's ConverseStream API.
+// Returns a channel that emits partial text chunks as they arrive.
+func (c *BedrockLLMClient) CompleteStream(ctx context.Context, req LLMRequest) (<-chan StreamChunk, error) {
+	if strings.TrimSpace(req.Model) == "" {
+		return nil, errors.New("conversation: bedrock model id is required")
+	}
+
+	systemBlocks := make([]brtypes.SystemContentBlock, 0, len(req.System))
+	for _, block := range req.System {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+		systemBlocks = append(systemBlocks, &brtypes.SystemContentBlockMemberText{Value: block})
+	}
+
+	messages := make([]brtypes.Message, 0, len(req.Messages))
+	for _, msg := range req.Messages {
+		content := strings.TrimSpace(msg.Content)
+		if content == "" {
+			continue
+		}
+
+		switch msg.Role {
+		case ChatRoleSystem:
+			systemBlocks = append(systemBlocks, &brtypes.SystemContentBlockMemberText{Value: content})
+			continue
+		case ChatRoleUser:
+			messages = append(messages, brtypes.Message{
+				Role: brtypes.ConversationRoleUser,
+				Content: []brtypes.ContentBlock{
+					&brtypes.ContentBlockMemberText{Value: content},
+				},
+			})
+		case ChatRoleAssistant:
+			messages = append(messages, brtypes.Message{
+				Role: brtypes.ConversationRoleAssistant,
+				Content: []brtypes.ContentBlock{
+					&brtypes.ContentBlockMemberText{Value: content},
+				},
+			})
+		default:
+			return nil, fmt.Errorf("conversation: unsupported role %q", msg.Role)
+		}
+	}
+
+	inference := &brtypes.InferenceConfiguration{}
+	if req.MaxTokens > 0 {
+		inference.MaxTokens = aws.Int32(req.MaxTokens)
+	}
+	if req.Temperature >= 0 {
+		inference.Temperature = aws.Float32(req.Temperature)
+	}
+	if req.TopP != 0 {
+		inference.TopP = aws.Float32(req.TopP)
+	}
+	if inference.MaxTokens == nil && inference.Temperature == nil && inference.TopP == nil {
+		inference = nil
+	}
+
+	out, err := c.api.ConverseStream(ctx, &bedrockruntime.ConverseStreamInput{
+		ModelId:         aws.String(req.Model),
+		System:          systemBlocks,
+		Messages:        messages,
+		InferenceConfig: inference,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	chunks := make(chan StreamChunk, 32)
+
+	go func() {
+		defer close(chunks)
+
+		stream := out.GetStream()
+		if stream == nil {
+			chunks <- StreamChunk{Error: errors.New("conversation: bedrock stream is nil"), Done: true}
+			return
+		}
+		defer stream.Close()
+
+		var usage TokenUsage
+		for event := range stream.Events() {
+			switch v := event.(type) {
+			case *brtypes.ConverseStreamOutputMemberContentBlockDelta:
+				if textDelta, ok := v.Value.Delta.(*brtypes.ContentBlockDeltaMemberText); ok {
+					chunks <- StreamChunk{Text: textDelta.Value}
+				}
+			case *brtypes.ConverseStreamOutputMemberMetadata:
+				if v.Value.Usage != nil {
+					usage = TokenUsage{
+						InputTokens:  int32OrZero(v.Value.Usage.InputTokens),
+						OutputTokens: int32OrZero(v.Value.Usage.OutputTokens),
+						TotalTokens:  int32OrZero(v.Value.Usage.TotalTokens),
+					}
+				}
+			case *brtypes.ConverseStreamOutputMemberMessageStop:
+				// Stream is complete
+			}
+		}
+
+		if err := stream.Err(); err != nil {
+			chunks <- StreamChunk{Error: err, Done: true}
+			return
+		}
+
+		chunks <- StreamChunk{Done: true, Usage: usage}
+	}()
+
+	return chunks, nil
 }
 
 func bedrockExtractOutputText(out *bedrockruntime.ConverseOutput) (string, error) {

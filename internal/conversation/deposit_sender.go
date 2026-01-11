@@ -107,7 +107,21 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		return fmt.Errorf("deposit: cannot verify existing deposit - payments repo missing HasOpenDeposit")
 	}
 
-	paymentRow, err := d.payments.CreateIntent(ctx, orgUUID, leadUUID, "square", uuid.Nil, intent.AmountCents, "deposit_pending", intent.ScheduledFor)
+	// Check if we have a preloaded checkout link (generated in parallel with LLM)
+	var preloadedPaymentID uuid.UUID
+	if intent.PreloadedPaymentID != "" {
+		if parsed, perr := uuid.Parse(intent.PreloadedPaymentID); perr == nil {
+			preloadedPaymentID = parsed
+		}
+	}
+
+	// Use preloaded payment ID if available, otherwise generate new
+	bookingIntentID := uuid.Nil
+	if preloadedPaymentID != uuid.Nil {
+		bookingIntentID = preloadedPaymentID
+	}
+
+	paymentRow, err := d.payments.CreateIntent(ctx, orgUUID, leadUUID, "square", bookingIntentID, intent.AmountCents, "deposit_pending", intent.ScheduledFor)
 	if err != nil {
 		return fmt.Errorf("deposit: create intent: %w", err)
 	}
@@ -121,26 +135,40 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		paymentID = uuid.UUID(paymentRow.ID.Bytes)
 	}
 
-	link, err := d.checkout.CreatePaymentLink(ctx, payments.CheckoutParams{
-		OrgID:           msg.OrgID,
-		LeadID:          msg.LeadID,
-		AmountCents:     intent.AmountCents,
-		BookingIntentID: paymentID,
-		Description:     defaultString(intent.Description, "Appointment deposit"),
-		SuccessURL:      intent.SuccessURL,
-		CancelURL:       intent.CancelURL,
-		ScheduledFor:    intent.ScheduledFor,
-	})
-	if err != nil {
-		return fmt.Errorf("deposit: create checkout link: %w", err)
+	// Use preloaded checkout link if available, otherwise create new
+	var link *payments.CheckoutResponse
+	if intent.PreloadedURL != "" {
+		d.logger.Info("deposit: using preloaded checkout link (saved ~1.7s)",
+			"org_id", msg.OrgID,
+			"lead_id", msg.LeadID,
+			"payment_id", paymentID,
+		)
+		link = &payments.CheckoutResponse{
+			URL:        intent.PreloadedURL,
+			ProviderID: "", // Preloaded links don't have provider ID available here
+		}
+	} else {
+		link, err = d.checkout.CreatePaymentLink(ctx, payments.CheckoutParams{
+			OrgID:           msg.OrgID,
+			LeadID:          msg.LeadID,
+			AmountCents:     intent.AmountCents,
+			BookingIntentID: paymentID,
+			Description:     defaultString(intent.Description, "Appointment deposit"),
+			SuccessURL:      intent.SuccessURL,
+			CancelURL:       intent.CancelURL,
+			ScheduledFor:    intent.ScheduledFor,
+		})
+		if err != nil {
+			return fmt.Errorf("deposit: create checkout link: %w", err)
+		}
+		d.logger.Info("deposit: link created",
+			"org_id", msg.OrgID,
+			"lead_id", msg.LeadID,
+			"amount_cents", intent.AmountCents,
+			"payment_id", paymentID,
+			"provider_link_id", link.ProviderID,
+		)
 	}
-	d.logger.Info("deposit: link created",
-		"org_id", msg.OrgID,
-		"lead_id", msg.LeadID,
-		"amount_cents", intent.AmountCents,
-		"payment_id", paymentID,
-		"provider_link_id", link.ProviderID,
-	)
 
 	if link.URL != "" {
 		// Prefer the inbound destination number for this conversation (msg.To). This ensures
@@ -157,7 +185,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			"from", fromNumber,
 			"payment_id", paymentID,
 		)
-		body := fmt.Sprintf("To secure priority booking, please place a refundable $%.2f deposit: %s", float64(intent.AmountCents)/100, link.URL)
+		body := fmt.Sprintf("To secure priority booking, please place a refundable $%.2f deposit: %s\n\nNote: This reserves your priority spot, not a confirmed time. Our team will call to finalize your exact appointment.", float64(intent.AmountCents)/100, link.URL)
 		conversationID := strings.TrimSpace(resp.ConversationID)
 		if conversationID == "" {
 			conversationID = strings.TrimSpace(msg.ConversationID)
@@ -191,6 +219,10 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			To:   msg.From,
 			Body: body,
 			Kind: "deposit_link",
+			Metadata: map[string]string{
+				"payment_id": paymentID.String(),
+				"lead_id":    msg.LeadID,
+			},
 		})
 	}
 
