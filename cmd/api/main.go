@@ -566,6 +566,7 @@ func setupInlineWorker(
 	}
 
 	var depositSender conversation.DepositSender
+	var depositPreloader *conversation.DepositPreloader
 	var convStore *conversation.ConversationStore
 	if cfg.PersistConversationHistory {
 		convStore = conversation.NewConversationStore(sqlDB)
@@ -599,7 +600,8 @@ func setupInlineWorker(
 				logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
 			}
 			depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
-			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "")
+			depositPreloader = conversation.NewDepositPreloader(squareSvc, 5000, logger) // Default $50 deposit
+			logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "", "preloader", depositPreloader != nil)
 		}
 	} else {
 		logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "")
@@ -684,6 +686,7 @@ func setupInlineWorker(
 		logger,
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
+		conversation.WithDepositPreloader(depositPreloader),
 		conversation.WithPaymentNotifier(notifier),
 		conversation.WithSandboxAutoPurger(autoPurger),
 		conversation.WithProcessedEventsStore(processedStore),

@@ -396,3 +396,44 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
+
+type activateNumberRequest struct {
+	ClinicID    string `json:"clinic_id"`
+	PhoneNumber string `json:"phone_number"`
+}
+
+// ActivateHostedNumber directly activates a phone number for a clinic without going through Telnyx flow.
+// This is useful for dev/testing when the number is already set up externally.
+func (h *AdminMessagingHandler) ActivateHostedNumber(w http.ResponseWriter, r *http.Request) {
+	var req activateNumberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	clinicID, err := uuid.Parse(req.ClinicID)
+	if err != nil {
+		http.Error(w, "invalid clinic_id", http.StatusBadRequest)
+		return
+	}
+	normalized := messaging.NormalizeE164(req.PhoneNumber)
+	if normalized == "" {
+		http.Error(w, "invalid phone_number", http.StatusBadRequest)
+		return
+	}
+	record := messaging.HostedOrderRecord{
+		ClinicID:   clinicID,
+		E164Number: normalized,
+		Status:     "activated",
+	}
+	if err := h.store.UpsertHostedOrder(r.Context(), nil, record); err != nil {
+		h.logger.Error("upsert hosted order failed", "error", err, "clinic_id", clinicID, "number", normalized)
+		http.Error(w, "failed to activate number", http.StatusInternalServerError)
+		return
+	}
+	h.logger.Info("activated hosted number", "clinic_id", clinicID, "number", normalized)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clinic_id":    clinicID.String(),
+		"phone_number": normalized,
+		"status":       "activated",
+	})
+}

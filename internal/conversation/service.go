@@ -62,6 +62,9 @@ type DepositIntent struct {
 	CancelURL    string
 	Description  string
 	ScheduledFor *time.Time
+	// Preloaded checkout info (set by deposit preloader for parallel generation)
+	PreloadedURL       string // Pre-generated Square checkout URL
+	PreloadedPaymentID string // Pre-generated payment ID to use for intent (UUID string)
 }
 
 // Response is a simple DTO returned to the API layer.

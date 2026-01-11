@@ -16,13 +16,14 @@ import (
 const smsTranscriptKeyPrefix = "sms_transcript:"
 
 type SMSTranscriptMessage struct {
-	ID        string    `json:"id"`
-	Role      string    `json:"role"` // "user" or "assistant"
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Body      string    `json:"body"`
-	Timestamp time.Time `json:"timestamp"`
-	Kind      string    `json:"kind,omitempty"`
+	ID        string            `json:"id"`
+	Role      string            `json:"role"` // "user" or "assistant"
+	From      string            `json:"from"`
+	To        string            `json:"to"`
+	Body      string            `json:"body"`
+	Timestamp time.Time         `json:"timestamp"`
+	Kind      string            `json:"kind,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 type SMSTranscriptStore struct {

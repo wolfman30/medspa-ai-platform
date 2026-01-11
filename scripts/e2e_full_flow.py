@@ -26,6 +26,7 @@ import json
 import uuid
 import hmac
 import hashlib
+import base64
 import re
 import html as html_lib
 import subprocess
@@ -93,6 +94,9 @@ CANCEL_URL = os.getenv("CANCEL_URL", _DEFAULT_CANCEL_URL_LOCAL if _is_local_api 
 
 # Telnyx webhook secret for signature validation (from .env)
 TELNYX_WEBHOOK_SECRET = os.getenv("TELNYX_WEBHOOK_SECRET", "").strip()
+
+# Square webhook secret for payment webhook signature validation
+SQUARE_WEBHOOK_SIGNATURE_KEY = os.getenv("SQUARE_WEBHOOK_SIGNATURE_KEY", "").strip()
 
 # Test identifiers - using UUIDs for production-like behavior
 TEST_ORG_ID = os.getenv("TEST_ORG_ID", "11111111-1111-1111-1111-111111111111")
@@ -515,6 +519,51 @@ def seed_hosted_number() -> bool:
         print_warning(f"Hosted number seeding failed: {e}")
         return True  # Non-fatal
 
+
+def seed_clinic_config(clinic_name: str = "Cleveland Primecare Medspa") -> bool:
+    """Seed the clinic config in Redis so the AI uses the correct clinic name."""
+    try:
+        config = {
+            "org_id": TEST_ORG_ID,
+            "name": clinic_name,
+            "timezone": "America/New_York",
+            "business_hours": {
+                "monday": {"open": "09:00", "close": "18:00"},
+                "tuesday": {"open": "09:00", "close": "18:00"},
+                "wednesday": {"open": "09:00", "close": "18:00"},
+                "thursday": {"open": "09:00", "close": "18:00"},
+                "friday": {"open": "09:00", "close": "17:00"},
+            },
+            "callback_sla_hours": 12,
+            "deposit_amount_cents": 5000,
+            "services": ["Botox", "Fillers", "Laser Treatments", "HydraFacial", "DiamondGlow"],
+            "notifications": {
+                "email_enabled": False,
+                "sms_enabled": False,
+                "notify_on_payment": True,
+                "notify_on_new_lead": False,
+            },
+        }
+        config_json = json.dumps(config)
+
+        # Use docker compose exec to set the Redis key
+        cmd = [
+            "docker", "compose", "exec", "-T", "redis",
+            "redis-cli", "SET", f"clinic:config:{TEST_ORG_ID}", config_json
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, cwd=_PROJECT_ROOT)
+
+        if result.returncode == 0:
+            print_success(f"Clinic config seeded: {clinic_name}")
+            return True
+        else:
+            print_warning(f"Clinic config seeding failed: {result.stderr[:200] if result.stderr else 'unknown error'}")
+            return True  # Non-fatal
+    except Exception as e:
+        print_warning(f"Clinic config seeding failed: {e}")
+        return True  # Non-fatal
+
+
 def _wait_for_conversation_job(job_id: str, timeout_seconds: int = 240) -> Optional[Dict[str, Any]]:
     """Poll the conversation job endpoint until completed/failed."""
     deadline = time.time() + timeout_seconds
@@ -843,6 +892,13 @@ def create_checkout(lead_id: str, amount_cents: int = 5000) -> Optional[Dict[str
         print_error(f"Checkout creation failed: {e}")
         return None
 
+def compute_square_signature(webhook_url: str, body: bytes, key: str) -> str:
+    """Compute the Square webhook HMAC-SHA1 signature."""
+    message = webhook_url + body.decode("utf-8")
+    mac = hmac.new(key.encode("utf-8"), message.encode("utf-8"), hashlib.sha1)
+    return base64.b64encode(mac.digest()).decode("ascii")
+
+
 def send_square_payment_webhook(lead_id: str, booking_intent_id: str, amount_cents: int = 5000) -> bool:
     """Simulate a Square payment.completed webhook."""
     event_id = f"sq_evt_{uuid.uuid4().hex[:16]}"
@@ -873,13 +929,21 @@ def send_square_payment_webhook(lead_id: str, booking_intent_id: str, amount_cen
         }
     }
 
+    webhook_url = f"{API_URL}/webhooks/square"
+    body_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+    # Compute signature if we have the Square webhook secret
+    signature = ""
+    if SQUARE_WEBHOOK_SIGNATURE_KEY:
+        signature = compute_square_signature(webhook_url, body_bytes, SQUARE_WEBHOOK_SIGNATURE_KEY)
+
     try:
         resp = requests.post(
-            f"{API_URL}/webhooks/square",
-            json=payload,
+            webhook_url,
+            data=body_bytes,
             headers={
                 "Content-Type": "application/json",
-                "X-Square-Signature": ""  # Empty signature - bypassed in dev mode
+                "X-Square-Signature": signature
             },
             timeout=30
         )
@@ -892,6 +956,9 @@ def send_square_payment_webhook(lead_id: str, booking_intent_id: str, amount_cen
         elif resp.status_code == 401:
             print_warning("Square signature validation failed (expected in test without key)")
             return True  # Acceptable in dev
+        elif resp.status_code == 403:
+            print_warning("Square signature validation failed - check SQUARE_WEBHOOK_SIGNATURE_KEY")
+            return False
         else:
             print_error(f"Square webhook failed: {resp.text[:200]}")
             return False

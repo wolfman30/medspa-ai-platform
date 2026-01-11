@@ -165,3 +165,19 @@ export async function seedKnowledge(
   }
   return res.json();
 }
+
+export async function activatePhoneNumber(
+  orgId: string,
+  phoneNumber: string
+): Promise<{ clinic_id: string; phone_number: string; status: string }> {
+  const res = await fetch(`${API_BASE}/admin/hosted/activate`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify({ clinic_id: orgId, phone_number: phoneNumber }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to activate phone number');
+  }
+  return res.json();
+}
