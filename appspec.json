@@ -1,0 +1,17 @@
+{
+  "version": 0.0,
+  "Resources": [
+    {
+      "TargetService": {
+        "Type": "AWS::ECS::Service",
+        "Properties": {
+          "TaskDefinition": "arn:aws:ecs:us-east-1:422017356225:task-definition/medspa-development-api:45",
+          "LoadBalancerInfo": {
+            "ContainerName": "api",
+            "ContainerPort": 8080
+          }
+        }
+      }
+    }
+  ]
+}
