@@ -58,12 +58,15 @@ func (s *Store) UpsertHostedOrder(ctx context.Context, q Querier, record HostedO
 	if record.ID == uuid.Nil {
 		record.ID = uuid.New()
 	}
+	// Use clinic_id + e164_number as conflict target since provider_order_id may be empty
+	// for direct activations (e.g., dev/testing scenarios)
 	query := `
 		INSERT INTO hosted_number_orders (id, clinic_id, e164_number, status, last_error, provider_order_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (provider_order_id)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
+		ON CONFLICT (clinic_id, e164_number)
 		DO UPDATE SET status = EXCLUDED.status,
 			last_error = EXCLUDED.last_error,
+			provider_order_id = COALESCE(EXCLUDED.provider_order_id, hosted_number_orders.provider_order_id),
 			updated_at = now()
 	`
 	_, err := q.Exec(ctx, query, record.ID, record.ClinicID, record.E164Number, record.Status, record.LastError, record.ProviderOrderID)
