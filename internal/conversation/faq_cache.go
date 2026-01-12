@@ -17,7 +17,7 @@ type FAQEntry struct {
 var faqCache = []FAQEntry{
 	// HydraFacial vs DiamondGlow comparison
 	{
-		Pattern: regexp.MustCompile(`(?i)(hydrafacial|hydra[\s-]?facial).*(diamond\s*glow|diamondglow)|(diamond\s*glow|diamondglow).*(hydrafacial|hydra[\s-]?facial)`),
+		Pattern:  regexp.MustCompile(`(?i)(hydrafacial|hydra[\s-]?facial).*(diamond\s*glow|diamondglow)|(diamond\s*glow|diamondglow).*(hydrafacial|hydra[\s-]?facial)`),
 		Keywords: []string{"hydrafacial", "diamondglow", "difference", "vs", "versus", "compare", "better"},
 		Response: `Great question! Both are excellent exfoliating facials, but they work a bit differently:
 
@@ -29,7 +29,7 @@ For sensitive skin, I'd typically recommend starting with HydraFacial since it's
 	},
 	// Botox vs Fillers comparison
 	{
-		Pattern: regexp.MustCompile(`(?i)(botox|dysport|xeomin).*(filler|juvederm|restylane)|(filler|juvederm|restylane).*(botox|dysport|xeomin)`),
+		Pattern:  regexp.MustCompile(`(?i)(botox|dysport|xeomin).*(filler|juvederm|restylane)|(filler|juvederm|restylane).*(botox|dysport|xeomin)`),
 		Keywords: []string{"botox", "filler", "difference", "vs", "versus", "compare"},
 		Response: `Great question! They work differently:
 
@@ -41,7 +41,7 @@ Many patients actually use both for a complete rejuvenation! Would you like to s
 	},
 	// Chemical peel vs Microneedling
 	{
-		Pattern: regexp.MustCompile(`(?i)(chemical\s*peel|peel).*(microneedling|micro[\s-]?needling)|(microneedling|micro[\s-]?needling).*(chemical\s*peel|peel)`),
+		Pattern:  regexp.MustCompile(`(?i)(chemical\s*peel|peel).*(microneedling|micro[\s-]?needling)|(microneedling|micro[\s-]?needling).*(chemical\s*peel|peel)`),
 		Keywords: []string{"peel", "microneedling", "difference", "vs", "versus", "compare"},
 		Response: `Both are great for skin rejuvenation but work differently:
 

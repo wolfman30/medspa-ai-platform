@@ -22,18 +22,18 @@ var (
 
 // PreGeneratedCheckout holds a pre-generated Square checkout link
 type PreGeneratedCheckout struct {
-	URL             string
-	ProviderID      string
-	PrePaymentID    uuid.UUID
-	AmountCents     int32
-	GeneratedAt     time.Time
-	Error           error
+	URL          string
+	ProviderID   string
+	PrePaymentID uuid.UUID
+	AmountCents  int32
+	GeneratedAt  time.Time
+	Error        error
 }
 
 // DepositPreloader manages parallel checkout link generation
 type DepositPreloader struct {
-	checkout    paymentLinkCreator
-	logger      *logging.Logger
+	checkout      paymentLinkCreator
+	logger        *logging.Logger
 	defaultAmount int32
 
 	// Cache of pre-generated links keyed by conversation ID
