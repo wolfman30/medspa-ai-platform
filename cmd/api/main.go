@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -615,9 +616,23 @@ func setupInlineWorker(
 	// Initialize notification service for clinic operator alerts
 	var notifier conversation.PaymentNotifier
 	if clinicStore != nil {
-		// Setup email sender
+		// Setup email sender (prefer SES over SendGrid)
 		var emailSender notify.EmailSender
-		if cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
+		if cfg.SESFromEmail != "" {
+			// Use AWS SES for email
+			sesAwsCfg, err := mainconfig.LoadAWSConfig(ctx, cfg)
+			if err != nil {
+				logger.Error("failed to load AWS config for SES", "error", err)
+			} else {
+				sesClient := sesv2.NewFromConfig(sesAwsCfg)
+				emailSender = notify.NewSESSender(sesClient, notify.SESConfig{
+					FromEmail: cfg.SESFromEmail,
+					FromName:  cfg.SESFromName,
+				}, logger)
+				logger.Info("AWS SES email sender initialized for inline workers", "from", cfg.SESFromEmail)
+			}
+		}
+		if emailSender == nil && cfg.SendGridAPIKey != "" && cfg.SendGridFromEmail != "" {
 			emailSender = notify.NewSendGridSender(notify.SendGridConfig{
 				APIKey:    cfg.SendGridAPIKey,
 				FromEmail: cfg.SendGridFromEmail,
@@ -626,7 +641,7 @@ func setupInlineWorker(
 			logger.Info("sendgrid email sender initialized for inline workers")
 		} else {
 			emailSender = notify.NewStubEmailSender(logger)
-			logger.Warn("email notifications disabled for inline workers (SENDGRID_API_KEY or SENDGRID_FROM_EMAIL not set)")
+			logger.Warn("email notifications disabled for inline workers (SES_FROM_EMAIL or SENDGRID_API_KEY not set)")
 		}
 
 		// Setup SMS sender for operator notifications

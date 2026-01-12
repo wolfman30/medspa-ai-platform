@@ -89,6 +89,10 @@ type Config struct {
 	SendGridFromEmail string
 	SendGridFromName  string
 
+	// AWS SES Email Configuration (preferred over SendGrid if configured)
+	SESFromEmail string
+	SESFromName  string
+
 	// Nextech EMR Configuration
 	NextechBaseURL      string
 	NextechClientID     string
@@ -224,6 +228,10 @@ func Load() *Config {
 		SendGridAPIKey:    getEnv("SENDGRID_API_KEY", ""),
 		SendGridFromEmail: getEnv("SENDGRID_FROM_EMAIL", ""),
 		SendGridFromName:  getEnv("SENDGRID_FROM_NAME", "MedSpa AI"),
+
+		// AWS SES Email Configuration (preferred over SendGrid if configured)
+		SESFromEmail: getEnv("SES_FROM_EMAIL", ""),
+		SESFromName:  getEnv("SES_FROM_NAME", "MedSpa AI"),
 
 		// Nextech EMR Configuration
 		NextechBaseURL:      getEnv("NEXTECH_BASE_URL", ""),
