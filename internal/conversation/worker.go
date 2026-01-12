@@ -29,24 +29,24 @@ type SandboxAutoPurger interface {
 
 // Worker consumes conversation jobs from the queue and invokes the processor.
 type Worker struct {
-	processor      Service
-	queue          queueClient
-	jobs           JobUpdater
-	messenger      ReplyMessenger
-	bookings       bookingConfirmer
+	processor        Service
+	queue            queueClient
+	jobs             JobUpdater
+	messenger        ReplyMessenger
+	bookings         bookingConfirmer
 	deposits         DepositSender
 	depositPreloader *DepositPreloader
 	notifier         PaymentNotifier
-	autoPurge      SandboxAutoPurger
-	processed      processedEventStore
-	optOutChecker  OptOutChecker
-	msgChecker     ProviderMessageChecker
-	clinicStore    *clinic.Store
-	supervisor     Supervisor
-	supervisorMode SupervisorMode
-	transcript     *SMSTranscriptStore
-	convStore      *ConversationStore
-	logger         *logging.Logger
+	autoPurge        SandboxAutoPurger
+	processed        processedEventStore
+	optOutChecker    OptOutChecker
+	msgChecker       ProviderMessageChecker
+	clinicStore      *clinic.Store
+	supervisor       Supervisor
+	supervisorMode   SupervisorMode
+	transcript       *SMSTranscriptStore
+	convStore        *ConversationStore
+	logger           *logging.Logger
 
 	cfg workerConfig
 	wg  sync.WaitGroup
@@ -261,17 +261,17 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		deposits:         cfg.deposit,
 		depositPreloader: cfg.depositPreloader,
 		notifier:         cfg.notifier,
-		autoPurge:      cfg.autoPurge,
-		processed:      cfg.processed,
-		optOutChecker:  cfg.optOutChecker,
-		msgChecker:     cfg.msgChecker,
-		clinicStore:    cfg.clinicStore,
-		supervisor:     cfg.supervisor,
-		supervisorMode: cfg.supervisorMode,
-		transcript:     cfg.transcript,
-		convStore:      cfg.convStore,
-		logger:         logger,
-		cfg:            cfg,
+		autoPurge:        cfg.autoPurge,
+		processed:        cfg.processed,
+		optOutChecker:    cfg.optOutChecker,
+		msgChecker:       cfg.msgChecker,
+		clinicStore:      cfg.clinicStore,
+		supervisor:       cfg.supervisor,
+		supervisorMode:   cfg.supervisorMode,
+		transcript:       cfg.transcript,
+		convStore:        cfg.convStore,
+		logger:           logger,
+		cfg:              cfg,
 	}
 }
 
