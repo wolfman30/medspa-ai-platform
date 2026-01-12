@@ -57,7 +57,9 @@ type Config struct {
 	// ServicePriceText provides a human-readable price string per service (keyed by normalized service name).
 	ServicePriceText map[string]string `json:"service_price_text,omitempty"`
 	Services         []string          `json:"services,omitempty"` // e.g., ["Botox", "Fillers"]
-	Notifications    NotificationPrefs `json:"notifications"`
+	// BookingURL is the clinic's online booking page (e.g., Moxie, Calendly, etc.)
+	BookingURL    string            `json:"booking_url,omitempty"`
+	Notifications NotificationPrefs `json:"notifications"`
 }
 
 // DefaultConfig returns a sensible default configuration.
