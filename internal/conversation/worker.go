@@ -324,12 +324,20 @@ func (w *Worker) isOptedOut(ctx context.Context, orgID string, recipient string)
 }
 
 func (w *Worker) clinicName(ctx context.Context, orgID string) string {
-	if w == nil || w.clinicStore == nil {
+	cfg := w.clinicConfig(ctx, orgID)
+	if cfg == nil {
 		return ""
+	}
+	return strings.TrimSpace(cfg.Name)
+}
+
+func (w *Worker) clinicConfig(ctx context.Context, orgID string) *clinic.Config {
+	if w == nil || w.clinicStore == nil {
+		return nil
 	}
 	orgID = strings.TrimSpace(orgID)
 	if orgID == "" {
-		return ""
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -337,12 +345,9 @@ func (w *Worker) clinicName(ctx context.Context, orgID string) string {
 	cfg, err := w.clinicStore.Get(ctx, orgID)
 	if err != nil {
 		w.logger.Warn("failed to load clinic config", "error", err, "org_id", orgID)
-		return ""
+		return nil
 	}
-	if cfg == nil {
-		return ""
-	}
-	return strings.TrimSpace(cfg.Name)
+	return cfg
 }
 
 // Start launches worker goroutines until ctx is cancelled.
@@ -746,8 +751,13 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 
 	if evt.LeadPhone != "" && evt.FromNumber != "" {
 		if !w.isOptedOut(ctx, evt.OrgID, evt.LeadPhone) {
-			clinicName := w.clinicName(ctx, evt.OrgID)
-			body := paymentConfirmationMessage(evt, clinicName)
+			cfg := w.clinicConfig(ctx, evt.OrgID)
+			var clinicName, bookingURL string
+			if cfg != nil {
+				clinicName = strings.TrimSpace(cfg.Name)
+				bookingURL = strings.TrimSpace(cfg.BookingURL)
+			}
+			body := paymentConfirmationMessage(evt, clinicName, bookingURL)
 
 			if w.messenger == nil {
 				// Transcript is still recorded even when SMS sending is disabled.
@@ -792,23 +802,31 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	return nil
 }
 
-func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName string) string {
+func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, bookingURL string) string {
 	if evt == nil {
 		return ""
 	}
 	name := strings.TrimSpace(clinicName)
+	bookingURL = strings.TrimSpace(bookingURL)
+
+	// Build the booking link line if URL is configured
+	var bookingLine string
+	if bookingURL != "" {
+		bookingLine = fmt.Sprintf("\n\nBook your appointment online: %s", bookingURL)
+	}
+
 	if evt.ScheduledFor != nil {
 		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM")
 		if name != "" {
-			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you within 24 hours with final details. See you soon!", date, name)
+			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you within 24 hours with final details.%s", date, name, bookingLine)
 		}
-		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details. See you soon!", date)
+		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details.%s", date, bookingLine)
 	}
 	amount := float64(evt.AmountCents) / 100
 	if name != "" {
-		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you within 24 hours to confirm your appointment time.", amount, name)
+		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you within 24 hours to confirm your appointment.%s", amount, name, bookingLine)
 	}
-	return fmt.Sprintf("Payment of $%.2f received! Thank you! Our team will call you within 24 hours to confirm your appointment time.", amount)
+	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you within 24 hours to confirm your appointment.%s", amount, bookingLine)
 }
 
 func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.PaymentFailedV1) error {
