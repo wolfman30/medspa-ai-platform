@@ -60,12 +60,14 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateConfigRequest is the request body for updating clinic config.
 type UpdateConfigRequest struct {
-	Name               string         `json:"name,omitempty"`
-	Timezone           string         `json:"timezone,omitempty"`
-	BusinessHours      *BusinessHours `json:"business_hours,omitempty"`
-	CallbackSLAHours   *int           `json:"callback_sla_hours,omitempty"`
-	DepositAmountCents *int           `json:"deposit_amount_cents,omitempty"`
-	Services           []string       `json:"services,omitempty"`
+	Name               string             `json:"name,omitempty"`
+	Timezone           string             `json:"timezone,omitempty"`
+	BusinessHours      *BusinessHours     `json:"business_hours,omitempty"`
+	CallbackSLAHours   *int               `json:"callback_sla_hours,omitempty"`
+	DepositAmountCents *int               `json:"deposit_amount_cents,omitempty"`
+	Services           []string           `json:"services,omitempty"`
+	BookingURL         string             `json:"booking_url,omitempty"`
+	Notifications      *NotificationPrefs `json:"notifications,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -119,6 +121,12 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Services != nil {
 		cfg.Services = req.Services
+	}
+	if req.BookingURL != "" {
+		cfg.BookingURL = req.BookingURL
+	}
+	if req.Notifications != nil {
+		cfg.Notifications = *req.Notifications
 	}
 
 	// Save updated config
