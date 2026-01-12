@@ -254,7 +254,7 @@ func Load() *Config {
 		SupervisorRequired:  getEnvAsBool("SUPERVISOR_REQUIRED", false),
 		DisclaimerEnabled:   getEnvAsBool("DISCLAIMER_ENABLED", true),
 		DisclaimerLevel:     strings.ToLower(strings.TrimSpace(getEnv("DISCLAIMER_LEVEL", "medium"))),
-		DisclaimerFirstOnly: getEnvAsBool("DISCLAIMER_FIRST_ONLY", false),
+		DisclaimerFirstOnly: getEnvAsBool("DISCLAIMER_FIRST_ONLY", true),
 		AuditRetentionDays:  getEnvAsInt("AUDIT_RETENTION_DAYS", 2555), // 7 years for HIPAA
 	}
 }
