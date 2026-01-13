@@ -101,3 +101,36 @@ func TestDisclaimerWrapperFallsBackWhenCheckerErrors(t *testing.T) {
 		t.Fatalf("expected disclaimer when checker fails, got %q", inner.last.Body)
 	}
 }
+
+func TestDisclaimerWrapperFirstOnlyWithoutStores(t *testing.T) {
+	inner := &stubMessenger{}
+	wrapped := WrapWithDisclaimers(inner, DisclaimerWrapperConfig{
+		Enabled:          true,
+		Level:            "short",
+		FirstMessageOnly: true,
+	})
+
+	_ = wrapped.SendReply(context.Background(), conversation.OutboundReply{
+		OrgID:          "org-1",
+		ConversationID: "sms:org-1:15551234567",
+		Body:           "Hello!",
+	})
+
+	firstBody := inner.last.Body
+	if !strings.Contains(firstBody, "Auto-assistant. Not medical advice.") {
+		t.Fatalf("expected disclaimer to be appended, got %q", firstBody)
+	}
+
+	_ = wrapped.SendReply(context.Background(), conversation.OutboundReply{
+		OrgID:          "org-1",
+		ConversationID: "sms:org-1:15551234567",
+		Body:           "Hello again!",
+	})
+
+	if inner.calls != 2 {
+		t.Fatalf("expected inner messenger to be called twice")
+	}
+	if strings.Contains(inner.last.Body, "Auto-assistant. Not medical advice.") {
+		t.Fatalf("expected disclaimer to be skipped after first message")
+	}
+}
