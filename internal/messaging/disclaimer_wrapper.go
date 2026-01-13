@@ -73,6 +73,7 @@ func (d *DisclaimerMessenger) SendReply(ctx context.Context, reply conversation.
 	isFirst := true
 	if d.firstOnly {
 		isFirst = d.isFirstAssistantMessage(ctx, reply.ConversationID)
+		d.logger.Debug("disclaimer: first message check result", "conversation_id", reply.ConversationID, "is_first", isFirst, "first_only_mode", d.firstOnly)
 	}
 	body, err := d.service.AddDisclaimer(ctx, reply.Body, compliance.DisclaimerOptions{
 		OrgID:          reply.OrgID,
@@ -83,6 +84,9 @@ func (d *DisclaimerMessenger) SendReply(ctx context.Context, reply conversation.
 	if err != nil {
 		d.logger.Warn("failed to apply disclaimer", "error", err, "conversation_id", reply.ConversationID)
 	} else {
+		if body != reply.Body {
+			d.logger.Info("disclaimer: added to message", "conversation_id", reply.ConversationID, "is_first", isFirst)
+		}
 		reply.Body = body
 	}
 	return d.inner.SendReply(ctx, reply)
@@ -90,6 +94,7 @@ func (d *DisclaimerMessenger) SendReply(ctx context.Context, reply conversation.
 
 func (d *DisclaimerMessenger) isFirstAssistantMessage(ctx context.Context, conversationID string) bool {
 	if strings.TrimSpace(conversationID) == "" {
+		d.logger.Debug("disclaimer: empty conversation ID, treating as first message")
 		return true
 	}
 	if ctx == nil {
@@ -98,6 +103,7 @@ func (d *DisclaimerMessenger) isFirstAssistantMessage(ctx context.Context, conve
 	if d.conversation != nil {
 		has, err := d.conversation.HasAssistantMessage(ctx, conversationID)
 		if err == nil {
+			d.logger.Debug("disclaimer: conversation store check", "conversation_id", conversationID, "has_assistant", has)
 			return !has
 		}
 		d.logger.Warn("disclaimer: conversation store check failed", "error", err, "conversation_id", conversationID)
@@ -105,10 +111,12 @@ func (d *DisclaimerMessenger) isFirstAssistantMessage(ctx context.Context, conve
 	if d.transcriptStore != nil {
 		has, err := d.transcriptStore.HasAssistantMessage(ctx, conversationID)
 		if err == nil {
+			d.logger.Debug("disclaimer: transcript store check", "conversation_id", conversationID, "has_assistant", has)
 			return !has
 		}
 		d.logger.Warn("disclaimer: transcript store check failed", "error", err, "conversation_id", conversationID)
 	}
+	d.logger.Debug("disclaimer: no stores available, treating as first message", "conversation_id", conversationID)
 	return true
 }
 
