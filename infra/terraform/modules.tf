@@ -112,6 +112,11 @@ module "ecs_fargate" {
     SENDGRID_FROM_EMAIL = "${module.secrets.secret_arn}:SENDGRID_FROM_EMAIL::"
     SENDGRID_FROM_NAME  = "${module.secrets.secret_arn}:SENDGRID_FROM_NAME::"
 
+    SES_FROM_EMAIL = "${module.secrets.secret_arn}:SES_FROM_EMAIL::"
+    SES_FROM_NAME  = "${module.secrets.secret_arn}:SES_FROM_NAME::"
+
+    DISABLE_PAYMENT_COOLDOWN = "${module.secrets.secret_arn}:DISABLE_PAYMENT_COOLDOWN::"
+
     NEXTECH_BASE_URL      = "${module.secrets.secret_arn}:NEXTECH_BASE_URL::"
     NEXTECH_CLIENT_ID     = "${module.secrets.secret_arn}:NEXTECH_CLIENT_ID::"
     NEXTECH_CLIENT_SECRET = "${module.secrets.secret_arn}:NEXTECH_CLIENT_SECRET::"
