@@ -639,7 +639,8 @@ func setupInlineWorker(
 				FromName:  cfg.SendGridFromName,
 			}, logger)
 			logger.Info("sendgrid email sender initialized for inline workers")
-		} else {
+		}
+		if emailSender == nil {
 			emailSender = notify.NewStubEmailSender(logger)
 			logger.Warn("email notifications disabled for inline workers (SES_FROM_EMAIL or SENDGRID_API_KEY not set)")
 		}
