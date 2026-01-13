@@ -593,7 +593,7 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		reply := OutboundReply{
 			OrgID:          msg.OrgID,
 			LeadID:         msg.LeadID,
-			ConversationID: resp.ConversationID,
+			ConversationID: conversationID,
 			To:             msg.From,
 			From:           msg.To,
 			Body:           resp.Message,
