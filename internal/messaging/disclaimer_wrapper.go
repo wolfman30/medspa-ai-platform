@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
@@ -65,6 +66,7 @@ type DisclaimerMessenger struct {
 	firstOnly       bool
 	conversation    AssistantMessageChecker
 	transcriptStore AssistantMessageChecker
+	seen            sync.Map
 }
 
 // SendReply adds a disclaimer before sending when configured.
@@ -102,23 +104,40 @@ func (d *DisclaimerMessenger) isFirstAssistantMessage(ctx context.Context, conve
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	// Check in-memory cache first (most reliable for this session)
+	if _, alreadySeen := d.seen.Load(conversationID); alreadySeen {
+		d.logger.Info("disclaimer: already seen in memory", "conversation_id", conversationID)
+		return false
+	}
+
+	// Check persistent stores as backup
 	if d.conversation != nil {
 		has, err := d.conversation.HasAssistantMessage(ctx, conversationID)
-		if err == nil {
-			d.logger.Info("disclaimer: conversation store check", "conversation_id", conversationID, "has_assistant", has)
-			return !has
+		if err == nil && has {
+			d.logger.Info("disclaimer: conversation store has assistant", "conversation_id", conversationID)
+			d.seen.Store(conversationID, struct{}{})
+			return false
 		}
-		d.logger.Warn("disclaimer: conversation store check failed", "error", err, "conversation_id", conversationID)
+		if err != nil {
+			d.logger.Warn("disclaimer: conversation store check failed", "error", err, "conversation_id", conversationID)
+		}
 	}
 	if d.transcriptStore != nil {
 		has, err := d.transcriptStore.HasAssistantMessage(ctx, conversationID)
-		if err == nil {
-			d.logger.Info("disclaimer: transcript store check", "conversation_id", conversationID, "has_assistant", has)
-			return !has
+		if err == nil && has {
+			d.logger.Info("disclaimer: transcript store has assistant", "conversation_id", conversationID)
+			d.seen.Store(conversationID, struct{}{})
+			return false
 		}
-		d.logger.Warn("disclaimer: transcript store check failed", "error", err, "conversation_id", conversationID)
+		if err != nil {
+			d.logger.Warn("disclaimer: transcript store check failed", "error", err, "conversation_id", conversationID)
+		}
 	}
-	d.logger.Info("disclaimer: no stores available, treating as first message", "conversation_id", conversationID)
+
+	// First message for this conversation - mark as seen for future checks
+	d.seen.Store(conversationID, struct{}{})
+	d.logger.Info("disclaimer: first message, marking as seen", "conversation_id", conversationID)
 	return true
 }
 
