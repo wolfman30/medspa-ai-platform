@@ -63,7 +63,8 @@ export function ServicesForm({ defaultValues, onSubmit, onBack }: Props) {
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Services & Pricing</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Add the services you offer. The AI will use this to help clients book appointments.
+          Add the services you offer. The AI uses this to answer questions and capture
+          preferred times and full names so staff can finalize appointments in your system.
         </p>
       </div>
 

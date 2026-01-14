@@ -65,7 +65,7 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
             </div>
             <h3 className="mt-4 text-lg font-medium text-gray-900">Connect Square</h3>
             <p className="mt-2 text-sm text-gray-500">
-              Accept deposits for appointments and process payments securely.
+              Accept deposits for appointment requests and process payments securely.
             </p>
             <a
               href={connectUrl}
@@ -84,9 +84,9 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
         <h4 className="text-sm font-medium text-blue-900">Why Square?</h4>
         <ul className="mt-2 text-sm text-blue-700 space-y-1">
           <li>- Secure payment processing with PCI compliance</li>
-          <li>- Accept deposits for appointment bookings</li>
+          <li>- Accept deposits for appointment requests</li>
           <li>- Automatic payment reminders</li>
-          <li>- Integrated with your booking system</li>
+          <li>- Works alongside your booking system (no EMR/EHR or CRM sync in phase 1)</li>
         </ul>
       </div>
 
