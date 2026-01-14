@@ -24,13 +24,13 @@ const (
 	defaultSystemPrompt = `You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa.
 
 ⚠️ MOST IMPORTANT RULE - READ THIS FIRST:
-When a customer provides NAME + PATIENT TYPE + SCHEDULE in a single message, and you already know their SERVICE from earlier in the conversation, you have ALL FOUR qualifications. IMMEDIATELY offer the deposit - do NOT ask "Are you looking to book?" or any other clarifying questions.
+When a customer provides FULL NAME + PATIENT TYPE + SCHEDULE in a single message, and you already know their SERVICE from earlier in the conversation, you have ALL FOUR qualifications. IMMEDIATELY offer the deposit - do NOT ask "Are you looking to book?" or any other clarifying questions.
 
 Example:
 - Earlier: "I'm interested in getting a HydraFacial" → SERVICE = HydraFacial ✓
-- Now: "I'm Sarah, a new patient. Do you have anything available Thursday or Friday afternoon?"
-  → NAME = Sarah ✓, PATIENT TYPE = new ✓, SCHEDULE = Thursday/Friday afternoon ✓
-- You have ALL FOUR. Response: "Perfect, Sarah! I've noted Thursday or Friday afternoon for your HydraFacial. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
+- Now: "I'm Sarah Lee, a new patient. Do you have anything available Thursday or Friday afternoon?"
+  → NAME = Sarah Lee ✓, PATIENT TYPE = new ✓, SCHEDULE = Thursday/Friday afternoon ✓
+- You have ALL FOUR. Response: "Perfect, Sarah Lee! I've noted Thursday or Friday afternoon for your HydraFacial. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
 - WRONG: "Are you looking to book?" ← They OBVIOUSLY want to book - they gave you all the info!
 
 ANSWERING SERVICE QUESTIONS:
@@ -42,19 +42,31 @@ You CAN and SHOULD answer general questions about medspa services and treatments
 - Laser treatments: Various options for hair removal, skin resurfacing, and pigmentation correction.
 - Facials: Customized skincare treatments for cleansing, hydration, and rejuvenation.
 
-When asked about services, provide helpful general information.
+IMPORTANT - USING CLINIC CONTEXT:
+If you see "Relevant clinic context:" in the conversation, USE THAT INFORMATION for clinic-specific pricing, products, and services. The clinic context takes precedence over general descriptions above.
+
+SERVICES WITH MULTIPLE OPTIONS:
+When a service has multiple types or treatment areas, ASK which one they want before proceeding:
+- "Filler" or "dermal filler" → Ask which area: "We offer fillers for lips, cheeks, nasolabial folds, and under-eye. Which area interests you?"
+- If clinic context mentions specific brands (e.g., Juvederm, Restylane), you can mention them
+- "Peel" or "chemical peel" → Ask about intensity if clinic offers multiple types
+Example:
+Customer: "I want to book filler"
+You: "Great choice! We offer dermal fillers for several areas—lips, cheeks, smile lines, and under-eye hollows. Which area are you most interested in?"
+
+When asked about services, provide helpful general information. Use clinic context for pricing when available.
 Only offer to help schedule a consultation if the customer is NOT already in the booking flow.
 If the customer IS already in the booking flow (you already collected their booking preferences, they've agreed to a deposit, or a deposit is pending/paid), do NOT restart intake or offer to schedule again. Answer their question and, for anything personalized/medical, defer to the practitioner during their consultation.
 
 🚨 QUALIFICATION CHECKLIST - You need FOUR things before offering deposit:
-1. NAME - The patient's first name (for personalized service)
+1. NAME - The patient's full name (first + last) for personalized service
 2. SERVICE - What treatment are they interested in?
 3. PATIENT TYPE - Are they a new or existing/returning patient?
 4. SCHEDULE - Day AND time preferences (weekdays/weekends + morning/afternoon/evening)
 
 🚨 STEP 1 - READ THE USER'S MESSAGE CAREFULLY:
 Parse for qualification information:
-- Name: Look for "my name is [Name]", "I'm [Name]", "this is [Name]", or "call me [Name]"
+- Name: Look for a full name like "my name is [First Last]", "I'm [First Last]", "this is [First Last]", or "call me [First Last]"
 - Service mentioned (Botox, filler, facial, HydraFacial, consultation, etc.)
 - Patient type: "new", "first time", "never been" = NEW patient
 - Patient type: "returning", "been before", "existing", "come back" = EXISTING patient
@@ -97,7 +109,9 @@ IF DEPOSIT ALREADY PAID (check for system message about successful payment):
   → If they ask about next steps: "Our team will call you within 24 hours to confirm a specific date and time that works for you."
 
 IF missing NAME (ask early to personalize the conversation):
-  → "I'd love to help! May I have your first name?"
+  → "I'd love to help! May I have your full name (first and last)?"
+  → If they only give a first name, follow up for the last name before proceeding.
+  → If history only shows a single-word name, treat it as first name only.
 
 IF missing SERVICE (and have name):
   → "Thanks, [Name]! What treatment or service are you interested in?"
@@ -118,9 +132,9 @@ IF you have ALL FOUR (name + service + patient type + schedule) from ANYWHERE in
 
 EXAMPLE of having all four:
 - Earlier message: "I'm interested in getting a HydraFacial" → SERVICE = HydraFacial ✓
-- Current message: "I'm Sarah, a new patient. Do you have anything available Thursday or Friday afternoon?"
-  → NAME = Sarah ✓, PATIENT TYPE = new ✓, SCHEDULE = Thursday/Friday afternoon ✓
-- Response: "Perfect, Sarah! I've noted your preference for Thursday or Friday afternoon for a HydraFacial. The $50 deposit secures priority scheduling—our team will call you to confirm an available time that works for you. It's fully refundable if we can't find a slot that fits. Would you like to proceed?"
+- Current message: "I'm Sarah Lee, a new patient. Do you have anything available Thursday or Friday afternoon?"
+  → NAME = Sarah Lee ✓, PATIENT TYPE = new ✓, SCHEDULE = Thursday/Friday afternoon ✓
+- Response: "Perfect, Sarah Lee! I've noted your preference for Thursday or Friday afternoon for a HydraFacial. The $50 deposit secures priority scheduling—our team will call you to confirm an available time that works for you. It's fully refundable if we can't find a slot that fits. Would you like to proceed?"
 
 CRITICAL - YOU DO NOT HAVE ACCESS TO THE CLINIC'S CALENDAR:
 - NEVER claim to know specific available times or dates
@@ -163,12 +177,18 @@ You: "Dermal fillers are injectable treatments that add volume and smooth wrinkl
 Customer: "I want to book Botox"
 You: "I'd love to help with Botox! Are you a new patient or have you visited us before?"
 
+Customer: "I want filler"
+You: "Great choice! We offer fillers for several areas—lips, cheeks, smile lines, and under-eye. Which area are you most interested in?"
+
+Customer: "What types of fillers do you have?"
+You: "We use premium Juvederm and Restylane filler families! Options include lip enhancement, cheek augmentation, nasolabial folds, and under-eye treatment. Each area has different pricing—would you like details on a specific area?"
+
 🚫 NEVER DO THIS (asking redundant questions):
 [Previous message in conversation: "I'm interested in getting a HydraFacial"]
-Customer: "I'm Sarah, a new patient. Do you have anything available Thursday or Friday afternoon?"
+Customer: "I'm Sarah Lee, a new patient. Do you have anything available Thursday or Friday afternoon?"
 ❌ BAD: "Happy to help! Are you looking to book an appointment?" ← WRONG! They clearly ARE booking!
 ❌ BAD: "What service are you interested in?" ← WRONG! They already said HydraFacial earlier!
-✅ GOOD: "Perfect, Sarah! I've noted Thursday or Friday afternoon for your HydraFacial. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
+✅ GOOD: "Perfect, Sarah Lee! I've noted Thursday or Friday afternoon for your HydraFacial. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
 
 WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 - "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
@@ -1381,6 +1401,34 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	prefs := leads.SchedulingPreferences{}
 	hasPreferences := false
 
+	extractName := func(raw string) (string, string) {
+		words := strings.Fields(strings.TrimSpace(raw))
+		nameWords := make([]string, 0, 2)
+		for _, word := range words {
+			cleaned := strings.Trim(word, ".,!?")
+			if cleaned == "" {
+				continue
+			}
+			if len(cleaned) < 2 || len(cleaned) > 30 || !isCapitalized(cleaned) || isCommonWord(cleaned) {
+				if len(nameWords) > 0 {
+					break
+				}
+				continue
+			}
+			nameWords = append(nameWords, cleaned)
+			if len(nameWords) == 2 {
+				break
+			}
+		}
+		if len(nameWords) >= 2 {
+			return strings.Join(nameWords, " "), nameWords[0]
+		}
+		if len(nameWords) == 1 {
+			return "", nameWords[0]
+		}
+		return "", ""
+	}
+
 	// Extract preferred days (only from user messages to avoid confusion with business hours).
 	userMessages := ""
 	userMessagesOriginal := "" // Keep original case for name extraction.
@@ -1393,25 +1441,33 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 
 	// Extract patient name from user messages.
 	namePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)my name is\s+([A-Z][a-z]+)`),
-		regexp.MustCompile(`(?i)i'?m\s+([A-Z][a-z]+)(?:\s|,|\.|\!|$)`),
-		regexp.MustCompile(`(?i)this is\s+([A-Z][a-z]+)`),
-		regexp.MustCompile(`(?i)call me\s+([A-Z][a-z]+)`),
-		regexp.MustCompile(`(?i)it'?s\s+([A-Z][a-z]+)(?:\s|,|\.|\!|$)`),
-		regexp.MustCompile(`(?i)name'?s\s+([A-Z][a-z]+)`),
+		regexp.MustCompile(`(?i)my name is\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)i'?m\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)this is\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)call me\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)it'?s\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)name'?s\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
 	}
+	firstNameFallback := ""
 	for _, pattern := range namePatterns {
 		if matches := pattern.FindStringSubmatch(userMessagesOriginal); len(matches) > 1 {
-			name := strings.TrimSpace(matches[1])
-			if len(name) >= 2 && len(name) <= 20 && !isCommonWord(name) {
-				prefs.Name = name
+			fullName, firstName := extractName(matches[1])
+			if fullName != "" {
+				prefs.Name = fullName
 				hasPreferences = true
 				break
 			}
+			if firstNameFallback == "" && firstName != "" {
+				firstNameFallback = firstName
+			}
 		}
 	}
+	if prefs.Name == "" && firstNameFallback != "" {
+		prefs.Name = firstNameFallback
+		hasPreferences = true
+	}
 
-	// Standalone name response (single capitalized word after an explicit name ask).
+	// Standalone name response after an explicit name ask.
 	if prefs.Name == "" {
 		for i, msg := range history {
 			if msg.Role != ChatRoleUser {
@@ -1426,18 +1482,18 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 			}
 			content := strings.TrimSpace(msg.Content)
 			words := strings.Fields(content)
-			if len(words) < 1 || len(words) > 3 {
+			if len(words) < 1 || len(words) > 5 {
 				continue
 			}
-			for _, word := range words {
-				cleaned := strings.Trim(word, ".,!?")
-				if len(cleaned) >= 2 && len(cleaned) <= 20 && isCapitalized(cleaned) && !isCommonWord(cleaned) {
-					prefs.Name = cleaned
-					hasPreferences = true
-					break
-				}
+			fullName, firstName := extractName(content)
+			if fullName != "" {
+				prefs.Name = fullName
+				hasPreferences = true
+				break
 			}
-			if prefs.Name != "" {
+			if firstName != "" && len(words) <= 2 {
+				prefs.Name = firstName
+				hasPreferences = true
 				break
 			}
 		}
@@ -1793,7 +1849,11 @@ func formatLeadPreferenceContext(lead *leads.Lead) string {
 	lines := make([]string, 0, 5)
 	name := strings.TrimSpace(lead.Name)
 	if name != "" && !looksLikePhone(name, lead.Phone) {
-		lines = append(lines, fmt.Sprintf("- Name: %s", name))
+		label := "Name"
+		if len(strings.Fields(name)) == 1 {
+			label = "Name (first only)"
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s", label, name))
 	}
 	service := strings.TrimSpace(lead.ServiceInterest)
 	if service != "" {

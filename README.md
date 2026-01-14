@@ -15,7 +15,8 @@ What we’re selling in that first deployment:
 
 What is intentionally *not* in scope for the first paid client:
 
-- No EMR availability lookup or calendar write (staff books inside the EMR).
+- No EMR/EHR integration, availability lookup, or CRM sync in phase 1 (staff books inside their EMR).
+- No auto-finalized bookings; the assistant captures preferred times and patient full names for staff follow-up.
 - No voice AI, Instagram DMs, web chat widget, etc.
 
 ## Current State
