@@ -669,7 +669,7 @@ const enhancedPhoneSimulatorHTML = `<!doctype html>
             <span class="app-name">Messages</span>
             <span class="time">now</span>
           </div>
-          <div class="title" id="notifTitle">Brilliant Aesthetics</div>
+          <div class="title" id="notifTitle">Wolf Aesthetics</div>
           <div class="preview" id="notifPreview">New message received</div>
         </div>
       </div>
@@ -678,7 +678,7 @@ const enhancedPhoneSimulatorHTML = `<!doctype html>
       <div id="callOverlay" class="call-overlay">
         <div class="call-avatar" id="callAvatar">✨</div>
         <div class="call-label">incoming call</div>
-        <div class="call-name" id="callName">Brilliant Aesthetics</div>
+        <div class="call-name" id="callName">Wolf Aesthetics</div>
         <div class="call-status" id="callStatus">mobile</div>
         <div class="call-actions">
           <div class="call-btn">
@@ -724,7 +724,7 @@ const enhancedPhoneSimulatorHTML = `<!doctype html>
         </div>
         <div class="avatar" id="contactAvatar">✨</div>
         <div class="contact">
-          <div class="contact-name" id="contactName">Brilliant Aesthetics</div>
+          <div class="contact-name" id="contactName">Wolf Aesthetics</div>
           <div class="contact-status">Business Chat</div>
         </div>
       </div>
@@ -882,7 +882,7 @@ const enhancedPhoneSimulatorHTML = `<!doctype html>
       const titleEl = document.getElementById('notifTitle');
       const previewEl = document.getElementById('notifPreview');
 
-      titleEl.textContent = title || 'Brilliant Aesthetics';
+      titleEl.textContent = title || 'Wolf Aesthetics';
       previewEl.textContent = preview || 'New message';
 
       banner.classList.add('show');
@@ -904,7 +904,7 @@ const enhancedPhoneSimulatorHTML = `<!doctype html>
 
     window.showIncomingCall = function(clinicName, avatar) {
       const overlay = document.getElementById('callOverlay');
-      document.getElementById('callName').textContent = clinicName || 'Brilliant Aesthetics';
+      document.getElementById('callName').textContent = clinicName || 'Wolf Aesthetics';
       document.getElementById('callAvatar').textContent = avatar || '✨';
       overlay.classList.add('active');
 
@@ -1120,7 +1120,7 @@ const enhancedPhoneSimulatorHTML = `<!doctype html>
       orgID: qs("orgID") || qs("org_id"),
       customerPhone: qs("phone") || qs("customer"),
       clinicPhone: qs("clinic"),
-      clinicName: qs("clinic_name") || "Brilliant Aesthetics",
+      clinicName: qs("clinic_name") || "Wolf Aesthetics",
       lastHash: "",
     };
 
