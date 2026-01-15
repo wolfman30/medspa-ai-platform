@@ -27,10 +27,22 @@ DiamondGlow uses a diamond-tip wand for exfoliation while infusing serums. It's 
 
 For sensitive skin, I'd typically recommend starting with HydraFacial since it's the gentler option. Would you like to schedule a consultation to discuss which would be best for your skin goals?`,
 	},
+	// Hylenex/Filler dissolving vs Fillers comparison (must come before Botox vs Fillers)
+	{
+		Pattern:  regexp.MustCompile(`(?i)(dissolv|hylenex|hyaluronidase).*(filler)|(filler).*(dissolv|hylenex|hyaluronidase)`),
+		Keywords: []string{}, // No keyword fallback - pattern only
+		Response: `Great question! These are very different:
+
+Dermal fillers (like Juvederm and Restylane) ADD volume to areas like lips, cheeks, and smile lines. They contain hyaluronic acid and results last 6-18 months.
+
+Hylenex (hyaluronidase) is an enzyme that DISSOLVES hyaluronic acid fillers. It's used to reverse unwanted filler results, correct asymmetry, or treat complications. It's not a filler itself.
+
+Would you like to schedule a consultation to discuss which service is right for you?`,
+	},
 	// Botox vs Fillers comparison
 	{
 		Pattern:  regexp.MustCompile(`(?i)(botox|dysport|xeomin).*(filler|juvederm|restylane)|(filler|juvederm|restylane).*(botox|dysport|xeomin)`),
-		Keywords: []string{"botox", "filler", "difference", "vs", "versus", "compare"},
+		Keywords: []string{}, // Removed keyword fallback - pattern only to avoid false matches
 		Response: `Great question! They work differently:
 
 Botox relaxes muscles to smooth dynamic wrinkles (like forehead lines and crow's feet). Results last 3-4 months.
