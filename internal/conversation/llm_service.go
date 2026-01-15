@@ -332,6 +332,7 @@ type LLMService struct {
 	clinicStore    *clinic.Store
 	audit          *compliance.AuditService
 	paymentChecker PaymentStatusChecker
+	faqClassifier  *FAQClassifier
 }
 
 // NewLLMService returns an LLM-backed Service implementation.
@@ -351,11 +352,12 @@ func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever
 	}
 
 	service := &LLMService{
-		client:  client,
-		rag:     rag,
-		model:   model,
-		logger:  logger,
-		history: newHistoryStore(redisClient, llmTracer),
+		client:        client,
+		rag:           rag,
+		model:         model,
+		logger:        logger,
+		history:       newHistoryStore(redisClient, llmTracer),
+		faqClassifier: NewFAQClassifier(client),
 	}
 
 	for _, opt := range opts {
@@ -746,10 +748,11 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
 	}
 
-	// Check FAQ cache for instant responses to common questions (bypasses LLM)
-	if IsServiceComparisonQuestion(rawMessage) {
-		if faqReply, found := CheckFAQCache(rawMessage); found {
-			s.logger.Info("FAQ cache hit", "conversation_id", req.ConversationID, "message", redactedMessage)
+	// Use LLM classifier for FAQ responses to common questions
+	// This is more accurate than regex pattern matching
+	if s.faqClassifier != nil && IsServiceComparisonQuestion(rawMessage) {
+		if faqReply, err := s.faqClassifier.ClassifyAndRespond(ctx, rawMessage); err == nil && faqReply != "" {
+			s.logger.Info("FAQ classifier hit", "conversation_id", req.ConversationID, "message", redactedMessage)
 			history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: faqReply})
 			history = trimHistory(history, maxHistoryMessages)
 			if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
@@ -757,6 +760,8 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				return nil, err
 			}
 			return &Response{ConversationID: req.ConversationID, Message: faqReply, Timestamp: time.Now().UTC()}, nil
+		} else if err != nil {
+			s.logger.Warn("FAQ classification failed, falling through to full LLM", "error", err)
 		}
 	}
 
