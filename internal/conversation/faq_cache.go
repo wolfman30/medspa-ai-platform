@@ -21,9 +21,9 @@ var faqCache = []FAQEntry{
 		Keywords: []string{"hydrafacial", "diamondglow", "difference", "vs", "versus", "compare", "better"},
 		Response: `Great question! Both are excellent exfoliating facials, but they work a bit differently:
 
-- **HydraFacial** uses vortex technology with water and serums to deeply cleanse and hydrate. It's very gentle and great for all skin types, especially sensitive skin.
+HydraFacial uses vortex technology with water and serums to deeply cleanse and hydrate. It's very gentle and great for all skin types, especially sensitive skin.
 
-- **DiamondGlow** uses a diamond-tip wand for exfoliation while infusing serums. It's slightly more intense and may be better for those wanting deeper exfoliation.
+DiamondGlow uses a diamond-tip wand for exfoliation while infusing serums. It's slightly more intense and may be better for those wanting deeper exfoliation.
 
 For sensitive skin, I'd typically recommend starting with HydraFacial since it's the gentler option. Would you like to schedule a consultation to discuss which would be best for your skin goals?`,
 	},
@@ -33,9 +33,9 @@ For sensitive skin, I'd typically recommend starting with HydraFacial since it's
 		Keywords: []string{"botox", "filler", "difference", "vs", "versus", "compare"},
 		Response: `Great question! They work differently:
 
-- **Botox** relaxes muscles to smooth dynamic wrinkles (like forehead lines and crow's feet). Results last 3-4 months.
+Botox relaxes muscles to smooth dynamic wrinkles (like forehead lines and crow's feet). Results last 3-4 months.
 
-- **Fillers** add volume and plump areas like lips, cheeks, and smile lines. Results typically last 6-18 months depending on the type.
+Fillers add volume and plump areas like lips, cheeks, and smile lines. Results typically last 6-18 months depending on the type.
 
 Many patients actually use both for a complete rejuvenation! Would you like to schedule a consultation to see which would best address your concerns?`,
 	},
@@ -45,9 +45,9 @@ Many patients actually use both for a complete rejuvenation! Would you like to s
 		Keywords: []string{"peel", "microneedling", "difference", "vs", "versus", "compare"},
 		Response: `Both are great for skin rejuvenation but work differently:
 
-- **Chemical peels** use acids to exfoliate and improve texture, tone, and fine lines. Downtime varies from none to a week depending on depth.
+Chemical peels use acids to exfoliate and improve texture, tone, and fine lines. Downtime varies from none to a week depending on depth.
 
-- **Microneedling** creates tiny punctures to stimulate collagen production. It's excellent for scars, pores, and overall skin texture with 1-3 days of redness.
+Microneedling creates tiny punctures to stimulate collagen production. It's excellent for scars, pores, and overall skin texture with 1-3 days of redness.
 
 Your practitioner can recommend the best option based on your skin type and goals. Would you like to schedule a consultation?`,
 	},
