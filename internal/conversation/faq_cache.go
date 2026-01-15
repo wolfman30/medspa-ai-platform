@@ -126,7 +126,7 @@ func IsServiceComparisonQuestion(message string) bool {
 		"vs",
 		"versus",
 		"compared to",
-		"or",
+		" or ", // Use spaces to avoid matching "for", "more", etc.
 		"which is better",
 		"which one",
 		"what's the difference",
