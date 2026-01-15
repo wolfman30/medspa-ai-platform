@@ -750,9 +750,18 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 	// Use LLM classifier for FAQ responses to common questions
 	// This is more accurate than regex pattern matching
-	if s.faqClassifier != nil && IsServiceComparisonQuestion(rawMessage) {
-		if faqReply, err := s.faqClassifier.ClassifyAndRespond(ctx, rawMessage); err == nil && faqReply != "" {
-			s.logger.Info("FAQ classifier hit", "conversation_id", req.ConversationID, "message", redactedMessage)
+	isComparison := IsServiceComparisonQuestion(rawMessage)
+	msgPreview := rawMessage
+	if len(msgPreview) > 50 {
+		msgPreview = msgPreview[:50] + "..."
+	}
+	s.logger.Info("FAQ classifier check", "is_comparison_question", isComparison, "message_preview", msgPreview)
+	if s.faqClassifier != nil && isComparison {
+		category, classifyErr := s.faqClassifier.ClassifyQuestion(ctx, rawMessage)
+		s.logger.Info("FAQ classifier result", "category", category, "error", classifyErr)
+		if classifyErr == nil && category != FAQCategoryOther {
+			faqReply := GetFAQResponse(category)
+			s.logger.Info("FAQ classifier hit", "category", category, "conversation_id", req.ConversationID)
 			history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: faqReply})
 			history = trimHistory(history, maxHistoryMessages)
 			if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
@@ -760,8 +769,10 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				return nil, err
 			}
 			return &Response{ConversationID: req.ConversationID, Message: faqReply, Timestamp: time.Now().UTC()}, nil
-		} else if err != nil {
-			s.logger.Warn("FAQ classification failed, falling through to full LLM", "error", err)
+		} else if classifyErr != nil {
+			s.logger.Warn("FAQ classification failed, falling through to full LLM", "error", classifyErr)
+		} else {
+			s.logger.Info("FAQ classifier returned 'other', falling through to full LLM")
 		}
 	}
 
