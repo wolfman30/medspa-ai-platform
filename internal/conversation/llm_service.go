@@ -749,19 +749,41 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	}
 
 	// Use LLM classifier for FAQ responses to common questions
-	// This is more accurate than regex pattern matching
+	// Falls back to regex pattern matching if classifier fails
 	isComparison := IsServiceComparisonQuestion(rawMessage)
 	msgPreview := rawMessage
 	if len(msgPreview) > 50 {
 		msgPreview = msgPreview[:50] + "..."
 	}
 	s.logger.Info("FAQ classifier check", "is_comparison_question", isComparison, "message_preview", msgPreview)
-	if s.faqClassifier != nil && isComparison {
-		category, classifyErr := s.faqClassifier.ClassifyQuestion(ctx, rawMessage)
-		s.logger.Info("FAQ classifier result", "category", category, "error", classifyErr)
-		if classifyErr == nil && category != FAQCategoryOther {
-			faqReply := GetFAQResponse(category)
-			s.logger.Info("FAQ classifier hit", "category", category, "conversation_id", req.ConversationID)
+	if isComparison {
+		var faqReply string
+		var faqSource string
+
+		// Try LLM classifier first (more accurate)
+		if s.faqClassifier != nil {
+			category, classifyErr := s.faqClassifier.ClassifyQuestion(ctx, rawMessage)
+			s.logger.Info("FAQ LLM classifier result", "category", category, "error", classifyErr)
+			if classifyErr == nil && category != FAQCategoryOther {
+				faqReply = GetFAQResponse(category)
+				faqSource = "llm_classifier"
+			} else if classifyErr != nil {
+				s.logger.Warn("FAQ LLM classification failed, trying regex fallback", "error", classifyErr)
+			}
+		}
+
+		// Fallback to regex pattern matching
+		if faqReply == "" {
+			if regexReply, found := CheckFAQCache(rawMessage); found {
+				faqReply = regexReply
+				faqSource = "regex_fallback"
+				s.logger.Info("FAQ regex fallback hit", "conversation_id", req.ConversationID)
+			}
+		}
+
+		// Return cached FAQ response if found
+		if faqReply != "" {
+			s.logger.Info("FAQ response returned", "source", faqSource, "conversation_id", req.ConversationID)
 			history = append(history, ChatMessage{Role: ChatRoleAssistant, Content: faqReply})
 			history = trimHistory(history, maxHistoryMessages)
 			if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
@@ -769,11 +791,9 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				return nil, err
 			}
 			return &Response{ConversationID: req.ConversationID, Message: faqReply, Timestamp: time.Now().UTC()}, nil
-		} else if classifyErr != nil {
-			s.logger.Warn("FAQ classification failed, falling through to full LLM", "error", classifyErr)
-		} else {
-			s.logger.Info("FAQ classifier returned 'other', falling through to full LLM")
 		}
+
+		s.logger.Info("FAQ: no match from classifier or regex, falling through to full LLM")
 	}
 
 	reply, err := s.generateResponse(ctx, history)
