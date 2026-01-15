@@ -764,6 +764,8 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if err != nil {
 		return nil, err
 	}
+	// Sanitize reply to strip any markdown that slipped through (LLM sometimes ignores instructions)
+	reply = sanitizeSMSResponse(reply)
 	history = append(history, ChatMessage{
 		Role:    ChatRoleAssistant,
 		Content: reply,
@@ -1139,6 +1141,23 @@ func trimHistory(history []ChatMessage, limit int) []ChatMessage {
 		return result
 	}
 	return history[len(history)-limit:]
+}
+
+// sanitizeSMSResponse strips markdown formatting that doesn't render in SMS.
+// This includes **bold**, *italics*, bullet points, and other markdown syntax.
+func sanitizeSMSResponse(msg string) string {
+	// Remove bold markers **text** -> text
+	msg = strings.ReplaceAll(msg, "**", "")
+	// Remove italic markers *text* -> text (be careful not to remove asterisks in lists)
+	// Only remove single asterisks that are likely italics (surrounded by non-space)
+	msg = regexp.MustCompile(`\*([^\s*][^*]*[^\s*])\*`).ReplaceAllString(msg, "$1")
+	// Remove markdown bullet points at start of lines: "- item" -> "item"
+	msg = regexp.MustCompile(`(?m)^[\s]*[-•]\s+`).ReplaceAllString(msg, "")
+	// Remove numbered list formatting: "1. item" -> "item"
+	msg = regexp.MustCompile(`(?m)^[\s]*\d+\.\s+`).ReplaceAllString(msg, "")
+	// Clean up any double spaces that might result
+	msg = regexp.MustCompile(`\s{2,}`).ReplaceAllString(msg, " ")
+	return strings.TrimSpace(msg)
 }
 
 func (s *LLMService) extractDepositIntent(ctx context.Context, history []ChatMessage) (*DepositIntent, error) {
