@@ -85,19 +85,22 @@ Your practitioner can recommend the best option based on your skin type and goal
 
 // CheckFAQCache looks for a matching FAQ response.
 // Returns the response and true if found, or empty string and false if not.
+// Priority: Pattern matches are checked first across ALL entries before falling back to keywords.
 func CheckFAQCache(message string) (string, bool) {
 	message = strings.ToLower(strings.TrimSpace(message))
 	if message == "" {
 		return "", false
 	}
 
+	// First pass: Check all patterns (more specific, higher priority)
 	for _, faq := range faqCache {
-		// First try pattern match
 		if faq.Pattern != nil && faq.Pattern.MatchString(message) {
 			return faq.Response, true
 		}
+	}
 
-		// Fall back to keyword matching (need at least 2 keywords to match)
+	// Second pass: Fall back to keyword matching (need at least 2 keywords to match)
+	for _, faq := range faqCache {
 		if len(faq.Keywords) > 0 {
 			matchCount := 0
 			for _, kw := range faq.Keywords {
