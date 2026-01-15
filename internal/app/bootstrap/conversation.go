@@ -258,7 +258,7 @@ func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowled
 	}
 	docs := []string{
 		"Dermaplaning candidates should avoid treatment if they have active acne breakouts, open wounds, or have used Accutane within the last 6 months.",
-		"All MedSpa AI clinics require a deposit between $50-$100 to secure an injectable appointment; deposits apply toward treatment.",
+		"We require a $50 refundable deposit to secure your appointment; the deposit applies toward your treatment cost.",
 		"New clients should be advised to arrive 10 minutes early to complete intake forms and mention any recent chemical peels or microneedling.",
 	}
 	return repo.AppendDocuments(ctx, "", docs)
