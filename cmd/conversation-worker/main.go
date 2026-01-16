@@ -151,6 +151,8 @@ func main() {
 			ConversationStore: convStore,
 			TranscriptStore:   smsTranscript,
 		})
+		// Wrap with persistence to store outbound messages in the database
+		messenger = messaging.WrapWithPersistence(messenger, msgStore, logger)
 	} else {
 		logger.Warn("sms replies disabled for async workers",
 			"preference", cfg.SMSProvider,

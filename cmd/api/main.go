@@ -156,6 +156,8 @@ func main() {
 			ConversationStore: conversationStore,
 			TranscriptStore:   smsTranscript,
 		})
+		// Wrap with persistence to store outbound messages in the database
+		webhookMessenger = messaging.WrapWithPersistence(webhookMessenger, msgStore, logger)
 	} else {
 		logger.Warn("sms replies disabled for webhooks",
 			"preference", cfg.SMSProvider,
