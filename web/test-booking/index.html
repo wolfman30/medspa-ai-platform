@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Your Appointment | MedSpa</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #1a1a2e;
+            color: white;
+            padding: 32px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #a0aec0;
+            font-size: 14px;
+        }
+
+        .sandbox-badge {
+            display: inline-block;
+            background: #f6ad55;
+            color: #744210;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 100px;
+            margin-top: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-section {
+            padding: 32px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #f7fafc;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .footer-note {
+            text-align: center;
+            padding: 16px 32px 32px;
+            color: #718096;
+            font-size: 13px;
+        }
+
+        .footer-note a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        /* Success State */
+        .success-container {
+            display: none;
+            padding: 48px 32px;
+            text-align: center;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+        }
+
+        .success-icon svg {
+            width: 40px;
+            height: 40px;
+            color: white;
+        }
+
+        .success-container h2 {
+            font-size: 24px;
+            color: #1a1a2e;
+            margin-bottom: 12px;
+        }
+
+        .success-container p {
+            color: #718096;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .confirmation-details {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: left;
+            margin-bottom: 24px;
+        }
+
+        .confirmation-details .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .confirmation-details .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .confirmation-details .label {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .confirmation-details .value {
+            color: #1a1a2e;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .confirmation-number {
+            background: #edf2f7;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 18px;
+            color: #667eea;
+            letter-spacing: 2px;
+        }
+
+        .back-btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 12px 24px;
+            background: transparent;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        @media (max-width: 480px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                padding: 24px;
+            }
+
+            .form-section {
+                padding: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Form View -->
+        <div id="formView">
+            <div class="header">
+                <h1>Book Your Appointment</h1>
+                <p>Complete the form below to schedule your visit</p>
+                <span class="sandbox-badge">Test Mode</span>
+            </div>
+
+            <form id="bookingForm" class="form-section">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" placeholder="Jane Smith" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" placeholder="jane@example.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="service">Service</label>
+                    <select id="service" name="service" required>
+                        <option value="">Select a service...</option>
+                        <option value="Botox">Botox</option>
+                        <option value="Dermal Fillers">Dermal Fillers</option>
+                        <option value="Lip Fillers">Lip Fillers</option>
+                        <option value="HydraFacial">HydraFacial</option>
+                        <option value="Laser Treatment">Laser Treatment</option>
+                        <option value="Microneedling">Microneedling</option>
+                        <option value="Chemical Peel">Chemical Peel</option>
+                        <option value="Consultation">Consultation</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="date">Preferred Date</label>
+                        <input type="date" id="date" name="date" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="time">Preferred Time</label>
+                        <select id="time" name="time" required>
+                            <option value="">Select time...</option>
+                            <option value="09:00">9:00 AM</option>
+                            <option value="10:00">10:00 AM</option>
+                            <option value="11:00">11:00 AM</option>
+                            <option value="12:00">12:00 PM</option>
+                            <option value="13:00">1:00 PM</option>
+                            <option value="14:00">2:00 PM</option>
+                            <option value="15:00">3:00 PM</option>
+                            <option value="16:00">4:00 PM</option>
+                            <option value="17:00">5:00 PM</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">Book Appointment</button>
+            </form>
+
+            <p class="footer-note">
+                This is a test booking page for demonstration purposes.
+                <br>No actual appointment will be scheduled.
+            </p>
+        </div>
+
+        <!-- Success View -->
+        <div id="successView" class="success-container">
+            <div class="success-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+            </div>
+
+            <h2>Booking Request Received!</h2>
+            <p>Thank you for your booking request. In a real scenario, our team would contact you within 24 hours to confirm your appointment.</p>
+
+            <div class="confirmation-details">
+                <div class="detail-row">
+                    <span class="label">Name</span>
+                    <span class="value" id="confirmName">-</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Service</span>
+                    <span class="value" id="confirmService">-</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Requested Date</span>
+                    <span class="value" id="confirmDate">-</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Requested Time</span>
+                    <span class="value" id="confirmTime">-</span>
+                </div>
+            </div>
+
+            <p style="font-size: 13px; color: #a0aec0;">Confirmation Number</p>
+            <div class="confirmation-number" id="confirmNumber">-</div>
+
+            <button class="back-btn" onclick="resetForm()">Book Another Appointment</button>
+        </div>
+    </div>
+
+    <script>
+        // Set minimum date to today
+        const dateInput = document.getElementById('date');
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.setAttribute('min', today);
+
+        // Pre-fill from URL parameters if available
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('name')) {
+            document.getElementById('name').value = urlParams.get('name');
+        }
+        if (urlParams.has('phone')) {
+            document.getElementById('phone').value = urlParams.get('phone');
+        }
+        if (urlParams.has('service')) {
+            document.getElementById('service').value = urlParams.get('service');
+        }
+        if (urlParams.has('clinic')) {
+            document.querySelector('.header h1').textContent = `Book at ${urlParams.get('clinic')}`;
+        }
+
+        // Format phone number as user types
+        document.getElementById('phone').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length >= 6) {
+                value = `(${value.slice(0,3)}) ${value.slice(3,6)}-${value.slice(6,10)}`;
+            } else if (value.length >= 3) {
+                value = `(${value.slice(0,3)}) ${value.slice(3)}`;
+            }
+            e.target.value = value;
+        });
+
+        // Handle form submission
+        document.getElementById('bookingForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('name').value;
+            const service = document.getElementById('service').value;
+            const date = document.getElementById('date').value;
+            const time = document.getElementById('time').value;
+
+            // Format date for display
+            const dateObj = new Date(date + 'T12:00:00');
+            const formattedDate = dateObj.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+
+            // Format time for display
+            const [hours, minutes] = time.split(':');
+            const hour = parseInt(hours);
+            const formattedTime = `${hour > 12 ? hour - 12 : hour}:${minutes} ${hour >= 12 ? 'PM' : 'AM'}`;
+
+            // Generate confirmation number
+            const confirmNum = 'BK' + Date.now().toString(36).toUpperCase().slice(-8);
+
+            // Update confirmation view
+            document.getElementById('confirmName').textContent = name;
+            document.getElementById('confirmService').textContent = service;
+            document.getElementById('confirmDate').textContent = formattedDate;
+            document.getElementById('confirmTime').textContent = formattedTime;
+            document.getElementById('confirmNumber').textContent = confirmNum;
+
+            // Show success view
+            document.getElementById('formView').style.display = 'none';
+            document.getElementById('successView').style.display = 'block';
+
+            // Log to console for testing
+            console.log('Test Booking Submitted:', {
+                name,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value,
+                service,
+                date,
+                time,
+                confirmationNumber: confirmNum
+            });
+        });
+
+        function resetForm() {
+            document.getElementById('bookingForm').reset();
+            document.getElementById('formView').style.display = 'block';
+            document.getElementById('successView').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
