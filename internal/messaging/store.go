@@ -272,6 +272,23 @@ func (s *Store) UpdateMessageStatus(ctx context.Context, providerMessageID, stat
 	return nil
 }
 
+// UpdateMessageStatusByID updates a message's status by its UUID (for outbound messages without provider IDs).
+func (s *Store) UpdateMessageStatusByID(ctx context.Context, msgID uuid.UUID, status string, deliveredAt, failedAt *time.Time) error {
+	query := `
+		UPDATE messages
+		SET provider_status = $2,
+			delivered_at = COALESCE($3, delivered_at),
+			failed_at = COALESCE($4, failed_at),
+			next_retry_at = NULL
+		WHERE id = $1
+	`
+	_, err := s.pool.Exec(ctx, query, msgID, status, deliveredAt, failedAt)
+	if err != nil {
+		return fmt.Errorf("messaging: update message status by id: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) InsertUnsubscribe(ctx context.Context, q Querier, clinicID uuid.UUID, recipient string, source string) error {
 	if q == nil {
 		q = s.pool
