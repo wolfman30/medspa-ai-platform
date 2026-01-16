@@ -62,6 +62,9 @@ type Config struct {
 	Notifications NotificationPrefs `json:"notifications"`
 }
 
+// DefaultBookingURL is the default test booking page for development/demo purposes.
+const DefaultBookingURL = "https://portal-dev.aiwolfsolutions.com/booking/"
+
 // DefaultConfig returns a sensible default configuration.
 func DefaultConfig(orgID string) *Config {
 	return &Config{
@@ -82,6 +85,7 @@ func DefaultConfig(orgID string) *Config {
 		ServiceDepositAmountCents: map[string]int{},
 		ServicePriceText:          map[string]string{},
 		Services:                  []string{"Botox", "Fillers", "Laser Treatments"},
+		BookingURL:                DefaultBookingURL,
 		Notifications: NotificationPrefs{
 			EmailEnabled:    false, // Disabled by default until configured
 			SMSEnabled:      false,

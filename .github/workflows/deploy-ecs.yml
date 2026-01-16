@@ -206,7 +206,12 @@ jobs:
       - name: Upload onboarding UI
         if: steps.ui.outputs.bucket != ''
         run: |
-          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete
+          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete --exclude "booking/*"
+
+      - name: Upload test booking page
+        if: steps.ui.outputs.bucket != ''
+        run: |
+          aws s3 sync web/test-booking "s3://${{ steps.ui.outputs.bucket }}/booking" --delete
 
       - name: Invalidate onboarding UI cache
         if: steps.ui.outputs.distribution != ''
@@ -500,7 +505,12 @@ jobs:
       - name: Upload onboarding UI
         if: steps.ui.outputs.bucket != ''
         run: |
-          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete
+          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete --exclude "booking/*"
+
+      - name: Upload test booking page
+        if: steps.ui.outputs.bucket != ''
+        run: |
+          aws s3 sync web/test-booking "s3://${{ steps.ui.outputs.bucket }}/booking" --delete
 
       - name: Invalidate onboarding UI cache
         if: steps.ui.outputs.distribution != ''
