@@ -63,7 +63,7 @@ type Config struct {
 }
 
 // DefaultBookingURL is the default test booking page for development/demo purposes.
-const DefaultBookingURL = "https://portal-dev.aiwolfsolutions.com/booking/"
+const DefaultBookingURL = "https://portal-dev.aiwolfsolutions.com/booking/index.html"
 
 // DefaultConfig returns a sensible default configuration.
 func DefaultConfig(orgID string) *Config {
