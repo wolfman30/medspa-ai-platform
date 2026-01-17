@@ -425,9 +425,20 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		safeReq.Intro = redactedIntro
 	}
 
+	// Get clinic-configured deposit amount for system prompt customization
+	depositCents := s.deposit.DefaultAmountCents
+	if s.clinicStore != nil && req.OrgID != "" {
+		if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
+			if cfg.DepositAmountCents > 0 {
+				depositCents = int32(cfg.DepositAmountCents)
+			}
+		}
+	}
+	systemPrompt := buildSystemPrompt(int(depositCents))
+
 	if req.Silent {
 		history := []ChatMessage{
-			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+			{Role: ChatRoleSystem, Content: systemPrompt},
 		}
 		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
 		history = append(history, ChatMessage{
@@ -451,7 +462,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 
 	if sawPHI {
 		history := []ChatMessage{
-			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+			{Role: ChatRoleSystem, Content: systemPrompt},
 		}
 		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
 		history = append(history, ChatMessage{
@@ -479,7 +490,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 
 	if len(medicalKeywords) > 0 {
 		history := []ChatMessage{
-			{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+			{Role: ChatRoleSystem, Content: systemPrompt},
 		}
 		safeReq := req
 		safeReq.Intro = "[REDACTED]"
@@ -508,7 +519,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	}
 
 	history := []ChatMessage{
-		{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+		{Role: ChatRoleSystem, Content: systemPrompt},
 	}
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Intro)
 	history = append(history, ChatMessage{
@@ -591,8 +602,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					To:             req.To,
 					Metadata:       req.Metadata,
 				}
+				// Get clinic-configured deposit amount for system prompt
+				depositCents := s.deposit.DefaultAmountCents
+				if s.clinicStore != nil && req.OrgID != "" {
+					if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
+						if cfg.DepositAmountCents > 0 {
+							depositCents = int32(cfg.DepositAmountCents)
+						}
+					}
+				}
 				history := []ChatMessage{
-					{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+					{Role: ChatRoleSystem, Content: buildSystemPrompt(int(depositCents))},
 				}
 				history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
 				history = append(history, ChatMessage{
@@ -625,8 +645,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					To:             req.To,
 					Metadata:       req.Metadata,
 				}
+				// Get clinic-configured deposit amount for system prompt
+				depositCents := s.deposit.DefaultAmountCents
+				if s.clinicStore != nil && req.OrgID != "" {
+					if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
+						if cfg.DepositAmountCents > 0 {
+							depositCents = int32(cfg.DepositAmountCents)
+						}
+					}
+				}
 				history := []ChatMessage{
-					{Role: ChatRoleSystem, Content: defaultSystemPrompt},
+					{Role: ChatRoleSystem, Content: buildSystemPrompt(int(depositCents))},
 				}
 				history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
 				history = append(history, ChatMessage{
