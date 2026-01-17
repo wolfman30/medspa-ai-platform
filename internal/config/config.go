@@ -9,63 +9,63 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	Port                       string
-	Env                        string
-	PublicBaseURL              string
-	LogLevel                   string
-	CORSAllowedOrigins         []string
-	UseMemoryQueue             bool
-	WorkerCount                int
-	DatabaseURL                string
+	Port                            string
+	Env                             string
+	PublicBaseURL                   string
+	LogLevel                        string
+	CORSAllowedOrigins              []string
+	UseMemoryQueue                  bool
+	WorkerCount                     int
+	DatabaseURL                     string
 	PersistConversationHistory      bool
 	ConversationPersistExcludePhone string
-	SMSProvider                string
-	TelnyxAPIKey               string
-	TelnyxMessagingProfileID   string
-	TelnyxWebhookSecret        string
-	TelnyxStopReply            string
-	TelnyxHelpReply            string
-	TelnyxStartReply           string
-	TelnyxFirstContactReply    string
-	TelnyxVoiceAckReply        string
-	TelnyxTrackJobs            bool
-	TelnyxRetryMaxAttempts     int
-	TelnyxRetryBaseDelay       time.Duration
-	TelnyxHostedPollInterval   time.Duration
-	TwilioAccountSID           string
-	TwilioAuthToken            string
-	TwilioWebhookSecret        string
-	TwilioFromNumber           string
-	TwilioOrgMapJSON           string
-	TwilioSkipSignature        bool
-	PaymentProviderKey         string
-	SquareAccessToken          string
-	SquareLocationID           string
-	SquareBaseURL              string
-	SquareWebhookKey           string
-	SquareSuccessURL           string
-	SquareCancelURL            string
-	SquareClientID             string
-	SquareClientSecret         string
-	SquareOAuthRedirectURI     string
-	SquareOAuthSuccessURL      string
-	SquareSandbox              bool
-	AllowFakePayments          bool
-	DepositAmountCents         int
-	SandboxAutoPurgePhones     string
-	SandboxAutoPurgeDelay      time.Duration
-	AdminJWTSecret             string
-	QuietHoursStart            string
-	QuietHoursEnd              string
-	QuietHoursTimezone         string
-	AWSRegion                  string
-	AWSAccessKeyID             string
-	AWSSecretAccessKey         string
-	AWSEndpointOverride        string
-	ConversationQueueURL       string
-	ConversationJobsTable      string
-	BedrockModelID             string
-	BedrockEmbeddingModelID    string
+	SMSProvider                     string
+	TelnyxAPIKey                    string
+	TelnyxMessagingProfileID        string
+	TelnyxWebhookSecret             string
+	TelnyxStopReply                 string
+	TelnyxHelpReply                 string
+	TelnyxStartReply                string
+	TelnyxFirstContactReply         string
+	TelnyxVoiceAckReply             string
+	TelnyxTrackJobs                 bool
+	TelnyxRetryMaxAttempts          int
+	TelnyxRetryBaseDelay            time.Duration
+	TelnyxHostedPollInterval        time.Duration
+	TwilioAccountSID                string
+	TwilioAuthToken                 string
+	TwilioWebhookSecret             string
+	TwilioFromNumber                string
+	TwilioOrgMapJSON                string
+	TwilioSkipSignature             bool
+	PaymentProviderKey              string
+	SquareAccessToken               string
+	SquareLocationID                string
+	SquareBaseURL                   string
+	SquareWebhookKey                string
+	SquareSuccessURL                string
+	SquareCancelURL                 string
+	SquareClientID                  string
+	SquareClientSecret              string
+	SquareOAuthRedirectURI          string
+	SquareOAuthSuccessURL           string
+	SquareSandbox                   bool
+	AllowFakePayments               bool
+	DepositAmountCents              int
+	SandboxAutoPurgePhones          string
+	SandboxAutoPurgeDelay           time.Duration
+	AdminJWTSecret                  string
+	QuietHoursStart                 string
+	QuietHoursEnd                   string
+	QuietHoursTimezone              string
+	AWSRegion                       string
+	AWSAccessKeyID                  string
+	AWSSecretAccessKey              string
+	AWSEndpointOverride             string
+	ConversationQueueURL            string
+	ConversationJobsTable           string
+	BedrockModelID                  string
+	BedrockEmbeddingModelID         string
 
 	// Gemini fallback provider configuration
 	GeminiAPIKey        string
@@ -150,63 +150,63 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port:                       getEnv("PORT", "8080"),
-		Env:                        getEnv("ENV", "development"),
-		PublicBaseURL:              getEnv("PUBLIC_BASE_URL", ""),
-		LogLevel:                   getEnv("LOG_LEVEL", "info"),
-		CORSAllowedOrigins:         corsAllowedOrigins,
-		UseMemoryQueue:             getEnvAsBool("USE_MEMORY_QUEUE", false),
-		WorkerCount:                getEnvAsInt("WORKER_COUNT", 2),
-		DatabaseURL:                getEnv("DATABASE_URL", ""),
+		Port:                            getEnv("PORT", "8080"),
+		Env:                             getEnv("ENV", "development"),
+		PublicBaseURL:                   getEnv("PUBLIC_BASE_URL", ""),
+		LogLevel:                        getEnv("LOG_LEVEL", "info"),
+		CORSAllowedOrigins:              corsAllowedOrigins,
+		UseMemoryQueue:                  getEnvAsBool("USE_MEMORY_QUEUE", false),
+		WorkerCount:                     getEnvAsInt("WORKER_COUNT", 2),
+		DatabaseURL:                     getEnv("DATABASE_URL", ""),
 		PersistConversationHistory:      getEnvAsBool("PERSIST_CONVERSATION_HISTORY", false),
 		ConversationPersistExcludePhone: getEnv("CONVERSATION_PERSIST_EXCLUDE_PHONE", ""),
 		SMSProvider:                     strings.ToLower(strings.TrimSpace(getEnv("SMS_PROVIDER", "auto"))),
-		TelnyxAPIKey:               getEnv("TELNYX_API_KEY", ""),
-		TelnyxMessagingProfileID:   getEnv("TELNYX_MESSAGING_PROFILE_ID", ""),
-		TelnyxWebhookSecret:        getEnv("TELNYX_WEBHOOK_SECRET", ""),
-		TelnyxStopReply:            getEnv("TELNYX_STOP_REPLY", "You have been opted out. Reply HELP for info."),
-		TelnyxHelpReply:            getEnv("TELNYX_HELP_REPLY", "Reply STOP to opt out or contact support@medspa.ai."),
-		TelnyxStartReply:           getEnv("TELNYX_START_REPLY", "You're opted back in. Reply STOP to opt out."),
-		TelnyxFirstContactReply:    getEnv("TELNYX_FIRST_CONTACT_REPLY", ""),
-		TelnyxVoiceAckReply:        getEnv("TELNYX_VOICE_ACK_REPLY", ""),
-		TelnyxTrackJobs:            getEnvAsBool("TELNYX_TRACK_JOBS", false),
-		TelnyxRetryMaxAttempts:     getEnvAsInt("TELNYX_RETRY_MAX_ATTEMPTS", 5),
-		TelnyxRetryBaseDelay:       getEnvAsDuration("TELNYX_RETRY_BASE_DELAY", 5*time.Minute),
-		TelnyxHostedPollInterval:   getEnvAsDuration("TELNYX_HOSTED_POLL_INTERVAL", 15*time.Minute),
-		TwilioAccountSID:           getEnv("TWILIO_ACCOUNT_SID", ""),
-		TwilioAuthToken:            getEnv("TWILIO_AUTH_TOKEN", ""),
-		TwilioWebhookSecret:        getEnv("TWILIO_WEBHOOK_SECRET", ""),
-		TwilioFromNumber:           getEnv("TWILIO_FROM_NUMBER", ""),
-		TwilioOrgMapJSON:           getEnv("TWILIO_ORG_MAP_JSON", ""),
-		TwilioSkipSignature:        getEnvAsBool("TWILIO_SKIP_SIGNATURE", false),
-		PaymentProviderKey:         getEnv("PAYMENT_PROVIDER_KEY", ""),
-		SquareAccessToken:          getEnv("SQUARE_ACCESS_TOKEN", ""),
-		SquareLocationID:           getEnv("SQUARE_LOCATION_ID", ""),
-		SquareBaseURL:              getEnv("SQUARE_BASE_URL", ""),
-		SquareWebhookKey:           getEnv("SQUARE_WEBHOOK_SIGNATURE_KEY", ""),
-		SquareSuccessURL:           getEnv("SQUARE_SUCCESS_URL", ""),
-		SquareCancelURL:            getEnv("SQUARE_CANCEL_URL", ""),
-		SquareClientID:             getEnv("SQUARE_CLIENT_ID", ""),
-		SquareClientSecret:         getEnv("SQUARE_CLIENT_SECRET", ""),
-		SquareOAuthRedirectURI:     getEnv("SQUARE_OAUTH_REDIRECT_URI", ""),
-		SquareOAuthSuccessURL:      getEnv("SQUARE_OAUTH_SUCCESS_URL", ""),
-		SquareSandbox:              getEnvAsBool("SQUARE_SANDBOX", true),
-		AllowFakePayments:          getEnvAsBool("ALLOW_FAKE_PAYMENTS", false),
-		DepositAmountCents:         getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
-		SandboxAutoPurgePhones:     getEnv("SANDBOX_AUTO_PURGE_PHONE_DIGITS", ""),
-		SandboxAutoPurgeDelay:      getEnvAsDuration("SANDBOX_AUTO_PURGE_DELAY", 0),
-		AdminJWTSecret:             getEnv("ADMIN_JWT_SECRET", ""),
-		QuietHoursStart:            getEnv("QUIET_HOURS_START", ""),
-		QuietHoursEnd:              getEnv("QUIET_HOURS_END", ""),
-		QuietHoursTimezone:         getEnv("QUIET_HOURS_TZ", "UTC"),
-		AWSRegion:                  getEnv("AWS_REGION", "us-east-1"),
-		AWSAccessKeyID:             getEnv("AWS_ACCESS_KEY_ID", ""),
-		AWSSecretAccessKey:         getEnv("AWS_SECRET_ACCESS_KEY", ""),
-		AWSEndpointOverride:        getEnv("AWS_ENDPOINT_OVERRIDE", ""),
-		ConversationQueueURL:       getEnv("CONVERSATION_QUEUE_URL", ""),
-		ConversationJobsTable:      getEnv("CONVERSATION_JOBS_TABLE", "conversation_jobs"),
-		BedrockModelID:             bedrockModel,
-		BedrockEmbeddingModelID:    getEnv("BEDROCK_EMBEDDING_MODEL_ID", ""),
+		TelnyxAPIKey:                    getEnv("TELNYX_API_KEY", ""),
+		TelnyxMessagingProfileID:        getEnv("TELNYX_MESSAGING_PROFILE_ID", ""),
+		TelnyxWebhookSecret:             getEnv("TELNYX_WEBHOOK_SECRET", ""),
+		TelnyxStopReply:                 getEnv("TELNYX_STOP_REPLY", "You have been opted out. Reply HELP for info."),
+		TelnyxHelpReply:                 getEnv("TELNYX_HELP_REPLY", "Reply STOP to opt out or contact support@medspa.ai."),
+		TelnyxStartReply:                getEnv("TELNYX_START_REPLY", "You're opted back in. Reply STOP to opt out."),
+		TelnyxFirstContactReply:         getEnv("TELNYX_FIRST_CONTACT_REPLY", ""),
+		TelnyxVoiceAckReply:             getEnv("TELNYX_VOICE_ACK_REPLY", ""),
+		TelnyxTrackJobs:                 getEnvAsBool("TELNYX_TRACK_JOBS", false),
+		TelnyxRetryMaxAttempts:          getEnvAsInt("TELNYX_RETRY_MAX_ATTEMPTS", 5),
+		TelnyxRetryBaseDelay:            getEnvAsDuration("TELNYX_RETRY_BASE_DELAY", 5*time.Minute),
+		TelnyxHostedPollInterval:        getEnvAsDuration("TELNYX_HOSTED_POLL_INTERVAL", 15*time.Minute),
+		TwilioAccountSID:                getEnv("TWILIO_ACCOUNT_SID", ""),
+		TwilioAuthToken:                 getEnv("TWILIO_AUTH_TOKEN", ""),
+		TwilioWebhookSecret:             getEnv("TWILIO_WEBHOOK_SECRET", ""),
+		TwilioFromNumber:                getEnv("TWILIO_FROM_NUMBER", ""),
+		TwilioOrgMapJSON:                getEnv("TWILIO_ORG_MAP_JSON", ""),
+		TwilioSkipSignature:             getEnvAsBool("TWILIO_SKIP_SIGNATURE", false),
+		PaymentProviderKey:              getEnv("PAYMENT_PROVIDER_KEY", ""),
+		SquareAccessToken:               getEnv("SQUARE_ACCESS_TOKEN", ""),
+		SquareLocationID:                getEnv("SQUARE_LOCATION_ID", ""),
+		SquareBaseURL:                   getEnv("SQUARE_BASE_URL", ""),
+		SquareWebhookKey:                getEnv("SQUARE_WEBHOOK_SIGNATURE_KEY", ""),
+		SquareSuccessURL:                getEnv("SQUARE_SUCCESS_URL", ""),
+		SquareCancelURL:                 getEnv("SQUARE_CANCEL_URL", ""),
+		SquareClientID:                  getEnv("SQUARE_CLIENT_ID", ""),
+		SquareClientSecret:              getEnv("SQUARE_CLIENT_SECRET", ""),
+		SquareOAuthRedirectURI:          getEnv("SQUARE_OAUTH_REDIRECT_URI", ""),
+		SquareOAuthSuccessURL:           getEnv("SQUARE_OAUTH_SUCCESS_URL", ""),
+		SquareSandbox:                   getEnvAsBool("SQUARE_SANDBOX", true),
+		AllowFakePayments:               getEnvAsBool("ALLOW_FAKE_PAYMENTS", false),
+		DepositAmountCents:              getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
+		SandboxAutoPurgePhones:          getEnv("SANDBOX_AUTO_PURGE_PHONE_DIGITS", ""),
+		SandboxAutoPurgeDelay:           getEnvAsDuration("SANDBOX_AUTO_PURGE_DELAY", 0),
+		AdminJWTSecret:                  getEnv("ADMIN_JWT_SECRET", ""),
+		QuietHoursStart:                 getEnv("QUIET_HOURS_START", ""),
+		QuietHoursEnd:                   getEnv("QUIET_HOURS_END", ""),
+		QuietHoursTimezone:              getEnv("QUIET_HOURS_TZ", "UTC"),
+		AWSRegion:                       getEnv("AWS_REGION", "us-east-1"),
+		AWSAccessKeyID:                  getEnv("AWS_ACCESS_KEY_ID", ""),
+		AWSSecretAccessKey:              getEnv("AWS_SECRET_ACCESS_KEY", ""),
+		AWSEndpointOverride:             getEnv("AWS_ENDPOINT_OVERRIDE", ""),
+		ConversationQueueURL:            getEnv("CONVERSATION_QUEUE_URL", ""),
+		ConversationJobsTable:           getEnv("CONVERSATION_JOBS_TABLE", "conversation_jobs"),
+		BedrockModelID:                  bedrockModel,
+		BedrockEmbeddingModelID:         getEnv("BEDROCK_EMBEDDING_MODEL_ID", ""),
 
 		// Gemini fallback configuration
 		GeminiAPIKey:        getEnv("GEMINI_API_KEY", ""),
