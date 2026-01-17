@@ -181,3 +181,67 @@ export async function activatePhoneNumber(
   }
   return res.json();
 }
+
+// 10DLC Brand and Campaign Registration
+
+export interface CreateBrandRequest {
+  clinic_id: string;
+  legal_name: string;
+  ein: string;
+  website: string;
+  address_line: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  vertical: string;
+}
+
+export interface BrandResponse {
+  brand_id: string;
+  status: string;
+  legal_name?: string;
+}
+
+export async function createBrand(data: CreateBrandRequest): Promise<BrandResponse> {
+  const res = await fetch(`${API_BASE}/admin/10dlc/brands`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to create brand');
+  }
+  return res.json();
+}
+
+export interface CreateCampaignRequest {
+  brand_internal_id: string;
+  use_case: string;
+  sample_messages: string[];
+  help_message: string;
+  stop_message: string;
+}
+
+export interface CampaignResponse {
+  campaign_id: string;
+  status: string;
+  use_case: string;
+}
+
+export async function createCampaign(data: CreateCampaignRequest): Promise<CampaignResponse> {
+  const res = await fetch(`${API_BASE}/admin/10dlc/campaigns`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to create campaign');
+  }
+  return res.json();
+}

@@ -273,11 +273,55 @@ func (c *Config) BusinessHoursContext(t time.Time) string {
 
 	if !isOpen {
 		ctx += fmt.Sprintf("Next open: %s\n", nextOpen.Format("Monday at 3:04 PM"))
+		// Calculate callback expectation for after-hours messages
+		callbackTime := c.ExpectedCallbackTime(t)
+		ctx += fmt.Sprintf("CALLBACK INSTRUCTION: When the clinic is closed, tell patients our team will reach out around %s. NEVER say '24 hours' if we're closed for the weekend or holiday.\n", callbackTime)
+	} else {
+		ctx += "CALLBACK INSTRUCTION: We're currently open! Our team can reach out shortly.\n"
 	}
 
 	ctx += fmt.Sprintf("Callback SLA: %d business hours\n", c.CallbackSLAHours)
 
 	return ctx
+}
+
+// ExpectedCallbackTime returns a human-friendly string for when the patient can expect a callback.
+// It accounts for business hours and provides a realistic expectation.
+func (c *Config) ExpectedCallbackTime(t time.Time) string {
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	localTime := t.In(loc)
+	nextOpen := c.NextOpenTime(t)
+
+	// If we're open now, callback within the hour
+	if c.IsOpenAt(t) {
+		return "shortly"
+	}
+
+	// Calculate days until next open
+	daysUntil := int(nextOpen.Sub(localTime).Hours() / 24)
+	nextOpenLocal := nextOpen.In(loc)
+
+	// Same day (later today)
+	if localTime.YearDay() == nextOpenLocal.YearDay() && localTime.Year() == nextOpenLocal.Year() {
+		return fmt.Sprintf("this %s around %s", strings.ToLower(nextOpenLocal.Format("Monday")), nextOpenLocal.Format("3 PM"))
+	}
+
+	// Tomorrow
+	tomorrow := localTime.AddDate(0, 0, 1)
+	if tomorrow.YearDay() == nextOpenLocal.YearDay() && tomorrow.Year() == nextOpenLocal.Year() {
+		return fmt.Sprintf("tomorrow (%s) around %s", nextOpenLocal.Format("Monday"), nextOpenLocal.Format("3 PM"))
+	}
+
+	// This week (2-6 days out)
+	if daysUntil <= 6 {
+		return fmt.Sprintf("on %s around %s", nextOpenLocal.Format("Monday"), nextOpenLocal.Format("3 PM"))
+	}
+
+	// Fallback for longer periods
+	return fmt.Sprintf("on %s around %s", nextOpenLocal.Format("Monday, January 2"), nextOpenLocal.Format("3 PM"))
 }
 
 // Store provides persistence for clinic configurations.
