@@ -1,0 +1,213 @@
+# yaml-language-server: $schema=https://json-schema.org/github-workflow
+name: Dev Environment Scheduler
+
+# Schedule: 1am ET teardown, 7am ET startup
+# Note: Times are approximate due to DST. Using EST (UTC-5) as baseline.
+# 1am EST = 6am UTC, 7am EST = 12pm UTC
+on:
+  schedule:
+    - cron: '0 6 * * *'   # ~1am Eastern - Teardown
+    - cron: '0 12 * * *'  # ~7am Eastern - Startup
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - startup
+          - teardown
+      override_scheduler:
+        description: 'Ignore DEV_SCHEDULER_ENABLED check'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: medspa-development-cluster
+  ECS_SERVICE: medspa-development-api
+  RDS_INSTANCE: medspa-development-db
+
+jobs:
+  manage_dev_resources:
+    name: Manage Dev Resources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: development
+
+    steps:
+      - name: Check if scheduler is enabled
+        id: check_enabled
+        run: |
+          ENABLED="${{ vars.DEV_SCHEDULER_ENABLED }}"
+          OVERRIDE="${{ inputs.override_scheduler }}"
+
+          # Default to enabled if not set
+          if [ -z "$ENABLED" ]; then
+            ENABLED="true"
+          fi
+
+          # Allow override for manual runs
+          if [ "$OVERRIDE" = "true" ]; then
+            echo "Manual override - proceeding regardless of scheduler setting"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$ENABLED" = "false" ]; then
+            echo "Scheduler is disabled (DEV_SCHEDULER_ENABLED=false). Skipping."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Scheduler is enabled. Proceeding."
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine action
+        id: action
+        if: steps.check_enabled.outputs.should_run == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+          else
+            # Scheduled run - determine by cron time
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" = "06" ]; then
+              echo "action=teardown" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" = "12" ]; then
+              echo "action=startup" >> "$GITHUB_OUTPUT"
+            else
+              echo "Unexpected hour: $HOUR"
+              exit 1
+            fi
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.check_enabled.outputs.should_run == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ==================== TEARDOWN ====================
+      - name: Teardown - Scale ECS to 0
+        if: steps.check_enabled.outputs.should_run == 'true' && steps.action.outputs.action == 'teardown'
+        run: |
+          echo "Scaling ECS service to 0 desired tasks..."
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --desired-count 0 \
+            --no-cli-pager
+
+          echo "Waiting for tasks to stop..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+          echo "ECS service scaled down."
+
+      - name: Teardown - Stop RDS instance
+        if: steps.check_enabled.outputs.should_run == 'true' && steps.action.outputs.action == 'teardown'
+        run: |
+          echo "Checking RDS instance status..."
+          STATUS=$(aws rds describe-db-instances \
+            --db-instance-identifier "$RDS_INSTANCE" \
+            --query 'DBInstances[0].DBInstanceStatus' \
+            --output text 2>/dev/null || echo "not-found")
+
+          if [ "$STATUS" = "available" ]; then
+            echo "Stopping RDS instance..."
+            aws rds stop-db-instance \
+              --db-instance-identifier "$RDS_INSTANCE" \
+              --no-cli-pager
+            echo "RDS stop initiated. Instance will stop in a few minutes."
+          elif [ "$STATUS" = "stopped" ] || [ "$STATUS" = "stopping" ]; then
+            echo "RDS instance is already $STATUS."
+          else
+            echo "RDS instance status: $STATUS - cannot stop."
+          fi
+
+      - name: Teardown complete
+        if: steps.check_enabled.outputs.should_run == 'true' && steps.action.outputs.action == 'teardown'
+        run: |
+          echo "============================================"
+          echo "Dev environment teardown complete!"
+          echo "- ECS tasks: Scaled to 0"
+          echo "- RDS: Stopping (data preserved)"
+          echo "- Redis: Still running (cache only)"
+          echo "- PostgreSQL data: PRESERVED"
+          echo "============================================"
+          echo ""
+          echo "To manually bring resources back up:"
+          echo "  Run this workflow with action=startup"
+          echo ""
+          echo "Resources will automatically start at ~7am Eastern."
+
+      # ==================== STARTUP ====================
+      - name: Startup - Start RDS instance
+        if: steps.check_enabled.outputs.should_run == 'true' && steps.action.outputs.action == 'startup'
+        run: |
+          echo "Checking RDS instance status..."
+          STATUS=$(aws rds describe-db-instances \
+            --db-instance-identifier "$RDS_INSTANCE" \
+            --query 'DBInstances[0].DBInstanceStatus' \
+            --output text 2>/dev/null || echo "not-found")
+
+          if [ "$STATUS" = "stopped" ]; then
+            echo "Starting RDS instance..."
+            aws rds start-db-instance \
+              --db-instance-identifier "$RDS_INSTANCE" \
+              --no-cli-pager
+
+            echo "Waiting for RDS to become available (this may take several minutes)..."
+            aws rds wait db-instance-available \
+              --db-instance-identifier "$RDS_INSTANCE"
+            echo "RDS instance is now available."
+          elif [ "$STATUS" = "available" ]; then
+            echo "RDS instance is already available."
+          elif [ "$STATUS" = "starting" ]; then
+            echo "RDS instance is already starting. Waiting..."
+            aws rds wait db-instance-available \
+              --db-instance-identifier "$RDS_INSTANCE"
+          else
+            echo "RDS instance status: $STATUS"
+          fi
+
+      - name: Startup - Scale ECS to 1
+        if: steps.check_enabled.outputs.should_run == 'true' && steps.action.outputs.action == 'startup'
+        run: |
+          echo "Scaling ECS service to 1 desired task..."
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --desired-count 1 \
+            --no-cli-pager
+
+          echo "Waiting for service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+          echo "ECS service is running."
+
+      - name: Startup complete
+        if: steps.check_enabled.outputs.should_run == 'true' && steps.action.outputs.action == 'startup'
+        run: |
+          echo "============================================"
+          echo "Dev environment startup complete!"
+          echo "- RDS: Running"
+          echo "- ECS: 1 task running"
+          echo "- All conversation history: PRESERVED"
+          echo "============================================"
+
+      - name: Skipped
+        if: steps.check_enabled.outputs.should_run == 'false'
+        run: |
+          echo "Scheduler is disabled. No action taken."
+          echo ""
+          echo "To re-enable automatic scheduling:"
+          echo "  Set repository variable DEV_SCHEDULER_ENABLED=true"
+          echo ""
+          echo "To run manually despite scheduler being disabled:"
+          echo "  Run this workflow with override_scheduler=true"
