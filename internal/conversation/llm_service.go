@@ -147,6 +147,7 @@ DEPOSIT MESSAGING:
 - Never pressure - always give the option to skip the deposit and wait for a callback
 - DO NOT mention callback timeframes UNTIL AFTER they complete the deposit
 - When offering deposit, just say "Would you like to proceed?" - the payment link is sent automatically
+- NEVER give a range for deposits (e.g., "$50-100" is WRONG). Always state ONE specific amount from the clinic context. If unsure, use $50.
 
 AFTER CUSTOMER AGREES TO DEPOSIT:
 - If they mention a SPECIFIC time (e.g., "Friday at 2pm"), acknowledge it as a PREFERENCE, not a confirmed time:
@@ -200,6 +201,17 @@ WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 )
 
 var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
+
+// buildSystemPrompt returns the system prompt with the actual deposit amount.
+// If depositCents is 0 or negative, it defaults to $50.
+func buildSystemPrompt(depositCents int) string {
+	if depositCents <= 0 {
+		depositCents = 5000 // default $50
+	}
+	depositDollars := fmt.Sprintf("$%d", depositCents/100)
+	// Replace all instances of $50 with the actual deposit amount
+	return strings.ReplaceAll(defaultSystemPrompt, "$50", depositDollars)
+}
 
 var llmLatency = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
