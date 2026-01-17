@@ -17,7 +17,8 @@ type Config struct {
 	UseMemoryQueue             bool
 	WorkerCount                int
 	DatabaseURL                string
-	PersistConversationHistory bool
+	PersistConversationHistory      bool
+	ConversationPersistExcludePhone string
 	SMSProvider                string
 	TelnyxAPIKey               string
 	TelnyxMessagingProfileID   string
@@ -157,8 +158,9 @@ func Load() *Config {
 		UseMemoryQueue:             getEnvAsBool("USE_MEMORY_QUEUE", false),
 		WorkerCount:                getEnvAsInt("WORKER_COUNT", 2),
 		DatabaseURL:                getEnv("DATABASE_URL", ""),
-		PersistConversationHistory: getEnvAsBool("PERSIST_CONVERSATION_HISTORY", false),
-		SMSProvider:                strings.ToLower(strings.TrimSpace(getEnv("SMS_PROVIDER", "auto"))),
+		PersistConversationHistory:      getEnvAsBool("PERSIST_CONVERSATION_HISTORY", false),
+		ConversationPersistExcludePhone: getEnv("CONVERSATION_PERSIST_EXCLUDE_PHONE", ""),
+		SMSProvider:                     strings.ToLower(strings.TrimSpace(getEnv("SMS_PROVIDER", "auto"))),
 		TelnyxAPIKey:               getEnv("TELNYX_API_KEY", ""),
 		TelnyxMessagingProfileID:   getEnv("TELNYX_MESSAGING_PROFILE_ID", ""),
 		TelnyxWebhookSecret:        getEnv("TELNYX_WEBHOOK_SECRET", ""),

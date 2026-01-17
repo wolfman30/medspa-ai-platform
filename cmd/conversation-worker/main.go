@@ -100,7 +100,20 @@ func main() {
 	)
 	var convStore *conversation.ConversationStore
 	if cfg.PersistConversationHistory {
-		convStore = conversation.NewConversationStore(sqlDB)
+		var excludePhones []string
+		if cfg.ConversationPersistExcludePhone != "" {
+			for _, p := range strings.Split(cfg.ConversationPersistExcludePhone, ",") {
+				if trimmed := strings.TrimSpace(p); trimmed != "" {
+					excludePhones = append(excludePhones, trimmed)
+				}
+			}
+		}
+		if len(excludePhones) > 0 {
+			convStore = conversation.NewConversationStoreWithExclusions(sqlDB, excludePhones)
+			logger.Info("conversation persistence enabled with exclusions", "excluded_count", len(excludePhones))
+		} else {
+			convStore = conversation.NewConversationStore(sqlDB)
+		}
 	}
 	var redisClient *redis.Client
 	if cfg.RedisAddr != "" {

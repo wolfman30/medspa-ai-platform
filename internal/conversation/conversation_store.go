@@ -12,7 +12,8 @@ import (
 
 // ConversationStore persists conversations and messages to PostgreSQL for long-term history.
 type ConversationStore struct {
-	db *sql.DB
+	db             *sql.DB
+	excludedPhones map[string]struct{}
 }
 
 // NewConversationStore creates a new conversation store.
@@ -20,7 +21,37 @@ func NewConversationStore(db *sql.DB) *ConversationStore {
 	if db == nil {
 		return nil
 	}
-	return &ConversationStore{db: db}
+	return &ConversationStore{db: db, excludedPhones: make(map[string]struct{})}
+}
+
+// NewConversationStoreWithExclusions creates a conversation store that excludes specific phone numbers.
+func NewConversationStoreWithExclusions(db *sql.DB, excludePhones []string) *ConversationStore {
+	if db == nil {
+		return nil
+	}
+	excluded := make(map[string]struct{})
+	for _, phone := range excludePhones {
+		digits := normalizePhoneDigits(phone)
+		if digits != "" {
+			excluded[digits] = struct{}{}
+		}
+	}
+	return &ConversationStore{db: db, excludedPhones: excluded}
+}
+
+// normalizePhoneDigits strips non-digits and normalizes 10-digit US numbers to 11-digit format.
+func normalizePhoneDigits(phone string) string {
+	var digits strings.Builder
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			digits.WriteRune(r)
+		}
+	}
+	d := digits.String()
+	if len(d) == 10 {
+		return "1" + d
+	}
+	return d
 }
 
 // ConversationRecord represents a conversation in the database.
@@ -63,6 +94,16 @@ func parseConversationID(conversationID string) (orgID, phone string, ok bool) {
 	return parts[1], parts[2], true
 }
 
+// isPhoneExcluded checks if a phone number is in the exclusion list.
+func (s *ConversationStore) isPhoneExcluded(phone string) bool {
+	if s == nil || len(s.excludedPhones) == 0 {
+		return false
+	}
+	digits := normalizePhoneDigits(phone)
+	_, excluded := s.excludedPhones[digits]
+	return excluded
+}
+
 // EnsureConversation creates or updates a conversation record.
 // Returns the conversation UUID.
 func (s *ConversationStore) EnsureConversation(ctx context.Context, conversationID string) (uuid.UUID, error) {
@@ -73,6 +114,11 @@ func (s *ConversationStore) EnsureConversation(ctx context.Context, conversation
 	orgID, phone, ok := parseConversationID(conversationID)
 	if !ok {
 		return uuid.Nil, fmt.Errorf("conversation: invalid conversation_id format: %s", conversationID)
+	}
+
+	// Skip persistence for excluded phone numbers (e.g., test numbers)
+	if s.isPhoneExcluded(phone) {
+		return uuid.Nil, nil
 	}
 
 	// Try to get existing conversation

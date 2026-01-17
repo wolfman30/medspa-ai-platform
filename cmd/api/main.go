@@ -78,7 +78,21 @@ func main() {
 	}
 	var conversationStore *conversation.ConversationStore
 	if cfg.PersistConversationHistory {
-		conversationStore = conversation.NewConversationStore(sqlDB)
+		var excludePhones []string
+		if cfg.ConversationPersistExcludePhone != "" {
+			for _, p := range strings.Split(cfg.ConversationPersistExcludePhone, ",") {
+				if trimmed := strings.TrimSpace(p); trimmed != "" {
+					excludePhones = append(excludePhones, trimmed)
+				}
+			}
+		}
+		if len(excludePhones) > 0 {
+			conversationStore = conversation.NewConversationStoreWithExclusions(sqlDB, excludePhones)
+			logger.Info("conversation persistence enabled with exclusions", "excluded_count", len(excludePhones))
+		} else {
+			conversationStore = conversation.NewConversationStore(sqlDB)
+			logger.Info("conversation persistence enabled")
+		}
 	}
 	var auditSvc *auditcompliance.AuditService
 	if sqlDB != nil {
