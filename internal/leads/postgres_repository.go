@@ -64,7 +64,14 @@ func (r *PostgresRepository) Create(ctx context.Context, req *CreateLeadRequest)
 // GetByID fetches a lead scoped to the org.
 func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id string) (*Lead, error) {
 	query := `
-		SELECT id, org_id, name, email, phone, message, source, created_at
+		SELECT id, org_id, name, email, phone, message, source, created_at,
+		       COALESCE(service_interest, '') as service_interest,
+		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(preferred_days, '') as preferred_days,
+		       COALESCE(preferred_times, '') as preferred_times,
+		       COALESCE(scheduling_notes, '') as scheduling_notes,
+		       COALESCE(deposit_status, '') as deposit_status,
+		       COALESCE(priority_level, '') as priority_level
 		FROM leads
 		WHERE id = $1 AND org_id = $2
 	`
@@ -79,6 +86,13 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		&lead.Message,
 		&lead.Source,
 		&lead.CreatedAt,
+		&lead.ServiceInterest,
+		&lead.PatientType,
+		&lead.PreferredDays,
+		&lead.PreferredTimes,
+		&lead.SchedulingNotes,
+		&lead.DepositStatus,
+		&lead.PriorityLevel,
 	); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrLeadNotFound
@@ -96,7 +110,14 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		return nil, fmt.Errorf("leads: org and phone are required")
 	}
 	query := `
-		SELECT id, org_id, name, email, phone, message, source, created_at
+		SELECT id, org_id, name, email, phone, message, source, created_at,
+		       COALESCE(service_interest, '') as service_interest,
+		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(preferred_days, '') as preferred_days,
+		       COALESCE(preferred_times, '') as preferred_times,
+		       COALESCE(scheduling_notes, '') as scheduling_notes,
+		       COALESCE(deposit_status, '') as deposit_status,
+		       COALESCE(priority_level, '') as priority_level
 		FROM leads
 		WHERE org_id = $1 AND phone = $2
 		ORDER BY created_at DESC
@@ -112,6 +133,13 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		&lead.Message,
 		&lead.Source,
 		&lead.CreatedAt,
+		&lead.ServiceInterest,
+		&lead.PatientType,
+		&lead.PreferredDays,
+		&lead.PreferredTimes,
+		&lead.SchedulingNotes,
+		&lead.DepositStatus,
+		&lead.PriorityLevel,
 	); err == nil {
 		return &lead, nil
 	} else if err != pgx.ErrNoRows {
