@@ -76,3 +76,44 @@ export interface OnboardingStatus {
   nextAction?: string;
   nextActionUrl?: string;
 }
+
+// 10DLC Types
+export interface BrandRegistration {
+  clinicId: string;
+  legalName: string;
+  ein: string;
+  website: string;
+  addressLine: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  vertical: string;
+}
+
+export interface CampaignRegistration {
+  brandInternalId: string;
+  useCase: string;
+  description: string;
+  sampleMessages: string[];
+  messageFlow: string;
+  optInDescription: string;
+  optOutDescription: string;
+  helpMessage: string;
+  stopMessage: string;
+}
+
+export interface BrandResponse {
+  brand_id: string;
+  status: string;
+  legal_name?: string;
+}
+
+export interface CampaignResponse {
+  campaign_id: string;
+  status: string;
+  use_case: string;
+}

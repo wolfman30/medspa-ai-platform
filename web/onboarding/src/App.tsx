@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { Dashboard } from './components/Dashboard';
+import { CampaignRegistration } from './components/CampaignRegistration';
 import { getOnboardingStatus } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
@@ -97,6 +98,27 @@ function AuthenticatedApp() {
 }
 
 function App() {
+  // Preview mode for component development - add ?preview=campaign to URL
+  const params = new URLSearchParams(window.location.search);
+  const preview = params.get('preview');
+
+  if (preview === 'campaign') {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-2xl mx-auto px-4">
+          <div className="bg-white rounded-lg shadow p-6">
+            <CampaignRegistration
+              orgId="preview-org"
+              brandId="preview-brand-id"
+              onBack={() => alert('Back clicked')}
+              onComplete={(id) => alert(`Campaign created: ${id}`)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AuthProvider>
       <AuthenticatedApp />

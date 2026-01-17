@@ -68,6 +68,52 @@ func TestBusinessHoursContext(t *testing.T) {
 	if !contains(ctx, "Monday") {
 		t.Errorf("expected context to mention Monday, got: %s", ctx)
 	}
+
+	// Should include callback instruction
+	if !contains(ctx, "CALLBACK INSTRUCTION") {
+		t.Errorf("expected context to include callback instruction, got: %s", ctx)
+	}
+}
+
+func TestExpectedCallbackTime(t *testing.T) {
+	cfg := DefaultConfig("test-org")
+	loc, _ := time.LoadLocation("America/New_York")
+
+	tests := []struct {
+		name     string
+		time     time.Time
+		contains string
+	}{
+		{
+			name:     "Friday 6pm - should say Monday",
+			time:     time.Date(2025, 12, 5, 18, 0, 0, 0, loc),
+			contains: "Monday",
+		},
+		{
+			name:     "Saturday - should say Monday",
+			time:     time.Date(2025, 12, 6, 14, 0, 0, 0, loc),
+			contains: "Monday",
+		},
+		{
+			name:     "Monday 7am before open - should say today or tomorrow",
+			time:     time.Date(2025, 12, 8, 7, 0, 0, 0, loc),
+			contains: "9 AM",
+		},
+		{
+			name:     "Wednesday 8pm after close - should say tomorrow",
+			time:     time.Date(2025, 12, 10, 20, 0, 0, 0, loc),
+			contains: "tomorrow",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cfg.ExpectedCallbackTime(tt.time)
+			if !contains(result, tt.contains) {
+				t.Errorf("ExpectedCallbackTime(%v) = %q, want to contain %q", tt.time, result, tt.contains)
+			}
+		})
+	}
 }
 
 func contains(s, substr string) bool {

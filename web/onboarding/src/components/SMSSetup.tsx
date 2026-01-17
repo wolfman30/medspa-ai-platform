@@ -8,9 +8,10 @@ interface Props {
   onBack: () => void;
   onComplete: () => void;
   onPhoneActivated?: (phone: string) => void;
+  onRegisterCampaign?: () => void;
 }
 
-export function SMSSetup({ orgId, phoneNumber, status, onBack, onComplete, onPhoneActivated }: Props) {
+export function SMSSetup({ orgId, phoneNumber, status, onBack, onComplete, onPhoneActivated, onRegisterCampaign }: Props) {
   const isReady = status === 'active' || status === 'verified';
   const [manualPhone, setManualPhone] = useState('');
   const [activating, setActivating] = useState(false);
@@ -95,9 +96,23 @@ export function SMSSetup({ orgId, phoneNumber, status, onBack, onComplete, onPho
                 Business SMS messaging in the US requires 10DLC (10-Digit Long Code) registration.
                 This process typically takes 2-4 weeks for approval.
               </p>
-              <p className="mt-2">
-                We'll help you through the registration process after you complete onboarding.
-              </p>
+              {onRegisterCampaign && (
+                <button
+                  type="button"
+                  onClick={onRegisterCampaign}
+                  className="mt-3 inline-flex items-center rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                >
+                  Register Campaign
+                  <svg className="ml-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              )}
+              {!onRegisterCampaign && (
+                <p className="mt-2">
+                  We'll help you through the registration process after you complete onboarding.
+                </p>
+              )}
             </div>
           </div>
         </div>
