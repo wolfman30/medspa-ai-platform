@@ -809,24 +809,25 @@ func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, book
 	name := strings.TrimSpace(clinicName)
 	bookingURL = strings.TrimSpace(bookingURL)
 
-	// Build the booking link line if URL is configured
-	var bookingLine string
+	// Build the booking link section if URL is configured
+	// Provides context that booking online is optional and staff will call regardless
+	var bookingSection string
 	if bookingURL != "" {
-		bookingLine = fmt.Sprintf("\n\nBook your appointment online: %s", bookingURL)
+		bookingSection = fmt.Sprintf("\n\nWant to lock in your preferred date and time now? You can schedule online here: %s\n\nThis is completely optional - our team will call you either way. The link just helps expedite the process if you'd like to confirm sooner.", bookingURL)
 	}
 
 	if evt.ScheduledFor != nil {
 		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM")
 		if name != "" {
-			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you within 24 hours with final details.%s", date, name, bookingLine)
+			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you within 24 hours with final details.%s", date, name, bookingSection)
 		}
-		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details.%s", date, bookingLine)
+		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details.%s", date, bookingSection)
 	}
 	amount := float64(evt.AmountCents) / 100
 	if name != "" {
-		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you within 24 hours to confirm your appointment.%s", amount, name, bookingLine)
+		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you within 24 hours to confirm your appointment.%s", amount, name, bookingSection)
 	}
-	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you within 24 hours to confirm your appointment.%s", amount, bookingLine)
+	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you within 24 hours to confirm your appointment.%s", amount, bookingSection)
 }
 
 func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.PaymentFailedV1) error {
