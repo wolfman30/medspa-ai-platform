@@ -245,3 +245,49 @@ export async function createCampaign(data: CreateCampaignRequest): Promise<Campa
   }
   return res.json();
 }
+
+// Conversation Viewer API
+
+import type {
+  ConversationsListResponse,
+  ConversationDetailResponse,
+} from '../types/conversation';
+
+export async function listConversations(
+  orgId: string,
+  options?: { page?: number; pageSize?: number; phone?: string }
+): Promise<ConversationsListResponse> {
+  const params = new URLSearchParams();
+  if (options?.page) params.set('page', options.page.toString());
+  if (options?.pageSize) params.set('page_size', options.pageSize.toString());
+  if (options?.phone) params.set('phone', options.phone);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/admin/orgs/${orgId}/conversations${queryString ? '?' + queryString : ''}`;
+
+  const res = await fetch(url, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to list conversations');
+  }
+  return res.json();
+}
+
+export async function getConversation(
+  orgId: string,
+  conversationId: string
+): Promise<ConversationDetailResponse> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/conversations/${encodeURIComponent(conversationId)}`,
+    {
+      headers: await getHeaders(),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to get conversation');
+  }
+  return res.json();
+}
