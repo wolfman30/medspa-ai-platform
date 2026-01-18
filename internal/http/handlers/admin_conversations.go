@@ -252,8 +252,6 @@ func (h *AdminConversationsHandler) listFromConversationsTable(w http.ResponseWr
 func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWriter, r *http.Request, orgID, phone, dateFrom, dateTo string, page, pageSize, offset int) {
 	conversationIDPattern := "sms:" + orgID + ":%"
 
-	h.logger.Info("listFromConversationJobs", "org_id", orgID, "pattern", conversationIDPattern, "phone_filter", phone)
-
 	query := `
 		SELECT conversation_id,
 			   COUNT(*) as job_count,
@@ -292,12 +290,8 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 	var total int
 	h.db.QueryRowContext(r.Context(), countQuery, conversationIDPattern).Scan(&total)
 
-	h.logger.Info("listFromConversationJobs count", "total", total, "pattern", conversationIDPattern)
-
 	query += " LIMIT $" + strconv.Itoa(argNum) + " OFFSET $" + strconv.Itoa(argNum+1)
 	args = append(args, pageSize, offset)
-
-	h.logger.Debug("listFromConversationJobs query", "query", query, "args", args)
 
 	rows, err := h.db.QueryContext(r.Context(), query, args...)
 	if err != nil {
@@ -308,8 +302,6 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 	defer rows.Close()
 
 	var conversations []ConversationListItem
-	rowCount := 0
-	parseFailCount := 0
 	for rows.Next() {
 		var conversationID string
 		var jobCount int
@@ -317,19 +309,13 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 		var status string
 
 		if err := rows.Scan(&conversationID, &jobCount, &lastActivity, &firstActivity, &status); err != nil {
-			h.logger.Error("failed to scan conversation row", "error", err)
 			continue
 		}
-		rowCount++
 
 		parsedOrgID, customerPhone, ok := parseConversationID(conversationID)
 		if !ok {
-			h.logger.Warn("failed to parse conversation ID", "conversation_id", conversationID)
-			parseFailCount++
 			continue
 		}
-
-		h.logger.Info("conversation found", "conversation_id", conversationID, "phone", customerPhone, "job_count", jobCount)
 
 		lastFormatted := lastActivity.Format(time.RFC3339)
 		conversations = append(conversations, ConversationListItem{
@@ -342,8 +328,6 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 			LastMessageAt: &lastFormatted,
 		})
 	}
-
-	h.logger.Info("listFromConversationJobs results", "rows_scanned", rowCount, "parse_failures", parseFailCount, "conversations_returned", len(conversations))
 
 	if conversations == nil {
 		conversations = []ConversationListItem{}
