@@ -998,3 +998,84 @@ func (s *stubSupervisor) callCount() int {
 	defer s.mu.Unlock()
 	return s.calls
 }
+
+func TestPaymentConfirmationMessage_UsesCallbackTime(t *testing.T) {
+	tests := []struct {
+		name           string
+		callbackTime   string
+		clinicName     string
+		bookingURL     string
+		scheduledFor   *time.Time
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name:           "uses custom callback time",
+			callbackTime:   "on Monday around 10 AM",
+			clinicName:     "Wolf Aesthetics",
+			bookingURL:     "",
+			wantContains:   []string{"on Monday around 10 AM", "Wolf Aesthetics"},
+			wantNotContain: []string{"within 24 hours"},
+		},
+		{
+			name:         "uses shortly when open",
+			callbackTime: "shortly",
+			clinicName:   "Test Clinic",
+			bookingURL:   "",
+			wantContains: []string{"shortly", "Test Clinic"},
+		},
+		{
+			name:         "defaults to 24 hours when empty",
+			callbackTime: "",
+			clinicName:   "Test Clinic",
+			bookingURL:   "",
+			wantContains: []string{"within 24 hours"},
+		},
+		{
+			name:         "includes booking URL when provided",
+			callbackTime: "tomorrow around 10 AM",
+			clinicName:   "Test Clinic",
+			bookingURL:   "https://example.com/book",
+			wantContains: []string{"https://example.com/book", "completely optional"},
+		},
+		{
+			name:           "with scheduled date",
+			callbackTime:   "on Monday around 10 AM",
+			clinicName:     "Test Clinic",
+			bookingURL:     "",
+			scheduledFor:   func() *time.Time { t := time.Date(2026, 1, 20, 14, 0, 0, 0, time.UTC); return &t }(),
+			wantContains:   []string{"Tuesday, January 20 at 2:00 PM", "on Monday around 10 AM"},
+			wantNotContain: []string{"within 24 hours"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			evt := &events.PaymentSucceededV1{
+				EventID:      "evt-123",
+				AmountCents:  5000,
+				ScheduledFor: tt.scheduledFor,
+			}
+
+			msg := paymentConfirmationMessage(evt, tt.clinicName, tt.bookingURL, tt.callbackTime)
+
+			for _, want := range tt.wantContains {
+				if !strings.Contains(msg, want) {
+					t.Errorf("paymentConfirmationMessage() should contain %q, got %q", want, msg)
+				}
+			}
+			for _, notWant := range tt.wantNotContain {
+				if strings.Contains(msg, notWant) {
+					t.Errorf("paymentConfirmationMessage() should NOT contain %q, got %q", notWant, msg)
+				}
+			}
+		})
+	}
+}
+
+func TestPaymentConfirmationMessage_NilEvent(t *testing.T) {
+	msg := paymentConfirmationMessage(nil, "Test", "", "shortly")
+	if msg != "" {
+		t.Errorf("expected empty string for nil event, got %q", msg)
+	}
+}
