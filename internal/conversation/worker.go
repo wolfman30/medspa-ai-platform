@@ -752,12 +752,16 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	if evt.LeadPhone != "" && evt.FromNumber != "" {
 		if !w.isOptedOut(ctx, evt.OrgID, evt.LeadPhone) {
 			cfg := w.clinicConfig(ctx, evt.OrgID)
-			var clinicName, bookingURL string
+			var clinicName, bookingURL, callbackTime string
 			if cfg != nil {
 				clinicName = strings.TrimSpace(cfg.Name)
 				bookingURL = strings.TrimSpace(cfg.BookingURL)
+				callbackTime = cfg.ExpectedCallbackTime(time.Now())
 			}
-			body := paymentConfirmationMessage(evt, clinicName, bookingURL)
+			if callbackTime == "" {
+				callbackTime = "within 24 hours" // fallback
+			}
+			body := paymentConfirmationMessage(evt, clinicName, bookingURL, callbackTime)
 
 			if w.messenger == nil {
 				// Transcript is still recorded even when SMS sending is disabled.
@@ -802,12 +806,16 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 	return nil
 }
 
-func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, bookingURL string) string {
+func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, bookingURL, callbackTime string) string {
 	if evt == nil {
 		return ""
 	}
 	name := strings.TrimSpace(clinicName)
 	bookingURL = strings.TrimSpace(bookingURL)
+	callbackTime = strings.TrimSpace(callbackTime)
+	if callbackTime == "" {
+		callbackTime = "within 24 hours"
+	}
 
 	// Build the booking link section if URL is configured
 	// Provides context that booking online is optional and staff will call regardless
@@ -819,15 +827,15 @@ func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, book
 	if evt.ScheduledFor != nil {
 		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM")
 		if name != "" {
-			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you within 24 hours with final details.%s", date, name, bookingSection)
+			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you %s with final details.%s", date, name, callbackTime, bookingSection)
 		}
-		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call within 24 hours with final details.%s", date, bookingSection)
+		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call %s with final details.%s", date, callbackTime, bookingSection)
 	}
 	amount := float64(evt.AmountCents) / 100
 	if name != "" {
-		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you within 24 hours to confirm your appointment.%s", amount, name, bookingSection)
+		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you %s to confirm your appointment.%s", amount, name, callbackTime, bookingSection)
 	}
-	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you within 24 hours to confirm your appointment.%s", amount, bookingSection)
+	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you %s to confirm your appointment.%s", amount, callbackTime, bookingSection)
 }
 
 func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.PaymentFailedV1) error {
