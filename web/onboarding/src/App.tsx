@@ -26,7 +26,7 @@ function getOrgIdFromUser(user: unknown): string | null {
 
 // Known orgs for admin quick access
 const KNOWN_ORGS = [
-  { id: 'bb507f20-7fcc-4941-9eac-9ed93b7834ed', name: 'Botox by Audrey (Dev)' },
+  { id: 'bb507f20-7fcc-4941-9eac-9ed93b7834ed', name: 'Wolf Aesthetics' },
 ];
 
 function AuthenticatedApp() {
