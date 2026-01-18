@@ -111,13 +111,15 @@ func (p *Publisher) enqueue(ctx context.Context, payload queuePayload, opts ...P
 		switch payload.Kind {
 		case jobTypeStart:
 			jobRecord.StartRequest = &payload.Start
+			jobRecord.ConversationID = payload.Start.ConversationID
 		case jobTypeMessage:
 			jobRecord.MessageRequest = &payload.Message
+			jobRecord.ConversationID = payload.Message.ConversationID
 		}
 		if err := p.jobs.PutPending(ctx, jobRecord); err != nil {
 			return fmt.Errorf("conversation: failed to create job record: %w", err)
 		}
-		p.logger.Debug("conversation job record created", "job_id", payload.ID, "kind", payload.Kind)
+		p.logger.Debug("conversation job record created", "job_id", payload.ID, "kind", payload.Kind, "conversation_id", jobRecord.ConversationID)
 	}
 
 	if err := p.queue.Send(ctx, body); err != nil {
