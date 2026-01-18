@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { Dashboard } from './components/Dashboard';
 import { CampaignRegistration } from './components/CampaignRegistration';
+import { ConversationList } from './components/ConversationList';
+import { ConversationDetail } from './components/ConversationDetail';
 import { getOnboardingStatus } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
 
 type OnboardingDecision = 'idle' | 'loading' | 'ready' | 'not_ready';
+type AppView = 'dashboard' | 'conversations' | 'conversation-detail';
 
 function getOrgIdFromUser(user: unknown): string | null {
   if (!user || typeof user !== 'object') return null;
@@ -19,6 +22,8 @@ function AuthenticatedApp() {
   const [decision, setDecision] = useState<OnboardingDecision>('idle');
   const [checkedOrgId, setCheckedOrgId] = useState<string | null>(null);
   const [statusRefresh, setStatusRefresh] = useState(0);
+  const [view, setView] = useState<AppView>('dashboard');
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
   const userOrgId = getOrgIdFromUser(user);
@@ -72,7 +77,25 @@ function AuthenticatedApp() {
     <div>
       {authEnabled && user && (
         <div className="bg-indigo-600 text-white px-4 py-2 flex justify-between items-center">
-          <span className="text-sm">Logged in as {user.email}</span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm">Logged in as {user.email}</span>
+            {decision === 'ready' && orgId && (
+              <nav className="flex gap-2">
+                <button
+                  onClick={() => setView('dashboard')}
+                  className={`text-sm px-2 py-1 rounded ${view === 'dashboard' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => { setView('conversations'); setSelectedConversationId(null); }}
+                  className={`text-sm px-2 py-1 rounded ${view === 'conversations' || view === 'conversation-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                >
+                  Conversations
+                </button>
+              </nav>
+            )}
+          </div>
           <button
             onClick={logout}
             className="text-sm underline hover:no-underline"
@@ -86,7 +109,20 @@ function AuthenticatedApp() {
           <span className="text-sm text-gray-600">Checking onboarding status...</span>
         </div>
       ) : decision === 'ready' && orgId ? (
-        <Dashboard orgId={orgId} />
+        view === 'conversation-detail' && selectedConversationId ? (
+          <ConversationDetail
+            orgId={orgId}
+            conversationId={selectedConversationId}
+            onBack={() => { setView('conversations'); setSelectedConversationId(null); }}
+          />
+        ) : view === 'conversations' ? (
+          <ConversationList
+            orgId={orgId}
+            onSelect={(id) => { setSelectedConversationId(id); setView('conversation-detail'); }}
+          />
+        ) : (
+          <Dashboard orgId={orgId} />
+        )
       ) : (
         <OnboardingWizard
           orgId={orgId}
@@ -97,8 +133,30 @@ function AuthenticatedApp() {
   );
 }
 
+function ConversationsPreview() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const orgId = new URLSearchParams(window.location.search).get('orgId') || 'preview-org';
+
+  if (selectedId) {
+    return (
+      <ConversationDetail
+        orgId={orgId}
+        conversationId={selectedId}
+        onBack={() => setSelectedId(null)}
+      />
+    );
+  }
+
+  return (
+    <ConversationList
+      orgId={orgId}
+      onSelect={setSelectedId}
+    />
+  );
+}
+
 function App() {
-  // Preview mode for component development - add ?preview=campaign to URL
+  // Preview mode for component development - add ?preview=campaign or ?preview=conversations to URL
   const params = new URLSearchParams(window.location.search);
   const preview = params.get('preview');
 
@@ -117,6 +175,10 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  if (preview === 'conversations') {
+    return <ConversationsPreview />;
   }
 
   return (
