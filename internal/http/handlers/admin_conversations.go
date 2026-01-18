@@ -104,6 +104,18 @@ func (h *AdminConversationsHandler) hasConversationsTable(ctx *http.Request) boo
 	return exists
 }
 
+// hasConversationsForOrg checks if the conversations table has any data for the given org
+func (h *AdminConversationsHandler) hasConversationsForOrg(ctx *http.Request, orgID string) bool {
+	if !h.hasConversationsTable(ctx) {
+		return false
+	}
+	var count int
+	h.db.QueryRowContext(ctx.Context(),
+		`SELECT COUNT(*) FROM conversations WHERE org_id = $1 LIMIT 1`, orgID,
+	).Scan(&count)
+	return count > 0
+}
+
 // ListConversations returns a paginated list of conversations for an organization.
 // GET /admin/orgs/{orgID}/conversations
 func (h *AdminConversationsHandler) ListConversations(w http.ResponseWriter, r *http.Request) {
@@ -129,13 +141,13 @@ func (h *AdminConversationsHandler) ListConversations(w http.ResponseWriter, r *
 
 	offset := (page - 1) * pageSize
 
-	// Try conversations table first (long-term history)
-	if h.hasConversationsTable(r) {
+	// Try conversations table first (long-term history) - only if it has data for this org
+	if h.hasConversationsForOrg(r, orgID) {
 		h.listFromConversationsTable(w, r, orgID, phone, status, dateFrom, dateTo, page, pageSize, offset)
 		return
 	}
 
-	// Fallback to conversation_jobs
+	// Fallback to conversation_jobs (used when conversations table is empty or doesn't exist)
 	h.listFromConversationJobs(w, r, orgID, phone, dateFrom, dateTo, page, pageSize, offset)
 }
 
@@ -475,8 +487,8 @@ func (h *AdminConversationsHandler) GetConversationStats(w http.ResponseWriter, 
 	monthAgo := now.AddDate(0, -1, 0)
 	sixMonthsAgo := now.AddDate(0, -6, 0)
 
-	// Try conversations table first
-	if h.hasConversationsTable(r) {
+	// Try conversations table first - only if it has data for this org
+	if h.hasConversationsForOrg(r, orgID) {
 		h.db.QueryRowContext(r.Context(),
 			`SELECT COUNT(*) FROM conversations WHERE org_id = $1`, orgID,
 		).Scan(&stats.TotalConversations)
