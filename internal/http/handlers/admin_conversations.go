@@ -329,6 +329,8 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 			continue
 		}
 
+		h.logger.Info("conversation found", "conversation_id", conversationID, "phone", customerPhone, "job_count", jobCount)
+
 		lastFormatted := lastActivity.Format(time.RFC3339)
 		conversations = append(conversations, ConversationListItem{
 			ID:            conversationID,
