@@ -1066,3 +1066,93 @@ func (s *stubRAG) Query(ctx context.Context, clinicID string, query string, topK
 	}
 	return s.contexts, nil
 }
+
+func TestBuildSystemPrompt_ReplacesDepositAmount(t *testing.T) {
+	tests := []struct {
+		name            string
+		depositCents    int
+		wantContains    string
+		wantNotContains string
+	}{
+		{
+			name:         "default $50",
+			depositCents: 5000,
+			wantContains: "$50",
+		},
+		{
+			name:            "custom $75",
+			depositCents:    7500,
+			wantContains:    "$75",
+			wantNotContains: "$50",
+		},
+		{
+			name:            "custom $100",
+			depositCents:    10000,
+			wantContains:    "$100",
+			wantNotContains: "$50",
+		},
+		{
+			name:         "zero defaults to $50",
+			depositCents: 0,
+			wantContains: "$50",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt := buildSystemPrompt(tt.depositCents)
+			if !strings.Contains(prompt, tt.wantContains) {
+				t.Errorf("buildSystemPrompt(%d) should contain %q", tt.depositCents, tt.wantContains)
+			}
+			if tt.wantNotContains != "" && strings.Contains(prompt, tt.wantNotContains) {
+				t.Errorf("buildSystemPrompt(%d) should NOT contain %q", tt.depositCents, tt.wantNotContains)
+			}
+		})
+	}
+}
+
+func TestLLMService_InjectsDepositAmountContext(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(client)
+
+	// Set up clinic with custom deposit amount of $75
+	cfg := clinic.DefaultConfig("org-deposit-test")
+	cfg.DepositAmountCents = 7500
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("set clinic config: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{response: LLMResponse{Text: "Hello!"}}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithClinicStore(clinicStore))
+
+	_, err := service.StartConversation(ctx, StartRequest{
+		ConversationID: "conv-deposit-context",
+		LeadID:         "lead-1",
+		OrgID:          "org-deposit-test",
+		Intro:          "Hi",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	// Check that the deposit amount context was injected
+	foundDepositContext := false
+	for _, sys := range mockLLM.lastReq.System {
+		if strings.Contains(sys, "DEPOSIT AMOUNT") && strings.Contains(sys, "$75") {
+			foundDepositContext = true
+			// Verify it says to never give a range
+			if !strings.Contains(sys, "NEVER say a range") {
+				t.Errorf("deposit context should warn against ranges, got %q", sys)
+			}
+			break
+		}
+	}
+	if !foundDepositContext {
+		t.Fatalf("expected deposit amount context with $75 to be injected into system prompts")
+	}
+}
