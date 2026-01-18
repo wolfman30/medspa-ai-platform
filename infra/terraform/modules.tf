@@ -78,6 +78,7 @@ module "ecs_fargate" {
     REDIS_TLS                  = "true"
     BEDROCK_MODEL_ID           = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw"
     BEDROCK_EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
+    TELNYX_TRACK_JOBS          = "true"
   }
 
   secret_environment_variables = {
