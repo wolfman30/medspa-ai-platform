@@ -99,7 +99,7 @@ function AuthenticatedApp() {
     <div>
       {/* Admin header with org selector */}
       {authEnabled && user && isAdmin && (
-        <OrgSelector currentOrgId={orgId} onOrgChange={handleAdminOrgChange} />
+        <OrgSelector currentOrgId={adminOrgId} onOrgChange={handleAdminOrgChange} />
       )}
       {authEnabled && user && (
         <div className="bg-indigo-600 text-white px-4 py-2 flex justify-between items-center">
