@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -362,6 +363,11 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// URL-decode the conversation ID since it may contain encoded colons (%3A)
+	if decoded, err := url.PathUnescape(conversationID); err == nil {
+		conversationID = decoded
+	}
+
 	parsedOrgID, customerPhone, ok := parseConversationID(conversationID)
 	if !ok || parsedOrgID != orgID {
 		jsonError(w, fmt.Sprintf("invalid conversation ID format: %s (expected sms:orgID:phone)", conversationID), http.StatusNotFound)
@@ -592,6 +598,11 @@ func (h *AdminConversationsHandler) ExportTranscript(w http.ResponseWriter, r *h
 	if orgID == "" || conversationID == "" {
 		http.Error(w, "missing orgID or conversationID", http.StatusBadRequest)
 		return
+	}
+
+	// URL-decode the conversation ID since it may contain encoded colons (%3A)
+	if decoded, err := url.PathUnescape(conversationID); err == nil {
+		conversationID = decoded
 	}
 
 	parsedOrgID, customerPhone, ok := parseConversationID(conversationID)
