@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -343,6 +344,13 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 	})
 }
 
+// jsonError writes a JSON error response
+func jsonError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
 // GetConversation returns detailed information about a specific conversation.
 // GET /admin/orgs/{orgID}/conversations/{conversationID}
 func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *http.Request) {
@@ -350,13 +358,13 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 	conversationID := chi.URLParam(r, "conversationID")
 
 	if orgID == "" || conversationID == "" {
-		http.Error(w, "missing orgID or conversationID", http.StatusBadRequest)
+		jsonError(w, "missing orgID or conversationID", http.StatusBadRequest)
 		return
 	}
 
 	parsedOrgID, customerPhone, ok := parseConversationID(conversationID)
 	if !ok || parsedOrgID != orgID {
-		http.Error(w, "conversation not found", http.StatusNotFound)
+		jsonError(w, fmt.Sprintf("invalid conversation ID format: %s (expected sms:orgID:phone)", conversationID), http.StatusNotFound)
 		return
 	}
 
@@ -387,6 +395,16 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 		if len(messages) > 0 {
 			conv.Messages = messages
 			conv.Metadata.Source = "database"
+		}
+	} else {
+		// Fallback: try to get started_at from conversation_jobs
+		var jobStartedAt time.Time
+		h.db.QueryRowContext(r.Context(),
+			`SELECT MIN(created_at) FROM conversation_jobs WHERE conversation_id = $1`,
+			conversationID,
+		).Scan(&jobStartedAt)
+		if !jobStartedAt.IsZero() {
+			conv.StartedAt = jobStartedAt.Format(time.RFC3339)
 		}
 	}
 
