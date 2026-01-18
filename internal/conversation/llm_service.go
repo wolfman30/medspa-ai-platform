@@ -1133,7 +1133,7 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 		}
 	}
 
-	// Append clinic business hours context if available
+	// Append clinic business hours context and deposit amount if available
 	if s.clinicStore != nil && orgID != "" {
 		cfg, err := s.clinicStore.Get(ctx, orgID)
 		if err != nil {
@@ -1143,6 +1143,16 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 			history = append(history, ChatMessage{
 				Role:    ChatRoleSystem,
 				Content: hoursContext,
+			})
+			// Explicitly state the exact deposit amount to prevent LLM from guessing ranges
+			depositAmount := cfg.DepositAmountCents
+			if depositAmount <= 0 {
+				depositAmount = 5000 // default $50
+			}
+			depositDollars := depositAmount / 100
+			history = append(history, ChatMessage{
+				Role:    ChatRoleSystem,
+				Content: fmt.Sprintf("DEPOSIT AMOUNT: This clinic's deposit is exactly $%d. NEVER say a range like '$50-100'. Always state the exact amount: $%d.", depositDollars, depositDollars),
 			})
 		}
 	}
