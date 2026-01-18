@@ -1,16 +1,26 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Amplify } from 'aws-amplify';
-import { signIn, signOut, signUp, confirmSignUp, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
-import { cognitoConfig, isCognitoConfigured } from './config';
+import { signIn, signOut, signUp, confirmSignUp, getCurrentUser, fetchAuthSession, signInWithRedirect } from 'aws-amplify/auth';
+import { cognitoConfig, isCognitoConfigured, getRedirectUrl } from './config';
 
 // Configure Amplify if Cognito is set up
 if (isCognitoConfigured()) {
+  const redirectUrl = getRedirectUrl();
   Amplify.configure({
     Auth: {
       Cognito: {
         userPoolId: cognitoConfig.userPoolId,
         userPoolClientId: cognitoConfig.userPoolClientId,
+        loginWith: {
+          oauth: {
+            domain: cognitoConfig.oauthDomain,
+            scopes: ['email', 'openid', 'profile'],
+            redirectSignIn: [redirectUrl],
+            redirectSignOut: [redirectUrl],
+            responseType: 'code',
+          },
+        },
       },
     },
   });
@@ -27,6 +37,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   authEnabled: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   register: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
   confirmRegistration: (email: string, code: string) => Promise<void>;
@@ -51,8 +62,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function checkUser() {
     try {
       const currentUser = await getCurrentUser();
+      // For federated users (Google), get email from ID token claims
+      let email = currentUser.signInDetails?.loginId || '';
+      if (!email || email.startsWith('Google_')) {
+        try {
+          const session = await fetchAuthSession();
+          const idToken = session.tokens?.idToken;
+          if (idToken) {
+            // Decode JWT payload to get email claim
+            const payload = idToken.payload;
+            email = (payload.email as string) || currentUser.username;
+          }
+        } catch {
+          email = currentUser.username;
+        }
+      }
       setUser({
-        email: currentUser.signInDetails?.loginId || currentUser.username,
+        email,
         username: currentUser.username,
       });
     } catch {
@@ -67,6 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.isSignedIn) {
       await checkUser();
     }
+  }
+
+  async function loginWithGoogle() {
+    await signInWithRedirect({ provider: 'Google' });
   }
 
   async function logout() {
@@ -107,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         authEnabled,
         login,
+        loginWithGoogle,
         logout,
         register,
         confirmRegistration,

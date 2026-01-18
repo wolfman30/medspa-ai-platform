@@ -11,11 +11,23 @@ import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
 type OnboardingDecision = 'idle' | 'loading' | 'ready' | 'not_ready';
 type AppView = 'dashboard' | 'conversations' | 'conversation-detail';
 
+// Admin users can view all orgs
+const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com'];
+
+function isAdminUser(email: string | undefined): boolean {
+  return !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
 function getOrgIdFromUser(user: unknown): string | null {
   if (!user || typeof user !== 'object') return null;
   const record = user as { orgId?: string; org_id?: string };
   return record.orgId || record.org_id || null;
 }
+
+// Known orgs for admin quick access
+const KNOWN_ORGS = [
+  { id: 'bb507f20-7fcc-4941-9eac-9ed93b7834ed', name: 'Botox by Audrey (Dev)' },
+];
 
 function AuthenticatedApp() {
   const { isLoading, isAuthenticated, authEnabled, user, logout } = useAuth();
@@ -24,10 +36,13 @@ function AuthenticatedApp() {
   const [statusRefresh, setStatusRefresh] = useState(0);
   const [view, setView] = useState<AppView>('dashboard');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [adminOrgId, setAdminOrgId] = useState<string>(KNOWN_ORGS[0]?.id || '');
 
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
   const userOrgId = getOrgIdFromUser(user);
-  const orgId = userOrgId || getStoredOrgId();
+  const isAdmin = isAdminUser(user?.email);
+  // Admins can switch orgs; regular users use their assigned org
+  const orgId = isAdmin ? adminOrgId : (userOrgId || getStoredOrgId());
 
   useEffect(() => {
     if (!authReady || !userOrgId) return;
@@ -72,21 +87,36 @@ function AuthenticatedApp() {
 
   const showStatusLoading = authReady && orgId && checkedOrgId !== orgId;
 
+  const handleAdminOrgChange = (newOrgId: string) => {
+    setAdminOrgId(newOrgId);
+    setSelectedConversationId(null);
+    setDecision('idle');
+    setCheckedOrgId(null);
+  };
+
   // Show onboarding wizard or dashboard (with optional user header if authenticated)
   return (
     <div>
+      {/* Admin header with org selector */}
+      {authEnabled && user && isAdmin && (
+        <OrgSelector currentOrgId={orgId} onOrgChange={handleAdminOrgChange} />
+      )}
       {authEnabled && user && (
         <div className="bg-indigo-600 text-white px-4 py-2 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <span className="text-sm">Logged in as {user.email}</span>
-            {decision === 'ready' && orgId && (
+            <span className="text-sm">
+              {isAdmin ? '(Admin) ' : ''}Logged in as {user.email}
+            </span>
+            {(isAdmin || (decision === 'ready' && orgId)) && (
               <nav className="flex gap-2">
-                <button
-                  onClick={() => setView('dashboard')}
-                  className={`text-sm px-2 py-1 rounded ${view === 'dashboard' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
-                >
-                  Dashboard
-                </button>
+                {!isAdmin && (
+                  <button
+                    onClick={() => setView('dashboard')}
+                    className={`text-sm px-2 py-1 rounded ${view === 'dashboard' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  >
+                    Dashboard
+                  </button>
+                )}
                 <button
                   onClick={() => { setView('conversations'); setSelectedConversationId(null); }}
                   className={`text-sm px-2 py-1 rounded ${view === 'conversations' || view === 'conversation-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
@@ -104,7 +134,21 @@ function AuthenticatedApp() {
           </button>
         </div>
       )}
-      {showStatusLoading ? (
+      {/* Admin view - direct access to conversations */}
+      {isAdmin && orgId ? (
+        view === 'conversation-detail' && selectedConversationId ? (
+          <ConversationDetail
+            orgId={orgId}
+            conversationId={selectedConversationId}
+            onBack={() => { setView('conversations'); setSelectedConversationId(null); }}
+          />
+        ) : (
+          <ConversationList
+            orgId={orgId}
+            onSelect={(id) => { setSelectedConversationId(id); setView('conversation-detail'); }}
+          />
+        )
+      ) : showStatusLoading ? (
         <div className="min-h-screen flex items-center justify-center">
           <span className="text-sm text-gray-600">Checking onboarding status...</span>
         </div>
@@ -133,25 +177,94 @@ function AuthenticatedApp() {
   );
 }
 
+function OrgSelector({ currentOrgId, onOrgChange }: { currentOrgId: string; onOrgChange: (orgId: string) => void }) {
+  const [customOrgId, setCustomOrgId] = useState('');
+
+  const handleCustomSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customOrgId.trim()) {
+      onOrgChange(customOrgId.trim());
+      setCustomOrgId('');
+    }
+  };
+
+  return (
+    <div className="bg-gray-800 text-white px-4 py-3">
+      <div className="max-w-6xl mx-auto flex items-center gap-4 flex-wrap">
+        <span className="text-sm font-medium">Admin View</span>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-400">Org:</label>
+          <select
+            value={currentOrgId}
+            onChange={(e) => onOrgChange(e.target.value)}
+            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600"
+          >
+            {KNOWN_ORGS.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+            {!KNOWN_ORGS.find((o) => o.id === currentOrgId) && (
+              <option value={currentOrgId}>{currentOrgId}</option>
+            )}
+          </select>
+        </div>
+        <form onSubmit={handleCustomSubmit} className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Enter org ID..."
+            value={customOrgId}
+            onChange={(e) => setCustomOrgId(e.target.value)}
+            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 w-64"
+          />
+          <button
+            type="submit"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded"
+          >
+            Go
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function ConversationsPreview() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const orgId = new URLSearchParams(window.location.search).get('orgId') || 'preview-org';
+  const params = new URLSearchParams(window.location.search);
+  const initialOrgId = params.get('orgId') || KNOWN_ORGS[0]?.id || 'preview-org';
+  const [orgId, setOrgId] = useState(initialOrgId);
+
+  const handleOrgChange = (newOrgId: string) => {
+    setOrgId(newOrgId);
+    setSelectedId(null);
+    // Update URL without reload
+    const newParams = new URLSearchParams(window.location.search);
+    newParams.set('orgId', newOrgId);
+    window.history.replaceState({}, '', `${window.location.pathname}?${newParams.toString()}`);
+  };
 
   if (selectedId) {
     return (
-      <ConversationDetail
-        orgId={orgId}
-        conversationId={selectedId}
-        onBack={() => setSelectedId(null)}
-      />
+      <div className="min-h-screen bg-gray-50">
+        <OrgSelector currentOrgId={orgId} onOrgChange={handleOrgChange} />
+        <ConversationDetail
+          orgId={orgId}
+          conversationId={selectedId}
+          onBack={() => setSelectedId(null)}
+        />
+      </div>
     );
   }
 
   return (
-    <ConversationList
-      orgId={orgId}
-      onSelect={setSelectedId}
-    />
+    <div className="min-h-screen bg-gray-50">
+      <OrgSelector currentOrgId={orgId} onOrgChange={handleOrgChange} />
+      <ConversationList
+        orgId={orgId}
+        onSelect={setSelectedId}
+      />
+    </div>
   );
 }
 
