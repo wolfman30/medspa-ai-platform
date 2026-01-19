@@ -299,6 +299,8 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conversationID := deterministicConversationID(orgID, from)
+	// Get ack message first so we can include it in the StartRequest for history
+	ackMsg := InstantAckMessageForClinic(h.clinicName(ctx, orgID))
 
 	startReq := conversation.StartRequest{
 		OrgID:          orgID,
@@ -310,6 +312,7 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		From:           from,
 		To:             to,
 		Silent:         true,
+		AckMessage:     ackMsg, // Include ack message so AI knows what was already sent
 		Metadata: map[string]string{
 			"twilio_call_sid":    callSid,
 			"twilio_call_status": callStatus,
@@ -325,14 +328,14 @@ func (h *Handler) TwilioVoiceWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.sendImmediateAck(from, to, orgID, leadID, conversationID, callSid)
+	h.sendImmediateAckWithMessage(from, to, orgID, leadID, conversationID, callSid, ackMsg)
 
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`))
 }
 
-func (h *Handler) sendImmediateAck(to, from, orgID, leadID, conversationID, callSid string) {
+func (h *Handler) sendImmediateAckWithMessage(to, from, orgID, leadID, conversationID, callSid, ackMsg string) {
 	if h.messenger == nil {
 		return
 	}
@@ -342,7 +345,6 @@ func (h *Handler) sendImmediateAck(to, from, orgID, leadID, conversationID, call
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	ackMsg := InstantAckMessageForClinic(h.clinicName(ctx, orgID))
 	reply := conversation.OutboundReply{
 		OrgID:          orgID,
 		LeadID:         leadID,
