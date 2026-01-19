@@ -400,3 +400,52 @@ export async function updateNotificationSettings(
   }
   return res.json();
 }
+
+// Client self-service registration types
+export interface RegisterClinicRequest {
+  clinic_name: string;
+  owner_email: string;
+  owner_phone?: string;
+  timezone?: string;
+}
+
+export interface RegisterClinicResponse {
+  org_id: string;
+  clinic_name: string;
+  owner_email: string;
+  created_at: string;
+  message: string;
+}
+
+export interface LookupOrgResponse {
+  org_id: string;
+  clinic_name: string;
+  owner_email: string;
+}
+
+// Register a new clinic (called after Cognito signup)
+export async function registerClinic(request: RegisterClinicRequest): Promise<RegisterClinicResponse> {
+  const res = await fetch(`${API_BASE}/api/client/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to register clinic');
+  }
+  return res.json();
+}
+
+// Lookup org by owner email (for returning users)
+export async function lookupOrgByEmail(email: string): Promise<LookupOrgResponse> {
+  const res = await fetch(`${API_BASE}/api/client/org?email=${encodeURIComponent(email)}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Organization not found');
+  }
+  return res.json();
+}

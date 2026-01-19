@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import { registerClinic, lookupOrgByEmail } from '../api/client';
+import { setStoredOrgId } from '../utils/orgStorage';
 
-type AuthMode = 'login' | 'register' | 'confirm';
+type AuthMode = 'login' | 'register' | 'confirm' | 'setup-clinic';
 
 interface PasswordRequirement {
   label: string;
@@ -29,6 +31,8 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmCode, setConfirmCode] = useState('');
+  const [clinicName, setClinicName] = useState('');
+  const [clinicPhone, setClinicPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -62,6 +66,32 @@ export function LoginForm() {
         }
       } else if (mode === 'confirm') {
         await confirmRegistration(email, confirmCode);
+        // Check if user already has an org
+        try {
+          const orgResult = await lookupOrgByEmail(email);
+          if (orgResult.org_id) {
+            setStoredOrgId(orgResult.org_id);
+            await login(email, password);
+          } else {
+            // No org yet, go to setup-clinic
+            setMode('setup-clinic');
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // No org found, go to setup-clinic
+          setMode('setup-clinic');
+          setLoading(false);
+          return;
+        }
+      } else if (mode === 'setup-clinic') {
+        // Register the clinic
+        const result = await registerClinic({
+          clinic_name: clinicName,
+          owner_email: email,
+          owner_phone: clinicPhone || undefined,
+        });
+        setStoredOrgId(result.org_id);
         await login(email, password);
       }
     } catch (err) {
@@ -86,6 +116,7 @@ export function LoginForm() {
             {mode === 'login' && 'Sign in to your account'}
             {mode === 'register' && 'Create your account'}
             {mode === 'confirm' && 'Confirm your email'}
+            {mode === 'setup-clinic' && 'Set up your clinic'}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             MedSpa AI Receptionist Portal
@@ -138,7 +169,7 @@ export function LoginForm() {
             </div>
           )}
 
-          {mode !== 'confirm' ? (
+          {(mode === 'login' || mode === 'register') ? (
             <div className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700">
@@ -232,7 +263,7 @@ export function LoginForm() {
                 </>
               )}
             </div>
-          ) : (
+          ) : mode === 'confirm' ? (
             <div>
               <label htmlFor="code" className="block text-sm font-medium text-gray-700">
                 Confirmation code
@@ -251,12 +282,47 @@ export function LoginForm() {
                 onChange={(e) => setConfirmCode(e.target.value)}
               />
             </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Welcome! Let's set up your clinic profile to get started.
+              </p>
+              <div>
+                <label htmlFor="clinicName" className="block text-sm font-medium text-gray-700">
+                  Clinic Name
+                </label>
+                <input
+                  id="clinicName"
+                  name="clinicName"
+                  type="text"
+                  required
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  placeholder="Your MedSpa Name"
+                  value={clinicName}
+                  onChange={(e) => setClinicName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="clinicPhone" className="block text-sm font-medium text-gray-700">
+                  Business Phone (optional)
+                </label>
+                <input
+                  id="clinicPhone"
+                  name="clinicPhone"
+                  type="tel"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  placeholder="+1 (555) 123-4567"
+                  value={clinicPhone}
+                  onChange={(e) => setClinicPhone(e.target.value)}
+                />
+              </div>
+            </div>
           )}
 
           <div>
             <button
               type="submit"
-              disabled={loading || (mode === 'register' && (!passwordValidation.valid || !passwordsMatch))}
+              disabled={loading || (mode === 'register' && (!passwordValidation.valid || !passwordsMatch)) || (mode === 'setup-clinic' && !clinicName.trim())}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -272,12 +338,13 @@ export function LoginForm() {
                   {mode === 'login' && 'Sign in'}
                   {mode === 'register' && 'Create account'}
                   {mode === 'confirm' && 'Confirm & Sign in'}
+                  {mode === 'setup-clinic' && 'Complete Setup'}
                 </>
               )}
             </button>
           </div>
 
-          {mode !== 'confirm' && (
+          {(mode === 'login' || mode === 'register') && (
             <div className="text-center">
               <button
                 type="button"

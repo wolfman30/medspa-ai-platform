@@ -46,6 +46,9 @@ type Config struct {
 	DB              *sql.DB
 	TranscriptStore *conversation.SMSTranscriptStore
 	ClinicStore     *clinic.Store
+
+	// Client self-service registration
+	ClientRegistration *handlers.ClientRegistrationHandler
 }
 
 // New creates a new Chi router with all routes configured
@@ -95,6 +98,13 @@ func New(cfg *Config) http.Handler {
 		// DEV ONLY: Public phone activation (bypasses auth for development)
 		if cfg.AdminMessaging != nil {
 			public.Post("/dev/activate-phone", cfg.AdminMessaging.ActivateHostedNumber)
+		}
+		// Client self-service registration (public - called after Cognito signup)
+		if cfg.ClientRegistration != nil {
+			public.Route("/api/client", func(r chi.Router) {
+				r.Post("/register", cfg.ClientRegistration.RegisterClinic)
+				r.Get("/org", cfg.ClientRegistration.LookupOrgByEmail)
+			})
 		}
 		// Public onboarding routes (self-service)
 		if cfg.AdminOnboarding != nil {
