@@ -72,5 +72,12 @@ ngrok.zip
 
 #Cached python files
 __pycache__/
-"medspa-api.tar"  
-"medspa-api.tar.gz"  
+"medspa-api.tar"
+"medspa-api.tar.gz"
+
+# Clinic-specific setup scripts (contain org IDs, phone numbers)
+scripts/setup-*.ps1
+scripts/*-knowledge.json
+
+# Windows artifacts
+nul
