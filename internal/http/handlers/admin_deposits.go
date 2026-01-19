@@ -113,6 +113,8 @@ func (h *AdminDepositsHandler) ListDeposits(w http.ResponseWriter, r *http.Reque
 	status := r.URL.Query().Get("status")
 	dateFrom := r.URL.Query().Get("date_from")
 	dateTo := r.URL.Query().Get("date_to")
+	// Hide stale deposit_pending records by default (ones where a newer succeeded payment exists for the same lead)
+	hideStalePending := r.URL.Query().Get("hide_stale_pending") != "false"
 
 	offset := (page - 1) * pageSize
 
@@ -126,6 +128,19 @@ func (h *AdminDepositsHandler) ListDeposits(w http.ResponseWriter, r *http.Reque
 	`
 	args := []any{orgID}
 	argNum := 2
+
+	// Filter out stale deposit_pending records that have a newer succeeded payment for the same lead
+	if hideStalePending {
+		query += ` AND NOT (
+			p.status = 'deposit_pending'
+			AND EXISTS (
+				SELECT 1 FROM payments p2
+				WHERE p2.lead_id = p.lead_id
+				AND p2.status = 'succeeded'
+				AND p2.created_at > p.created_at
+			)
+		)`
+	}
 
 	if status != "" {
 		query += " AND p.status = $" + strconv.Itoa(argNum)
@@ -149,12 +164,25 @@ func (h *AdminDepositsHandler) ListDeposits(w http.ResponseWriter, r *http.Reque
 
 	query += " ORDER BY p.created_at DESC"
 
-	// Get total count
-	countQuery := "SELECT COUNT(*) FROM payments WHERE org_id = $1"
+	// Get total count (must match the same filters)
+	countQuery := "SELECT COUNT(*) FROM payments p WHERE p.org_id = $1"
 	countArgs := []any{orgID}
+	countArgNum := 2
+	if hideStalePending {
+		countQuery += ` AND NOT (
+			p.status = 'deposit_pending'
+			AND EXISTS (
+				SELECT 1 FROM payments p2
+				WHERE p2.lead_id = p.lead_id
+				AND p2.status = 'succeeded'
+				AND p2.created_at > p.created_at
+			)
+		)`
+	}
 	if status != "" {
-		countQuery += " AND status = $2"
+		countQuery += " AND p.status = $" + strconv.Itoa(countArgNum)
 		countArgs = append(countArgs, status)
+		countArgNum++
 	}
 	var total int
 	h.db.QueryRowContext(r.Context(), countQuery, countArgs...).Scan(&total)
