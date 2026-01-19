@@ -45,6 +45,7 @@ type Config struct {
 	// Admin dashboard dependencies (optional)
 	DB              *sql.DB
 	TranscriptStore *conversation.SMSTranscriptStore
+	ClinicStore     *clinic.Store
 }
 
 // New creates a new Chi router with all routes configured
@@ -176,7 +177,7 @@ func New(cfg *Config) http.Handler {
 
 			// Admin dashboard, leads, and conversations routes
 			if cfg.DB != nil {
-				handlers.RegisterAdminRoutes(admin, cfg.DB, cfg.TranscriptStore, cfg.Logger)
+				handlers.RegisterAdminRoutes(admin, cfg.DB, cfg.TranscriptStore, cfg.ClinicStore, cfg.Logger)
 			}
 		})
 	}

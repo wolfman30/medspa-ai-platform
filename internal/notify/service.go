@@ -137,16 +137,19 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 		}
 	}
 
-	// Send SMS to operator
-	if cfg.Notifications.SMSEnabled && s.sms != nil && cfg.Notifications.SMSRecipient != "" {
+	// Send SMS to operators (supports multiple recipients)
+	smsRecipients := cfg.Notifications.GetSMSRecipients()
+	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
 		smsBody := fmt.Sprintf("💰 %s paid %s deposit. Phone: %s%s. Please call to confirm appointment.",
 			leadName, amountStr, leadPhone, s.formatScheduledSMS(evt.ScheduledFor))
 
-		if err := s.sms.SendSMS(ctx, cfg.Notifications.SMSRecipient, smsBody); err != nil {
-			s.logger.Error("notify: failed to send operator SMS", "error", err, "to", cfg.Notifications.SMSRecipient)
-			errs = append(errs, err)
-		} else {
-			s.logger.Info("notify: payment SMS sent to operator", "to", cfg.Notifications.SMSRecipient, "lead_id", evt.LeadID)
+		for _, recipient := range smsRecipients {
+			if err := s.sms.SendSMS(ctx, recipient, smsBody); err != nil {
+				s.logger.Error("notify: failed to send operator SMS", "error", err, "to", recipient)
+				errs = append(errs, err)
+			} else {
+				s.logger.Info("notify: payment SMS sent to operator", "to", recipient, "lead_id", evt.LeadID)
+			}
 		}
 	}
 
@@ -213,11 +216,14 @@ Message: %s
 		}
 	}
 
-	// Send SMS to operator
-	if cfg.Notifications.SMSEnabled && s.sms != nil && cfg.Notifications.SMSRecipient != "" {
+	// Send SMS to operators (supports multiple recipients)
+	smsRecipients := cfg.Notifications.GetSMSRecipients()
+	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
 		smsBody := fmt.Sprintf("🆕 New lead: %s (%s). Source: %s", lead.Name, lead.Phone, lead.Source)
-		if err := s.sms.SendSMS(ctx, cfg.Notifications.SMSRecipient, smsBody); err != nil {
-			errs = append(errs, err)
+		for _, recipient := range smsRecipients {
+			if err := s.sms.SendSMS(ctx, recipient, smsBody); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 

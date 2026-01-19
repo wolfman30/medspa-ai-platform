@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -338,10 +339,12 @@ func (h *AdminDashboardHandler) getPendingActions(r *http.Request, orgID string)
 }
 
 // RegisterAdminRoutes registers all admin dashboard routes.
-func RegisterAdminRoutes(r chi.Router, db *sql.DB, transcriptStore *conversation.SMSTranscriptStore, logger *logging.Logger) {
+func RegisterAdminRoutes(r chi.Router, db *sql.DB, transcriptStore *conversation.SMSTranscriptStore, clinicStore *clinic.Store, logger *logging.Logger) {
 	dashboardHandler := NewAdminDashboardHandler(db, logger)
 	leadsHandler := NewAdminLeadsHandler(db, logger)
 	conversationsHandler := NewAdminConversationsHandler(db, transcriptStore, logger)
+	depositsHandler := NewAdminDepositsHandler(db, logger)
+	notificationsHandler := NewAdminNotificationsHandler(clinicStore, logger)
 
 	r.Route("/orgs/{orgID}", func(r chi.Router) {
 		// Dashboard
@@ -358,5 +361,14 @@ func RegisterAdminRoutes(r chi.Router, db *sql.DB, transcriptStore *conversation
 		r.Get("/conversations/stats", conversationsHandler.GetConversationStats)
 		r.Get("/conversations/{conversationID}", conversationsHandler.GetConversation)
 		r.Get("/conversations/{conversationID}/export", conversationsHandler.ExportTranscript)
+
+		// Deposits
+		r.Get("/deposits", depositsHandler.ListDeposits)
+		r.Get("/deposits/stats", depositsHandler.GetDepositStats)
+		r.Get("/deposits/{depositID}", depositsHandler.GetDeposit)
+
+		// Notifications
+		r.Get("/notifications", notificationsHandler.GetNotificationSettings)
+		r.Put("/notifications", notificationsHandler.UpdateNotificationSettings)
 	})
 }

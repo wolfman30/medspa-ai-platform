@@ -36,12 +36,38 @@ type NotificationPrefs struct {
 	EmailRecipients []string `json:"email_recipients,omitempty"` // e.g., ["owner@clinic.com"]
 
 	// SMS notifications to operator
-	SMSEnabled   bool   `json:"sms_enabled"`
-	SMSRecipient string `json:"sms_recipient,omitempty"` // Operator's cell phone
+	SMSEnabled    bool     `json:"sms_enabled"`
+	SMSRecipient  string   `json:"sms_recipient,omitempty"`  // Legacy: single operator's cell phone
+	SMSRecipients []string `json:"sms_recipients,omitempty"` // Multiple operator phone numbers
 
 	// What to notify about
 	NotifyOnPayment bool `json:"notify_on_payment"`  // When deposit is paid
 	NotifyOnNewLead bool `json:"notify_on_new_lead"` // When new lead comes in
+}
+
+// GetSMSRecipients returns all configured SMS recipients, merging legacy single
+// recipient with the new array. Duplicates are removed.
+func (n *NotificationPrefs) GetSMSRecipients() []string {
+	seen := make(map[string]struct{})
+	var recipients []string
+
+	// Add legacy single recipient first
+	if n.SMSRecipient != "" {
+		seen[n.SMSRecipient] = struct{}{}
+		recipients = append(recipients, n.SMSRecipient)
+	}
+
+	// Add new array recipients
+	for _, r := range n.SMSRecipients {
+		if r != "" {
+			if _, ok := seen[r]; !ok {
+				seen[r] = struct{}{}
+				recipients = append(recipients, r)
+			}
+		}
+	}
+
+	return recipients
 }
 
 // Config holds clinic-specific configuration.

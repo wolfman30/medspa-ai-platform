@@ -410,6 +410,7 @@ func main() {
 		CognitoRegion:       cfg.CognitoRegion,
 		DB:                  sqlDB,
 		TranscriptStore:     smsTranscript,
+		ClinicStore:         clinicStore,
 		MetricsHandler:      metricsHandler,
 		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 	}
