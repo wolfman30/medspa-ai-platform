@@ -4,12 +4,15 @@ import { Dashboard } from './components/Dashboard';
 import { CampaignRegistration } from './components/CampaignRegistration';
 import { ConversationList } from './components/ConversationList';
 import { ConversationDetail } from './components/ConversationDetail';
+import { DepositList } from './components/DepositList';
+import { DepositDetail } from './components/DepositDetail';
+import { NotificationSettings } from './components/NotificationSettings';
 import { getOnboardingStatus } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
 
 type OnboardingDecision = 'idle' | 'loading' | 'ready' | 'not_ready';
-type AppView = 'dashboard' | 'conversations' | 'conversation-detail';
+type AppView = 'dashboard' | 'conversations' | 'conversation-detail' | 'deposits' | 'deposit-detail' | 'settings';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com'];
@@ -36,6 +39,7 @@ function AuthenticatedApp() {
   const [statusRefresh, setStatusRefresh] = useState(0);
   const [view, setView] = useState<AppView>('dashboard');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null);
   const [adminOrgId, setAdminOrgId] = useState<string>(KNOWN_ORGS[0]?.id || '');
 
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
@@ -90,6 +94,7 @@ function AuthenticatedApp() {
   const handleAdminOrgChange = (newOrgId: string) => {
     setAdminOrgId(newOrgId);
     setSelectedConversationId(null);
+    setSelectedDepositId(null);
     setDecision('idle');
     setCheckedOrgId(null);
   };
@@ -123,6 +128,18 @@ function AuthenticatedApp() {
                 >
                   Conversations
                 </button>
+                <button
+                  onClick={() => { setView('deposits'); setSelectedDepositId(null); }}
+                  className={`text-sm px-2 py-1 rounded ${view === 'deposits' || view === 'deposit-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                >
+                  Deposits
+                </button>
+                <button
+                  onClick={() => setView('settings')}
+                  className={`text-sm px-2 py-1 rounded ${view === 'settings' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                >
+                  Settings
+                </button>
               </nav>
             )}
           </div>
@@ -134,13 +151,30 @@ function AuthenticatedApp() {
           </button>
         </div>
       )}
-      {/* Admin view - direct access to conversations */}
+      {/* Admin view - direct access to conversations and deposits */}
       {isAdmin && orgId ? (
         view === 'conversation-detail' && selectedConversationId ? (
           <ConversationDetail
             orgId={orgId}
             conversationId={selectedConversationId}
             onBack={() => { setView('conversations'); setSelectedConversationId(null); }}
+          />
+        ) : view === 'deposit-detail' && selectedDepositId ? (
+          <DepositDetail
+            orgId={orgId}
+            depositId={selectedDepositId}
+            onBack={() => { setView('deposits'); setSelectedDepositId(null); }}
+            onViewConversation={(convId) => { setSelectedConversationId(convId); setView('conversation-detail'); }}
+          />
+        ) : view === 'settings' ? (
+          <NotificationSettings
+            orgId={orgId}
+            onBack={() => setView('conversations')}
+          />
+        ) : view === 'deposits' ? (
+          <DepositList
+            orgId={orgId}
+            onSelect={(id) => { setSelectedDepositId(id); setView('deposit-detail'); }}
           />
         ) : (
           <ConversationList
@@ -158,6 +192,23 @@ function AuthenticatedApp() {
             orgId={orgId}
             conversationId={selectedConversationId}
             onBack={() => { setView('conversations'); setSelectedConversationId(null); }}
+          />
+        ) : view === 'deposit-detail' && selectedDepositId ? (
+          <DepositDetail
+            orgId={orgId}
+            depositId={selectedDepositId}
+            onBack={() => { setView('deposits'); setSelectedDepositId(null); }}
+            onViewConversation={(convId) => { setSelectedConversationId(convId); setView('conversation-detail'); }}
+          />
+        ) : view === 'settings' ? (
+          <NotificationSettings
+            orgId={orgId}
+            onBack={() => setView('dashboard')}
+          />
+        ) : view === 'deposits' ? (
+          <DepositList
+            orgId={orgId}
+            onSelect={(id) => { setSelectedDepositId(id); setView('deposit-detail'); }}
           />
         ) : view === 'conversations' ? (
           <ConversationList

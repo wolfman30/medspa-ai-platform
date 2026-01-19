@@ -253,6 +253,12 @@ import type {
   ConversationDetailResponse,
 } from '../types/conversation';
 
+import type {
+  DepositsListResponse,
+  DepositDetailResponse,
+  DepositStatsResponse,
+} from '../types/deposit';
+
 export async function listConversations(
   orgId: string,
   options?: { page?: number; pageSize?: number; phone?: string }
@@ -288,6 +294,109 @@ export async function getConversation(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || 'Failed to get conversation');
+  }
+  return res.json();
+}
+
+// Deposits API
+
+export async function listDeposits(
+  orgId: string,
+  options?: { page?: number; pageSize?: number; status?: string }
+): Promise<DepositsListResponse> {
+  const params = new URLSearchParams();
+  if (options?.page) params.set('page', options.page.toString());
+  if (options?.pageSize) params.set('page_size', options.pageSize.toString());
+  if (options?.status) params.set('status', options.status);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/admin/orgs/${orgId}/deposits${queryString ? '?' + queryString : ''}`;
+
+  const res = await fetch(url, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to list deposits');
+  }
+  return res.json();
+}
+
+export async function getDeposit(
+  orgId: string,
+  depositId: string
+): Promise<DepositDetailResponse> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/deposits/${depositId}`,
+    {
+      headers: await getHeaders(),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to get deposit');
+  }
+  return res.json();
+}
+
+export async function getDepositStats(
+  orgId: string
+): Promise<DepositStatsResponse> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/deposits/stats`,
+    {
+      headers: await getHeaders(),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to get deposit stats');
+  }
+  return res.json();
+}
+
+// Notification Settings API
+
+export interface NotificationSettings {
+  email_enabled: boolean;
+  email_recipients: string[];
+  sms_enabled: boolean;
+  sms_recipients: string[];
+  notify_on_payment: boolean;
+  notify_on_new_lead: boolean;
+}
+
+export async function getNotificationSettings(
+  orgId: string
+): Promise<NotificationSettings> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/notifications`,
+    {
+      headers: await getHeaders(),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to get notification settings');
+  }
+  return res.json();
+}
+
+export async function updateNotificationSettings(
+  orgId: string,
+  settings: Partial<NotificationSettings>
+): Promise<NotificationSettings> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/notifications`,
+    {
+      method: 'PUT',
+      headers: await getHeaders(),
+      body: JSON.stringify(settings),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to update notification settings');
   }
   return res.json();
 }
