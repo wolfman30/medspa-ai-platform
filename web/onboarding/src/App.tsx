@@ -30,7 +30,7 @@ function getOrgIdFromUser(user: unknown): string | null {
 // Known orgs for admin quick access
 const KNOWN_ORGS = [
   { id: 'b1b73611-420c-4f30-b4cc-e576a79fabf8', name: 'Glow Medspa' },
-  { id: 'bb507f20-7fcc-4941-9eac-9ed93b7834ed', name: 'Wolf Aesthetics' },
+  { id: 'bb507f20-7fcc-4941-9eac-9ed93b7834ed', name: 'AI Wolf Solutions' },
 ];
 
 // Clinic setup form for returning users without an org
