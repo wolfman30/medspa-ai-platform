@@ -859,7 +859,7 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 			"telnyx_status":   payload.Status,
 		},
 	}
-	jobID := fmt.Sprintf("telnyx:voice:%s", payload.ID)
+	jobID := fmt.Sprintf("telnyx:voice:%s", evt.ID)
 	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	opts := []conversation.PublishOption{conversation.WithoutJobTracking()}
