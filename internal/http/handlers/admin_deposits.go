@@ -57,25 +57,25 @@ type DepositsListResponse struct {
 
 // DepositDetailResponse represents detailed deposit information.
 type DepositDetailResponse struct {
-	ID               string  `json:"id"`
-	OrgID            string  `json:"org_id"`
-	LeadID           *string `json:"lead_id,omitempty"`
-	LeadPhone        string  `json:"lead_phone"`
-	LeadName         *string `json:"lead_name,omitempty"`
-	LeadEmail        *string `json:"lead_email,omitempty"`
-	ServiceInterest  *string `json:"service_interest,omitempty"`
-	PatientType      *string `json:"patient_type,omitempty"`
-	PreferredDays    *string `json:"preferred_days,omitempty"`
-	PreferredTimes   *string `json:"preferred_times,omitempty"`
-	SchedulingNotes  *string `json:"scheduling_notes,omitempty"`
-	AmountCents      int     `json:"amount_cents"`
-	Status           string  `json:"status"`
-	Provider         string  `json:"provider"`
-	ProviderRef      *string `json:"provider_ref,omitempty"`
-	BookingIntentID  *string `json:"booking_intent_id,omitempty"`
-	ScheduledFor     *string `json:"scheduled_for,omitempty"`
-	CreatedAt        string  `json:"created_at"`
-	ConversationID   *string `json:"conversation_id,omitempty"`
+	ID              string  `json:"id"`
+	OrgID           string  `json:"org_id"`
+	LeadID          *string `json:"lead_id,omitempty"`
+	LeadPhone       string  `json:"lead_phone"`
+	LeadName        *string `json:"lead_name,omitempty"`
+	LeadEmail       *string `json:"lead_email,omitempty"`
+	ServiceInterest *string `json:"service_interest,omitempty"`
+	PatientType     *string `json:"patient_type,omitempty"`
+	PreferredDays   *string `json:"preferred_days,omitempty"`
+	PreferredTimes  *string `json:"preferred_times,omitempty"`
+	SchedulingNotes *string `json:"scheduling_notes,omitempty"`
+	AmountCents     int     `json:"amount_cents"`
+	Status          string  `json:"status"`
+	Provider        string  `json:"provider"`
+	ProviderRef     *string `json:"provider_ref,omitempty"`
+	BookingIntentID *string `json:"booking_intent_id,omitempty"`
+	ScheduledFor    *string `json:"scheduled_for,omitempty"`
+	CreatedAt       string  `json:"created_at"`
+	ConversationID  *string `json:"conversation_id,omitempty"`
 }
 
 // DepositStatsResponse contains aggregated deposit statistics.
