@@ -56,6 +56,23 @@ Staff Confirms Appointment (2-3 min call vs 15-20 min intake)
 
 ## Critical Requirements
 
+### HIPAA Compliance (PHI Protection)
+
+Medical spas handle Protected Health Information (PHI). This platform is designed for HIPAA compliance to prevent fines and lawsuits.
+
+**Why AWS Bedrock:** We use Claude via AWS Bedrock (not direct Anthropic API) because AWS offers a **Business Associate Agreement (BAA)**. This is required for HIPAA-compliant AI processing of patient data.
+
+| Compliance Measure | Implementation |
+|--------------------|----------------|
+| BAA with AI provider | AWS Bedrock (BAA signed) |
+| Data encryption in transit | TLS 1.2+ on all endpoints |
+| Data encryption at rest | AWS RDS/Redis encryption |
+| PHI detection | Auto-redact SSN, DOB, medical IDs in logs |
+| Audit logging | All PHI access logged with timestamps |
+| Access controls | JWT auth, org-scoped data isolation |
+
+**What counts as PHI:** Names + health info, phone numbers + appointment details, payment info linked to health services.
+
 ### No Medical Advice (Liability Protection)
 
 The AI **never** provides medical advice. This protects the medspa from liability.
