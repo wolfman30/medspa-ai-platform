@@ -95,6 +95,27 @@ The AI **never** provides medical advice. This protects the medspa from liabilit
 Example:
 > "Hey! Thanks for reaching out. I can definitely help you get booked for Botox. Are you a new patient or have you been in before?"
 
+### Response Time Requirements
+
+Fast response times are critical for natural conversation flow and user experience.
+
+**SMS (Phase 1):**
+| Event | Target | Why |
+|-------|--------|-----|
+| Missed call → ack SMS | <5 seconds | Capture lead before they move on |
+| User message → quick ack | <2 seconds | "Got it - one moment..." feels responsive |
+| Quick ack → full AI response | <10 seconds | LLM processing + quality response |
+
+The quick ack pattern ensures the patient never waits in silence—they get immediate acknowledgment while the AI generates the full response.
+
+**Voice AI (Phase 2):**
+| Event | Target | Why |
+|-------|--------|-----|
+| User finishes speaking → AI response | <800ms | Natural conversation has 200-500ms gaps |
+| End-to-end turn latency | <1 second | Longer feels like dead air / confusion |
+
+Sub-second voice response requires: streaming LLM output, edge processing, and/or response pre-generation.
+
 ---
 
 ## Roadmap
