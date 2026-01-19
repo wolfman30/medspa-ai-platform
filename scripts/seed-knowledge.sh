@@ -6,6 +6,7 @@ set -euo pipefail
 API_URL=${1:-http://localhost:8080}
 CLINIC_ID=${2:-demo-radiance-medspa}
 KNOWLEDGE_FILE=${3:-testdata/demo-clinic-knowledge.json}
+ONBOARDING_TOKEN=${ONBOARDING_TOKEN:-}
 
 echo "Seeding knowledge base"
 echo "API URL      : $API_URL"
@@ -23,6 +24,11 @@ if [ ! -f "$KNOWLEDGE_FILE" ]; then
   exit 1
 fi
 
+TOKEN_HEADER=()
+if [ -n "$ONBOARDING_TOKEN" ]; then
+  TOKEN_HEADER=(-H "X-Onboarding-Token: $ONBOARDING_TOKEN")
+fi
+
 DOCUMENTS=$(jq -c '[.documents[] | "\(.title)\n\n\(.content)"]' "$KNOWLEDGE_FILE")
 DOC_COUNT=$(echo "$DOCUMENTS" | jq 'length')
 
@@ -34,6 +40,7 @@ STATUS_CODE=$(curl -s -o "$TMP_RESPONSE" -w "%{http_code}" \
   -X POST "$API_URL/knowledge/$CLINIC_ID" \
   -H "Content-Type: application/json" \
   -H "X-Org-Id: $CLINIC_ID" \
+  "${TOKEN_HEADER[@]}" \
   -d "$PAYLOAD")
 
 if [ "$STATUS_CODE" = "201" ]; then

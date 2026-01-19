@@ -33,6 +33,7 @@ type Config struct {
 	ClinicStatsHandler  *clinic.StatsHandler
 	ClinicDashboard     *clinic.DashboardHandler
 	AdminOnboarding     *handlers.AdminOnboardingHandler
+	OnboardingToken     string
 	AdminAuthSecret     string
 	MetricsHandler      http.Handler
 	CORSAllowedOrigins  []string
@@ -97,7 +98,7 @@ func New(cfg *Config) http.Handler {
 		}
 		// DEV ONLY: Public phone activation (bypasses auth for development)
 		if cfg.AdminMessaging != nil {
-			public.Post("/dev/activate-phone", cfg.AdminMessaging.ActivateHostedNumber)
+			public.With(requireOnboardingToken(cfg.OnboardingToken)).Post("/dev/activate-phone", cfg.AdminMessaging.ActivateHostedNumber)
 		}
 		// Client self-service registration (public - called after Cognito signup)
 		if cfg.ClientRegistration != nil {
@@ -109,6 +110,7 @@ func New(cfg *Config) http.Handler {
 		// Public onboarding routes (self-service)
 		if cfg.AdminOnboarding != nil {
 			public.Route("/onboarding", func(r chi.Router) {
+				r.Use(requireOnboardingToken(cfg.OnboardingToken))
 				r.Post("/clinics", cfg.AdminOnboarding.CreateClinic)
 				r.Route("/clinics/{orgID}", func(clinic chi.Router) {
 					clinic.Get("/status", cfg.AdminOnboarding.GetOnboardingStatus)
@@ -213,6 +215,7 @@ func New(cfg *Config) http.Handler {
 				r.Get("/jobs/{jobID}", cfg.ConversationHandler.JobStatus)
 			})
 			tenant.Route("/knowledge", func(r chi.Router) {
+				r.Use(requireOnboardingToken(cfg.OnboardingToken))
 				r.Post("/{clinicID}", cfg.ConversationHandler.AddKnowledge)
 			})
 		}

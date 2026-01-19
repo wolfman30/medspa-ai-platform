@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -403,7 +404,9 @@ func TestHandler_AddKnowledge_InvalidBody(t *testing.T) {
 func routeWithClinicID(req *http.Request, clinicID string) *http.Request {
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("clinicID", clinicID)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx)
+	ctx = tenancy.WithOrgID(ctx, clinicID)
+	return req.WithContext(ctx)
 }
 
 type stubKnowledgeRepo struct {

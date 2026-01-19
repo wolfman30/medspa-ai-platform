@@ -33,6 +33,7 @@ TIMEZONE="America/New_York"
 SKIP_SQUARE=false
 CLINIC_NAME=""
 ADMIN_TOKEN="${ADMIN_JWT_TOKEN:-}"
+ONBOARDING_TOKEN="${ONBOARDING_TOKEN:-}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -171,9 +172,15 @@ if [[ "$SEED_KNOWLEDGE" == "y" || "$SEED_KNOWLEDGE" == "Y" ]]; then
 EOF
 )
 
+    TOKEN_HEADER=()
+    if [[ -n "$ONBOARDING_TOKEN" ]]; then
+        TOKEN_HEADER=(-H "X-Onboarding-Token: ${ONBOARDING_TOKEN}")
+    fi
+
     KNOWLEDGE_RESPONSE=$(curl -s -X POST "${API_URL}/knowledge/${ORG_ID}" \
         -H "X-Org-Id: ${ORG_ID}" \
         -H "Content-Type: application/json" \
+        "${TOKEN_HEADER[@]}" \
         -d "$KNOWLEDGE_PAYLOAD")
 
     echo -e "${GREEN}Knowledge seeded successfully${NC}"

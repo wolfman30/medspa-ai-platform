@@ -55,6 +55,7 @@ type Config struct {
 	SandboxAutoPurgePhones          string
 	SandboxAutoPurgeDelay           time.Duration
 	AdminJWTSecret                  string
+	OnboardingToken                 string
 	QuietHoursStart                 string
 	QuietHoursEnd                   string
 	QuietHoursTimezone              string
@@ -196,6 +197,7 @@ func Load() *Config {
 		SandboxAutoPurgePhones:          getEnv("SANDBOX_AUTO_PURGE_PHONE_DIGITS", ""),
 		SandboxAutoPurgeDelay:           getEnvAsDuration("SANDBOX_AUTO_PURGE_DELAY", 0),
 		AdminJWTSecret:                  getEnv("ADMIN_JWT_SECRET", ""),
+		OnboardingToken:                 getEnv("ONBOARDING_TOKEN", ""),
 		QuietHoursStart:                 getEnv("QUIET_HOURS_START", ""),
 		QuietHoursEnd:                   getEnv("QUIET_HOURS_END", ""),
 		QuietHoursTimezone:              getEnv("QUIET_HOURS_TZ", "UTC"),
