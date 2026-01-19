@@ -1,71 +1,158 @@
-# MedSpa AI Platform (Revenue MVP)
+# MedSpa AI Platform
 
-SMS-only AI receptionist that converts missed calls and inbound texts into qualified, deposit-backed leads — **without EMR writes**.
+AI-powered lead recovery platform that converts missed calls into qualified, deposit-backed appointments.
 
-## Objective (First Client: $2,000)
+## The Problem
 
-This repo is being driven to a single near-term outcome: sell the first medspa client for **$2,000** by shipping the **Revenue MVP**.
+**Medical spas lose revenue from leads that go cold before staff can respond.**
 
-What we’re selling in that first deployment:
+When potential patients call and get voicemail, 80%+ never call back. Manual follow-up is slow, inconsistent, and doesn't scale. Every missed lead is lost revenue—a single Botox patient represents $1,500-3,000/year in recurring visits.
 
-- After-hours missed-call SMS follow-up from the clinic’s main number (Telnyx voice → SMS trigger).
-- Two-way SMS conversation that qualifies the lead (service + timing + new vs existing patient).
-- Square-hosted deposit links using the clinic’s own Square account (OAuth), plus payment webhooks.
-- Basic per-clinic stats/dashboard to prove ROI.
+## The Solution
 
-What is intentionally *not* in scope for the first paid client:
+**Instant AI engagement that qualifies leads, collects deposits, and hands off warm leads to staff for confirmation.**
 
-- No EMR/EHR integration, availability lookup, or CRM sync in phase 1 (staff books inside their EMR).
-- No auto-finalized bookings; the assistant captures preferred times and patient full names for staff follow-up.
-- No voice AI, Instagram DMs, web chat widget, etc.
+This platform recovers lost revenue by:
+1. **Instantly responding** to missed calls via SMS (within 5 seconds)
+2. **Qualifying leads** through natural AI conversation
+3. **Collecting deposits** to secure commitment and reduce no-shows
+4. **Submitting bookings** via the medspa's existing booking widget
+5. **Notifying staff** with pre-qualified leads ready for confirmation
 
-## Current State
+### The Workflow
 
-Revenue MVP core plumbing exists (Telnyx webhooks + compliance, conversation engine, Square checkout + webhook + OAuth, workers, metrics). Remaining work is primarily operational validation, clinic-specific knowledge content, and an authenticated client portal for paid onboarding (registration/login + clinic setup).
+```
+Missed Call
+    ↓
+Instant SMS Text-Back (< 5 seconds)
+    ↓
+AI Qualifies Lead via Conversation
+    ├── Service interest
+    ├── Full name
+    ├── New or existing patient
+    └── Scheduling preferences
+    ↓
+Collect Deposit Payment (Square checkout)
+    ↓
+AI Submits Booking via Public Widget
+    ↓
+Staff Receives Notification
+    ↓
+Staff Confirms Appointment (2-3 min call vs 15-20 min intake)
+```
 
-- Status + gaps: `docs/MVP_STATUS.md`
-- Product scope + flows: `docs/revenue-mvp.md`
-- Live validation checklist: `docs/LIVE_DEV_CHECKS.md`
-- ECS deployment: `docs/DEPLOYMENT_ECS.md` (preferred), `docs/BOOTSTRAP_DEPLOYMENT.md` (deprecated)
-- E2E harness + results log: `scripts/e2e_full_flow.py`, `docs/E2E_TEST_RESULTS.md`
+### Staff Effort: Before vs After
 
-## Client Portal (Paid Access) — In Progress
+| Without Platform | With Platform |
+|------------------|---------------|
+| Missed call notification | Qualified lead + deposit + booking request |
+| Staff calls back, qualifies from scratch | Lead already qualified |
+| Staff collects: name, service, timing | Info already captured by AI |
+| Staff sends deposit link manually | Deposit already paid |
+| Staff enters booking into system | Booking already submitted |
+| **15-20 minute intake** | **2-3 minute confirmation** |
 
-For paid clients, onboarding should happen through a login-protected portal (not via public endpoints).
-Planned portal workflow:
+---
 
-- Register + log in (clinic admin)
-- Complete clinic profile (hours, services, deposit rules)
-- Connect Square OAuth for deposits
-- Submit Telnyx hosted messaging + 10DLC registration
-- Verify onboarding status and go live
+## Critical Requirements
 
-Current implementation relies on admin endpoints and scripts; portal auth and user/org membership are not yet implemented.
+### No Medical Advice (Liability Protection)
 
-## Repo Layout
+The AI **never** provides medical advice. This protects the medspa from liability.
+
+| AI CAN | AI CANNOT |
+|--------|-----------|
+| Explain services offered | Advise what treatment is right for patient |
+| Describe what a procedure involves | Diagnose symptoms or conditions |
+| Share general pricing | Recommend treatment for complaints |
+| Answer FAQs about recovery, prep | Advise on medical emergencies |
+| Refer to medical professionals | Provide any clinical guidance |
+
+### Tone & Style
+
+- **Warm and hospitable** — welcoming, never robotic
+- **Informal** — conversational, like texting a real person
+- **Transparent** — patient knows it's AI, but experience feels natural
+- **Concise** — SMS-appropriate message lengths
+
+Example:
+> "Hey! Thanks for reaching out. I can definitely help you get booked for Botox. Are you a new patient or have you been in before?"
+
+---
+
+## Roadmap
+
+### Phase 1: SMS Lead Recovery (Current)
+- Missed call → text-back
+- AI qualification via SMS
+- Square deposit collection
+- Headless booking via widget
+- Staff notification and confirmation
+
+### Phase 2: Voice AI Agent (Future)
+- **Mode A:** AI answers calls during business hours, offers callback after hours
+- **Mode B:** Patient texts "voice" or "talk" → AI calls them back
+- Mode configurable per medspa owner preference
+
+### Future Phases
+- Social media lead capture (Instagram comments/DMs, Facebook)
+- Website form integration
+- Google Business Messages
+- Multi-location support
+
+---
+
+## Technical Overview
+
+### Architecture
 
 ```
 cmd/
-  api/                 # HTTP API + webhooks; can run inline workers (USE_MEMORY_QUEUE=true)
-  conversation-worker/ # SQS/Dynamo worker for LLM + deposits (USE_MEMORY_QUEUE=false)
-  messaging-worker/    # Telnyx hosted-order polling + retry worker
-  voice-lambda/        # (ECS deployment) forwards voice webhooks to the API
-  migrate/             # DB migrations runner
-docs/                  # Product + ops docs
-infra/terraform/       # AWS infrastructure (ECS/Fargate + Redis + API Gateway/Lambda)
-internal/              # Domains (conversation, messaging, payments, leads, clinic, etc.)
-migrations/            # Postgres schema migrations
+  api/                 # HTTP API + webhooks
+  conversation-worker/ # SQS worker for LLM + deposits
+  messaging-worker/    # Telnyx polling + retry
+  voice-lambda/        # Voice webhook forwarder
+  migrate/             # DB migrations
+internal/              # Core domains
+  conversation/        # AI conversation engine
+  messaging/           # SMS (Telnyx/Twilio)
+  payments/            # Square integration
+  leads/               # Lead capture
+  clinic/              # Per-clinic config
+infra/terraform/       # AWS infrastructure
 ```
+
+### Tech Stack
+- **Backend:** Go 1.24
+- **Database:** PostgreSQL
+- **Cache:** Redis
+- **AI:** Claude via AWS Bedrock
+- **SMS:** Telnyx (primary), Twilio (fallback)
+- **Payments:** Square (OAuth + checkout links)
+- **Infrastructure:** AWS ECS/Fargate
+
+### Key Endpoints
+
+**Webhooks (public):**
+- `POST /webhooks/telnyx/messages` — Inbound SMS
+- `POST /webhooks/telnyx/voice` — Missed call trigger
+- `POST /webhooks/square` — Payment notifications
+
+**Admin (JWT protected):**
+- `GET /admin/orgs/{orgID}/conversations` — List conversations
+- `GET /admin/orgs/{orgID}/deposits` — List deposits
+- `GET /admin/clinics/{orgID}/config` — Clinic configuration
+
+---
 
 ## Local Development
 
-### Prereqs
+### Prerequisites
+- Go 1.24+
+- Docker (for Postgres/Redis)
+- Make or Task
 
-- Go 1.24+ (`go.mod` sets `go 1.24.0`)
-- Docker (recommended for Postgres/Redis/LocalStack)
-- Task and/or Make (both are supported by this repo)
-
-### Quickstart (Docker Compose)
+### Quickstart
 
 ```bash
 cp .env.example .env
@@ -74,67 +161,27 @@ DATABASE_URL=postgresql://medspa:medspa@localhost:5432/medspa?sslmode=disable go
 curl http://localhost:8082/health
 ```
 
-Notes:
-
-- `docker-compose.yml` exposes the API at `http://localhost:8082` (container port `8080`).
-- LocalStack is used for SQS/Dynamo when `USE_MEMORY_QUEUE=false`. Use `AWS_ENDPOINT_OVERRIDE=http://localstack:4566` (already set in `.env.example`).
-- Bedrock calls are real AWS (LocalStack does not emulate Bedrock). Unit tests don’t require Bedrock; E2E does.
-
-### Bootstrap Mode (Inline Workers)
-
-If you want to avoid SQS/Dynamo entirely, run with `USE_MEMORY_QUEUE=true` (inline workers + Postgres-backed job store). See `.env.bootstrap.example` and `docker-compose.bootstrap.yml` (deprecated for prod, still useful for local bootstrap).
-
-## E2E Test Harness
-
-With the API running:
+### Testing
 
 ```bash
+# Unit tests
+make test
+
+# E2E tests (requires running API)
 make e2e
 ```
 
-- Quick mode: `make e2e-quick`
-- Results/notes live in: `docs/E2E_TEST_RESULTS.md`
-- Phone-view video recording (Windows-friendly): `powershell -File scripts/run-e2e-with-video.ps1 -ApiUrl http://localhost:8082` (docs: `docs/E2E_WITH_VIDEO.md`, artifacts: `tmp/e2e_videos/` + `tmp/e2e_artifacts/`)
+---
 
-## Key HTTP Endpoints
+## Documentation
 
-### Public (no auth)
+- **MVP Status:** `docs/MVP_STATUS.md`
+- **Product Flows:** `docs/revenue-mvp.md`
+- **Deployment:** `docs/DEPLOYMENT_ECS.md`
+- **Live Validation:** `docs/LIVE_DEV_CHECKS.md`
+- **E2E Results:** `docs/E2E_TEST_RESULTS.md`
 
-- `GET /health`
-- `GET /metrics` (when enabled)
-- `POST /webhooks/telnyx/messages` (Telnyx inbound SMS + receipts)
-- `POST /webhooks/telnyx/voice` (Telnyx missed-call trigger)
-- `POST /webhooks/telnyx/hosted` (Telnyx hosted-order webhooks)
-- `POST /messaging/twilio/webhook` (legacy Twilio inbound SMS)
-- `POST /webhooks/twilio/voice` (Twilio missed-call trigger)
-- `POST /webhooks/square` (Square payments webhook)
-- `GET /oauth/square/callback` (Square OAuth callback)
-
-### Admin (JWT)
-
-Protected by `ADMIN_JWT_SECRET` via `Authorization: Bearer <token>`:
-
-- `POST /admin/hosted/orders` (start Telnyx hosted messaging order)
-- `POST /admin/10dlc/brands`, `POST /admin/10dlc/campaigns` (Telnyx 10DLC onboarding)
-- `POST /admin/messages:send` (send SMS/MMS via Telnyx with compliance checks)
-- `GET /admin/clinics/{orgID}/stats` (Revenue MVP counters)
-- `GET /admin/clinics/{orgID}/dashboard` (conversion + LLM latency snapshot)
-- `GET /admin/clinics/{orgID}/square/connect` (initiate Square OAuth)
-- `GET /admin/clinics/{orgID}/square/status` (Square connection status)
-
-### Tenant-scoped (X-Org-Id)
-
-All tenant APIs require `X-Org-Id: <org-uuid>`:
-
-- `POST /leads/web` (capture web lead)
-- `POST /payments/checkout` (create deposit checkout link)
-- `POST /conversations/start`, `POST /conversations/message`, `GET /conversations/jobs/{jobID}`
-- `POST /knowledge/{clinicID}` (seed clinic knowledge for RAG)
-
-## CI/CD + Testing
-
-- CI: `.github/workflows/ci.yml` runs `go test`, `gofmt` check, `govulncheck`, and Terraform validation.
-- Messaging packages have a 90% coverage gate: `make ci-cover` (`scripts/check_package_coverage.sh`).
+---
 
 ## License
 
