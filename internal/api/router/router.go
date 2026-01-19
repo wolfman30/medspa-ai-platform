@@ -194,6 +194,32 @@ func New(cfg *Config) http.Handler {
 		})
 	}
 
+	// Customer portal routes (read-only, scoped to org owner)
+	if cfg.DB != nil && (cfg.AdminAuthSecret != "" || cfg.CognitoUserPoolID != "") {
+		r.Route("/portal", func(portal chi.Router) {
+			cognitoCfg := httpmiddleware.CognitoConfig{
+				Region:     cfg.CognitoRegion,
+				UserPoolID: cfg.CognitoUserPoolID,
+				ClientID:   cfg.CognitoClientID,
+			}
+			portal.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
+
+			dashboardHandler := handlers.NewPortalDashboardHandler(cfg.DB, cfg.Logger)
+			conversationsHandler := handlers.NewAdminConversationsHandler(cfg.DB, cfg.TranscriptStore, cfg.Logger)
+			depositsHandler := handlers.NewAdminDepositsHandler(cfg.DB, cfg.Logger)
+
+			portal.Route("/orgs/{orgID}", func(r chi.Router) {
+				r.Use(requirePortalOrgOwner(cfg.DB, cfg.Logger))
+				r.Get("/dashboard", dashboardHandler.GetDashboard)
+				r.Get("/conversations", conversationsHandler.ListConversations)
+				r.Get("/conversations/{conversationID}", conversationsHandler.GetConversation)
+				r.Get("/deposits", depositsHandler.ListDeposits)
+				r.Get("/deposits/stats", depositsHandler.GetDepositStats)
+				r.Get("/deposits/{depositID}", depositsHandler.GetDeposit)
+			})
+		})
+	}
+
 	// Tenant-scoped API routes
 	r.Group(func(tenant chi.Router) {
 		tenant.Use(requireOrgID)

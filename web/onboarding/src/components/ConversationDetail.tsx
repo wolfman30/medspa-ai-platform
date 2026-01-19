@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { getConversation } from '../api/client';
+import { getConversation, type ApiScope } from '../api/client';
 import type { ConversationDetailResponse, MessageResponse } from '../types/conversation';
 
 interface ConversationDetailProps {
   orgId: string;
   conversationId: string;
   onBack: () => void;
+  scope?: ApiScope;
 }
 
 function formatPhone(phone: string): string {
@@ -61,7 +62,7 @@ function MessageBubble({ message }: { message: MessageResponse }) {
   );
 }
 
-export function ConversationDetail({ orgId, conversationId, onBack }: ConversationDetailProps) {
+export function ConversationDetail({ orgId, conversationId, onBack, scope = 'admin' }: ConversationDetailProps) {
   const [conversation, setConversation] = useState<ConversationDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +75,7 @@ export function ConversationDetail({ orgId, conversationId, onBack }: Conversati
       setLoading(true);
       setError(null);
       try {
-        const data = await getConversation(orgId, conversationId);
+        const data = await getConversation(orgId, conversationId, scope);
         if (isActive) {
           setConversation(data);
         }
@@ -106,14 +107,14 @@ export function ConversationDetail({ orgId, conversationId, onBack }: Conversati
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const data = await getConversation(orgId, conversationId);
+        const data = await getConversation(orgId, conversationId, scope);
         setConversation(data);
       } catch {
         // Silently fail on refresh
       }
     }, 10000);
     return () => clearInterval(interval);
-  }, [orgId, conversationId]);
+  }, [orgId, conversationId, scope]);
 
   if (loading) {
     return (

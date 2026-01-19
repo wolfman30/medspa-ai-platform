@@ -7,7 +7,7 @@ import { ConversationDetail } from './components/ConversationDetail';
 import { DepositList } from './components/DepositList';
 import { DepositDetail } from './components/DepositDetail';
 import { NotificationSettings } from './components/NotificationSettings';
-import { getOnboardingStatus, lookupOrgByEmail, registerClinic } from './api/client';
+import { getOnboardingStatus, lookupOrgByEmail, registerClinic, type ApiScope } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
 
@@ -164,6 +164,7 @@ function AuthenticatedApp() {
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
   const userOrgId = getOrgIdFromUser(user);
   const isAdmin = isAdminUser(user?.email);
+  const dataScope: ApiScope = isAdmin ? 'admin' : 'portal';
   // Admins can switch orgs; regular users use their assigned org
   const orgId = isAdmin ? adminOrgId : (userOrgId || getStoredOrgId());
 
@@ -329,6 +330,7 @@ function AuthenticatedApp() {
             orgId={orgId}
             conversationId={selectedConversationId}
             onBack={() => { setView('conversations'); setSelectedConversationId(null); }}
+            scope={dataScope}
           />
         ) : view === 'deposit-detail' && selectedDepositId ? (
           <DepositDetail
@@ -336,6 +338,7 @@ function AuthenticatedApp() {
             depositId={selectedDepositId}
             onBack={() => { setView('deposits'); setSelectedDepositId(null); }}
             onViewConversation={(convId) => { setSelectedConversationId(convId); setView('conversation-detail'); }}
+            scope={dataScope}
           />
         ) : view === 'settings' ? (
           <NotificationSettings
@@ -346,11 +349,13 @@ function AuthenticatedApp() {
           <DepositList
             orgId={orgId}
             onSelect={(id) => { setSelectedDepositId(id); setView('deposit-detail'); }}
+            scope={dataScope}
           />
         ) : (
           <ConversationList
             orgId={orgId}
             onSelect={(id) => { setSelectedConversationId(id); setView('conversation-detail'); }}
+            scope={dataScope}
           />
         )
       ) : showStatusLoading ? (
@@ -363,6 +368,7 @@ function AuthenticatedApp() {
             orgId={orgId}
             conversationId={selectedConversationId}
             onBack={() => { setView('conversations'); setSelectedConversationId(null); }}
+            scope={dataScope}
           />
         ) : view === 'deposit-detail' && selectedDepositId ? (
           <DepositDetail
@@ -370,6 +376,7 @@ function AuthenticatedApp() {
             depositId={selectedDepositId}
             onBack={() => { setView('deposits'); setSelectedDepositId(null); }}
             onViewConversation={(convId) => { setSelectedConversationId(convId); setView('conversation-detail'); }}
+            scope={dataScope}
           />
         ) : view === 'settings' ? (
           <NotificationSettings
@@ -380,11 +387,13 @@ function AuthenticatedApp() {
           <DepositList
             orgId={orgId}
             onSelect={(id) => { setSelectedDepositId(id); setView('deposit-detail'); }}
+            scope={dataScope}
           />
         ) : view === 'conversations' ? (
           <ConversationList
             orgId={orgId}
             onSelect={(id) => { setSelectedConversationId(id); setView('conversation-detail'); }}
+            scope={dataScope}
           />
         ) : (
           <Dashboard orgId={orgId} />

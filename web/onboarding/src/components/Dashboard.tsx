@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getDashboardStats, type DashboardStats } from '../api/client';
+import { getPortalOverview, type PortalDashboardOverview } from '../api/client';
 
 interface DashboardProps {
   orgId: string;
-}
-
-function formatCurrency(cents?: number | null) {
-  if (cents === null || cents === undefined || Number.isNaN(cents)) return '--';
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatCount(value?: number | null) {
@@ -22,13 +17,13 @@ function formatPercent(value?: number | null) {
 }
 
 export function Dashboard({ orgId }: DashboardProps) {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<PortalDashboardOverview | null>(null);
   const [statsOrgId, setStatsOrgId] = useState<string | null>(null);
   const [error, setError] = useState<{ orgId: string; message: string } | null>(null);
 
   useEffect(() => {
     let isActive = true;
-    getDashboardStats(orgId)
+    getPortalOverview(orgId)
       .then(data => {
         if (!isActive) return;
         setStats(data);
@@ -56,7 +51,7 @@ export function Dashboard({ orgId }: DashboardProps) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <span className="text-sm text-gray-600">Loading ROI data...</span>
+        <span className="text-sm text-gray-600">Loading dashboard...</span>
       </div>
     );
   }
@@ -81,25 +76,25 @@ export function Dashboard({ orgId }: DashboardProps) {
     <div className="min-h-screen bg-gray-50 py-10">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Performance Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Test Dashboard</h1>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Total Revenue Captured</p>
+            <p className="text-sm text-gray-500">Conversations</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCurrency(activeStats.payments?.total_collected_cents)}
+              {formatCount(activeStats.conversations)}
             </p>
           </div>
           <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Conversations handled (this week)</p>
+            <p className="text-sm text-gray-500">Successful Deposits</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCount(activeStats.conversations?.this_week)}
+              {formatCount(activeStats.successful_deposits)}
             </p>
           </div>
           <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Conversion rate</p>
+            <p className="text-sm text-gray-500">Conversion</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatPercent(activeStats.leads?.conversion_rate)}
+              {formatPercent(activeStats.conversion_pct)}
             </p>
           </div>
         </div>

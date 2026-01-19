@@ -3,6 +3,11 @@ import { isCognitoConfigured } from '../auth/config';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 const ONBOARDING_TOKEN = import.meta.env.VITE_ONBOARDING_TOKEN || '';
+export type ApiScope = 'admin' | 'portal';
+
+function scopedBasePath(scope: ApiScope): string {
+  return scope === 'portal' ? 'portal' : 'admin';
+}
 
 // Get headers with optional auth token
 async function getHeaders(
@@ -86,6 +91,15 @@ export interface DashboardStats {
   }> | null;
 }
 
+export interface PortalDashboardOverview {
+  org_id: string;
+  period_start: string;
+  period_end: string;
+  conversations: number;
+  successful_deposits: number;
+  conversion_pct: number;
+}
+
 export async function createClinic(data: {
   name: string;
   email?: string;
@@ -115,6 +129,26 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats> 
   return res.json();
 }
 
+export async function getPortalOverview(
+  orgId: string,
+  options?: { start?: string; end?: string; phone?: string }
+): Promise<PortalDashboardOverview> {
+  const params = new URLSearchParams();
+  if (options?.start) params.set('start', options.start);
+  if (options?.end) params.set('end', options.end);
+  if (options?.phone) params.set('phone', options.phone);
+  const queryString = params.toString();
+  const url = `${API_BASE}/portal/orgs/${orgId}/dashboard${queryString ? '?' + queryString : ''}`;
+
+  const res = await fetch(url, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to get portal overview');
+  }
+  return res.json();
+}
 export async function getOnboardingStatus(orgId: string): Promise<{
   org_id: string;
   clinic_name: string;
@@ -272,7 +306,8 @@ import type {
 
 export async function listConversations(
   orgId: string,
-  options?: { page?: number; pageSize?: number; phone?: string }
+  options?: { page?: number; pageSize?: number; phone?: string },
+  scope: ApiScope = 'admin'
 ): Promise<ConversationsListResponse> {
   const params = new URLSearchParams();
   if (options?.page) params.set('page', options.page.toString());
@@ -280,7 +315,7 @@ export async function listConversations(
   if (options?.phone) params.set('phone', options.phone);
 
   const queryString = params.toString();
-  const url = `${API_BASE}/admin/orgs/${orgId}/conversations${queryString ? '?' + queryString : ''}`;
+  const url = `${API_BASE}/${scopedBasePath(scope)}/orgs/${orgId}/conversations${queryString ? '?' + queryString : ''}`;
 
   const res = await fetch(url, {
     headers: await getHeaders(),
@@ -294,10 +329,11 @@ export async function listConversations(
 
 export async function getConversation(
   orgId: string,
-  conversationId: string
+  conversationId: string,
+  scope: ApiScope = 'admin'
 ): Promise<ConversationDetailResponse> {
   const res = await fetch(
-    `${API_BASE}/admin/orgs/${orgId}/conversations/${encodeURIComponent(conversationId)}`,
+    `${API_BASE}/${scopedBasePath(scope)}/orgs/${orgId}/conversations/${encodeURIComponent(conversationId)}`,
     {
       headers: await getHeaders(),
     }
@@ -313,15 +349,17 @@ export async function getConversation(
 
 export async function listDeposits(
   orgId: string,
-  options?: { page?: number; pageSize?: number; status?: string }
+  options?: { page?: number; pageSize?: number; status?: string; phone?: string },
+  scope: ApiScope = 'admin'
 ): Promise<DepositsListResponse> {
   const params = new URLSearchParams();
   if (options?.page) params.set('page', options.page.toString());
   if (options?.pageSize) params.set('page_size', options.pageSize.toString());
   if (options?.status) params.set('status', options.status);
+  if (options?.phone) params.set('phone', options.phone);
 
   const queryString = params.toString();
-  const url = `${API_BASE}/admin/orgs/${orgId}/deposits${queryString ? '?' + queryString : ''}`;
+  const url = `${API_BASE}/${scopedBasePath(scope)}/orgs/${orgId}/deposits${queryString ? '?' + queryString : ''}`;
 
   const res = await fetch(url, {
     headers: await getHeaders(),
@@ -335,10 +373,11 @@ export async function listDeposits(
 
 export async function getDeposit(
   orgId: string,
-  depositId: string
+  depositId: string,
+  scope: ApiScope = 'admin'
 ): Promise<DepositDetailResponse> {
   const res = await fetch(
-    `${API_BASE}/admin/orgs/${orgId}/deposits/${depositId}`,
+    `${API_BASE}/${scopedBasePath(scope)}/orgs/${orgId}/deposits/${depositId}`,
     {
       headers: await getHeaders(),
     }
@@ -351,10 +390,11 @@ export async function getDeposit(
 }
 
 export async function getDepositStats(
-  orgId: string
+  orgId: string,
+  scope: ApiScope = 'admin'
 ): Promise<DepositStatsResponse> {
   const res = await fetch(
-    `${API_BASE}/admin/orgs/${orgId}/deposits/stats`,
+    `${API_BASE}/${scopedBasePath(scope)}/orgs/${orgId}/deposits/stats`,
     {
       headers: await getHeaders(),
     }
