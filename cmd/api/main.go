@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -76,24 +75,7 @@ func main() {
 	if sqlDB != nil {
 		defer sqlDB.Close()
 	}
-	var conversationStore *conversation.ConversationStore
-	if cfg.PersistConversationHistory {
-		var excludePhones []string
-		if cfg.ConversationPersistExcludePhone != "" {
-			for _, p := range strings.Split(cfg.ConversationPersistExcludePhone, ",") {
-				if trimmed := strings.TrimSpace(p); trimmed != "" {
-					excludePhones = append(excludePhones, trimmed)
-				}
-			}
-		}
-		if len(excludePhones) > 0 {
-			conversationStore = conversation.NewConversationStoreWithExclusions(sqlDB, excludePhones)
-			logger.Info("conversation persistence enabled with exclusions", "excluded_count", len(excludePhones))
-		} else {
-			conversationStore = conversation.NewConversationStore(sqlDB)
-			logger.Info("conversation persistence enabled")
-		}
-	}
+	conversationStore := appbootstrap.BuildConversationStore(sqlDB, cfg, logger, true)
 	var auditSvc *auditcompliance.AuditService
 	if sqlDB != nil {
 		auditSvc = auditcompliance.NewAuditService(sqlDB)
@@ -107,22 +89,9 @@ func main() {
 	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := setupConversation(appCtx, cfg, dbPool, logger)
 
 	// Create Redis client for knowledge repo and clinic config
-	var redisClient *redis.Client
-	if cfg.RedisAddr != "" {
-		redisOptions := &redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-		}
-		if cfg.RedisTLS {
-			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		}
-		redisClient = redis.NewClient(redisOptions)
-	}
-	var clinicStore *clinic.Store
-	if redisClient != nil {
-		clinicStore = clinic.NewStore(redisClient)
-	}
-	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
+	redisClient := appbootstrap.BuildRedisClient(appCtx, cfg, logger, false)
+	clinicStore := appbootstrap.BuildClinicStore(redisClient)
+	smsTranscript := appbootstrap.BuildSMSTranscriptStore(redisClient)
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
@@ -140,38 +109,19 @@ func main() {
 	if twilioWebhookSecret == "" {
 		twilioWebhookSecret = cfg.TwilioAuthToken
 	}
-	messengerCfg := messaging.ProviderSelectionConfig{
-		Preference:       cfg.SMSProvider,
-		TelnyxAPIKey:     cfg.TelnyxAPIKey,
-		TelnyxProfileID:  cfg.TelnyxMessagingProfileID,
-		TwilioAccountSID: cfg.TwilioAccountSID,
-		TwilioAuthToken:  cfg.TwilioAuthToken,
-		TwilioFromNumber: cfg.TwilioFromNumber,
-	}
-	webhookMessenger, webhookMessengerProvider, webhookMessengerReason := messaging.BuildReplyMessenger(messengerCfg, logger)
+	webhookMessenger, webhookMessengerProvider, webhookMessengerReason := appbootstrap.BuildOutboundMessenger(
+		cfg,
+		logger,
+		msgStore,
+		auditSvc,
+		conversationStore,
+		smsTranscript,
+	)
 	if webhookMessenger != nil {
 		logger.Info("sms messenger initialized for webhooks",
 			"provider", webhookMessengerProvider,
 			"preference", cfg.SMSProvider,
 		)
-		// Wrap with demo mode if enabled (adds 10DLC-compliant disclaimers)
-		webhookMessenger = messaging.WrapWithDemoMode(webhookMessenger, messaging.DemoModeConfig{
-			Enabled: cfg.DemoMode,
-			Prefix:  cfg.DemoModePrefix,
-			Suffix:  cfg.DemoModeSuffix,
-			Logger:  logger,
-		})
-		webhookMessenger = messaging.WrapWithDisclaimers(webhookMessenger, messaging.DisclaimerWrapperConfig{
-			Enabled:           cfg.DisclaimerEnabled,
-			Level:             cfg.DisclaimerLevel,
-			FirstMessageOnly:  cfg.DisclaimerFirstOnly,
-			Logger:            logger,
-			Audit:             auditSvc,
-			ConversationStore: conversationStore,
-			TranscriptStore:   smsTranscript,
-		})
-		// Wrap with persistence to store outbound messages in the database
-		webhookMessenger = messaging.WrapWithPersistence(webhookMessenger, msgStore, logger)
 	} else {
 		logger.Warn("sms replies disabled for webhooks",
 			"preference", cfg.SMSProvider,

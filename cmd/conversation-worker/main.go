@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"os"
@@ -15,11 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
-	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -98,74 +95,23 @@ func main() {
 		messengerReason   string
 		depositSender     conversation.DepositSender
 	)
-	var convStore *conversation.ConversationStore
-	if cfg.PersistConversationHistory {
-		var excludePhones []string
-		if cfg.ConversationPersistExcludePhone != "" {
-			for _, p := range strings.Split(cfg.ConversationPersistExcludePhone, ",") {
-				if trimmed := strings.TrimSpace(p); trimmed != "" {
-					excludePhones = append(excludePhones, trimmed)
-				}
-			}
-		}
-		if len(excludePhones) > 0 {
-			convStore = conversation.NewConversationStoreWithExclusions(sqlDB, excludePhones)
-			logger.Info("conversation persistence enabled with exclusions", "excluded_count", len(excludePhones))
-		} else {
-			convStore = conversation.NewConversationStore(sqlDB)
-		}
-	}
-	var redisClient *redis.Client
-	if cfg.RedisAddr != "" {
-		redisOptions := &redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-		}
-		if cfg.RedisTLS {
-			redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		}
-		redisClient = redis.NewClient(redisOptions)
-		if err := redisClient.Ping(ctx).Err(); err != nil {
-			logger.Warn("redis not available", "error", err)
-			redisClient = nil
-		}
-	}
-	smsTranscript := conversation.NewSMSTranscriptStore(redisClient)
-	var clinicStore *clinic.Store
-	if redisClient != nil {
-		clinicStore = clinic.NewStore(redisClient)
-	}
-	messengerCfg := messaging.ProviderSelectionConfig{
-		Preference:       cfg.SMSProvider,
-		TelnyxAPIKey:     cfg.TelnyxAPIKey,
-		TelnyxProfileID:  cfg.TelnyxMessagingProfileID,
-		TwilioAccountSID: cfg.TwilioAccountSID,
-		TwilioAuthToken:  cfg.TwilioAuthToken,
-		TwilioFromNumber: cfg.TwilioFromNumber,
-	}
-	messenger, messengerProvider, messengerReason = messaging.BuildReplyMessenger(messengerCfg, logger)
+	convStore := appbootstrap.BuildConversationStore(sqlDB, cfg, logger, false)
+	redisClient := appbootstrap.BuildRedisClient(ctx, cfg, logger, true)
+	smsTranscript := appbootstrap.BuildSMSTranscriptStore(redisClient)
+	clinicStore := appbootstrap.BuildClinicStore(redisClient)
+	messenger, messengerProvider, messengerReason = appbootstrap.BuildOutboundMessenger(
+		cfg,
+		logger,
+		msgStore,
+		auditSvc,
+		convStore,
+		smsTranscript,
+	)
 	if messenger != nil {
 		logger.Info("sms messenger initialized for async workers",
 			"provider", messengerProvider,
 			"preference", cfg.SMSProvider,
 		)
-		messenger = messaging.WrapWithDemoMode(messenger, messaging.DemoModeConfig{
-			Enabled: cfg.DemoMode,
-			Prefix:  cfg.DemoModePrefix,
-			Suffix:  cfg.DemoModeSuffix,
-			Logger:  logger,
-		})
-		messenger = messaging.WrapWithDisclaimers(messenger, messaging.DisclaimerWrapperConfig{
-			Enabled:           cfg.DisclaimerEnabled,
-			Level:             cfg.DisclaimerLevel,
-			FirstMessageOnly:  cfg.DisclaimerFirstOnly,
-			Logger:            logger,
-			Audit:             auditSvc,
-			ConversationStore: convStore,
-			TranscriptStore:   smsTranscript,
-		})
-		// Wrap with persistence to store outbound messages in the database
-		messenger = messaging.WrapWithPersistence(messenger, msgStore, logger)
 	} else {
 		logger.Warn("sms replies disabled for async workers",
 			"preference", cfg.SMSProvider,
