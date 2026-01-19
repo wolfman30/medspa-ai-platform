@@ -205,6 +205,9 @@ curl http://localhost:8082/health
 # Unit tests
 make test
 
+# Regression tests (fast, deterministic)
+make regression
+
 # E2E tests (requires running API)
 make e2e
 ```
