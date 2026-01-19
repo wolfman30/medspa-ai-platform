@@ -1,6 +1,6 @@
 go_files := $(shell go list ./...)
 
-.PHONY: all deps fmt lint vet test cover run-api run-worker migrate docker-up docker-down ci-cover
+.PHONY: all deps fmt lint vet test cover run-api run-worker migrate docker-up docker-down ci-cover regression
 .PHONY: clear-test-deposit e2e e2e-quick
 
 all: test
@@ -43,6 +43,9 @@ docker-down:
 
 test:
 	go test ./...
+
+regression:
+	go test ./tests -run Regression -v
 
 # Clears deposit state for a test phone (dry-run unless YES=1).
 clear-test-deposit:
