@@ -354,6 +354,31 @@ func (s *ConversationStore) LinkLead(ctx context.Context, conversationID string,
 	return err
 }
 
+// UpdateStatus updates the status of a conversation.
+func (s *ConversationStore) UpdateStatus(ctx context.Context, conversationID, status string) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE conversations SET status = $1, updated_at = $2
+		WHERE conversation_id = $3
+	`, status, time.Now(), conversationID)
+
+	return err
+}
+
+// UpdateStatusByPhone updates conversation status by org_id and phone number.
+// This is useful when we have lead phone but not the full conversation_id.
+func (s *ConversationStore) UpdateStatusByPhone(ctx context.Context, orgID, phone, status string) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+
+	conversationID := fmt.Sprintf("sms:%s:%s", orgID, phone)
+	return s.UpdateStatus(ctx, conversationID, status)
+}
+
 // HasAssistantMessage returns true if the conversation has any assistant messages stored.
 func (s *ConversationStore) HasAssistantMessage(ctx context.Context, conversationID string) (bool, error) {
 	if s == nil || s.db == nil {

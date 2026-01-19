@@ -793,6 +793,14 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 			})
 		}
 	}
+
+	// Update conversation status to deposit_paid
+	if w.convStore != nil && evt.LeadPhone != "" {
+		if err := w.convStore.UpdateStatusByPhone(ctx, evt.OrgID, evt.LeadPhone, "deposit_paid"); err != nil {
+			w.logger.Warn("failed to update conversation status to deposit_paid", "error", err, "org_id", evt.OrgID, "lead_phone", evt.LeadPhone)
+		}
+	}
+
 	if w.processed != nil && idempotencyKey != "" {
 		if _, err := w.processed.MarkProcessed(ctx, "conversation.payment_succeeded.v1", idempotencyKey); err != nil {
 			w.logger.Warn("failed to mark payment event processed", "error", err, "key", idempotencyKey, "event_id", evt.EventID, "provider_ref", evt.ProviderRef, "org_id", evt.OrgID, "lead_id", evt.LeadID)
