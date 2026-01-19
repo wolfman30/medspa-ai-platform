@@ -441,9 +441,16 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 			{Role: ChatRoleSystem, Content: systemPrompt},
 		}
 		history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
+		// Add the ack message to history so the AI knows what was already said
+		if req.AckMessage != "" {
+			history = append(history, ChatMessage{
+				Role:    ChatRoleAssistant,
+				Content: req.AckMessage,
+			})
+		}
 		history = append(history, ChatMessage{
 			Role:    ChatRoleSystem,
-			Content: "Context: Missed-call auto-reply already sent to the patient. Do NOT repeat the greeting or re-ask the same opener. Respond directly to the patient's next message.",
+			Content: "Context: The auto-reply above was already sent. Do NOT greet again, do NOT say 'Hey there' or 'Hi there' or 'Thanks for reaching out'. Just respond directly to whatever the patient says next.",
 		})
 		history = trimHistory(history, maxHistoryMessages)
 		if err := s.history.Save(ctx, conversationID, history); err != nil {

@@ -40,6 +40,7 @@ type StartRequest struct {
 	ConversationID string
 	Metadata       map[string]string
 	Silent         bool
+	AckMessage     string // The ack message sent to the user (for Silent=true flows)
 }
 
 // MessageRequest represents a single turn in the conversation.

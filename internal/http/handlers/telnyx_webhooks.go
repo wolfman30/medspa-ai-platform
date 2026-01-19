@@ -843,6 +843,8 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 		}
 	}
 	conversationID := telnyxConversationID(orgID, from)
+	// Get ack message first so we can include it in the StartRequest for history
+	ack := h.voiceAckMessage(ctx, orgID)
 	startReq := conversation.StartRequest{
 		OrgID:          orgID,
 		LeadID:         leadID,
@@ -853,6 +855,7 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 		From:           from,
 		To:             to,
 		Silent:         true,
+		AckMessage:     ack, // Include ack message so AI knows what was already sent
 		Metadata: map[string]string{
 			"telnyx_event_id": evt.ID,
 			"telnyx_call_id":  payload.ID,
@@ -869,7 +872,6 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, opts...); err != nil {
 		return fmt.Errorf("enqueue missed-call start: %w", err)
 	}
-	ack := h.voiceAckMessage(ctx, orgID)
 	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
 		Role: "assistant",
 		From: to,
