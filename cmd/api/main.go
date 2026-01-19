@@ -261,6 +261,13 @@ func main() {
 		logger.Info("onboarding handler initialized")
 	}
 
+	// Initialize client registration handler (for self-service registration)
+	var clientRegistrationHandler *handlers.ClientRegistrationHandler
+	if sqlDB != nil {
+		clientRegistrationHandler = handlers.NewClientRegistrationHandler(sqlDB, redisClient, logger)
+		logger.Info("client registration handler initialized")
+	}
+
 	var knowledgeRepo conversation.KnowledgeRepository
 	if redisClient != nil {
 		knowledgeRepo = conversation.NewRedisKnowledgeRepository(redisClient)
@@ -404,6 +411,7 @@ func main() {
 		ClinicStatsHandler:  clinicStatsHandler,
 		ClinicDashboard:     clinicDashboardHandler,
 		AdminOnboarding:     adminOnboardingHandler,
+		ClientRegistration:  clientRegistrationHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
 		CognitoUserPoolID:   cfg.CognitoUserPoolID,
 		CognitoClientID:     cfg.CognitoClientID,

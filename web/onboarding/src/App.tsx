@@ -7,7 +7,7 @@ import { ConversationDetail } from './components/ConversationDetail';
 import { DepositList } from './components/DepositList';
 import { DepositDetail } from './components/DepositDetail';
 import { NotificationSettings } from './components/NotificationSettings';
-import { getOnboardingStatus } from './api/client';
+import { getOnboardingStatus, lookupOrgByEmail, registerClinic } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
 
@@ -32,6 +32,122 @@ const KNOWN_ORGS = [
   { id: 'bb507f20-7fcc-4941-9eac-9ed93b7834ed', name: 'Wolf Aesthetics' },
 ];
 
+// Clinic setup form for returning users without an org
+interface ClinicSetupPromptProps {
+  email: string;
+  onComplete: (orgId: string) => void;
+  onLogout: () => void;
+}
+
+function ClinicSetupPrompt({ email, onComplete, onLogout }: ClinicSetupPromptProps) {
+  const [clinicName, setClinicName] = useState('');
+  const [clinicPhone, setClinicPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clinicName.trim()) {
+      setError('Clinic name is required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await registerClinic({
+        clinic_name: clinicName.trim(),
+        owner_email: email,
+        owner_phone: clinicPhone.trim() || undefined,
+      });
+      onComplete(result.org_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create clinic');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Set up your clinic
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Welcome! Let's set up your clinic profile to get started.
+          </p>
+          <p className="mt-1 text-center text-xs text-gray-500">
+            Signed in as {email}
+          </p>
+        </div>
+
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="clinicName" className="block text-sm font-medium text-gray-700">
+                Clinic Name
+              </label>
+              <input
+                id="clinicName"
+                name="clinicName"
+                type="text"
+                required
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="Your MedSpa Name"
+                value={clinicName}
+                onChange={(e) => setClinicName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="clinicPhone" className="block text-sm font-medium text-gray-700">
+                Business Phone (optional)
+              </label>
+              <input
+                id="clinicPhone"
+                name="clinicPhone"
+                type="tel"
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="+1 (555) 123-4567"
+                value={clinicPhone}
+                onChange={(e) => setClinicPhone(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={loading || !clinicName.trim()}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Creating...' : 'Complete Setup'}
+            </button>
+          </div>
+
+          <div className="text-center">
+            <button
+              type="button"
+              className="text-sm text-gray-500 hover:text-gray-700"
+              onClick={onLogout}
+            >
+              Sign out and use a different account
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function AuthenticatedApp() {
   const { isLoading, isAuthenticated, authEnabled, user, logout } = useAuth();
   const [decision, setDecision] = useState<OnboardingDecision>('idle');
@@ -41,12 +157,42 @@ function AuthenticatedApp() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null);
   const [adminOrgId, setAdminOrgId] = useState<string>(KNOWN_ORGS[0]?.id || '');
+  const [orgLookupDone, setOrgLookupDone] = useState(false);
+  const [needsClinicSetup, setNeedsClinicSetup] = useState(false);
 
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
   const userOrgId = getOrgIdFromUser(user);
   const isAdmin = isAdminUser(user?.email);
   // Admins can switch orgs; regular users use their assigned org
   const orgId = isAdmin ? adminOrgId : (userOrgId || getStoredOrgId());
+
+  // Look up org for returning users who don't have an org in localStorage
+  useEffect(() => {
+    if (!authReady || !user?.email || isAdmin || orgLookupDone) return;
+
+    // If we already have an org, skip lookup
+    const storedOrg = getStoredOrgId();
+    if (storedOrg) {
+      setOrgLookupDone(true);
+      return;
+    }
+
+    // Look up org by email
+    lookupOrgByEmail(user.email)
+      .then((result) => {
+        if (result.org_id) {
+          setStoredOrgId(result.org_id);
+        } else {
+          setNeedsClinicSetup(true);
+        }
+        setOrgLookupDone(true);
+      })
+      .catch(() => {
+        // No org found - user needs to set up clinic
+        setNeedsClinicSetup(true);
+        setOrgLookupDone(true);
+      });
+  }, [authReady, user?.email, isAdmin, orgLookupDone]);
 
   useEffect(() => {
     if (!authReady || !userOrgId) return;
@@ -87,6 +233,30 @@ function AuthenticatedApp() {
   // If auth is enabled but user is not authenticated, show login
   if (authEnabled && !isAuthenticated) {
     return <LoginForm />;
+  }
+
+  // If user is authenticated but needs to set up their clinic
+  if (needsClinicSetup && user?.email) {
+    return (
+      <ClinicSetupPrompt
+        email={user.email}
+        onComplete={(newOrgId) => {
+          setStoredOrgId(newOrgId);
+          setNeedsClinicSetup(false);
+          setStatusRefresh((prev) => prev + 1);
+        }}
+        onLogout={logout}
+      />
+    );
+  }
+
+  // Wait for org lookup to complete for non-admin users
+  if (authEnabled && isAuthenticated && !isAdmin && !orgLookupDone) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      </div>
+    );
   }
 
   const showStatusLoading = authReady && orgId && checkedOrgId !== orgId;
