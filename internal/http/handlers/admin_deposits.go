@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -113,6 +114,8 @@ func (h *AdminDepositsHandler) ListDeposits(w http.ResponseWriter, r *http.Reque
 	status := r.URL.Query().Get("status")
 	dateFrom := r.URL.Query().Get("date_from")
 	dateTo := r.URL.Query().Get("date_to")
+	phone := strings.TrimSpace(r.URL.Query().Get("phone"))
+	phoneDigits := phoneDigitsCandidates(phone)
 	// Hide stale deposit_pending records by default (ones where a newer succeeded payment exists for the same lead)
 	hideStalePending := r.URL.Query().Get("hide_stale_pending") != "false"
 
@@ -161,11 +164,18 @@ func (h *AdminDepositsHandler) ListDeposits(w http.ResponseWriter, r *http.Reque
 			argNum++
 		}
 	}
+	if len(phoneDigits) > 0 {
+		query += appendPhoneDigitsFilter("regexp_replace(l.phone, '\\\\D', '', 'g')", phoneDigits, &args, &argNum)
+	}
 
 	query += " ORDER BY p.created_at DESC"
 
 	// Get total count (must match the same filters)
-	countQuery := "SELECT COUNT(*) FROM payments p WHERE p.org_id = $1"
+	countQuery := "SELECT COUNT(*) FROM payments p"
+	if len(phoneDigits) > 0 {
+		countQuery += " LEFT JOIN leads l ON p.lead_id = l.id"
+	}
+	countQuery += " WHERE p.org_id = $1"
 	countArgs := []any{orgID}
 	countArgNum := 2
 	if hideStalePending {
@@ -183,6 +193,9 @@ func (h *AdminDepositsHandler) ListDeposits(w http.ResponseWriter, r *http.Reque
 		countQuery += " AND p.status = $" + strconv.Itoa(countArgNum)
 		countArgs = append(countArgs, status)
 		countArgNum++
+	}
+	if len(phoneDigits) > 0 {
+		countQuery += appendPhoneDigitsFilter("regexp_replace(l.phone, '\\\\D', '', 'g')", phoneDigits, &countArgs, &countArgNum)
 	}
 	var total int
 	h.db.QueryRowContext(r.Context(), countQuery, countArgs...).Scan(&total)

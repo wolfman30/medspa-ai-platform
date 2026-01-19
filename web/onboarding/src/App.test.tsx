@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import App from './App';
-import { getOnboardingStatus } from './api/client';
+import { getOnboardingStatus, lookupOrgByEmail } from './api/client';
 import { useAuth } from './auth';
 
 vi.mock('./api/client', async () => {
@@ -10,6 +10,7 @@ vi.mock('./api/client', async () => {
   return {
     ...actual,
     getOnboardingStatus: vi.fn(),
+    lookupOrgByEmail: vi.fn(),
   };
 });
 
@@ -78,10 +79,12 @@ describe('App onboarding flow', () => {
     expect(screen.queryByText('Dashboard view org_123')).not.toBeInTheDocument();
   });
 
-  it('renders onboarding when orgId is missing', () => {
+  it('renders clinic setup when orgId is missing', async () => {
+    vi.mocked(lookupOrgByEmail).mockRejectedValue(new Error('Not found'));
+
     render(<App />);
 
-    expect(screen.getByText('Onboarding Wizard')).toBeInTheDocument();
+    expect(await screen.findByText('Set up your clinic')).toBeInTheDocument();
     expect(vi.mocked(getOnboardingStatus)).not.toHaveBeenCalled();
   });
 

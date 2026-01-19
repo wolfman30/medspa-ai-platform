@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDashboardStats } from './client';
+import { getDashboardStats, getPortalOverview } from './client';
 
 vi.mock('../auth/config', () => ({
   isCognitoConfigured: () => false,
@@ -48,6 +48,15 @@ const sampleResponse = {
   pending_actions: [],
 };
 
+const samplePortalResponse = {
+  org_id: 'org_123',
+  period_start: 'all-time',
+  period_end: 'now',
+  conversations: 12,
+  successful_deposits: 3,
+  conversion_pct: 25,
+};
+
 describe('getDashboardStats', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
@@ -86,5 +95,50 @@ describe('getDashboardStats', () => {
     } as Response);
 
     await expect(getDashboardStats('org_123')).rejects.toThrow('Nope');
+  });
+});
+
+describe('getPortalOverview', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('calls the portal overview endpoint with filters', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(samplePortalResponse),
+    } as Response);
+
+    const result = await getPortalOverview('org_123', {
+      start: '2025-01-01T00:00:00Z',
+      end: '2025-01-08T00:00:00Z',
+      phone: '9378962713',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/portal/orgs/org_123/dashboard?start=2025-01-01T00%3A00%3A00Z&end=2025-01-08T00%3A00%3A00Z&phone=9378962713',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    expect(result).toEqual(samplePortalResponse);
+  });
+
+  it('throws when the response is not ok', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: vi.fn().mockResolvedValue({ error: 'Nope' }),
+    } as Response);
+
+    await expect(getPortalOverview('org_123')).rejects.toThrow('Nope');
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getDeposit } from '../api/client';
+import { getDeposit, type ApiScope } from '../api/client';
 import type { DepositDetailResponse } from '../types/deposit';
 
 interface DepositDetailProps {
@@ -7,6 +7,7 @@ interface DepositDetailProps {
   depositId: string;
   onBack: () => void;
   onViewConversation?: (conversationId: string) => void;
+  scope?: ApiScope;
 }
 
 function formatPhone(phone: string): string {
@@ -71,7 +72,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function DepositDetail({ orgId, depositId, onBack, onViewConversation }: DepositDetailProps) {
+export function DepositDetail({ orgId, depositId, onBack, onViewConversation, scope = 'admin' }: DepositDetailProps) {
   const [deposit, setDeposit] = useState<DepositDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation }: 
       setLoading(true);
       setError(null);
       try {
-        const data = await getDeposit(orgId, depositId);
+        const data = await getDeposit(orgId, depositId, scope);
         if (isActive) {
           setDeposit(data);
         }

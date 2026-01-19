@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { listDeposits, getDepositStats } from '../api/client';
+import { listDeposits, getDepositStats, type ApiScope } from '../api/client';
 import type { DepositListItem, DepositStatsResponse } from '../types/deposit';
 
 interface DepositListProps {
   orgId: string;
   onSelect: (depositId: string) => void;
+  scope?: ApiScope;
 }
 
 function formatPhone(phone: string): string {
@@ -50,7 +51,7 @@ function getStatusColor(status: string): string {
   }
 }
 
-export function DepositList({ orgId, onSelect }: DepositListProps) {
+export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListProps) {
   const [deposits, setDeposits] = useState<DepositListItem[]>([]);
   const [stats, setStats] = useState<DepositStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +59,7 @@ export function DepositList({ orgId, onSelect }: DepositListProps) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
 
   const loadDeposits = useCallback(async () => {
     setLoading(true);
@@ -68,8 +70,9 @@ export function DepositList({ orgId, onSelect }: DepositListProps) {
           page,
           pageSize: 20,
           status: statusFilter || undefined,
-        }),
-        getDepositStats(orgId),
+          phone: phoneFilter || undefined,
+        }, scope),
+        getDepositStats(orgId, scope),
       ]);
       setDeposits(depositsData.deposits);
       setTotalPages(depositsData.total_pages);
@@ -79,7 +82,7 @@ export function DepositList({ orgId, onSelect }: DepositListProps) {
     } finally {
       setLoading(false);
     }
-  }, [orgId, page, statusFilter]);
+  }, [orgId, page, statusFilter, phoneFilter, scope]);
 
   useEffect(() => {
     loadDeposits();
@@ -94,6 +97,12 @@ export function DepositList({ orgId, onSelect }: DepositListProps) {
   const handleStatusChange = (newStatus: string) => {
     setStatusFilter(newStatus);
     setPage(1);
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    loadDeposits();
   };
 
   return (
@@ -145,7 +154,7 @@ export function DepositList({ orgId, onSelect }: DepositListProps) {
         )}
 
         {/* Filters */}
-        <div className="mb-6 flex gap-4">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center">
           <select
             value={statusFilter}
             onChange={(e) => handleStatusChange(e.target.value)}
@@ -157,6 +166,21 @@ export function DepositList({ orgId, onSelect }: DepositListProps) {
             <option value="failed">Failed</option>
             <option value="refunded">Refunded</option>
           </select>
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Filter by phone number..."
+              value={phoneFilter}
+              onChange={(e) => setPhoneFilter(e.target.value)}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+            >
+              Search
+            </button>
+          </form>
         </div>
 
         {error && (

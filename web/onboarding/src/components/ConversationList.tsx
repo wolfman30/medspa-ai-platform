@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { listConversations } from '../api/client';
+import { listConversations, type ApiScope } from '../api/client';
 import type { ConversationListItem } from '../types/conversation';
 
 interface ConversationListProps {
   orgId: string;
   onSelect: (conversationId: string) => void;
+  scope?: ApiScope;
 }
 
 function formatPhone(phone: string): string {
@@ -31,7 +32,7 @@ function timeAgo(dateString: string): string {
   return date.toLocaleDateString();
 }
 
-export function ConversationList({ orgId, onSelect }: ConversationListProps) {
+export function ConversationList({ orgId, onSelect, scope = 'admin' }: ConversationListProps) {
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function ConversationList({ orgId, onSelect }: ConversationListProps) {
         page,
         pageSize: 20,
         phone: phoneFilter || undefined,
-      });
+      }, scope);
       setConversations(data.conversations);
       setTotalPages(data.total_pages);
     } catch (err) {
@@ -55,7 +56,7 @@ export function ConversationList({ orgId, onSelect }: ConversationListProps) {
     } finally {
       setLoading(false);
     }
-  }, [orgId, page, phoneFilter]);
+  }, [orgId, page, phoneFilter, scope]);
 
   useEffect(() => {
     loadConversations();
