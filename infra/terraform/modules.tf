@@ -62,20 +62,20 @@ module "ecs_fargate" {
   deployment_maximum_percent               = var.deployment_maximum_percent
 
   environment_variables = {
-    LOG_LEVEL                  = "info"
-    USE_MEMORY_QUEUE           = "true"
-    WORKER_COUNT               = var.environment == "production" ? "2" : "1"
-    AWS_RETRY_MODE             = var.environment == "production" ? "standard" : "adaptive"
-    AWS_MAX_ATTEMPTS           = var.environment == "production" ? "3" : "10"
-    AWS_REGION                 = var.aws_region
-    COGNITO_USER_POOL_ID       = var.cognito_user_pool_id
-    COGNITO_CLIENT_ID          = var.cognito_client_id
-    COGNITO_REGION             = var.cognito_region
-    PUBLIC_BASE_URL            = var.api_public_base_url
-    CORS_ALLOWED_ORIGINS       = var.environment == "production" ? "https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal.aiwolfsolutions.com,https://wolfman30.github.io" : "http://localhost:8000,https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal-dev.aiwolfsolutions.com,https://wolfman30.github.io"
-    ALLOW_FAKE_PAYMENTS        = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
-    REDIS_ADDR                 = "${module.redis.primary_endpoint_address}:${module.redis.port}"
-    REDIS_TLS                  = "true"
+    LOG_LEVEL                    = "info"
+    USE_MEMORY_QUEUE             = "true"
+    WORKER_COUNT                 = var.environment == "production" ? "2" : "1"
+    AWS_RETRY_MODE               = var.environment == "production" ? "standard" : "adaptive"
+    AWS_MAX_ATTEMPTS             = var.environment == "production" ? "3" : "10"
+    AWS_REGION                   = var.aws_region
+    COGNITO_USER_POOL_ID         = var.cognito_user_pool_id
+    COGNITO_CLIENT_ID            = var.cognito_client_id
+    COGNITO_REGION               = var.cognito_region
+    PUBLIC_BASE_URL              = var.api_public_base_url
+    CORS_ALLOWED_ORIGINS         = var.environment == "production" ? "https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal.aiwolfsolutions.com,https://wolfman30.github.io" : "http://localhost:8000,https://aiwolfsolutions.com,https://www.aiwolfsolutions.com,https://portal-dev.aiwolfsolutions.com,https://wolfman30.github.io"
+    ALLOW_FAKE_PAYMENTS          = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
+    REDIS_ADDR                   = "${module.redis.primary_endpoint_address}:${module.redis.port}"
+    REDIS_TLS                    = "true"
     BEDROCK_MODEL_ID             = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw"
     BEDROCK_EMBEDDING_MODEL_ID   = "amazon.titan-embed-text-v1"
     TELNYX_TRACK_JOBS            = "true"
