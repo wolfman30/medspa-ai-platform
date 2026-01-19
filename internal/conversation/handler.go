@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -175,6 +176,10 @@ func (h *Handler) AddKnowledge(w http.ResponseWriter, r *http.Request) {
 	clinicID := chi.URLParam(r, "clinicID")
 	if strings.TrimSpace(clinicID) == "" {
 		http.Error(w, "clinicID required", http.StatusBadRequest)
+		return
+	}
+	if orgID, ok := tenancy.OrgIDFromContext(r.Context()); ok && orgID != "" && orgID != clinicID {
+		http.Error(w, "clinicID does not match org", http.StatusForbidden)
 		return
 	}
 

@@ -109,6 +109,7 @@ TEST_CUSTOMER_EMAIL = "e2e-automated@test.dev"
 SMS_PROVIDER = os.getenv("SMS_PROVIDER", "").strip().lower()
 DEMO_MODE = os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
 E2E_REQUIRE_TELNYX = os.getenv("E2E_REQUIRE_TELNYX", "").strip().lower() in ("1", "true", "yes", "on")
+ONBOARDING_TOKEN = os.getenv("ONBOARDING_TOKEN", "").strip()
 
 # Conversation simulation delays
 AI_RESPONSE_WAIT = int(os.getenv("AI_RESPONSE_WAIT", "8"))  # seconds to wait for AI processing
@@ -472,14 +473,18 @@ def seed_knowledge() -> bool:
         payload = {"documents": documents}
         print_info(f"Uploading {len(documents)} knowledge snippets to org {TEST_ORG_ID}")
 
+        headers = {
+            "Content-Type": "application/json",
+            "X-Org-ID": TEST_ORG_ID,
+        }
+        if ONBOARDING_TOKEN:
+            headers["X-Onboarding-Token"] = ONBOARDING_TOKEN
+
         resp = requests.post(
             f"{API_URL}/knowledge/{TEST_ORG_ID}",
             json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "X-Org-ID": TEST_ORG_ID
-            },
-            timeout=120
+            headers=headers,
+            timeout=120,
         )
 
         if resp.status_code in (200, 201, 204):

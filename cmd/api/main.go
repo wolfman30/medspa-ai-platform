@@ -361,6 +361,7 @@ func main() {
 		ClinicStatsHandler:  clinicStatsHandler,
 		ClinicDashboard:     clinicDashboardHandler,
 		AdminOnboarding:     adminOnboardingHandler,
+		OnboardingToken:     cfg.OnboardingToken,
 		ClientRegistration:  clientRegistrationHandler,
 		AdminAuthSecret:     cfg.AdminJWTSecret,
 		CognitoUserPoolID:   cfg.CognitoUserPoolID,

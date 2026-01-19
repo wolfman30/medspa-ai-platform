@@ -2,9 +2,12 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { isCognitoConfigured } from '../auth/config';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const ONBOARDING_TOKEN = import.meta.env.VITE_ONBOARDING_TOKEN || '';
 
 // Get headers with optional auth token
-async function getHeaders(): Promise<Record<string, string>> {
+async function getHeaders(
+  extra?: Record<string, string>
+): Promise<Record<string, string>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (isCognitoConfigured()) {
@@ -17,6 +20,14 @@ async function getHeaders(): Promise<Record<string, string>> {
     } catch {
       // No session available, continue without auth
     }
+  }
+
+  if (ONBOARDING_TOKEN) {
+    headers['X-Onboarding-Token'] = ONBOARDING_TOKEN;
+  }
+
+  if (extra) {
+    Object.assign(headers, extra);
   }
 
   return headers;
@@ -156,7 +167,7 @@ export async function seedKnowledge(
 ): Promise<{ count: number; embedded: boolean }> {
   const res = await fetch(`${API_BASE}/knowledge/${orgId}`, {
     method: 'POST',
-    headers: await getHeaders(),
+    headers: await getHeaders({ 'X-Org-Id': orgId }),
     body: JSON.stringify({ documents }),
   });
   if (!res.ok) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -75,6 +76,7 @@ func main() {
 
 	ctx := context.Background()
 	client := &http.Client{Timeout: 30 * time.Second}
+	onboardingToken := strings.TrimSpace(os.Getenv("ONBOARDING_TOKEN"))
 
 	for i := 0; i < len(docs); i += batchSize {
 		end := i + batchSize
@@ -103,6 +105,9 @@ func main() {
 
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("X-Org-Id", knowledge.ClinicID)
+		if onboardingToken != "" {
+			httpReq.Header.Set("X-Onboarding-Token", onboardingToken)
+		}
 
 		resp, err := client.Do(httpReq)
 		if err != nil {

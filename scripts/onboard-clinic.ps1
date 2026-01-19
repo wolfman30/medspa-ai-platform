@@ -22,7 +22,9 @@ param(
 
     [string]$Token = $env:ADMIN_JWT_TOKEN,
 
-    [switch]$SkipSquare
+    [switch]$SkipSquare,
+
+    [string]$OnboardingToken = $env:ONBOARDING_TOKEN
 )
 
 # Set default API URL if not provided
@@ -148,6 +150,9 @@ if ($seedKnowledge -eq "y" -or $seedKnowledge -eq "Y") {
     $knowledgeHeaders = @{
         "X-Org-Id" = $orgId
         "Content-Type" = "application/json"
+    }
+    if (-not [string]::IsNullOrEmpty($OnboardingToken)) {
+        $knowledgeHeaders["X-Onboarding-Token"] = $OnboardingToken
     }
 
     try {
