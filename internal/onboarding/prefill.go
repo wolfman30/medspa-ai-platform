@@ -44,11 +44,11 @@ type PrefillClinicInfo struct {
 }
 
 type PrefillResult struct {
-	ClinicInfo    PrefillClinicInfo `json:"clinic_info"`
-	Services      []PrefillService  `json:"services"`
+	ClinicInfo    PrefillClinicInfo    `json:"clinic_info"`
+	Services      []PrefillService     `json:"services"`
 	BusinessHours clinic.BusinessHours `json:"business_hours"`
-	Sources       []string          `json:"sources,omitempty"`
-	Warnings      []string          `json:"warnings,omitempty"`
+	Sources       []string             `json:"sources,omitempty"`
+	Warnings      []string             `json:"warnings,omitempty"`
 }
 
 type sitemapURLSet struct {
@@ -262,16 +262,16 @@ func buildServicesFromSitemap(urls []string) []PrefillService {
 		return nil
 	}
 	excluded := map[string]bool{
-		"":           true,
-		"/":          true,
+		"":            true,
+		"/":           true,
 		"/contact-us": true,
-		"/contact":   true,
-		"/about":     true,
-		"/about-us":  true,
-		"/financing": true,
-		"/events":    true,
+		"/contact":    true,
+		"/about":      true,
+		"/about-us":   true,
+		"/financing":  true,
+		"/events":     true,
 		"/membership": true,
-		"/shop":      true,
+		"/shop":       true,
 	}
 	services := []PrefillService{}
 	seen := map[string]bool{}
