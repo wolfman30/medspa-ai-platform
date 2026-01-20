@@ -20,7 +20,7 @@ import (
 const (
 	prefillTimeout   = 15 * time.Second
 	prefillUserAgent = "Mozilla/5.0"
-	maxPrefillPages  = 8
+	maxPrefillPages  = 20
 )
 
 type PrefillService struct {
@@ -381,7 +381,7 @@ func parseBusinessHours(text string) clinic.BusinessHours {
 	}
 
 	dayPattern := `(?:mon(?:day)?|tue(?:sday)?|tues|wed(?:nesday)?|thu(?:rsday)?|thur|thurs|fri(?:day)?|sat(?:urday)?|sun(?:day)?)`
-	re := regexp.MustCompile(`(?is)(` + dayPattern + `(?:\s*(?:&|and|,)\s*` + dayPattern + `)*)\s*:\s*([^:]+?)(?=` + dayPattern + `|$)`)
+	re := regexp.MustCompile(`(?is)(` + dayPattern + `(?:\s*(?:&|and|,)\s*` + dayPattern + `)*)\s*:\s*(.+?)(?=` + dayPattern + `|$)`)
 	matches := re.FindAllStringSubmatch(hoursText, -1)
 	for _, match := range matches {
 		if len(match) < 3 {
