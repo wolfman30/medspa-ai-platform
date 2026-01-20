@@ -32,7 +32,7 @@ interface OnboardingState {
   currentStep: number;
   clinicInfo: {
     name: string;
-    website: string;
+    website?: string;
     email: string;
     phone: string;
     address: string;
