@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { StepIndicator } from './StepIndicator';
 import { ClinicInfoForm } from './ClinicInfoForm';
 import { BusinessHoursForm, type BusinessHoursFormData } from './BusinessHoursForm';
@@ -185,6 +185,7 @@ function mapPrefillServices(prefill: PrefillResult): OnboardingState['services']
 }
 
 export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWizardProps) {
+  const prefillTriggeredRef = useRef<Record<string, boolean>>({});
   const [state, setState] = useState<OnboardingState>({
     orgId: null,
     currentStep: 0,
@@ -196,6 +197,46 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handlePrefill = useCallback(async (website: string, options?: { preferExisting?: boolean }) => {
+    const result = await prefillFromWebsite(website);
+    const preferExisting = options?.preferExisting ?? false;
+    const pickValue = (incoming: string | undefined, existing: string | undefined) => {
+      const existingValue = (existing || '').trim();
+      if (preferExisting && existingValue) {
+        return existingValue;
+      }
+      return (incoming || existingValue).trim();
+    };
+
+    setState((prev) => {
+      const clinicInfo = {
+        name: pickValue(result.clinic_info.name, prev.clinicInfo?.name),
+        website: pickValue(result.clinic_info.website_url || website, prev.clinicInfo?.website),
+        email: pickValue(result.clinic_info.email, prev.clinicInfo?.email),
+        phone: pickValue(result.clinic_info.phone, prev.clinicInfo?.phone),
+        address: pickValue(result.clinic_info.address, prev.clinicInfo?.address),
+        city: pickValue(result.clinic_info.city, prev.clinicInfo?.city),
+        state: pickValue(result.clinic_info.state, prev.clinicInfo?.state),
+        zipCode: pickValue(result.clinic_info.zip_code, prev.clinicInfo?.zipCode),
+        timezone: pickValue(result.clinic_info.timezone, prev.clinicInfo?.timezone || 'America/New_York') || 'America/New_York',
+      };
+      const prefillServices = mapPrefillServices(result);
+      const shouldOverrideServices = !preferExisting || prev.services.length === 0;
+      const shouldOverrideHours = !preferExisting || !prev.businessHours;
+
+      return {
+        ...prev,
+        clinicInfo,
+        services: shouldOverrideServices && prefillServices.length > 0 ? prefillServices : prev.services,
+        businessHours:
+          shouldOverrideHours && hasAnyBusinessHours(result.business_hours)
+            ? toFormBusinessHours(result.business_hours)
+            : prev.businessHours,
+        contactInfo: mergeContactInfo(prev.contactInfo, clinicInfo.email, clinicInfo.phone),
+      };
+    });
+  }, []);
 
   const loadOnboardingStatus = useCallback(async (orgId: string) => {
     try {
@@ -266,32 +307,20 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
     }
   }, [orgIdProp, loadOnboardingStatus]);
 
-  async function handlePrefill(website: string) {
-    const result = await prefillFromWebsite(website);
-    setState((prev) => {
-      const clinicInfo = {
-        name: result.clinic_info.name || prev.clinicInfo?.name || '',
-        website: result.clinic_info.website_url || website || prev.clinicInfo?.website || '',
-        email: result.clinic_info.email || prev.clinicInfo?.email || '',
-        phone: result.clinic_info.phone || prev.clinicInfo?.phone || '',
-        address: result.clinic_info.address || prev.clinicInfo?.address || '',
-        city: result.clinic_info.city || prev.clinicInfo?.city || '',
-        state: result.clinic_info.state || prev.clinicInfo?.state || '',
-        zipCode: result.clinic_info.zip_code || prev.clinicInfo?.zipCode || '',
-        timezone: result.clinic_info.timezone || prev.clinicInfo?.timezone || 'America/New_York',
-      };
-      const prefillServices = mapPrefillServices(result);
-      return {
-        ...prev,
-        clinicInfo,
-        services: prefillServices.length > 0 ? prefillServices : prev.services,
-        businessHours: hasAnyBusinessHours(result.business_hours)
-          ? toFormBusinessHours(result.business_hours)
-          : prev.businessHours,
-        contactInfo: mergeContactInfo(prev.contactInfo, clinicInfo.email, clinicInfo.phone),
-      };
+  useEffect(() => {
+    const orgId = state.orgId;
+    const website = state.clinicInfo?.website?.trim();
+    if (!orgId || !website) return;
+    const needsServices = state.services.length === 0;
+    const needsHours = !state.businessHours;
+    if (!needsServices && !needsHours) return;
+    if (prefillTriggeredRef.current[orgId]) return;
+    prefillTriggeredRef.current[orgId] = true;
+
+    handlePrefill(website, { preferExisting: true }).catch((err) => {
+      setError(err instanceof Error ? err.message : 'Failed to prefill from website');
     });
-  }
+  }, [state.orgId, state.clinicInfo?.website, state.services.length, state.businessHours, handlePrefill]);
 
   async function handleClinicSubmit(data: NonNullable<OnboardingState['clinicInfo']>) {
     try {
