@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { getSquareConnectUrl } from '../api/client';
 
 interface Props {
@@ -9,7 +10,24 @@ interface Props {
 }
 
 export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinue }: Props) {
-  const connectUrl = getSquareConnectUrl(orgId);
+  const [connectUrl, setConnectUrl] = useState<string>('');
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+    setConnectError(null);
+    getSquareConnectUrl(orgId)
+      .then((url) => {
+        if (isActive) setConnectUrl(url);
+      })
+      .catch((err) => {
+        if (!isActive) return;
+        setConnectError(err instanceof Error ? err.message : 'Failed to load Square connect link');
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [orgId]);
 
   return (
     <div className="space-y-6">
@@ -67,15 +85,20 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
             <p className="mt-2 text-sm text-gray-500">
               Accept deposits for appointment requests and process payments securely.
             </p>
-            <a
-              href={connectUrl}
-              className="mt-4 inline-flex items-center rounded-md border border-transparent bg-black py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-            >
-              <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
-              </svg>
-              Connect with Square
-            </a>
+            {connectError ? (
+              <p className="mt-4 text-sm text-red-600">{connectError}</p>
+            ) : (
+              <a
+                href={connectUrl || '#'}
+                className="mt-4 inline-flex items-center rounded-md border border-transparent bg-black py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:opacity-50"
+                aria-disabled={!connectUrl}
+              >
+                <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
+                </svg>
+                {connectUrl ? 'Connect with Square' : 'Loading link...'}
+              </a>
+            )}
           </div>
         )}
       </div>

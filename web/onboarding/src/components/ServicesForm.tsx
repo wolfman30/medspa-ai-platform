@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -38,6 +38,7 @@ export function ServicesForm({ defaultValues, onSubmit, onBack }: Props) {
     register,
     control,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ServicesFormData>({
     resolver: zodResolver(servicesFormSchema),
@@ -48,6 +49,14 @@ export function ServicesForm({ defaultValues, onSubmit, onBack }: Props) {
     control,
     name: 'services',
   });
+
+  useEffect(() => {
+    if (!defaultValues) return;
+    reset(defaultValues);
+    if (defaultValues.services && defaultValues.services.length > 0) {
+      setShowSuggestions(false);
+    }
+  }, [defaultValues, reset]);
 
   const addSuggestedService = (service: typeof COMMON_SERVICES[0]) => {
     append({

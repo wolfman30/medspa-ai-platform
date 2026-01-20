@@ -1,17 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { StepIndicator } from './StepIndicator';
 import { ClinicInfoForm } from './ClinicInfoForm';
+import { BusinessHoursForm, type BusinessHoursFormData } from './BusinessHoursForm';
 import { ServicesForm } from './ServicesForm';
 import { PaymentSetup } from './PaymentSetup';
-import { SMSSetup } from './SMSSetup';
-import { createClinic, getOnboardingStatus, updateClinicConfig, seedKnowledge } from '../api/client';
+import { ContactInfoForm, type ContactInfoFormData } from './ContactInfoForm';
+import {
+  createClinic,
+  getClinicConfig,
+  getOnboardingStatus,
+  prefillFromWebsite,
+  seedKnowledge,
+  updateClinicConfig,
+  type BusinessHours,
+  type DayHours,
+  type NotificationSettings,
+  type PrefillResult,
+} from '../api/client';
 import { getStoredOrgId, setStoredOrgId } from '../utils/orgStorage';
 
 const STEPS = [
   { id: 'clinic', name: 'Clinic Info' },
+  { id: 'hours', name: 'Hours' },
   { id: 'services', name: 'Services' },
   { id: 'payments', name: 'Payments' },
-  { id: 'sms', name: 'SMS' },
+  { id: 'contact', name: 'Contact Info' },
 ];
 
 interface OnboardingState {
@@ -19,6 +32,7 @@ interface OnboardingState {
   currentStep: number;
   clinicInfo: {
     name: string;
+    website: string;
     email: string;
     phone: string;
     address: string;
@@ -27,6 +41,7 @@ interface OnboardingState {
     zipCode: string;
     timezone: string;
   } | null;
+  businessHours: BusinessHoursFormData | null;
   services: Array<{
     name: string;
     description: string;
@@ -35,8 +50,7 @@ interface OnboardingState {
   }>;
   squareConnected: boolean;
   merchantId?: string;
-  smsStatus: 'not_started' | 'pending' | 'verified' | 'active';
-  phoneNumber?: string;
+  contactInfo: ContactInfoFormData | null;
 }
 
 interface OnboardingWizardProps {
@@ -44,14 +58,141 @@ interface OnboardingWizardProps {
   onComplete?: () => void;
 }
 
+const FALLBACK_HOURS = {
+  monday: { open: '09:00', close: '18:00' },
+  tuesday: { open: '09:00', close: '18:00' },
+  wednesday: { open: '09:00', close: '18:00' },
+  thursday: { open: '09:00', close: '18:00' },
+  friday: { open: '09:00', close: '17:00' },
+  saturday: { open: '10:00', close: '16:00' },
+  sunday: { open: '10:00', close: '16:00' },
+};
+
+function toFormDayHours(value: DayHours | null | undefined, fallback: { open: string; close: string }) {
+  if (!value) {
+    return { open: fallback.open, close: fallback.close, closed: true };
+  }
+  return { open: value.open || fallback.open, close: value.close || fallback.close, closed: false };
+}
+
+function toFormBusinessHours(hours?: BusinessHours): BusinessHoursFormData {
+  return {
+    monday: toFormDayHours(hours?.monday, FALLBACK_HOURS.monday),
+    tuesday: toFormDayHours(hours?.tuesday, FALLBACK_HOURS.tuesday),
+    wednesday: toFormDayHours(hours?.wednesday, FALLBACK_HOURS.wednesday),
+    thursday: toFormDayHours(hours?.thursday, FALLBACK_HOURS.thursday),
+    friday: toFormDayHours(hours?.friday, FALLBACK_HOURS.friday),
+    saturday: toFormDayHours(hours?.saturday, FALLBACK_HOURS.saturday),
+    sunday: toFormDayHours(hours?.sunday, FALLBACK_HOURS.sunday),
+  };
+}
+
+function hasAnyBusinessHours(hours?: BusinessHours): boolean {
+  if (!hours) return false;
+  return Boolean(
+    hours.monday ||
+      hours.tuesday ||
+      hours.wednesday ||
+      hours.thursday ||
+      hours.friday ||
+      hours.saturday ||
+      hours.sunday
+  );
+}
+
+function toApiBusinessHours(hours: BusinessHoursFormData): BusinessHours {
+  const mapDay = (day: BusinessHoursFormData[keyof BusinessHoursFormData]) =>
+    day.closed ? null : { open: day.open, close: day.close };
+  return {
+    monday: mapDay(hours.monday),
+    tuesday: mapDay(hours.tuesday),
+    wednesday: mapDay(hours.wednesday),
+    thursday: mapDay(hours.thursday),
+    friday: mapDay(hours.friday),
+    saturday: mapDay(hours.saturday),
+    sunday: mapDay(hours.sunday),
+  };
+}
+
+function toContactInfo(notifications?: NotificationSettings): ContactInfoFormData {
+  return {
+    emailEnabled: notifications?.email_enabled ?? false,
+    smsEnabled: notifications?.sms_enabled ?? false,
+    emailRecipients: notifications?.email_recipients ?? [],
+    smsRecipients: notifications?.sms_recipients ?? [],
+    notifyOnPayment: notifications?.notify_on_payment ?? true,
+    notifyOnNewLead: notifications?.notify_on_new_lead ?? false,
+  };
+}
+
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) {
+    return '+1' + digits;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return '+' + digits;
+  }
+  return phone;
+}
+
+function mergeContactInfo(
+  existing: ContactInfoFormData | null,
+  email?: string,
+  phone?: string
+): ContactInfoFormData {
+  const emailRecipients =
+    existing?.emailRecipients?.length
+      ? existing.emailRecipients
+      : email
+      ? [email]
+      : [];
+  const smsRecipients =
+    existing?.smsRecipients?.length
+      ? existing.smsRecipients
+      : phone
+      ? [normalizePhone(phone)]
+      : [];
+
+  return {
+    emailEnabled: existing?.emailEnabled ?? emailRecipients.length > 0,
+    smsEnabled: existing?.smsEnabled ?? smsRecipients.length > 0,
+    emailRecipients,
+    smsRecipients,
+    notifyOnPayment: existing?.notifyOnPayment ?? true,
+    notifyOnNewLead: existing?.notifyOnNewLead ?? false,
+  };
+}
+
+function mapServiceNames(services?: string[]): OnboardingState['services'] {
+  if (!services || services.length === 0) return [];
+  return services.map((name) => ({
+    name,
+    description: `See website for details about ${name}.`,
+    durationMinutes: 30,
+    priceRange: 'Varies',
+  }));
+}
+
+function mapPrefillServices(prefill: PrefillResult): OnboardingState['services'] {
+  if (!prefill.services || prefill.services.length === 0) return [];
+  return prefill.services.map((service) => ({
+    name: service.name,
+    description: service.description,
+    durationMinutes: service.duration_minutes,
+    priceRange: service.price_range,
+  }));
+}
+
 export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWizardProps) {
   const [state, setState] = useState<OnboardingState>({
     orgId: null,
     currentStep: 0,
     clinicInfo: null,
+    businessHours: null,
     services: [],
     squareConnected: false,
-    smsStatus: 'not_started',
+    contactInfo: null,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,27 +200,57 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
   const loadOnboardingStatus = useCallback(async (orgId: string) => {
     try {
       setLoading(true);
+      setError(null);
       const status = await getOnboardingStatus(orgId);
+      let config = null;
+      try {
+        config = await getClinicConfig(orgId);
+      } catch (err) {
+        console.warn('Failed to load clinic config:', err);
+      }
       setStoredOrgId(orgId);
 
-      // Determine current step based on what's completed
+      const squareStep = status.steps.find((s) => s.id === 'square_connected');
+      const squareConnected = squareStep?.completed || false;
+
+      const clinicInfoCompleted = config?.clinic_info_confirmed || (config?.name && config.name !== 'MedSpa') || false;
+      const hoursCompleted = config?.business_hours_confirmed || false;
+      const servicesCompleted = config?.services_confirmed || false;
+      const contactCompleted = config?.contact_info_confirmed || false;
+
       let step = 0;
-      const squareStep = status.steps.find(s => s.id === 'square_connected');
-      const phoneStep = status.steps.find(s => s.id === 'phone_configured');
+      if (clinicInfoCompleted) step = 1;
+      if (clinicInfoCompleted && !hoursCompleted) step = 1;
+      if (clinicInfoCompleted && hoursCompleted && !servicesCompleted) step = 2;
+      if (clinicInfoCompleted && hoursCompleted && servicesCompleted && !squareConnected) step = 3;
+      if (clinicInfoCompleted && hoursCompleted && servicesCompleted && squareConnected) step = 4;
+      if (contactCompleted) step = 4;
 
-      if (status.steps.find(s => s.id === 'clinic_config')?.completed) step = 1;
-      if (squareStep?.completed) step = 2;
-      if (phoneStep?.completed) step = 3;
-
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         orgId,
         currentStep: step,
-        squareConnected: squareStep?.completed || false,
-        smsStatus: phoneStep?.completed ? 'active' : 'not_started',
+        squareConnected,
+        clinicInfo: config
+          ? {
+              name: config.name || '',
+              website: config.website_url || '',
+              email: config.email || '',
+              phone: config.phone || '',
+              address: config.address || '',
+              city: config.city || '',
+              state: config.state || '',
+              zipCode: config.zip_code || '',
+              timezone: config.timezone || 'America/New_York',
+            }
+          : prev.clinicInfo,
+        businessHours: config?.business_hours ? toFormBusinessHours(config.business_hours) : prev.businessHours,
+        services: config?.services ? mapServiceNames(config.services) : prev.services,
+        contactInfo: config?.notifications ? toContactInfo(config.notifications) : prev.contactInfo,
       }));
     } catch (err) {
       console.error('Failed to load status:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load onboarding status');
     } finally {
       setLoading(false);
     }
@@ -95,6 +266,33 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
     }
   }, [orgIdProp, loadOnboardingStatus]);
 
+  async function handlePrefill(website: string) {
+    const result = await prefillFromWebsite(website);
+    setState((prev) => {
+      const clinicInfo = {
+        name: result.clinic_info.name || prev.clinicInfo?.name || '',
+        website: result.clinic_info.website_url || website || prev.clinicInfo?.website || '',
+        email: result.clinic_info.email || prev.clinicInfo?.email || '',
+        phone: result.clinic_info.phone || prev.clinicInfo?.phone || '',
+        address: result.clinic_info.address || prev.clinicInfo?.address || '',
+        city: result.clinic_info.city || prev.clinicInfo?.city || '',
+        state: result.clinic_info.state || prev.clinicInfo?.state || '',
+        zipCode: result.clinic_info.zip_code || prev.clinicInfo?.zipCode || '',
+        timezone: result.clinic_info.timezone || prev.clinicInfo?.timezone || 'America/New_York',
+      };
+      const prefillServices = mapPrefillServices(result);
+      return {
+        ...prev,
+        clinicInfo,
+        services: prefillServices.length > 0 ? prefillServices : prev.services,
+        businessHours: hasAnyBusinessHours(result.business_hours)
+          ? toFormBusinessHours(result.business_hours)
+          : prev.businessHours,
+        contactInfo: mergeContactInfo(prev.contactInfo, clinicInfo.email, clinicInfo.phone),
+      };
+    });
+  }
+
   async function handleClinicSubmit(data: NonNullable<OnboardingState['clinicInfo']>) {
     try {
       setLoading(true);
@@ -104,8 +302,13 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
         // Create new clinic
         const result = await createClinic({
           name: data.name,
+          websiteUrl: data.website,
           email: data.email,
           phone: data.phone,
+          address: data.address,
+          city: data.city,
+          state: data.state,
+          zipCode: data.zipCode,
           timezone: data.timezone,
         });
 
@@ -118,7 +321,18 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
         }));
       } else {
         // Update existing
-        await updateClinicConfig(state.orgId, data);
+        await updateClinicConfig(state.orgId, {
+          name: data.name,
+          website_url: data.website,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          city: data.city,
+          state: data.state,
+          zip_code: data.zipCode,
+          timezone: data.timezone,
+          clinic_info_confirmed: true,
+        });
         setStoredOrgId(state.orgId);
         setState(prev => ({
           ...prev,
@@ -133,6 +347,28 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
     }
   }
 
+  async function handleHoursSubmit(data: BusinessHoursFormData) {
+    try {
+      setLoading(true);
+      setError(null);
+      if (state.orgId) {
+        await updateClinicConfig(state.orgId, {
+          business_hours: toApiBusinessHours(data),
+          business_hours_confirmed: true,
+        });
+      }
+      setState((prev) => ({
+        ...prev,
+        businessHours: data,
+        currentStep: 2,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save business hours');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleServicesSubmit(data: { services: OnboardingState['services'] }) {
     try {
       setLoading(true);
@@ -141,7 +377,10 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
       if (state.orgId && data.services && data.services.length > 0) {
         // Save service names to clinic config
         const serviceNames = data.services.map(s => s.name);
-        await updateClinicConfig(state.orgId, { services: serviceNames });
+        await updateClinicConfig(state.orgId, {
+          services: serviceNames,
+          services_confirmed: true,
+        });
 
         // Convert services to knowledge documents for AI RAG
         const knowledgeDocs = data.services.map(s => ({
@@ -158,10 +397,40 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
       setState(prev => ({
         ...prev,
         services: data.services,
-        currentStep: 2,
+        currentStep: 3,
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save services');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleContactSubmit(data: ContactInfoFormData) {
+    try {
+      setLoading(true);
+      setError(null);
+      if (state.orgId) {
+        await updateClinicConfig(state.orgId, {
+          notifications: {
+            email_enabled: data.emailEnabled,
+            email_recipients: data.emailRecipients,
+            sms_enabled: data.smsEnabled,
+            sms_recipients: data.smsRecipients,
+            notify_on_payment: data.notifyOnPayment,
+            notify_on_new_lead: data.notifyOnNewLead,
+          },
+          contact_info_confirmed: true,
+        });
+      }
+      setState((prev) => ({
+        ...prev,
+        contactInfo: data,
+        currentStep: 4,
+      }));
+      onComplete?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save contact info');
     } finally {
       setLoading(false);
     }
@@ -206,10 +475,19 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
             <ClinicInfoForm
               defaultValues={state.clinicInfo || undefined}
               onSubmit={handleClinicSubmit}
+              onPrefill={handlePrefill}
             />
           )}
 
           {state.currentStep === 1 && (
+            <BusinessHoursForm
+              defaultValues={state.businessHours || undefined}
+              onSubmit={handleHoursSubmit}
+              onBack={goBack}
+            />
+          )}
+
+          {state.currentStep === 2 && (
             <ServicesForm
               defaultValues={state.services.length > 0 ? { services: state.services } : undefined}
               onSubmit={handleServicesSubmit}
@@ -217,7 +495,7 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
             />
           )}
 
-          {state.currentStep === 2 && state.orgId && (
+          {state.currentStep === 3 && state.orgId && (
             <PaymentSetup
               orgId={state.orgId}
               isConnected={state.squareConnected}
@@ -227,24 +505,11 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
             />
           )}
 
-          {state.currentStep === 3 && state.orgId && (
-            <SMSSetup
-              orgId={state.orgId}
-              phoneNumber={state.phoneNumber}
-              status={state.smsStatus}
+          {state.currentStep === 4 && (
+            <ContactInfoForm
+              defaultValues={state.contactInfo || undefined}
+              onSubmit={handleContactSubmit}
               onBack={goBack}
-              onComplete={() => {
-                // Show completion screen or redirect
-                alert('Onboarding complete! Your AI receptionist will be ready once SMS is activated.');
-                onComplete?.();
-              }}
-              onPhoneActivated={(phone) => {
-                setState(prev => ({
-                  ...prev,
-                  phoneNumber: phone,
-                  smsStatus: 'active',
-                }));
-              }}
             />
           )}
         </div>

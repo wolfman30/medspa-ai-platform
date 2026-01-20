@@ -61,7 +61,18 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 // UpdateConfigRequest is the request body for updating clinic config.
 type UpdateConfigRequest struct {
 	Name               string             `json:"name,omitempty"`
+	Email              string             `json:"email,omitempty"`
+	Phone              string             `json:"phone,omitempty"`
+	Address            string             `json:"address,omitempty"`
+	City               string             `json:"city,omitempty"`
+	State              string             `json:"state,omitempty"`
+	ZipCode            string             `json:"zip_code,omitempty"`
+	WebsiteURL         string             `json:"website_url,omitempty"`
 	Timezone           string             `json:"timezone,omitempty"`
+	ClinicInfoConfirmed   *bool           `json:"clinic_info_confirmed,omitempty"`
+	BusinessHoursConfirmed *bool          `json:"business_hours_confirmed,omitempty"`
+	ServicesConfirmed      *bool          `json:"services_confirmed,omitempty"`
+	ContactInfoConfirmed   *bool          `json:"contact_info_confirmed,omitempty"`
 	BusinessHours      *BusinessHours     `json:"business_hours,omitempty"`
 	CallbackSLAHours   *int               `json:"callback_sla_hours,omitempty"`
 	DepositAmountCents *int               `json:"deposit_amount_cents,omitempty"`
@@ -107,8 +118,41 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if req.Name != "" {
 		cfg.Name = req.Name
 	}
+	if req.Email != "" {
+		cfg.Email = req.Email
+	}
+	if req.Phone != "" {
+		cfg.Phone = req.Phone
+	}
+	if req.Address != "" {
+		cfg.Address = req.Address
+	}
+	if req.City != "" {
+		cfg.City = req.City
+	}
+	if req.State != "" {
+		cfg.State = req.State
+	}
+	if req.ZipCode != "" {
+		cfg.ZipCode = req.ZipCode
+	}
+	if req.WebsiteURL != "" {
+		cfg.WebsiteURL = req.WebsiteURL
+	}
 	if req.Timezone != "" {
 		cfg.Timezone = req.Timezone
+	}
+	if req.ClinicInfoConfirmed != nil {
+		cfg.ClinicInfoConfirmed = *req.ClinicInfoConfirmed
+	}
+	if req.BusinessHoursConfirmed != nil {
+		cfg.BusinessHoursConfirmed = *req.BusinessHoursConfirmed
+	}
+	if req.ServicesConfirmed != nil {
+		cfg.ServicesConfirmed = *req.ServicesConfirmed
+	}
+	if req.ContactInfoConfirmed != nil {
+		cfg.ContactInfoConfirmed = *req.ContactInfoConfirmed
 	}
 	if req.BusinessHours != nil {
 		cfg.BusinessHours = *req.BusinessHours

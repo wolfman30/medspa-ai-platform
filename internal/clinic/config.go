@@ -74,7 +74,18 @@ func (n *NotificationPrefs) GetSMSRecipients() []string {
 type Config struct {
 	OrgID              string        `json:"org_id"`
 	Name               string        `json:"name"`
+	Email              string        `json:"email,omitempty"`
+	Phone              string        `json:"phone,omitempty"`
+	Address            string        `json:"address,omitempty"`
+	City               string        `json:"city,omitempty"`
+	State              string        `json:"state,omitempty"`
+	ZipCode            string        `json:"zip_code,omitempty"`
+	WebsiteURL         string        `json:"website_url,omitempty"`
 	Timezone           string        `json:"timezone"` // e.g., "America/New_York"
+	ClinicInfoConfirmed   bool       `json:"clinic_info_confirmed"`
+	BusinessHoursConfirmed bool      `json:"business_hours_confirmed"`
+	ServicesConfirmed      bool      `json:"services_confirmed"`
+	ContactInfoConfirmed   bool      `json:"contact_info_confirmed"`
 	BusinessHours      BusinessHours `json:"business_hours"`
 	CallbackSLAHours   int           `json:"callback_sla_hours"`   // e.g., 12
 	DepositAmountCents int           `json:"deposit_amount_cents"` // e.g., 5000
@@ -96,7 +107,18 @@ func DefaultConfig(orgID string) *Config {
 	return &Config{
 		OrgID:    orgID,
 		Name:     "MedSpa",
+		Email:    "",
+		Phone:    "",
+		Address:  "",
+		City:     "",
+		State:    "",
+		ZipCode:  "",
+		WebsiteURL: "",
 		Timezone: "America/New_York",
+		ClinicInfoConfirmed:    false,
+		BusinessHoursConfirmed: false,
+		ServicesConfirmed:      false,
+		ContactInfoConfirmed:   false,
 		BusinessHours: BusinessHours{
 			Monday:    &DayHours{Open: "09:00", Close: "18:00"},
 			Tuesday:   &DayHours{Open: "09:00", Close: "18:00"},

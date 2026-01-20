@@ -9,33 +9,52 @@ function scopedBasePath(scope: ApiScope): string {
   return scope === 'portal' ? 'portal' : 'admin';
 }
 
-// Get headers with optional auth token
-async function getHeaders(
-  extra?: Record<string, string>
-): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (isCognitoConfigured()) {
-    try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.accessToken?.toString();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    } catch {
-      // No session available, continue without auth
-    }
+async function getAccessToken(): Promise<string | null> {
+  if (!isCognitoConfigured()) return null;
+  try {
+    const session = await fetchAuthSession();
+    return session.tokens?.accessToken?.toString() || null;
+  } catch {
+    return null;
   }
+}
 
+function buildHeaders(
+  token?: string | null,
+  extra?: Record<string, string>
+): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   if (ONBOARDING_TOKEN) {
     headers['X-Onboarding-Token'] = ONBOARDING_TOKEN;
   }
-
   if (extra) {
     Object.assign(headers, extra);
   }
-
   return headers;
+}
+
+async function getHeaders(
+  extra?: Record<string, string>
+): Promise<Record<string, string>> {
+  const token = await getAccessToken();
+  return buildHeaders(token, extra);
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  if (!text) return 'Unknown error';
+  try {
+    const data = JSON.parse(text) as { error?: string };
+    if (data?.error) {
+      return data.error;
+    }
+  } catch {
+    // Non-JSON error body; fall through.
+  }
+  return text;
 }
 
 export interface DashboardStats {
@@ -100,20 +119,97 @@ export interface PortalDashboardOverview {
   conversion_pct: number;
 }
 
+export interface DayHours {
+  open: string;
+  close: string;
+}
+
+export interface BusinessHours {
+  monday?: DayHours | null;
+  tuesday?: DayHours | null;
+  wednesday?: DayHours | null;
+  thursday?: DayHours | null;
+  friday?: DayHours | null;
+  saturday?: DayHours | null;
+  sunday?: DayHours | null;
+}
+
+export interface PrefillService {
+  name: string;
+  description: string;
+  duration_minutes: number;
+  price_range: string;
+  source_url?: string;
+}
+
+export interface PrefillResult {
+  clinic_info: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    website_url?: string;
+    timezone?: string;
+  };
+  services: PrefillService[];
+  business_hours: BusinessHours;
+  sources?: string[];
+  warnings?: string[];
+}
+
+export interface ClinicConfig {
+  org_id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  website_url?: string;
+  timezone: string;
+  clinic_info_confirmed?: boolean;
+  business_hours_confirmed?: boolean;
+  services_confirmed?: boolean;
+  contact_info_confirmed?: boolean;
+  business_hours?: BusinessHours;
+  services?: string[];
+  notifications?: NotificationSettings;
+}
+
 export async function createClinic(data: {
   name: string;
   email?: string;
   phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  websiteUrl?: string;
   timezone?: string;
 }): Promise<{ org_id: string; name: string; created_at: string; message: string }> {
-  const res = await fetch(`${API_BASE}/onboarding/clinics`, {
+  const token = await getAccessToken();
+  const basePath = token ? 'admin' : 'onboarding';
+  const res = await fetch(`${API_BASE}/${basePath}/clinics`, {
     method: 'POST',
-    headers: await getHeaders(),
-    body: JSON.stringify(data),
+    headers: buildHeaders(token),
+    body: JSON.stringify({
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zip_code: data.zipCode,
+      website_url: data.websiteUrl,
+      timezone: data.timezone,
+    }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to create clinic');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -123,8 +219,7 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats> 
     headers: await getHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get dashboard stats');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -144,8 +239,7 @@ export async function getPortalOverview(
     headers: await getHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get portal overview');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -164,12 +258,14 @@ export async function getOnboardingStatus(orgId: string): Promise<{
   next_action?: string;
   next_action_url?: string;
 }> {
-  const res = await fetch(`${API_BASE}/onboarding/clinics/${orgId}/status`, {
-    headers: await getHeaders(),
+  const token = await getAccessToken();
+  const basePath = token ? 'admin/clinics' : 'onboarding/clinics';
+  const statusPath = token ? 'onboarding-status' : 'status';
+  const res = await fetch(`${API_BASE}/${basePath}/${orgId}/${statusPath}`, {
+    headers: buildHeaders(token),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get onboarding status');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -180,19 +276,48 @@ export async function updateClinicConfig(
 ): Promise<void> {
   // Ensure we always send a valid JSON object
   const body = config && Object.keys(config).length > 0 ? config : {};
-  const res = await fetch(`${API_BASE}/onboarding/clinics/${orgId}/config`, {
+  const token = await getAccessToken();
+  const basePath = token ? 'admin/clinics' : 'onboarding/clinics';
+  const res = await fetch(`${API_BASE}/${basePath}/${orgId}/config`, {
     method: 'PUT',
-    headers: await getHeaders(),
+    headers: buildHeaders(token),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to update config');
+    throw new Error(await readErrorMessage(res));
   }
 }
 
-export function getSquareConnectUrl(orgId: string): string {
-  return `${API_BASE}/onboarding/clinics/${orgId}/square/connect`;
+export async function getSquareConnectUrl(orgId: string): Promise<string> {
+  const token = await getAccessToken();
+  const basePath = token ? 'admin/clinics' : 'onboarding/clinics';
+  return `${API_BASE}/${basePath}/${orgId}/square/connect`;
+}
+
+export async function getClinicConfig(orgId: string): Promise<ClinicConfig> {
+  const token = await getAccessToken();
+  const basePath = token ? 'admin/clinics' : 'onboarding/clinics';
+  const res = await fetch(`${API_BASE}/${basePath}/${orgId}/config`, {
+    headers: buildHeaders(token),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export async function prefillFromWebsite(websiteUrl: string): Promise<PrefillResult> {
+  const token = await getAccessToken();
+  const basePath = token ? 'admin/onboarding' : 'onboarding';
+  const res = await fetch(`${API_BASE}/${basePath}/prefill`, {
+    method: 'POST',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ website_url: websiteUrl }),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
 }
 
 export async function seedKnowledge(
@@ -205,8 +330,7 @@ export async function seedKnowledge(
     body: JSON.stringify({ documents }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to seed knowledge');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -221,8 +345,7 @@ export async function activatePhoneNumber(
     body: JSON.stringify({ clinic_id: orgId, phone_number: phoneNumber }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to activate phone number');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -258,8 +381,7 @@ export async function createBrand(data: CreateBrandRequest): Promise<BrandRespon
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to create brand');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -285,8 +407,7 @@ export async function createCampaign(data: CreateCampaignRequest): Promise<Campa
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to create campaign');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -321,8 +442,7 @@ export async function listConversations(
     headers: await getHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to list conversations');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -339,8 +459,7 @@ export async function getConversation(
     }
   );
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get conversation');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -365,8 +484,7 @@ export async function listDeposits(
     headers: await getHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to list deposits');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -383,8 +501,7 @@ export async function getDeposit(
     }
   );
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get deposit');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -400,8 +517,7 @@ export async function getDepositStats(
     }
   );
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get deposit stats');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -427,8 +543,7 @@ export async function getNotificationSettings(
     }
   );
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to get notification settings');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -446,8 +561,7 @@ export async function updateNotificationSettings(
     }
   );
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to update notification settings');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -482,8 +596,7 @@ export async function registerClinic(request: RegisterClinicRequest): Promise<Re
     body: JSON.stringify(request),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Failed to register clinic');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }
@@ -495,8 +608,7 @@ export async function lookupOrgByEmail(email: string): Promise<LookupOrgResponse
     headers: { 'Content-Type': 'application/json' },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Organization not found');
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }

@@ -111,6 +111,7 @@ func New(cfg *Config) http.Handler {
 		if cfg.AdminOnboarding != nil {
 			public.Route("/onboarding", func(r chi.Router) {
 				r.Use(requireOnboardingToken(cfg.OnboardingToken))
+				r.Post("/prefill", cfg.AdminOnboarding.PrefillFromWebsite)
 				r.Post("/clinics", cfg.AdminOnboarding.CreateClinic)
 				r.Route("/clinics/{orgID}", func(clinic chi.Router) {
 					clinic.Get("/status", cfg.AdminOnboarding.GetOnboardingStatus)
@@ -151,6 +152,7 @@ func New(cfg *Config) http.Handler {
 			// Clinic onboarding endpoints
 			if cfg.AdminOnboarding != nil {
 				admin.Post("/clinics", cfg.AdminOnboarding.CreateClinic)
+				admin.Post("/onboarding/prefill", cfg.AdminOnboarding.PrefillFromWebsite)
 			}
 			// Clinic routes (config + Square OAuth)
 			admin.Route("/clinics/{orgID}", func(clinicRoutes chi.Router) {
