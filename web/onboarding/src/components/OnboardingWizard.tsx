@@ -148,7 +148,11 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
           title: `${s.name} - Service Info`,
           content: `${s.name}: ${s.description}. Duration: ${s.durationMinutes} minutes. Price: ${s.priceRange}.`,
         }));
-        await seedKnowledge(state.orgId, knowledgeDocs);
+        try {
+          await seedKnowledge(state.orgId, knowledgeDocs);
+        } catch (err) {
+          console.warn('Failed to seed knowledge documents', err);
+        }
       }
 
       setState(prev => ({
