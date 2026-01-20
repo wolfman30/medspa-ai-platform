@@ -1,7 +1,9 @@
 export { StepIndicator } from './StepIndicator';
 export { ClinicInfoForm } from './ClinicInfoForm';
+export { BusinessHoursForm } from './BusinessHoursForm';
 export { ServicesForm } from './ServicesForm';
 export { PaymentSetup } from './PaymentSetup';
+export { ContactInfoForm } from './ContactInfoForm';
 export { SMSSetup } from './SMSSetup';
 export { CampaignRegistration } from './CampaignRegistration';
 export { OnboardingWizard } from './OnboardingWizard';

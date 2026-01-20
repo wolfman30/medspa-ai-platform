@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/onboarding"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -50,10 +51,15 @@ func NewAdminOnboardingHandler(cfg AdminOnboardingConfig) *AdminOnboardingHandle
 
 // CreateClinicRequest is the request body for creating a new clinic.
 type CreateClinicRequest struct {
-	Name     string `json:"name"`
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
-	Timezone string `json:"timezone,omitempty"`
+	Name       string `json:"name"`
+	Email      string `json:"email,omitempty"`
+	Phone      string `json:"phone,omitempty"`
+	Address    string `json:"address,omitempty"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"state,omitempty"`
+	ZipCode    string `json:"zip_code,omitempty"`
+	WebsiteURL string `json:"website_url,omitempty"`
+	Timezone   string `json:"timezone,omitempty"`
 }
 
 // CreateClinicResponse is returned when a clinic is created.
@@ -87,6 +93,28 @@ func (h *AdminOnboardingHandler) CreateClinic(w http.ResponseWriter, r *http.Req
 	if req.Timezone != "" {
 		cfg.Timezone = req.Timezone
 	}
+	if req.Email != "" {
+		cfg.Email = strings.TrimSpace(req.Email)
+	}
+	if req.Phone != "" {
+		cfg.Phone = strings.TrimSpace(req.Phone)
+	}
+	if req.Address != "" {
+		cfg.Address = strings.TrimSpace(req.Address)
+	}
+	if req.City != "" {
+		cfg.City = strings.TrimSpace(req.City)
+	}
+	if req.State != "" {
+		cfg.State = strings.TrimSpace(req.State)
+	}
+	if req.ZipCode != "" {
+		cfg.ZipCode = strings.TrimSpace(req.ZipCode)
+	}
+	if req.WebsiteURL != "" {
+		cfg.WebsiteURL = strings.TrimSpace(req.WebsiteURL)
+	}
+	cfg.ClinicInfoConfirmed = true
 
 	if err := h.upsertOrganization(r.Context(), orgID, cfg.Name, strings.TrimSpace(req.Phone), strings.TrimSpace(req.Email), cfg.Timezone); err != nil {
 		h.logger.Error("failed to persist organization", "org_id", orgID, "error", err)
@@ -109,7 +137,7 @@ func (h *AdminOnboardingHandler) CreateClinic(w http.ResponseWriter, r *http.Req
 		OrgID:     orgID,
 		Name:      cfg.Name,
 		CreatedAt: time.Now().UTC(),
-		Message:   "Clinic created. Next: connect Square OAuth and configure phone number.",
+		Message:   "Clinic created. Next: confirm hours, services, and connect Square.",
 	})
 }
 
@@ -238,7 +266,10 @@ func (h *AdminOnboardingHandler) GetOnboardingStatus(w http.ResponseWriter, r *h
 
 func (h *AdminOnboardingHandler) checkClinicConfig(cfg *clinic.Config) OnboardingStep {
 	// Check if clinic has been configured beyond defaults
-	isConfigured := cfg.Name != "MedSpa" && cfg.Name != ""
+	isConfigured := cfg.ClinicInfoConfirmed
+	if !isConfigured {
+		isConfigured = cfg.Name != "MedSpa" && cfg.Name != ""
+	}
 
 	return OnboardingStep{
 		ID:          "clinic_config",
@@ -322,4 +353,36 @@ func (h *AdminOnboardingHandler) checkKnowledgeSeeded(ctx context.Context, orgID
 	}
 
 	return step
+}
+
+// PrefillFromWebsite scrapes a public website to prefill onboarding data.
+// POST /onboarding/prefill or POST /admin/onboarding/prefill
+func (h *AdminOnboardingHandler) PrefillFromWebsite(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		WebsiteURL string `json:"website_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	websiteURL := strings.TrimSpace(req.WebsiteURL)
+	if websiteURL == "" {
+		jsonError(w, "website_url is required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := onboarding.ScrapeClinicPrefill(r.Context(), websiteURL)
+	if err != nil {
+		message := err.Error()
+		if strings.Contains(message, "website_url") || strings.Contains(message, "invalid") {
+			jsonError(w, message, http.StatusBadRequest)
+			return
+		}
+		jsonError(w, message, http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }

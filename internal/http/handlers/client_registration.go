@@ -136,7 +136,7 @@ func (h *ClientRegistrationHandler) RegisterClinic(w http.ResponseWriter, r *htt
 		ClinicName: req.ClinicName,
 		OwnerEmail: req.OwnerEmail,
 		CreatedAt:  time.Now().UTC(),
-		Message:    "Clinic registered successfully. Please complete onboarding to activate SMS.",
+		Message:    "Clinic registered successfully. Please complete onboarding to activate notifications.",
 	})
 }
 

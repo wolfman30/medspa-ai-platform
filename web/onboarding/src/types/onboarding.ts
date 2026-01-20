@@ -2,6 +2,7 @@
 
 export interface ClinicInfo {
   name: string;
+  website: string;
   email: string;
   phone: string;
   address: string;
@@ -46,9 +47,13 @@ export interface PaymentConfig {
   depositAmountCents: number;
 }
 
-export interface PhoneConfig {
-  phoneNumber: string;
-  status: 'pending' | 'verified' | 'active';
+export interface ContactInfo {
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  emailRecipients: string[];
+  smsRecipients: string[];
+  notifyOnPayment: boolean;
+  notifyOnNewLead: boolean;
 }
 
 export interface OnboardingData {
@@ -56,7 +61,7 @@ export interface OnboardingData {
   businessHours: BusinessHours;
   knowledge: KnowledgeBase;
   payment: PaymentConfig;
-  phone: PhoneConfig;
+  contactInfo: ContactInfo;
 }
 
 export interface OnboardingStep {
