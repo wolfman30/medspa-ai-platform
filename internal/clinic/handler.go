@@ -60,25 +60,25 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateConfigRequest is the request body for updating clinic config.
 type UpdateConfigRequest struct {
-	Name               string             `json:"name,omitempty"`
-	Email              string             `json:"email,omitempty"`
-	Phone              string             `json:"phone,omitempty"`
-	Address            string             `json:"address,omitempty"`
-	City               string             `json:"city,omitempty"`
-	State              string             `json:"state,omitempty"`
-	ZipCode            string             `json:"zip_code,omitempty"`
-	WebsiteURL         string             `json:"website_url,omitempty"`
-	Timezone           string             `json:"timezone,omitempty"`
-	ClinicInfoConfirmed   *bool           `json:"clinic_info_confirmed,omitempty"`
-	BusinessHoursConfirmed *bool          `json:"business_hours_confirmed,omitempty"`
-	ServicesConfirmed      *bool          `json:"services_confirmed,omitempty"`
-	ContactInfoConfirmed   *bool          `json:"contact_info_confirmed,omitempty"`
-	BusinessHours      *BusinessHours     `json:"business_hours,omitempty"`
-	CallbackSLAHours   *int               `json:"callback_sla_hours,omitempty"`
-	DepositAmountCents *int               `json:"deposit_amount_cents,omitempty"`
-	Services           []string           `json:"services,omitempty"`
-	BookingURL         string             `json:"booking_url,omitempty"`
-	Notifications      *NotificationPrefs `json:"notifications,omitempty"`
+	Name                   string             `json:"name,omitempty"`
+	Email                  string             `json:"email,omitempty"`
+	Phone                  string             `json:"phone,omitempty"`
+	Address                string             `json:"address,omitempty"`
+	City                   string             `json:"city,omitempty"`
+	State                  string             `json:"state,omitempty"`
+	ZipCode                string             `json:"zip_code,omitempty"`
+	WebsiteURL             string             `json:"website_url,omitempty"`
+	Timezone               string             `json:"timezone,omitempty"`
+	ClinicInfoConfirmed    *bool              `json:"clinic_info_confirmed,omitempty"`
+	BusinessHoursConfirmed *bool              `json:"business_hours_confirmed,omitempty"`
+	ServicesConfirmed      *bool              `json:"services_confirmed,omitempty"`
+	ContactInfoConfirmed   *bool              `json:"contact_info_confirmed,omitempty"`
+	BusinessHours          *BusinessHours     `json:"business_hours,omitempty"`
+	CallbackSLAHours       *int               `json:"callback_sla_hours,omitempty"`
+	DepositAmountCents     *int               `json:"deposit_amount_cents,omitempty"`
+	Services               []string           `json:"services,omitempty"`
+	BookingURL             string             `json:"booking_url,omitempty"`
+	Notifications          *NotificationPrefs `json:"notifications,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.

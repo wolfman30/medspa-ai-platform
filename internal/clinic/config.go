@@ -72,23 +72,23 @@ func (n *NotificationPrefs) GetSMSRecipients() []string {
 
 // Config holds clinic-specific configuration.
 type Config struct {
-	OrgID              string        `json:"org_id"`
-	Name               string        `json:"name"`
-	Email              string        `json:"email,omitempty"`
-	Phone              string        `json:"phone,omitempty"`
-	Address            string        `json:"address,omitempty"`
-	City               string        `json:"city,omitempty"`
-	State              string        `json:"state,omitempty"`
-	ZipCode            string        `json:"zip_code,omitempty"`
-	WebsiteURL         string        `json:"website_url,omitempty"`
-	Timezone           string        `json:"timezone"` // e.g., "America/New_York"
-	ClinicInfoConfirmed   bool       `json:"clinic_info_confirmed"`
-	BusinessHoursConfirmed bool      `json:"business_hours_confirmed"`
-	ServicesConfirmed      bool      `json:"services_confirmed"`
-	ContactInfoConfirmed   bool      `json:"contact_info_confirmed"`
-	BusinessHours      BusinessHours `json:"business_hours"`
-	CallbackSLAHours   int           `json:"callback_sla_hours"`   // e.g., 12
-	DepositAmountCents int           `json:"deposit_amount_cents"` // e.g., 5000
+	OrgID                  string        `json:"org_id"`
+	Name                   string        `json:"name"`
+	Email                  string        `json:"email,omitempty"`
+	Phone                  string        `json:"phone,omitempty"`
+	Address                string        `json:"address,omitempty"`
+	City                   string        `json:"city,omitempty"`
+	State                  string        `json:"state,omitempty"`
+	ZipCode                string        `json:"zip_code,omitempty"`
+	WebsiteURL             string        `json:"website_url,omitempty"`
+	Timezone               string        `json:"timezone"` // e.g., "America/New_York"
+	ClinicInfoConfirmed    bool          `json:"clinic_info_confirmed"`
+	BusinessHoursConfirmed bool          `json:"business_hours_confirmed"`
+	ServicesConfirmed      bool          `json:"services_confirmed"`
+	ContactInfoConfirmed   bool          `json:"contact_info_confirmed"`
+	BusinessHours          BusinessHours `json:"business_hours"`
+	CallbackSLAHours       int           `json:"callback_sla_hours"`   // e.g., 12
+	DepositAmountCents     int           `json:"deposit_amount_cents"` // e.g., 5000
 	// ServiceDepositAmountCents overrides the default deposit per service (keyed by normalized service name).
 	ServiceDepositAmountCents map[string]int `json:"service_deposit_amount_cents,omitempty"`
 	// ServicePriceText provides a human-readable price string per service (keyed by normalized service name).
@@ -105,16 +105,16 @@ const DefaultBookingURL = "https://portal-dev.aiwolfsolutions.com/booking/index.
 // DefaultConfig returns a sensible default configuration.
 func DefaultConfig(orgID string) *Config {
 	return &Config{
-		OrgID:    orgID,
-		Name:     "MedSpa",
-		Email:    "",
-		Phone:    "",
-		Address:  "",
-		City:     "",
-		State:    "",
-		ZipCode:  "",
-		WebsiteURL: "",
-		Timezone: "America/New_York",
+		OrgID:                  orgID,
+		Name:                   "MedSpa",
+		Email:                  "",
+		Phone:                  "",
+		Address:                "",
+		City:                   "",
+		State:                  "",
+		ZipCode:                "",
+		WebsiteURL:             "",
+		Timezone:               "America/New_York",
 		ClinicInfoConfirmed:    false,
 		BusinessHoursConfirmed: false,
 		ServicesConfirmed:      false,
