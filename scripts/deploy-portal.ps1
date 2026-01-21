@@ -9,32 +9,46 @@ param(
     [string]$S3Bucket = "",
 
     [Parameter(Mandatory=$false)]
-    [string]$DistributionId = ""
+    [string]$DistributionId = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$ApiBaseUrl = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$OnboardingToken = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 # Set defaults based on environment
 if ($Environment -eq "dev") {
-    if (-not $S3Bucket) { $S3Bucket = "medspa-dev-portal-339713028352" }
-    if (-not $DistributionId) { $DistributionId = "E3QG58BCZCOXRP" }
+    if (-not $S3Bucket) { $S3Bucket = "medspa-development-portal-422017356225" }
+    if (-not $DistributionId) { $DistributionId = "EYJWEY5CHZH87" }
+    if (-not $ApiBaseUrl) { $ApiBaseUrl = "https://api-dev.aiwolfsolutions.com" }
 } elseif ($Environment -eq "prod") {
     if (-not $S3Bucket) { $S3Bucket = "medspa-prod-portal-339713028352" }
+    if (-not $ApiBaseUrl) { $ApiBaseUrl = "https://api.aiwolfsolutions.com" }
     # Add prod distribution ID when available
 }
 
 Write-Host "Deploying portal to $Environment environment" -ForegroundColor Cyan
 Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Gray
 Write-Host "CloudFront Distribution: $DistributionId" -ForegroundColor Gray
+Write-Host "API Base URL: $ApiBaseUrl" -ForegroundColor Gray
 
 # Build the frontend
 Write-Host "`nBuilding frontend..." -ForegroundColor Yellow
 Push-Location web/onboarding
 try {
-    npm run build
-    if ($LASTEXITCODE -ne 0) {
-        throw "Build failed"
+    $env:VITE_API_URL = $ApiBaseUrl
+    if ($OnboardingToken) {
+        $env:VITE_ONBOARDING_TOKEN = $OnboardingToken
     }
+
+    node ./node_modules/typescript/bin/tsc -b
+    if ($LASTEXITCODE -ne 0) { throw "TypeScript build failed" }
+    node ./node_modules/vite/bin/vite.js build
+    if ($LASTEXITCODE -ne 0) { throw "Vite build failed" }
 } finally {
     Pop-Location
 }
