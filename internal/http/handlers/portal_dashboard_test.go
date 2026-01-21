@@ -40,6 +40,10 @@ func TestPortalDashboardHandlerWithConversationTable(t *testing.T) {
 		WithArgs("org-123", start, end, "9378962713", "19378962713").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 
+	mock.ExpectQuery("(?s)SELECT COALESCE\\(SUM\\(p.amount_cents\\), 0\\).*FROM payments p.*").
+		WithArgs("org-123", start, end, "9378962713", "19378962713").
+		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(15000))
+
 	req := httptest.NewRequest(http.MethodGet, "/portal/orgs/org-123/dashboard?start=2025-01-01T00:00:00Z&end=2025-01-08T00:00:00Z&phone=(937)%20896-2713", nil)
 	req = withOrgParam(req, "org-123")
 	rec := httptest.NewRecorder()
@@ -59,6 +63,9 @@ func TestPortalDashboardHandlerWithConversationTable(t *testing.T) {
 	}
 	if resp.SuccessfulDeposits != 2 {
 		t.Fatalf("expected successful deposits 2, got %d", resp.SuccessfulDeposits)
+	}
+	if resp.TotalCollectedCents != 15000 {
+		t.Fatalf("expected total collected 15000, got %d", resp.TotalCollectedCents)
 	}
 	if resp.ConversionPct != 25.0 {
 		t.Fatalf("expected conversion pct 25.0, got %f", resp.ConversionPct)
@@ -92,6 +99,10 @@ func TestPortalDashboardHandlerFallbackToConversationJobs(t *testing.T) {
 		WithArgs("org-123", "9378962713", "19378962713").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
+	mock.ExpectQuery("(?s)SELECT COALESCE\\(SUM\\(p.amount_cents\\), 0\\).*FROM payments p.*").
+		WithArgs("org-123", "9378962713", "19378962713").
+		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(4200))
+
 	req := httptest.NewRequest(http.MethodGet, "/portal/orgs/org-123/dashboard?phone=9378962713", nil)
 	req = withOrgParam(req, "org-123")
 	rec := httptest.NewRecorder()
@@ -111,6 +122,9 @@ func TestPortalDashboardHandlerFallbackToConversationJobs(t *testing.T) {
 	}
 	if resp.SuccessfulDeposits != 1 {
 		t.Fatalf("expected successful deposits 1, got %d", resp.SuccessfulDeposits)
+	}
+	if resp.TotalCollectedCents != 4200 {
+		t.Fatalf("expected total collected 4200, got %d", resp.TotalCollectedCents)
 	}
 	if resp.ConversionPct != 20.0 {
 		t.Fatalf("expected conversion pct 20.0, got %f", resp.ConversionPct)
