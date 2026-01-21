@@ -21,12 +21,13 @@ type PortalDashboardHandler struct {
 
 // PortalDashboardResponse contains the core customer metrics.
 type PortalDashboardResponse struct {
-	OrgID              string  `json:"org_id"`
-	PeriodStart        string  `json:"period_start"`
-	PeriodEnd          string  `json:"period_end"`
-	Conversations      int64   `json:"conversations"`
-	SuccessfulDeposits int64   `json:"successful_deposits"`
-	ConversionPct      float64 `json:"conversion_pct"`
+	OrgID               string  `json:"org_id"`
+	PeriodStart         string  `json:"period_start"`
+	PeriodEnd           string  `json:"period_end"`
+	Conversations       int64   `json:"conversations"`
+	SuccessfulDeposits  int64   `json:"successful_deposits"`
+	TotalCollectedCents int64   `json:"total_collected_cents"`
+	ConversionPct       float64 `json:"conversion_pct"`
 }
 
 // NewPortalDashboardHandler creates a new portal dashboard handler.
@@ -79,18 +80,26 @@ func (h *PortalDashboardHandler) GetDashboard(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	totalCollectedCents, err := h.sumSuccessfulDepositAmount(r.Context(), orgID, phoneDigits, start, end)
+	if err != nil {
+		h.logger.Error("failed to sum deposits", "org_id", orgID, "error", err)
+		jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	conversionPct := 0.0
 	if conversations > 0 {
 		conversionPct = (float64(successfulDeposits) / float64(conversations)) * 100.0
 	}
 
 	resp := PortalDashboardResponse{
-		OrgID:              orgID,
-		PeriodStart:        periodStart,
-		PeriodEnd:          periodEnd,
-		Conversations:      conversations,
-		SuccessfulDeposits: successfulDeposits,
-		ConversionPct:      conversionPct,
+		OrgID:               orgID,
+		PeriodStart:         periodStart,
+		PeriodEnd:           periodEnd,
+		Conversations:       conversations,
+		SuccessfulDeposits:  successfulDeposits,
+		TotalCollectedCents: totalCollectedCents,
+		ConversionPct:       conversionPct,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -160,6 +169,31 @@ func (h *PortalDashboardHandler) countSuccessfulDeposits(ctx context.Context, or
 		return 0, err
 	}
 	return count, nil
+}
+
+func (h *PortalDashboardHandler) sumSuccessfulDepositAmount(ctx context.Context, orgID string, phoneDigits []string, start, end *time.Time) (int64, error) {
+	query := `
+		SELECT COALESCE(SUM(p.amount_cents), 0)
+		FROM payments p
+		LEFT JOIN leads l ON p.lead_id = l.id
+		WHERE p.org_id = $1 AND p.status = 'succeeded'
+	`
+	args := []any{orgID}
+	argNum := 2
+
+	if start != nil && end != nil {
+		query += fmt.Sprintf(" AND p.created_at >= $%d AND p.created_at < $%d", argNum, argNum+1)
+		args = append(args, *start, *end)
+		argNum += 2
+	}
+
+	query += appendPhoneDigitsFilter("regexp_replace(l.phone, '\\\\D', '', 'g')", phoneDigits, &args, &argNum)
+
+	var total int64
+	if err := h.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func (h *PortalDashboardHandler) hasConversationsTable(ctx context.Context) bool {

@@ -116,6 +116,7 @@ export interface PortalDashboardOverview {
   period_end: string;
   conversations: number;
   successful_deposits: number;
+  total_collected_cents: number;
   conversion_pct: number;
 }
 
