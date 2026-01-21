@@ -30,7 +30,8 @@ type CognitoClaims struct {
 	CognitoGroups []string `json:"cognito:groups"`
 	TokenUse      string   `json:"token_use"`
 	ClientID      string   `json:"client_id"`
-	Username      string   `json:"cognito:username"`
+	Username      string   `json:"username"`
+	CognitoUsername string `json:"cognito:username"`
 }
 
 const cognitoClaimsKey contextKey = "cognitoClaims"
