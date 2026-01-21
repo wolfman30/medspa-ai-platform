@@ -206,8 +206,15 @@ func extractTitle(htmlBody string) string {
 }
 
 func extractText(htmlBody string) string {
-	reScripts := regexp.MustCompile(`(?is)<(script|style|noscript)[^>]*>.*?</\1>`)
-	clean := reScripts.ReplaceAllString(htmlBody, " ")
+	clean := htmlBody
+	for _, pattern := range []string{
+		`(?is)<script[^>]*>.*?</script>`,
+		`(?is)<style[^>]*>.*?</style>`,
+		`(?is)<noscript[^>]*>.*?</noscript>`,
+	} {
+		re := regexp.MustCompile(pattern)
+		clean = re.ReplaceAllString(clean, " ")
+	}
 	reTags := regexp.MustCompile(`(?s)<[^>]+>`)
 	clean = reTags.ReplaceAllString(clean, " ")
 	clean = html.UnescapeString(clean)
@@ -380,15 +387,21 @@ func parseBusinessHours(text string) clinic.BusinessHours {
 		return hours
 	}
 
-	dayPattern := `(?:mon(?:day)?|tue(?:sday)?|tues|wed(?:nesday)?|thu(?:rsday)?|thur|thurs|fri(?:day)?|sat(?:urday)?|sun(?:day)?)`
-	re := regexp.MustCompile(`(?is)(` + dayPattern + `(?:\s*(?:&|and|,)\s*` + dayPattern + `)*)\s*:\s*(.+?)(?=` + dayPattern + `|$)`)
-	matches := re.FindAllStringSubmatch(hoursText, -1)
-	for _, match := range matches {
-		if len(match) < 3 {
+	dayPattern := `(?i)(?:mon(?:day)?|tue(?:sday)?|tues|wed(?:nesday)?|thu(?:rsday)?|thur|thurs|fri(?:day)?|sat(?:urday)?|sun(?:day)?)(?:\s*(?:&|and|,|-)\s*(?:mon(?:day)?|tue(?:sday)?|tues|wed(?:nesday)?|thu(?:rsday)?|thur|thurs|fri(?:day)?|sat(?:urday)?|sun(?:day)?))*`
+	re := regexp.MustCompile(dayPattern)
+	matches := re.FindAllStringIndex(hoursText, -1)
+	for i, match := range matches {
+		if len(match) < 2 {
 			continue
 		}
-		dayGroup := match[1]
-		timePart := strings.TrimSpace(match[2])
+		dayGroup := strings.TrimSpace(hoursText[match[0]:match[1]])
+		start := match[1]
+		end := len(hoursText)
+		if i+1 < len(matches) {
+			end = matches[i+1][0]
+		}
+		timePart := strings.TrimSpace(hoursText[start:end])
+		timePart = strings.TrimSpace(strings.TrimLeft(timePart, ":-"))
 		days := extractDays(dayGroup)
 		if len(days) == 0 {
 			continue
