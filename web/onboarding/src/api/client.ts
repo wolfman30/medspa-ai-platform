@@ -13,7 +13,8 @@ async function getAccessToken(): Promise<string | null> {
   if (!isCognitoConfigured()) return null;
   try {
     const session = await fetchAuthSession();
-    return session.tokens?.accessToken?.toString() || null;
+    // Prefer ID token so portal ownership checks can use the email claim.
+    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
   } catch {
     return null;
   }

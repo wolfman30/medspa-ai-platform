@@ -39,6 +39,12 @@ func requirePortalOrgOwner(db *sql.DB, logger *logging.Logger) func(http.Handler
 
 			email := strings.ToLower(strings.TrimSpace(claims.Email))
 			if email == "" {
+				email = strings.ToLower(strings.TrimSpace(claims.Username))
+			}
+			if email == "" {
+				email = strings.ToLower(strings.TrimSpace(claims.CognitoUsername))
+			}
+			if email == "" {
 				http.Error(w, `{"error":"missing user email"}`, http.StatusUnauthorized)
 				return
 			}

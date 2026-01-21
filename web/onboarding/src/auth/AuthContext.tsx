@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!authEnabled) return null;
     try {
       const session = await fetchAuthSession();
-      return session.tokens?.accessToken?.toString() || null;
+      return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
     } catch {
       return null;
     }
