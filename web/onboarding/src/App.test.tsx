@@ -79,6 +79,23 @@ describe('App onboarding flow', () => {
     expect(screen.queryByText('Dashboard view org_123')).not.toBeInTheDocument();
   });
 
+  it('renders the dashboard when setup is complete even if not ready', async () => {
+    localStorage.setItem('medspa_org_id', 'org_123');
+    localStorage.setItem('medspa_setup_complete:org_123', 'true');
+    vi.mocked(getOnboardingStatus).mockResolvedValue({
+      org_id: 'org_123',
+      clinic_name: 'MedSpa',
+      overall_progress: 60,
+      ready_for_launch: false,
+      steps: [],
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Dashboard view org_123')).toBeInTheDocument();
+    expect(screen.queryByText('Onboarding Wizard')).not.toBeInTheDocument();
+  });
+
   it('renders clinic setup when orgId is missing', async () => {
     vi.mocked(lookupOrgByEmail).mockRejectedValue(new Error('Not found'));
 

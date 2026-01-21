@@ -9,7 +9,12 @@ import { DepositDetail } from './components/DepositDetail';
 import { NotificationSettings } from './components/NotificationSettings';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, type ApiScope } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
-import { getStoredOrgId, setStoredOrgId } from './utils/orgStorage';
+import {
+  getStoredOrgId,
+  getStoredSetupComplete,
+  setStoredOrgId,
+  setStoredSetupComplete,
+} from './utils/orgStorage';
 
 type OnboardingDecision = 'idle' | 'loading' | 'ready' | 'not_ready';
 type AppView = 'dashboard' | 'conversations' | 'conversation-detail' | 'deposits' | 'deposit-detail' | 'settings';
@@ -160,6 +165,7 @@ function AuthenticatedApp() {
   const [adminOrgId, setAdminOrgId] = useState<string>(KNOWN_ORGS[0]?.id || '');
   const [orgLookupDone, setOrgLookupDone] = useState(false);
   const [needsClinicSetup, setNeedsClinicSetup] = useState(false);
+  const [setupComplete, setSetupComplete] = useState(false);
 
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
   const userOrgId = getOrgIdFromUser(user);
@@ -203,6 +209,7 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     if (!authReady || !orgId) return;
+    setSetupComplete(getStoredSetupComplete(orgId));
     let isActive = true;
     getOnboardingStatus(orgId)
       .then(status => {
@@ -262,6 +269,7 @@ function AuthenticatedApp() {
   }
 
   const showStatusLoading = authReady && orgId && checkedOrgId !== orgId;
+  const canAccessPortal = decision === 'ready' || setupComplete;
 
   const handleAdminOrgChange = (newOrgId: string) => {
     setAdminOrgId(newOrgId);
@@ -284,7 +292,7 @@ function AuthenticatedApp() {
             <span className="text-sm">
               {isAdmin ? '(Admin) ' : ''}Logged in as {user.email}
             </span>
-            {(isAdmin || (decision === 'ready' && orgId)) && (
+            {(isAdmin || (canAccessPortal && orgId)) && (
               <nav className="flex gap-2">
                 {!isAdmin && (
                   <button
@@ -362,7 +370,7 @@ function AuthenticatedApp() {
         <div className="min-h-screen flex items-center justify-center">
           <span className="text-sm text-gray-600">Checking onboarding status...</span>
         </div>
-      ) : decision === 'ready' && orgId ? (
+      ) : canAccessPortal && orgId ? (
         view === 'conversation-detail' && selectedConversationId ? (
           <ConversationDetail
             orgId={orgId}
@@ -401,7 +409,15 @@ function AuthenticatedApp() {
       ) : (
         <OnboardingWizard
           orgId={orgId}
-          onComplete={() => setStatusRefresh(prev => prev + 1)}
+          onComplete={() => {
+            const resolvedOrgId = orgId || getStoredOrgId();
+            if (resolvedOrgId) {
+              setStoredSetupComplete(resolvedOrgId);
+              setSetupComplete(true);
+            }
+            setView('dashboard');
+            setStatusRefresh(prev => prev + 1);
+          }}
         />
       )}
     </div>
