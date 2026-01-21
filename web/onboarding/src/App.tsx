@@ -209,11 +209,17 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     if (!authReady || !orgId) return;
-    setSetupComplete(getStoredSetupComplete(orgId));
+    const storedSetupComplete = getStoredSetupComplete(orgId);
+    setSetupComplete(storedSetupComplete);
     let isActive = true;
     getOnboardingStatus(orgId)
       .then(status => {
         if (!isActive) return;
+        const serverSetupComplete = status.setup_complete || false;
+        if (serverSetupComplete && !storedSetupComplete) {
+          setStoredSetupComplete(orgId);
+        }
+        setSetupComplete(storedSetupComplete || serverSetupComplete);
         setDecision(status.ready_for_launch ? 'ready' : 'not_ready');
         setCheckedOrgId(orgId);
       })

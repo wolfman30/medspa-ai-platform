@@ -178,6 +178,7 @@ type OnboardingStatusResponse struct {
 	ClinicName      string           `json:"clinic_name"`
 	OverallProgress int              `json:"overall_progress"` // Percentage 0-100
 	ReadyForLaunch  bool             `json:"ready_for_launch"`
+	SetupComplete   bool             `json:"setup_complete"`
 	Steps           []OnboardingStep `json:"steps"`
 	NextAction      string           `json:"next_action,omitempty"`
 	NextActionURL   string           `json:"next_action_url,omitempty"`
@@ -227,6 +228,8 @@ func (h *AdminOnboardingHandler) GetOnboardingStatus(w http.ResponseWriter, r *h
 		progress = (completedRequired * 100) / totalRequired
 	}
 
+	setupComplete := isSetupComplete(cfg)
+
 	// Determine next action
 	nextAction := ""
 	nextActionURL := ""
@@ -255,6 +258,7 @@ func (h *AdminOnboardingHandler) GetOnboardingStatus(w http.ResponseWriter, r *h
 		ClinicName:      cfg.Name,
 		OverallProgress: progress,
 		ReadyForLaunch:  progress == 100,
+		SetupComplete:   setupComplete,
 		Steps:           steps,
 		NextAction:      nextAction,
 		NextActionURL:   nextActionURL,
@@ -278,6 +282,16 @@ func (h *AdminOnboardingHandler) checkClinicConfig(cfg *clinic.Config) Onboardin
 		Completed:   isConfigured,
 		Required:    true,
 	}
+}
+
+func isSetupComplete(cfg *clinic.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.ClinicInfoConfirmed &&
+		cfg.BusinessHoursConfirmed &&
+		cfg.ServicesConfirmed &&
+		cfg.ContactInfoConfirmed
 }
 
 func (h *AdminOnboardingHandler) checkSquareConnected(ctx context.Context, orgID string) OnboardingStep {
