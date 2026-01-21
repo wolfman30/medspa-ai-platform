@@ -54,6 +54,7 @@ describe('App onboarding flow', () => {
       clinic_name: 'MedSpa',
       overall_progress: 100,
       ready_for_launch: true,
+      setup_complete: false,
       steps: [],
     });
 
@@ -70,6 +71,7 @@ describe('App onboarding flow', () => {
       clinic_name: 'MedSpa',
       overall_progress: 60,
       ready_for_launch: false,
+      setup_complete: false,
       steps: [],
     });
 
@@ -87,6 +89,24 @@ describe('App onboarding flow', () => {
       clinic_name: 'MedSpa',
       overall_progress: 60,
       ready_for_launch: false,
+      setup_complete: false,
+      steps: [],
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Dashboard view org_123')).toBeInTheDocument();
+    expect(screen.queryByText('Onboarding Wizard')).not.toBeInTheDocument();
+  });
+
+  it('renders the dashboard when setup is complete on the server', async () => {
+    localStorage.setItem('medspa_org_id', 'org_123');
+    vi.mocked(getOnboardingStatus).mockResolvedValue({
+      org_id: 'org_123',
+      clinic_name: 'MedSpa',
+      overall_progress: 60,
+      ready_for_launch: false,
+      setup_complete: true,
       steps: [],
     });
 

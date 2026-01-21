@@ -249,6 +249,7 @@ export async function getOnboardingStatus(orgId: string): Promise<{
   clinic_name: string;
   overall_progress: number;
   ready_for_launch: boolean;
+  setup_complete: boolean;
   steps: Array<{
     id: string;
     name: string;
