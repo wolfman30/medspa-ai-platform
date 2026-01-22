@@ -338,6 +338,74 @@ func (h *AdminDashboardHandler) getPendingActions(r *http.Request, orgID string)
 	return actions
 }
 
+// OrgListItem represents an organization in the list response.
+type OrgListItem struct {
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	OwnerEmail *string `json:"owner_email,omitempty"`
+	CreatedAt  string  `json:"created_at"`
+}
+
+// ListOrganizationsResponse contains the list of all organizations.
+type ListOrganizationsResponse struct {
+	Organizations []OrgListItem `json:"organizations"`
+	Total         int           `json:"total"`
+}
+
+// ListOrganizations returns all organizations for admin users.
+// GET /admin/orgs
+func (h *AdminDashboardHandler) ListOrganizations(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	query := `
+		SELECT id, name, owner_email, created_at
+		FROM organizations
+		ORDER BY name ASC
+	`
+
+	rows, err := h.db.QueryContext(ctx, query)
+	if err != nil {
+		h.logger.Error("failed to query organizations", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var orgs []OrgListItem
+	for rows.Next() {
+		var org OrgListItem
+		var ownerEmail sql.NullString
+		var createdAt time.Time
+
+		if err := rows.Scan(&org.ID, &org.Name, &ownerEmail, &createdAt); err != nil {
+			h.logger.Error("failed to scan organization row", "error", err)
+			continue
+		}
+
+		if ownerEmail.Valid {
+			org.OwnerEmail = &ownerEmail.String
+		}
+		org.CreatedAt = createdAt.Format(time.RFC3339)
+		orgs = append(orgs, org)
+	}
+
+	if err := rows.Err(); err != nil {
+		h.logger.Error("error iterating organization rows", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := ListOrganizationsResponse{
+		Organizations: orgs,
+		Total:         len(orgs),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logger.Error("failed to encode organizations response", "error", err)
+	}
+}
+
 // RegisterAdminRoutes registers all admin dashboard routes.
 func RegisterAdminRoutes(r chi.Router, db *sql.DB, transcriptStore *conversation.SMSTranscriptStore, clinicStore *clinic.Store, logger *logging.Logger) {
 	dashboardHandler := NewAdminDashboardHandler(db, logger)
@@ -345,6 +413,9 @@ func RegisterAdminRoutes(r chi.Router, db *sql.DB, transcriptStore *conversation
 	conversationsHandler := NewAdminConversationsHandler(db, transcriptStore, logger)
 	depositsHandler := NewAdminDepositsHandler(db, logger)
 	notificationsHandler := NewAdminNotificationsHandler(clinicStore, logger)
+
+	// List all organizations (admin only)
+	r.Get("/orgs", dashboardHandler.ListOrganizations)
 
 	r.Route("/orgs/{orgID}", func(r chi.Router) {
 		// Dashboard

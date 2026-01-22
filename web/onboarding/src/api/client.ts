@@ -615,3 +615,26 @@ export async function lookupOrgByEmail(email: string): Promise<LookupOrgResponse
   }
   return res.json();
 }
+
+// Admin: List all organizations
+export interface OrgListItem {
+  id: string;
+  name: string;
+  owner_email?: string;
+  created_at: string;
+}
+
+export interface ListOrgsResponse {
+  organizations: OrgListItem[];
+  total: number;
+}
+
+export async function listOrgs(): Promise<ListOrgsResponse> {
+  const res = await fetch(`${API_BASE}/admin/orgs`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
