@@ -245,48 +245,50 @@ export function Dashboard({ orgId }: DashboardProps) {
             ) : conversations.length === 0 ? (
               <div className="px-6 py-8 text-sm text-gray-500">No conversations yet.</div>
             ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Phone
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Messages
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Activity
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {conversations.map((conv) => (
-                    <tr key={conv.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatPhone(conv.customer_phone)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatCount(conv.message_count)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getConversationStatusClass(
-                            conv.status
-                          )}`}
-                        >
-                          {formatStatusLabel(conv.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {timeAgo(conv.last_message_at || conv.started_at)}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Phone
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Messages
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Last Activity
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {conversations.map((conv) => (
+                      <tr key={conv.id}>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sm:px-6">
+                          {formatPhone(conv.customer_phone)}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                          {formatCount(conv.message_count)}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getConversationStatusClass(
+                              conv.status
+                            )}`}
+                          >
+                            {formatStatusLabel(conv.status)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                          {timeAgo(conv.last_message_at || conv.started_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
           <div className="bg-white shadow rounded-lg overflow-hidden">
@@ -301,61 +303,63 @@ export function Dashboard({ orgId }: DashboardProps) {
             ) : deposits.length === 0 ? (
               <div className="px-6 py-8 text-sm text-gray-500">No deposits yet.</div>
             ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Patient
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Service
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {deposits.map((deposit) => (
-                    <tr key={deposit.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-gray-900">
-                            {deposit.lead_name || 'Unknown'}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            {formatPhone(deposit.lead_phone)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {deposit.service_interest || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {formatCents(deposit.amount_cents)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDepositStatusClass(
-                            deposit.status
-                          )}`}
-                        >
-                          {formatStatusLabel(deposit.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {timeAgo(deposit.created_at)}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Patient
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Service
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Amount
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                        Date
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {deposits.map((deposit) => (
+                      <tr key={deposit.id}>
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-900">
+                              {deposit.lead_name || 'Unknown'}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {formatPhone(deposit.lead_phone)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sm:px-6">
+                          {deposit.service_interest || '-'}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 sm:px-6">
+                          {formatCents(deposit.amount_cents)}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDepositStatusClass(
+                              deposit.status
+                            )}`}
+                          >
+                            {formatStatusLabel(deposit.status)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                          {timeAgo(deposit.created_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
