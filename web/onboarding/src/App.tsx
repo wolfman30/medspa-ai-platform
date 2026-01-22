@@ -293,48 +293,56 @@ function AuthenticatedApp() {
         <OrgSelector currentOrgId={adminOrgId} onOrgChange={handleAdminOrgChange} />
       )}
       {authEnabled && user && (
-        <div className="bg-indigo-600 text-white px-4 py-2 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <span className="text-sm">
-              {isAdmin ? '(Admin) ' : ''}Logged in as {user.email}
-            </span>
+        <div className="bg-indigo-600 text-white px-3 py-2 sm:px-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
+            <div className="flex justify-between items-center">
+              <span className="text-xs sm:text-sm truncate max-w-[200px] sm:max-w-none">
+                {isAdmin ? '(Admin) ' : ''}{user.email}
+              </span>
+              <button
+                onClick={logout}
+                className="text-xs sm:text-sm underline hover:no-underline sm:hidden ml-2 whitespace-nowrap"
+              >
+                Sign out
+              </button>
+            </div>
             {(isAdmin || (canAccessPortal && orgId)) && (
-              <nav className="flex gap-2">
+              <nav className="flex flex-wrap gap-1 sm:gap-2">
                 {!isAdmin && (
                   <button
                     onClick={() => setView('dashboard')}
-                    className={`text-sm px-2 py-1 rounded ${view === 'dashboard' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                    className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'dashboard' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
                   >
                     Dashboard
                   </button>
                 )}
                 <button
                   onClick={() => { setView('conversations'); setSelectedConversationId(null); }}
-                  className={`text-sm px-2 py-1 rounded ${view === 'conversations' || view === 'conversation-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'conversations' || view === 'conversation-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
                 >
                   Conversations
                 </button>
                 <button
                   onClick={() => { setView('deposits'); setSelectedDepositId(null); }}
-                  className={`text-sm px-2 py-1 rounded ${view === 'deposits' || view === 'deposit-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'deposits' || view === 'deposit-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
                 >
                   Deposits
                 </button>
                 <button
                   onClick={() => setView('settings')}
-                  className={`text-sm px-2 py-1 rounded ${view === 'settings' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'settings' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
                 >
                   Settings
                 </button>
               </nav>
             )}
+            <button
+              onClick={logout}
+              className="hidden sm:block text-sm underline hover:no-underline whitespace-nowrap"
+            >
+              Sign out
+            </button>
           </div>
-          <button
-            onClick={logout}
-            className="text-sm underline hover:no-underline"
-          >
-            Sign out
-          </button>
         </div>
       )}
       {/* Admin view - direct access to conversations and deposits */}
