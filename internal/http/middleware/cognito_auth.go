@@ -25,13 +25,13 @@ type CognitoConfig struct {
 // CognitoClaims represents the claims in a Cognito JWT.
 type CognitoClaims struct {
 	jwt.RegisteredClaims
-	Email         string   `json:"email"`
-	EmailVerified bool     `json:"email_verified"`
-	CognitoGroups []string `json:"cognito:groups"`
-	TokenUse      string   `json:"token_use"`
-	ClientID      string   `json:"client_id"`
-	Username      string   `json:"username"`
-	CognitoUsername string `json:"cognito:username"`
+	Email           string   `json:"email"`
+	EmailVerified   bool     `json:"email_verified"`
+	CognitoGroups   []string `json:"cognito:groups"`
+	TokenUse        string   `json:"token_use"`
+	ClientID        string   `json:"client_id"`
+	Username        string   `json:"username"`
+	CognitoUsername string   `json:"cognito:username"`
 }
 
 const cognitoClaimsKey contextKey = "cognitoClaims"
