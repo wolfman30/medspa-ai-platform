@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
@@ -64,12 +65,16 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	}
 
 	// Try to get lead details for richer notifications
-	var leadName, leadPhone string
+	var leadName, leadPhone, serviceInterest, preferredDays, preferredTimes, schedulingNotes string
 	if s.leadsRepo != nil && evt.LeadID != "" {
 		lead, err := s.leadsRepo.GetByID(ctx, evt.OrgID, evt.LeadID)
 		if err == nil && lead != nil {
 			leadName = lead.Name
 			leadPhone = lead.Phone
+			serviceInterest = lead.ServiceInterest
+			preferredDays = lead.PreferredDays
+			preferredTimes = lead.PreferredTimes
+			schedulingNotes = lead.SchedulingNotes
 		}
 	}
 	if leadPhone == "" {
@@ -88,6 +93,27 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 		scheduledInfo = fmt.Sprintf("\nScheduled for: %s", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
 	}
 
+	// Build service and scheduling preference info
+	serviceInfo := ""
+	if serviceInterest != "" {
+		serviceInfo = fmt.Sprintf("\nService Interest: %s", serviceInterest)
+	}
+	preferencesInfo := ""
+	if preferredDays != "" || preferredTimes != "" {
+		parts := []string{}
+		if preferredDays != "" {
+			parts = append(parts, preferredDays)
+		}
+		if preferredTimes != "" {
+			parts = append(parts, preferredTimes)
+		}
+		preferencesInfo = fmt.Sprintf("\nTime Preferences: %s", strings.Join(parts, ", "))
+	}
+	notesInfo := ""
+	if schedulingNotes != "" {
+		notesInfo = fmt.Sprintf("\nNotes: %s", schedulingNotes)
+	}
+
 	var errs []error
 
 	// Send email notifications
@@ -97,12 +123,12 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 
 Patient: %s
 Phone: %s
-Amount: %s%s
+Amount: %s%s%s%s%s
 Payment ID: %s
 
 This patient is now a priority lead. Please follow up to confirm their appointment.
 
-— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, scheduledInfo, evt.ProviderRef, cfg.Name)
+— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, serviceInfo, preferencesInfo, scheduledInfo, notesInfo, evt.ProviderRef, cfg.Name)
 
 		html := fmt.Sprintf(`<div style="font-family: sans-serif; max-width: 600px;">
 <h2 style="color: #10b981;">💰 Deposit Received!</h2>
@@ -111,7 +137,7 @@ This patient is now a priority lead. Please follow up to confirm their appointme
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><a href="tel:%s">%s</a></td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
-  %s
+  %s%s%s
 </table>
 <p style="background: #f0fdf4; padding: 12px; border-radius: 8px; border-left: 4px solid #10b981;">
   ⭐ <strong>Priority Lead</strong> — Please follow up to confirm their appointment.
@@ -119,7 +145,7 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">— %s AI</p>
 </div>`,
 			leadName, amountStr, leadName, leadPhone, leadPhone, amountStr,
-			s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
+			s.formatServiceHTML(serviceInterest), s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
 
 		for _, recipient := range cfg.Notifications.EmailRecipients {
 			msg := EmailMessage{
@@ -140,8 +166,8 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 	// Send SMS to operators (supports multiple recipients)
 	smsRecipients := cfg.Notifications.GetSMSRecipients()
 	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
-		smsBody := fmt.Sprintf("💰 %s paid %s deposit. Phone: %s%s. Please call to confirm appointment.",
-			leadName, amountStr, leadPhone, s.formatScheduledSMS(evt.ScheduledFor))
+		smsBody := fmt.Sprintf("💰 %s paid %s deposit. Phone: %s%s%s%s. Please call to confirm appointment.",
+			leadName, amountStr, leadPhone, s.formatServiceSMS(serviceInterest), s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor))
 
 		for _, recipient := range smsRecipients {
 			if err := s.sms.SendSMS(ctx, recipient, smsBody); err != nil {
@@ -167,11 +193,53 @@ func (s *Service) formatScheduledHTML(t *time.Time) string {
 		t.Format("Monday, January 2 at 3:04 PM"))
 }
 
+func (s *Service) formatServiceHTML(service string) string {
+	if service == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Service Interest:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, service)
+}
+
+func (s *Service) formatPreferencesHTML(days, times string) string {
+	if days == "" && times == "" {
+		return ""
+	}
+	parts := []string{}
+	if days != "" {
+		parts = append(parts, days)
+	}
+	if times != "" {
+		parts = append(parts, times)
+	}
+	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Time Preferences:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, strings.Join(parts, ", "))
+}
+
 func (s *Service) formatScheduledSMS(t *time.Time) string {
 	if t == nil {
 		return ""
 	}
 	return fmt.Sprintf(" for %s", t.Format("Mon 1/2 3:04PM"))
+}
+
+func (s *Service) formatServiceSMS(service string) string {
+	if service == "" {
+		return ""
+	}
+	return fmt.Sprintf(". Service: %s", service)
+}
+
+func (s *Service) formatPreferencesSMS(days, times string) string {
+	if days == "" && times == "" {
+		return ""
+	}
+	parts := []string{}
+	if days != "" {
+		parts = append(parts, days)
+	}
+	if times != "" {
+		parts = append(parts, times)
+	}
+	return fmt.Sprintf(". Prefers: %s", strings.Join(parts, ", "))
 }
 
 // NotifyNewLead sends notifications when a new lead is created.
