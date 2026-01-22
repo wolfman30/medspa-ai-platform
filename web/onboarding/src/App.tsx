@@ -7,7 +7,7 @@ import { ConversationDetail } from './components/ConversationDetail';
 import { DepositList } from './components/DepositList';
 import { DepositDetail } from './components/DepositDetail';
 import { NotificationSettings } from './components/NotificationSettings';
-import { getOnboardingStatus, lookupOrgByEmail, registerClinic, type ApiScope } from './api/client';
+import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
   getStoredOrgId,
@@ -166,6 +166,8 @@ function AuthenticatedApp() {
   const [orgLookupDone, setOrgLookupDone] = useState(false);
   const [needsClinicSetup, setNeedsClinicSetup] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
+  const [adminOrgs, setAdminOrgs] = useState<OrgListItem[]>([]);
+  const [adminOrgsLoading, setAdminOrgsLoading] = useState(false);
 
   const authReady = !isLoading && (!authEnabled || isAuthenticated);
   const userOrgId = getOrgIdFromUser(user);
@@ -173,6 +175,25 @@ function AuthenticatedApp() {
   const dataScope: ApiScope = isAdmin ? 'admin' : 'portal';
   // Admins can switch orgs; regular users use their assigned org
   const orgId = isAdmin ? adminOrgId : (userOrgId || getStoredOrgId());
+
+  // Fetch organizations list for admin users
+  useEffect(() => {
+    if (!authReady || !isAdmin || adminOrgs.length > 0) return;
+    setAdminOrgsLoading(true);
+    listOrgs()
+      .then((res) => {
+        setAdminOrgs(res.organizations);
+        // If we have orgs and no current selection, select the first one
+        if (res.organizations.length > 0 && !adminOrgId) {
+          setAdminOrgId(res.organizations[0].id);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch organizations:', err);
+        // Fall back to KNOWN_ORGS
+      })
+      .finally(() => setAdminOrgsLoading(false));
+  }, [authReady, isAdmin, adminOrgs.length, adminOrgId]);
 
   // Look up org for returning users who don't have an org in localStorage
   useEffect(() => {
@@ -290,7 +311,12 @@ function AuthenticatedApp() {
     <div>
       {/* Admin header with org selector */}
       {authEnabled && user && isAdmin && (
-        <OrgSelector currentOrgId={adminOrgId} onOrgChange={handleAdminOrgChange} />
+        <OrgSelector
+          currentOrgId={adminOrgId}
+          onOrgChange={handleAdminOrgChange}
+          orgs={adminOrgs}
+          loading={adminOrgsLoading}
+        />
       )}
       {authEnabled && user && (
         <div className="bg-indigo-600 text-white px-3 py-2 sm:px-4">
@@ -438,8 +464,17 @@ function AuthenticatedApp() {
   );
 }
 
-function OrgSelector({ currentOrgId, onOrgChange }: { currentOrgId: string; onOrgChange: (orgId: string) => void }) {
+interface OrgSelectorProps {
+  currentOrgId: string;
+  onOrgChange: (orgId: string) => void;
+  orgs?: Array<{ id: string; name: string }>;
+  loading?: boolean;
+}
+
+function OrgSelector({ currentOrgId, onOrgChange, orgs, loading }: OrgSelectorProps) {
   const [customOrgId, setCustomOrgId] = useState('');
+  // Use provided orgs or fall back to KNOWN_ORGS
+  const orgList = orgs && orgs.length > 0 ? orgs : KNOWN_ORGS;
 
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,22 +485,24 @@ function OrgSelector({ currentOrgId, onOrgChange }: { currentOrgId: string; onOr
   };
 
   return (
-    <div className="bg-gray-800 text-white px-4 py-3">
-      <div className="max-w-6xl mx-auto flex items-center gap-4 flex-wrap">
+    <div className="bg-gray-800 text-white px-3 py-2 sm:px-4 sm:py-3">
+      <div className="max-w-6xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:flex-wrap">
         <span className="text-sm font-medium">Admin View</span>
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-400">Org:</label>
           <select
             value={currentOrgId}
             onChange={(e) => onOrgChange(e.target.value)}
-            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600"
+            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 flex-1 sm:flex-none"
+            disabled={loading}
           >
-            {KNOWN_ORGS.map((org) => (
+            {loading && <option value="">Loading...</option>}
+            {orgList.map((org) => (
               <option key={org.id} value={org.id}>
                 {org.name}
               </option>
             ))}
-            {!KNOWN_ORGS.find((o) => o.id === currentOrgId) && (
+            {!orgList.find((o) => o.id === currentOrgId) && currentOrgId && (
               <option value={currentOrgId}>{currentOrgId}</option>
             )}
           </select>
@@ -476,11 +513,11 @@ function OrgSelector({ currentOrgId, onOrgChange }: { currentOrgId: string; onOr
             placeholder="Enter org ID..."
             value={customOrgId}
             onChange={(e) => setCustomOrgId(e.target.value)}
-            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 w-64"
+            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 flex-1 sm:w-64"
           />
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded whitespace-nowrap"
           >
             Go
           </button>
