@@ -1764,19 +1764,49 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		}
 	}
 
-	// Extract preferred times
-	if strings.Contains(userMessages, "morning") || strings.Contains(userMessages, "am") {
-		prefs.PreferredTimes = "morning"
-		hasPreferences = true
-	} else if strings.Contains(userMessages, "afternoon") {
-		prefs.PreferredTimes = "afternoon"
-		hasPreferences = true
-	} else if strings.Contains(userMessages, "evening") || strings.Contains(userMessages, "after work") || strings.Contains(userMessages, "late") {
-		prefs.PreferredTimes = "evening"
-		hasPreferences = true
-	} else if strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "any time") || strings.Contains(userMessages, "flexible") {
-		prefs.PreferredTimes = "flexible"
-		hasPreferences = true
+	// Extract preferred times - first check for specific times like "2pm", "2:30 pm", "around 3"
+	specificTimeRE := regexp.MustCompile(`(?i)(?:around |about |at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)`)
+	if matches := specificTimeRE.FindAllStringSubmatch(userMessages, -1); len(matches) > 0 {
+		// Extract all specific times mentioned
+		times := []string{}
+		for _, match := range matches {
+			hour := match[1]
+			minutes := match[2]
+			ampm := strings.ToLower(strings.ReplaceAll(match[3], ".", ""))
+
+			// Format the time nicely
+			timeStr := hour
+			if minutes != "" {
+				timeStr += ":" + minutes
+			}
+			timeStr += ampm
+			times = append(times, timeStr)
+		}
+		if len(times) > 0 {
+			prefs.PreferredTimes = strings.Join(times, ", ")
+			hasPreferences = true
+		}
+	}
+
+	// Check for general time preferences if no specific time found
+	if prefs.PreferredTimes == "" {
+		noonRE := regexp.MustCompile(`(?i)\b(noon|midday)\b`)
+		if noonRE.MatchString(userMessages) {
+			prefs.PreferredTimes = "noon"
+			hasPreferences = true
+		} else if strings.Contains(userMessages, "morning") {
+			prefs.PreferredTimes = "morning"
+			hasPreferences = true
+		} else if strings.Contains(userMessages, "afternoon") {
+			prefs.PreferredTimes = "afternoon"
+			hasPreferences = true
+		} else if strings.Contains(userMessages, "evening") || strings.Contains(userMessages, "after work") || strings.Contains(userMessages, "late") {
+			prefs.PreferredTimes = "evening"
+			hasPreferences = true
+		} else if strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "any time") || strings.Contains(userMessages, "flexible") {
+			prefs.PreferredTimes = "flexible"
+			hasPreferences = true
+		}
 	}
 
 	return prefs, hasPreferences
