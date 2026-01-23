@@ -191,8 +191,8 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
           </InfoCard>
 
           {/* Service Details */}
-          <InfoCard title="Service Details">
-            <InfoRow label="Service Interest" value={deposit.service_interest} />
+          <InfoCard title="Scheduling Preferences">
+            <InfoRow label="Service" value={deposit.service_interest} />
             <InfoRow label="Preferred Days" value={deposit.preferred_days} />
             <InfoRow label="Preferred Times" value={deposit.preferred_times} />
             {deposit.scheduling_notes && (

@@ -362,10 +362,21 @@ func (h *AdminDepositsHandler) GetDeposit(w http.ResponseWriter, r *http.Request
 		d.SchedulingNotes = &schedulingNotes.String
 	}
 
-	// Try to find associated conversation
+	// Try to find associated conversation by looking up in conversation_jobs
 	if d.LeadPhone != "" {
-		conversationID := "sms:" + orgID + ":" + d.LeadPhone
-		d.ConversationID = &conversationID
+		// Normalize phone to digits only for matching
+		normalizedPhone := normalizePhoneForConversation(d.LeadPhone)
+		// Look for conversation_id that matches this phone pattern
+		var conversationID string
+		err := h.db.QueryRowContext(r.Context(),
+			`SELECT conversation_id FROM conversation_jobs
+			 WHERE conversation_id LIKE $1
+			 ORDER BY created_at DESC LIMIT 1`,
+			"sms:"+orgID+":%"+normalizedPhone+"%",
+		).Scan(&conversationID)
+		if err == nil && conversationID != "" {
+			d.ConversationID = &conversationID
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -435,4 +446,15 @@ func (h *AdminDepositsHandler) GetDepositStats(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+// normalizePhoneForConversation extracts just the digits from a phone number for conversation matching
+func normalizePhoneForConversation(phone string) string {
+	var digits strings.Builder
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			digits.WriteRune(r)
+		}
+	}
+	return digits.String()
 }
