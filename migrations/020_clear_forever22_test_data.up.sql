@@ -5,7 +5,20 @@
 
 -- Forever 22 org ID: d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599
 
--- Delete bookings associated with these phone numbers (via lead_id)
+-- 1. Delete conversation_messages (references conversations.conversation_id)
+DELETE FROM conversation_messages
+WHERE conversation_id IN (
+  SELECT conversation_id FROM conversations
+  WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
+    AND (phone LIKE '%3303332654%' OR phone LIKE '%5005550001%')
+);
+
+-- 2. Delete conversations (references leads.id via lead_id)
+DELETE FROM conversations
+WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
+  AND (phone LIKE '%3303332654%' OR phone LIKE '%5005550001%');
+
+-- 3. Delete bookings associated with these phone numbers (via lead_id)
 DELETE FROM bookings
 WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
   AND lead_id IN (
@@ -14,7 +27,7 @@ WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
       AND (phone LIKE '%3303332654%' OR phone LIKE '%5005550001%')
   );
 
--- Delete payments associated with these phone numbers (via lead_id)
+-- 4. Delete payments associated with these phone numbers (via lead_id)
 DELETE FROM payments
 WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
   AND lead_id IN (
@@ -23,17 +36,12 @@ WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
       AND (phone LIKE '%3303332654%' OR phone LIKE '%5005550001%')
   );
 
--- Delete leads associated with these phone numbers
+-- 5. Delete leads associated with these phone numbers
 DELETE FROM leads
 WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
   AND (phone LIKE '%3303332654%' OR phone LIKE '%5005550001%');
 
--- Delete conversation jobs associated with these phone numbers
+-- 6. Delete conversation jobs associated with these phone numbers
 DELETE FROM conversation_jobs
-WHERE conversation_id LIKE '%d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599%3303332654%'
-   OR conversation_id LIKE '%d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599%5005550001%';
-
--- Delete conversations associated with these phone numbers
-DELETE FROM conversations
 WHERE conversation_id LIKE '%d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599%3303332654%'
    OR conversation_id LIKE '%d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599%5005550001%';
