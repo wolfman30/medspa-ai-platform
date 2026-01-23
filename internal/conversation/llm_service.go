@@ -1629,34 +1629,109 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	}
 
 	// Extract service interest from user messages (users may answer with just a service name).
-	services := []string{"botox", "filler", "dermal filler", "consultation", "laser", "facial", "peel", "microneedling"}
-	for _, service := range services {
-		if strings.Contains(userMessages, service) {
-			prefs.ServiceInterest = service
+	// Also check the full conversation for context about what service was discussed.
+	allMessages := userMessages
+	for _, msg := range history {
+		if msg.Role == ChatRoleAssistant {
+			allMessages += strings.ToLower(msg.Content) + " "
+		}
+	}
+
+	// Comprehensive list of medspa services (ordered by specificity - check longer/specific terms first)
+	services := []struct {
+		pattern string
+		name    string
+	}{
+		{"dermal filler", "dermal filler"},
+		{"lip filler", "lip filler"},
+		{"lip injection", "lip filler"},
+		{"cheek filler", "cheek filler"},
+		{"under eye filler", "under eye filler"},
+		{"tear trough", "tear trough filler"},
+		{"perfect derma peel", "Perfect Derma Peel"},
+		{"chemical peel", "chemical peel"},
+		{"vi peel", "VI Peel"},
+		{"semaglutide", "semaglutide"},
+		{"weight loss", "weight loss"},
+		{"tirzepatide", "tirzepatide"},
+		{"pdo thread", "PDO threads"},
+		{"thread lift", "thread lift"},
+		{"microneedling", "microneedling"},
+		{"prp", "PRP"},
+		{"vampire facial", "PRP facial"},
+		{"hydrafacial", "HydraFacial"},
+		{"laser treatment", "laser treatment"},
+		{"laser hair", "laser hair removal"},
+		{"ipl", "IPL"},
+		{"jeuveau", "Jeuveau"},
+		{"dysport", "Dysport"},
+		{"xeomin", "Xeomin"},
+		{"botox", "Botox"},
+		{"filler", "filler"},
+		{"consultation", "consultation"},
+		{"facial", "facial"},
+		{"peel", "peel"},
+		{"laser", "laser"},
+		{"injectable", "injectables"},
+		{"wrinkle", "wrinkle treatment"},
+		{"anti-aging", "anti-aging treatment"},
+	}
+
+	// First check user messages, then fall back to full conversation context
+	for _, s := range services {
+		if strings.Contains(userMessages, s.pattern) {
+			prefs.ServiceInterest = s.name
 			hasPreferences = true
 			break
 		}
 	}
+	// If not found in user messages, check full conversation for context
+	if prefs.ServiceInterest == "" {
+		for _, s := range services {
+			if strings.Contains(allMessages, s.pattern) {
+				prefs.ServiceInterest = s.name
+				hasPreferences = true
+				break
+			}
+		}
+	}
 
+	// Extract preferred days
 	if strings.Contains(userMessages, "weekday") {
 		prefs.PreferredDays = "weekdays"
 		hasPreferences = true
 	} else if strings.Contains(userMessages, "weekend") {
 		prefs.PreferredDays = "weekends"
 		hasPreferences = true
-	} else if strings.Contains(userMessages, "any day") || strings.Contains(userMessages, "flexible") {
+	} else if strings.Contains(userMessages, "any day") || strings.Contains(userMessages, "flexible") || strings.Contains(userMessages, "anytime") {
 		prefs.PreferredDays = "any"
 		hasPreferences = true
+	} else if strings.Contains(userMessages, "monday") || strings.Contains(userMessages, "tuesday") || strings.Contains(userMessages, "wednesday") || strings.Contains(userMessages, "thursday") || strings.Contains(userMessages, "friday") {
+		// Specific day mentioned - extract it
+		days := []string{}
+		for _, day := range []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"} {
+			if strings.Contains(userMessages, day) {
+				days = append(days, day)
+			}
+		}
+		if len(days) > 0 {
+			prefs.PreferredDays = strings.Join(days, ", ")
+			hasPreferences = true
+		}
 	}
 
-	if strings.Contains(userMessages, "morning") {
+	// Extract preferred times
+	if strings.Contains(userMessages, "morning") || strings.Contains(userMessages, "am") {
 		prefs.PreferredTimes = "morning"
 		hasPreferences = true
 	} else if strings.Contains(userMessages, "afternoon") {
 		prefs.PreferredTimes = "afternoon"
 		hasPreferences = true
-	} else if strings.Contains(userMessages, "evening") {
+	} else if strings.Contains(userMessages, "evening") || strings.Contains(userMessages, "after work") || strings.Contains(userMessages, "late") {
 		prefs.PreferredTimes = "evening"
+		hasPreferences = true
+	} else if strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "any time") || strings.Contains(userMessages, "flexible") {
+		prefs.PreferredTimes = "flexible"
 		hasPreferences = true
 	}
 
