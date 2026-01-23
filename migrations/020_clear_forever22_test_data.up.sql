@@ -5,6 +5,15 @@
 
 -- Forever 22 org ID: d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599
 
+-- Delete bookings associated with these phone numbers (via lead_id)
+DELETE FROM bookings
+WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
+  AND lead_id IN (
+    SELECT id FROM leads
+    WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
+      AND (phone LIKE '%3303332654%' OR phone LIKE '%9378962713%')
+  );
+
 -- Delete payments associated with these phone numbers (via lead_id)
 DELETE FROM payments
 WHERE org_id = 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'
