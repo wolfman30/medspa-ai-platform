@@ -1515,6 +1515,31 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	prefs := leads.SchedulingPreferences{}
 	hasPreferences := false
 
+	// Helper to capitalize a name properly (first letter uppercase, rest lowercase).
+	capitalizeName := func(s string) string {
+		if len(s) == 0 {
+			return s
+		}
+		return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+	}
+
+	// Helper to check if a word looks like a name (starts with a letter, not a common word).
+	isLikelyName := func(s string) bool {
+		if len(s) < 2 || len(s) > 30 {
+			return false
+		}
+		// Must start with a letter
+		first := s[0]
+		if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) {
+			return false
+		}
+		// Check it's not a common word (case insensitive)
+		if isCommonWord(strings.ToLower(s)) {
+			return false
+		}
+		return true
+	}
+
 	extractName := func(raw string) (string, string) {
 		words := strings.Fields(strings.TrimSpace(raw))
 		nameWords := make([]string, 0, 2)
@@ -1523,13 +1548,14 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 			if cleaned == "" {
 				continue
 			}
-			if len(cleaned) < 2 || len(cleaned) > 30 || !isCapitalized(cleaned) || isCommonWord(cleaned) {
+			if !isLikelyName(cleaned) {
 				if len(nameWords) > 0 {
 					break
 				}
 				continue
 			}
-			nameWords = append(nameWords, cleaned)
+			// Capitalize the name properly
+			nameWords = append(nameWords, capitalizeName(cleaned))
 			if len(nameWords) == 2 {
 				break
 			}
@@ -1554,13 +1580,14 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	}
 
 	// Extract patient name from user messages.
+	// Patterns are case-insensitive and accept lowercase names (common in SMS).
 	namePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)my name is\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
-		regexp.MustCompile(`(?i)i'?m\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
-		regexp.MustCompile(`(?i)this is\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
-		regexp.MustCompile(`(?i)call me\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
-		regexp.MustCompile(`(?i)it'?s\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
-		regexp.MustCompile(`(?i)name'?s\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)my name is\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)i'?m\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)this is\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)call me\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
+		regexp.MustCompile(`(?i)it'?s\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)name'?s\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
 	}
 	firstNameFallback := ""
 	for _, pattern := range namePatterns {
