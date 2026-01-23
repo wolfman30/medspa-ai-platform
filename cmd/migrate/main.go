@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -47,6 +48,19 @@ func main() {
 		log.Fatalf("create migrator: %v", err)
 	}
 	defer func() { _, _ = m.Close() }()
+
+	// Check for force command: /bin/migrate force <version>
+	if len(os.Args) >= 3 && os.Args[1] == "force" {
+		version, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			log.Fatalf("invalid version: %v", err)
+		}
+		if err := m.Force(version); err != nil {
+			log.Fatalf("force version: %v", err)
+		}
+		fmt.Printf("forced version to %d\n", version)
+		return
+	}
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		log.Fatalf("migrate up: %v", err)

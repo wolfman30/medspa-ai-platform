@@ -154,33 +154,17 @@ func (s *LLMSupervisor) Review(ctx context.Context, req SupervisorRequest) (Supe
 }
 
 func parseSupervisorDecision(raw string) (SupervisorDecision, error) {
-	text := strings.TrimSpace(raw)
-	text = strings.TrimPrefix(text, "```json")
-	text = strings.TrimPrefix(text, "```")
-	text = strings.TrimSuffix(text, "```")
-	text = strings.TrimSpace(text)
+	text := sanitizeSupervisorJSON(raw)
 	if text == "" {
 		return SupervisorDecision{}, errors.New("conversation: supervisor empty response")
 	}
-	if !strings.HasPrefix(text, "{") {
-		start := strings.Index(text, "{")
-		end := strings.LastIndex(text, "}")
-		if start >= 0 && end > start {
-			text = text[start : end+1]
-		}
-	}
-	var payload struct {
-		Action     string `json:"action"`
-		EditedText string `json:"edited_text"`
-		Reason     string `json:"reason"`
-	}
-	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+
+	payload, err := decodeSupervisorPayload(text)
+	if err != nil {
 		return SupervisorDecision{}, err
 	}
-	action := SupervisorAction(strings.ToLower(strings.TrimSpace(payload.Action)))
-	switch action {
-	case SupervisorActionAllow, SupervisorActionBlock, SupervisorActionEdit:
-	default:
+	action, ok := normalizeSupervisorAction(payload.Action)
+	if !ok {
 		return SupervisorDecision{}, fmt.Errorf("conversation: supervisor action invalid: %q", payload.Action)
 	}
 	return SupervisorDecision{
@@ -188,6 +172,56 @@ func parseSupervisorDecision(raw string) (SupervisorDecision, error) {
 		EditedText: strings.TrimSpace(payload.EditedText),
 		Reason:     strings.TrimSpace(payload.Reason),
 	}, nil
+}
+
+type supervisorPayload struct {
+	Action     string `json:"action"`
+	EditedText string `json:"edited_text"`
+	Reason     string `json:"reason"`
+}
+
+func decodeSupervisorPayload(text string) (supervisorPayload, error) {
+	var payload supervisorPayload
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		return supervisorPayload{}, err
+	}
+	return payload, nil
+}
+
+func normalizeSupervisorAction(raw string) (SupervisorAction, bool) {
+	action := SupervisorAction(strings.ToLower(strings.TrimSpace(raw)))
+	switch action {
+	case SupervisorActionAllow, SupervisorActionBlock, SupervisorActionEdit:
+		return action, true
+	default:
+		return "", false
+	}
+}
+
+func sanitizeSupervisorJSON(raw string) string {
+	text := stripCodeFence(raw)
+	text = extractJSONObject(text)
+	return strings.TrimSpace(text)
+}
+
+func stripCodeFence(text string) string {
+	text = strings.TrimSpace(text)
+	text = strings.TrimPrefix(text, "```json")
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	return strings.TrimSpace(text)
+}
+
+func extractJSONObject(text string) string {
+	if strings.HasPrefix(text, "{") {
+		return text
+	}
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start >= 0 && end > start {
+		return text[start : end+1]
+	}
+	return text
 }
 
 // ParseSupervisorMode normalizes a supervisor mode string.
