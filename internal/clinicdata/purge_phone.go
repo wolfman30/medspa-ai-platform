@@ -112,9 +112,9 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string) (PurgeResult, error
 		return PurgeResult{}, fmt.Errorf("clinicdata: delete conversations: %w", err)
 	}
 
-	// Delete ALL outbox events for this org
+	// Delete ALL outbox events for this org (column is named 'aggregate' not 'org_id')
 	resp.Deleted.Outbox, err = execRowsAffected(ctx, tx, `
-		DELETE FROM outbox WHERE org_id = $1
+		DELETE FROM outbox WHERE aggregate = $1
 	`, orgID)
 	if err != nil {
 		return PurgeResult{}, fmt.Errorf("clinicdata: delete outbox: %w", err)
