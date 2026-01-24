@@ -569,6 +569,45 @@ export async function updateNotificationSettings(
   return res.json();
 }
 
+// AI Persona Settings API
+
+export interface AIPersona {
+  provider_name?: string;
+  is_solo_operator?: boolean;
+  tone?: 'clinical' | 'warm' | 'professional';
+  custom_greeting?: string;
+  after_hours_greeting?: string;
+  busy_message?: string;
+  special_services?: string[];
+}
+
+export async function getAIPersona(orgId: string): Promise<AIPersona> {
+  const res = await fetch(`${API_BASE}/admin/clinics/${orgId}/config`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  const config = await res.json();
+  return config.ai_persona || {};
+}
+
+export async function updateAIPersona(
+  orgId: string,
+  persona: AIPersona
+): Promise<AIPersona> {
+  const res = await fetch(`${API_BASE}/admin/clinics/${orgId}/config`, {
+    method: 'PUT',
+    headers: await getHeaders(),
+    body: JSON.stringify({ ai_persona: persona }),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  const config = await res.json();
+  return config.ai_persona || {};
+}
+
 // Client self-service registration types
 export interface RegisterClinicRequest {
   clinic_name: string;

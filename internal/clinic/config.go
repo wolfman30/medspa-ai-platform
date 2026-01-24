@@ -78,8 +78,10 @@ type AIPersona struct {
 	IsSoloOperator bool `json:"is_solo_operator,omitempty"`
 	// Tone sets the communication style: "clinical", "warm", "professional" (default: "warm")
 	Tone string `json:"tone,omitempty"`
-	// CustomGreeting overrides the default greeting (e.g., "Hi! It's Brandi at Forever 22...")
+	// CustomGreeting overrides the default greeting during business hours
 	CustomGreeting string `json:"custom_greeting,omitempty"`
+	// AfterHoursGreeting is used when the clinic is closed (evenings, weekends)
+	AfterHoursGreeting string `json:"after_hours_greeting,omitempty"`
 	// BusyMessage explains why the provider can't answer (for solo operators)
 	BusyMessage string `json:"busy_message,omitempty"`
 	// SpecialServices lists non-cosmetic medical services offered (e.g., hyperhidrosis, migraines)
@@ -417,9 +419,21 @@ func (c *Config) AIPersonaContext() string {
 		parts = append(parts, fmt.Sprintf("Primary provider: %s. You are the clinic's AI assistant.", persona.ProviderName))
 	}
 
-	// Custom greeting for initial contact
-	if persona.CustomGreeting != "" {
-		parts = append(parts, fmt.Sprintf("GREETING STYLE: When a new patient texts, use this tone: \"%s\"", persona.CustomGreeting))
+	// Custom greetings for initial contact (business hours vs after hours)
+	if persona.CustomGreeting != "" || persona.AfterHoursGreeting != "" {
+		var greetingParts []string
+		if persona.CustomGreeting != "" {
+			greetingParts = append(greetingParts, fmt.Sprintf(
+				"DURING BUSINESS HOURS greeting: \"%s\"", persona.CustomGreeting))
+		}
+		if persona.AfterHoursGreeting != "" {
+			greetingParts = append(greetingParts, fmt.Sprintf(
+				"AFTER HOURS greeting (evenings/weekends/closed): \"%s\"", persona.AfterHoursGreeting))
+		}
+		if len(greetingParts) > 0 {
+			parts = append(parts, "GREETING STYLE:\n"+strings.Join(greetingParts, "\n")+
+				"\nIMPORTANT: Check the clinic status above to determine which greeting to use.")
+		}
 	}
 
 	// Busy message for why the provider can't answer

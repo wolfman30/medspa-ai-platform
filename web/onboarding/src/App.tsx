@@ -6,7 +6,7 @@ import { ConversationList } from './components/ConversationList';
 import { ConversationDetail } from './components/ConversationDetail';
 import { DepositList } from './components/DepositList';
 import { DepositDetail } from './components/DepositDetail';
-import { NotificationSettings } from './components/NotificationSettings';
+import { SettingsPage } from './components/SettingsPage';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -389,7 +389,7 @@ function AuthenticatedApp() {
             scope={dataScope}
           />
         ) : view === 'settings' ? (
-          <NotificationSettings
+          <SettingsPage
             orgId={orgId}
             onBack={() => setView('conversations')}
           />
@@ -427,7 +427,7 @@ function AuthenticatedApp() {
             scope={dataScope}
           />
         ) : view === 'settings' ? (
-          <NotificationSettings
+          <SettingsPage
             orgId={orgId}
             onBack={() => setView('dashboard')}
           />
