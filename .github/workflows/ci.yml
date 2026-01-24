@@ -114,12 +114,4 @@ jobs:
 
     - name: Build
       run: |
-        mkdir -p bin
-        go build -v -o bin/medspa-api ./cmd/api
-
-    - name: Upload binary
-      uses: actions/upload-artifact@v4
-      with:
-        name: medspa-api
-        path: bin/medspa-api
-        retention-days: 7
+        go build -v ./cmd/api
