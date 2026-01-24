@@ -70,6 +70,22 @@ func (n *NotificationPrefs) GetSMSRecipients() []string {
 	return recipients
 }
 
+// AIPersona configures the AI assistant's voice and personality for a clinic.
+type AIPersona struct {
+	// ProviderName is the name the AI uses (e.g., "Brandi" for solo practitioners)
+	ProviderName string `json:"provider_name,omitempty"`
+	// IsSoloOperator indicates if the clinic is run by a single provider (affects messaging)
+	IsSoloOperator bool `json:"is_solo_operator,omitempty"`
+	// Tone sets the communication style: "clinical", "warm", "professional" (default: "warm")
+	Tone string `json:"tone,omitempty"`
+	// CustomGreeting overrides the default greeting (e.g., "Hi! It's Brandi at Forever 22...")
+	CustomGreeting string `json:"custom_greeting,omitempty"`
+	// BusyMessage explains why the provider can't answer (for solo operators)
+	BusyMessage string `json:"busy_message,omitempty"`
+	// SpecialServices lists non-cosmetic medical services offered (e.g., hyperhidrosis, migraines)
+	SpecialServices []string `json:"special_services,omitempty"`
+}
+
 // Config holds clinic-specific configuration.
 type Config struct {
 	OrgID                  string        `json:"org_id"`
@@ -97,6 +113,8 @@ type Config struct {
 	// BookingURL is the clinic's online booking page (e.g., Moxie, Calendly, etc.)
 	BookingURL    string            `json:"booking_url,omitempty"`
 	Notifications NotificationPrefs `json:"notifications"`
+	// AIPersona customizes the AI assistant's voice for this clinic
+	AIPersona AIPersona `json:"ai_persona,omitempty"`
 }
 
 // DefaultBookingURL is the default test booking page for development/demo purposes.
@@ -370,6 +388,68 @@ func (c *Config) ExpectedCallbackTime(t time.Time) string {
 
 	// Fallback for longer periods
 	return fmt.Sprintf("on %s around %s", nextOpenLocal.Format("Monday, January 2"), nextOpenLocal.Format("3 PM"))
+}
+
+// AIPersonaContext generates a string describing the AI persona for the LLM.
+// This is injected into the conversation context to customize the AI's voice.
+func (c *Config) AIPersonaContext() string {
+	if c == nil {
+		return ""
+	}
+
+	persona := c.AIPersona
+	var parts []string
+
+	// If solo operator, add context about the provider
+	if persona.IsSoloOperator && persona.ProviderName != "" {
+		parts = append(parts, fmt.Sprintf(
+			"CLINIC CONTEXT - SOLO PRACTITIONER:\n"+
+				"This clinic is operated by %s as a solo practitioner. When messaging, speak as if you ARE %s's digital assistant.\n"+
+				"- Use first-person for the provider: 'I'm currently with a patient' (meaning %s is with a patient)\n"+
+				"- The provider handles ALL patient care personally - there is no front desk staff\n"+
+				"- This is a boutique, personality-driven practice where clients come specifically for %s",
+			persona.ProviderName, persona.ProviderName, persona.ProviderName, persona.ProviderName,
+		))
+	} else if persona.ProviderName != "" {
+		parts = append(parts, fmt.Sprintf("Primary provider: %s", persona.ProviderName))
+	}
+
+	// Custom greeting for initial contact
+	if persona.CustomGreeting != "" {
+		parts = append(parts, fmt.Sprintf("GREETING STYLE: When a new patient texts, use this tone: \"%s\"", persona.CustomGreeting))
+	}
+
+	// Busy message for why the provider can't answer
+	if persona.BusyMessage != "" {
+		parts = append(parts, fmt.Sprintf("BUSY MESSAGE: If explaining why we couldn't answer a call: \"%s\"", persona.BusyMessage))
+	}
+
+	// Tone guidance
+	if persona.Tone != "" {
+		switch strings.ToLower(persona.Tone) {
+		case "clinical":
+			parts = append(parts, "TONE: Clinical and professional. Focus on medical accuracy and patient safety.")
+		case "warm":
+			parts = append(parts, "TONE: Warm and approachable. Make patients feel comfortable while maintaining professionalism.")
+		case "professional":
+			parts = append(parts, "TONE: Straightforward and professional. Efficient communication focused on booking.")
+		}
+	}
+
+	// Special non-cosmetic medical services
+	if len(persona.SpecialServices) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"MEDICAL SERVICES NOTE: This clinic also offers medical treatments beyond cosmetics: %s. "+
+				"These are functional medical treatments - handle inquiries with appropriate medical sensitivity.",
+			strings.Join(persona.SpecialServices, ", "),
+		))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return "\n\n" + strings.Join(parts, "\n\n")
 }
 
 // Store provides persistence for clinic configurations.

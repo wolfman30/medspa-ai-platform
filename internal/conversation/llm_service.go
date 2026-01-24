@@ -1178,6 +1178,13 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 				Role:    ChatRoleSystem,
 				Content: fmt.Sprintf("DEPOSIT AMOUNT: This clinic's deposit is exactly $%d. NEVER say a range like '$50-100'. Always state the exact amount: $%d.", depositDollars, depositDollars),
 			})
+			// Add AI persona context for personalized voice
+			if personaContext := cfg.AIPersonaContext(); personaContext != "" {
+				history = append(history, ChatMessage{
+					Role:    ChatRoleSystem,
+					Content: personaContext,
+				})
+			}
 		}
 	}
 
