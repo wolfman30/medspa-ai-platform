@@ -79,6 +79,7 @@ type UpdateConfigRequest struct {
 	Services               []string           `json:"services,omitempty"`
 	BookingURL             string             `json:"booking_url,omitempty"`
 	Notifications          *NotificationPrefs `json:"notifications,omitempty"`
+	AIPersona              *AIPersona         `json:"ai_persona,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -171,6 +172,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Notifications != nil {
 		cfg.Notifications = *req.Notifications
+	}
+	if req.AIPersona != nil {
+		cfg.AIPersona = *req.AIPersona
 	}
 
 	// Save updated config
