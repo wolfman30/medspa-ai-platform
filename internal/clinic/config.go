@@ -404,14 +404,17 @@ func (c *Config) AIPersonaContext() string {
 	if persona.IsSoloOperator && persona.ProviderName != "" {
 		parts = append(parts, fmt.Sprintf(
 			"CLINIC CONTEXT - SOLO PRACTITIONER:\n"+
-				"This clinic is operated by %s as a solo practitioner. When messaging, speak as if you ARE %s's digital assistant.\n"+
-				"- Use first-person for the provider: 'I'm currently with a patient' (meaning %s is with a patient)\n"+
+				"This clinic is operated by %s as a solo practitioner. You are %s's AI assistant (digital assistant).\n"+
+				"IMPORTANT: Always identify yourself as %s's AI assistant or virtual assistant - never pretend to BE %s.\n"+
+				"- Example greeting: 'Hi! This is %s's AI assistant at %s. %s is currently with a patient...'\n"+
+				"- The patient should know they're texting with an AI system, not directly with %s\n"+
 				"- The provider handles ALL patient care personally - there is no front desk staff\n"+
 				"- This is a boutique, personality-driven practice where clients come specifically for %s",
 			persona.ProviderName, persona.ProviderName, persona.ProviderName, persona.ProviderName,
+			persona.ProviderName, c.Name, persona.ProviderName, persona.ProviderName, persona.ProviderName,
 		))
 	} else if persona.ProviderName != "" {
-		parts = append(parts, fmt.Sprintf("Primary provider: %s", persona.ProviderName))
+		parts = append(parts, fmt.Sprintf("Primary provider: %s. You are the clinic's AI assistant.", persona.ProviderName))
 	}
 
 	// Custom greeting for initial contact
