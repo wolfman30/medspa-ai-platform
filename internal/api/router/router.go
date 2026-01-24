@@ -179,6 +179,7 @@ func New(cfg *Config) http.Handler {
 				}
 				if cfg.AdminClinicData != nil {
 					clinicRoutes.Delete("/phones/{phone}", cfg.AdminClinicData.PurgePhone)
+					clinicRoutes.Delete("/data", cfg.AdminClinicData.PurgeOrg)
 				}
 				if cfg.SquareOAuth != nil {
 					clinicRoutes.Get("/square/connect", cfg.SquareOAuth.HandleConnect)

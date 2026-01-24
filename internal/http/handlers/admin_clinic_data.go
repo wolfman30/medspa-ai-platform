@@ -60,6 +60,53 @@ type PurgePhoneResponse struct {
 	RedisDeleted int64 `json:"redis_deleted"`
 }
 
+// PurgeOrg deletes ALL demo data for a clinic/org.
+// Route: DELETE /admin/clinics/{orgID}/data
+func (h *AdminClinicDataHandler) PurgeOrg(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.db == nil {
+		http.Error(w, "database not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	orgID := strings.TrimSpace(chi.URLParam(r, "orgID"))
+	if orgID == "" {
+		http.Error(w, "missing orgID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := clinicdata.NewPurger(h.db, h.redis, h.logger).PurgeOrg(r.Context(), orgID)
+	if err != nil {
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "missing orgID") || strings.Contains(msg, "orgID must be a UUID"):
+			http.Error(w, msg, http.StatusBadRequest)
+		case strings.Contains(msg, "database not configured"):
+			http.Error(w, msg, http.StatusServiceUnavailable)
+		default:
+			h.logger.Error("admin purge org failed", "error", err, "org_id", orgID)
+			http.Error(w, "failed to purge org data", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	resp := PurgePhoneResponse{
+		OrgID:          result.OrgID,
+		Phone:          "ALL",
+		ConversationID: result.ConversationID,
+		RedisDeleted:   result.RedisDeleted,
+	}
+	resp.Deleted.ConversationJobs = result.Deleted.ConversationJobs
+	resp.Deleted.Outbox = result.Deleted.Outbox
+	resp.Deleted.Payments = result.Deleted.Payments
+	resp.Deleted.Bookings = result.Deleted.Bookings
+	resp.Deleted.Leads = result.Deleted.Leads
+	resp.Deleted.Messages = result.Deleted.Messages
+	resp.Deleted.Unsubscribes = result.Deleted.Unsubscribes
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 // PurgePhone deletes demo data for a phone number within a clinic/org.
 // Route: DELETE /admin/clinics/{orgID}/phones/{phone}
 func (h *AdminClinicDataHandler) PurgePhone(w http.ResponseWriter, r *http.Request) {
