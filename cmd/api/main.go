@@ -623,11 +623,11 @@ func setupInlineWorker(
 		}
 
 		// Setup SMS sender for operator notifications
-		// Use Telnyx or Twilio from number depending on which is configured
+		// Prefer Telnyx from number since Telnyx is the primary SMS provider
 		var smsSender notify.SMSSender
-		smsFromNumber := cfg.TwilioFromNumber
+		smsFromNumber := cfg.TelnyxFromNumber
 		if smsFromNumber == "" {
-			smsFromNumber = cfg.TelnyxFromNumber
+			smsFromNumber = cfg.TwilioFromNumber
 		}
 		if messenger != nil && smsFromNumber != "" {
 			smsSender = notify.NewSimpleSMSSender(smsFromNumber, func(ctx context.Context, to, from, body string) error {
