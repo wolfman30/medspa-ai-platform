@@ -131,13 +131,13 @@ func (h *TelnyxWebhookHandler) appendTranscript(ctx context.Context, conversatio
 	}
 }
 
-func (h *TelnyxWebhookHandler) clinicName(ctx context.Context, orgID string) string {
+func (h *TelnyxWebhookHandler) clinicConfig(ctx context.Context, orgID string) *clinic.Config {
 	if h == nil || h.clinicStore == nil {
-		return ""
+		return nil
 	}
 	orgID = strings.TrimSpace(orgID)
 	if orgID == "" {
-		return ""
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -145,8 +145,13 @@ func (h *TelnyxWebhookHandler) clinicName(ctx context.Context, orgID string) str
 	cfg, err := h.clinicStore.Get(ctx, orgID)
 	if err != nil {
 		h.logger.Warn("failed to load clinic config", "error", err, "org_id", orgID)
-		return ""
+		return nil
 	}
+	return cfg
+}
+
+func (h *TelnyxWebhookHandler) clinicName(ctx context.Context, orgID string) string {
+	cfg := h.clinicConfig(ctx, orgID)
 	if cfg == nil {
 		return ""
 	}
@@ -154,10 +159,22 @@ func (h *TelnyxWebhookHandler) clinicName(ctx context.Context, orgID string) str
 }
 
 func (h *TelnyxWebhookHandler) voiceAckMessage(ctx context.Context, orgID string) string {
+	// Check for environment-level override first
 	if strings.TrimSpace(h.voiceAck) != "" && h.voiceAck != messaging.InstantAckMessage {
 		return h.voiceAck
 	}
-	name := h.clinicName(ctx, orgID)
+
+	// Get clinic config to check for AIPersona.CustomGreeting
+	cfg := h.clinicConfig(ctx, orgID)
+	if cfg != nil && strings.TrimSpace(cfg.AIPersona.CustomGreeting) != "" {
+		return cfg.AIPersona.CustomGreeting
+	}
+
+	// Fall back to template with clinic name
+	name := ""
+	if cfg != nil {
+		name = strings.TrimSpace(cfg.Name)
+	}
 	return messaging.InstantAckMessageForClinic(name)
 }
 
