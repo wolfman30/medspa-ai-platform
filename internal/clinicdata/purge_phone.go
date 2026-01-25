@@ -188,16 +188,23 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string) (PurgeResult, error
 		return PurgeResult{}, fmt.Errorf("clinicdata: commit purge: %w", err)
 	}
 
-	// Clear Redis keys for this org
+	// Clear Redis keys for this org - ONLY conversation-related keys
+	// Preserve clinic:config:{orgID} and rag:docs:{orgID} (clinic configuration and knowledge)
 	if p.redis != nil {
-		pattern := fmt.Sprintf("*%s*", orgID)
-		keys, err := p.redis.Keys(ctx, pattern).Result()
-		if err == nil && len(keys) > 0 {
-			res := p.redis.Del(ctx, keys...)
-			if err := res.Err(); err != nil {
-				p.logger.Warn("clinicdata purge: redis DEL failed", "error", err, "org_id", orgID)
-			} else {
-				resp.RedisDeleted = res.Val()
+		// Only delete conversation and transcript keys, not clinic config or knowledge
+		patterns := []string{
+			fmt.Sprintf("conversation:sms:%s:*", orgID),
+			fmt.Sprintf("sms_transcript:sms:%s:*", orgID),
+		}
+		for _, pattern := range patterns {
+			keys, err := p.redis.Keys(ctx, pattern).Result()
+			if err == nil && len(keys) > 0 {
+				res := p.redis.Del(ctx, keys...)
+				if err := res.Err(); err != nil {
+					p.logger.Warn("clinicdata purge: redis DEL failed", "error", err, "pattern", pattern, "org_id", orgID)
+				} else {
+					resp.RedisDeleted += res.Val()
+				}
 			}
 		}
 	}
