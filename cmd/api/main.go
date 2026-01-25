@@ -623,19 +623,24 @@ func setupInlineWorker(
 		}
 
 		// Setup SMS sender for operator notifications
+		// Use Telnyx or Twilio from number depending on which is configured
 		var smsSender notify.SMSSender
-		if messenger != nil && cfg.TwilioFromNumber != "" {
-			smsSender = notify.NewSimpleSMSSender(cfg.TwilioFromNumber, func(ctx context.Context, to, from, body string) error {
+		smsFromNumber := cfg.TwilioFromNumber
+		if smsFromNumber == "" {
+			smsFromNumber = cfg.TelnyxFromNumber
+		}
+		if messenger != nil && smsFromNumber != "" {
+			smsSender = notify.NewSimpleSMSSender(smsFromNumber, func(ctx context.Context, to, from, body string) error {
 				return messenger.SendReply(ctx, conversation.OutboundReply{
 					To:   to,
 					From: from,
 					Body: body,
 				})
 			}, logger)
-			logger.Info("sms sender initialized for operator notifications (inline workers)")
+			logger.Info("sms sender initialized for operator notifications (inline workers)", "from", smsFromNumber)
 		} else {
 			smsSender = notify.NewStubSMSSender(logger)
-			logger.Warn("operator SMS notifications disabled for inline workers (messenger not available)")
+			logger.Warn("operator SMS notifications disabled for inline workers (messenger not available or no from number)")
 		}
 
 		notifier = notify.NewService(emailSender, smsSender, clinicStore, leadsRepo, logger)
