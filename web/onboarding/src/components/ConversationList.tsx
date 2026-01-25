@@ -1,5 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { listConversations, type ApiScope } from '../api/client';
+import {
+  listConversations,
+  clearAllPatientData,
+  clearPatientDataByPhone,
+  type ApiScope,
+} from '../api/client';
 import type { ConversationListItem } from '../types/conversation';
 
 interface ConversationListProps {
@@ -40,6 +45,15 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
   const [totalPages, setTotalPages] = useState(1);
   const [phoneFilter, setPhoneFilter] = useState('');
 
+  // Clear patient data state (admin only)
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
+  const [clearingPhone, setClearingPhone] = useState<string | null>(null);
+  const [clearConfirmPhone, setClearConfirmPhone] = useState<string | null>(null);
+  const [clearMessage, setClearMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const isAdmin = scope === 'admin';
+
   const loadConversations = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -68,6 +82,46 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
     return () => clearInterval(interval);
   }, [loadConversations]);
 
+  // Clear all patient data handler
+  const handleClearAll = useCallback(async () => {
+    setClearingAll(true);
+    setClearMessage(null);
+    try {
+      await clearAllPatientData(orgId);
+      setClearMessage({ type: 'success', text: 'All patient data cleared successfully' });
+      setShowClearAllConfirm(false);
+      // Refresh the list
+      await loadConversations();
+    } catch (err) {
+      setClearMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to clear patient data',
+      });
+    } finally {
+      setClearingAll(false);
+    }
+  }, [orgId, loadConversations]);
+
+  // Clear individual patient data handler
+  const handleClearPhone = useCallback(async (phone: string) => {
+    setClearingPhone(phone);
+    setClearMessage(null);
+    try {
+      await clearPatientDataByPhone(orgId, phone);
+      setClearMessage({ type: 'success', text: `Data for ${formatPhone(phone)} cleared successfully` });
+      setClearConfirmPhone(null);
+      // Refresh the list
+      await loadConversations();
+    } catch (err) {
+      setClearMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to clear patient data',
+      });
+    } finally {
+      setClearingPhone(null);
+    }
+  }, [orgId, loadConversations]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
@@ -79,14 +133,102 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
       <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Conversations</h1>
-          <button
-            onClick={loadConversations}
-            disabled={loading}
-            className="px-3 py-2 text-sm sm:px-4 sm:text-base bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 w-full sm:w-auto"
-          >
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <button
+                onClick={() => setShowClearAllConfirm(true)}
+                disabled={clearingAll || loading}
+                className="px-3 py-2 text-sm sm:px-4 sm:text-base bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {clearingAll ? 'Clearing...' : 'Clear All Patient Data'}
+              </button>
+            )}
+            <button
+              onClick={loadConversations}
+              disabled={loading}
+              className="px-3 py-2 text-sm sm:px-4 sm:text-base bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 w-full sm:w-auto"
+            >
+              {loading ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
         </div>
+
+        {/* Clear All Confirmation Modal */}
+        {showClearAllConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear All Patient Data?</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                This will permanently delete all conversations, leads, deposits, and payment records.
+                <strong className="block mt-2 text-gray-900">Clinic configuration and knowledge will be preserved.</strong>
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowClearAllConfirm(false)}
+                  disabled={clearingAll}
+                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleClearAll}
+                  disabled={clearingAll}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                >
+                  {clearingAll ? 'Clearing...' : 'Yes, Clear All'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clear Phone Confirmation Modal */}
+        {clearConfirmPhone && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear Patient Data?</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                This will permanently delete all data for <strong>{formatPhone(clearConfirmPhone)}</strong>:
+                conversations, lead info, deposits, and payment records.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setClearConfirmPhone(null)}
+                  disabled={!!clearingPhone}
+                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleClearPhone(clearConfirmPhone)}
+                  disabled={!!clearingPhone}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                >
+                  {clearingPhone === clearConfirmPhone ? 'Clearing...' : 'Yes, Clear'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success/Error Message */}
+        {clearMessage && (
+          <div
+            className={`mb-4 p-4 rounded-md ${
+              clearMessage.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}
+          >
+            {clearMessage.text}
+            <button
+              onClick={() => setClearMessage(null)}
+              className="ml-2 text-sm underline hover:no-underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Search */}
         <form onSubmit={handleSearch} className="mb-4 sm:mb-6">
@@ -131,12 +273,17 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
                     Last Activity
                   </th>
+                  {isAdmin && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {conversations.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500 sm:px-6">
+                    <td colSpan={isAdmin ? 5 : 4} className="px-4 py-8 text-center text-gray-500 sm:px-6">
                       No conversations found
                     </td>
                   </tr>
@@ -144,15 +291,20 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                   conversations.map((conv) => (
                     <tr
                       key={conv.id}
-                      onClick={() => onSelect(conv.id)}
-                      className="hover:bg-gray-50 cursor-pointer"
+                      className="hover:bg-gray-50"
                     >
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <td
+                        className="px-4 py-4 whitespace-nowrap sm:px-6 cursor-pointer"
+                        onClick={() => onSelect(conv.id)}
+                      >
                         <span className="text-sm font-medium text-gray-900">
                           {formatPhone(conv.customer_phone)}
                         </span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <td
+                        className="px-4 py-4 whitespace-nowrap sm:px-6 cursor-pointer"
+                        onClick={() => onSelect(conv.id)}
+                      >
                         <div className="text-sm text-gray-500">
                           <span>{conv.message_count}</span>
                           <span className="hidden sm:inline text-xs text-gray-400 ml-1">
@@ -160,7 +312,10 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <td
+                        className="px-4 py-4 whitespace-nowrap sm:px-6 cursor-pointer"
+                        onClick={() => onSelect(conv.id)}
+                      >
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             conv.status === 'active'
@@ -171,9 +326,26 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                           {conv.status}
                         </span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                      <td
+                        className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6 cursor-pointer"
+                        onClick={() => onSelect(conv.id)}
+                      >
                         {conv.last_message_at ? timeAgo(conv.last_message_at) : timeAgo(conv.started_at)}
                       </td>
+                      {isAdmin && (
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClearConfirmPhone(conv.customer_phone);
+                            }}
+                            disabled={clearingPhone === conv.customer_phone}
+                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50"
+                          >
+                            {clearingPhone === conv.customer_phone ? 'Clearing...' : 'Clear'}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
