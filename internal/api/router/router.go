@@ -186,6 +186,7 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Get("/square/status", cfg.SquareOAuth.HandleStatus)
 					clinicRoutes.Delete("/square/disconnect", cfg.SquareOAuth.HandleDisconnect)
 					clinicRoutes.Post("/square/sync-location", cfg.SquareOAuth.HandleSyncLocation)
+					clinicRoutes.Post("/square/setup", cfg.SquareOAuth.HandleSandboxSetup)
 					clinicRoutes.Put("/phone", cfg.SquareOAuth.HandleUpdatePhone)
 				}
 			})
