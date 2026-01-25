@@ -677,3 +677,41 @@ export async function listOrgs(): Promise<ListOrgsResponse> {
   }
   return res.json();
 }
+
+// Patient Data Management API
+
+/**
+ * Clear all patient data for an organization.
+ * This removes conversations, leads, deposits, payments, bookings, and messages
+ * but preserves clinic configuration and knowledge.
+ */
+export async function clearAllPatientData(orgId: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/admin/clinics/${orgId}/data`, {
+    method: 'DELETE',
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+/**
+ * Clear patient data for a specific phone number.
+ * This removes conversations, leads, deposits, payments, and messages
+ * associated with the given phone number.
+ */
+export async function clearPatientDataByPhone(
+  orgId: string,
+  phone: string
+): Promise<{ message: string }> {
+  const encodedPhone = encodeURIComponent(phone);
+  const res = await fetch(`${API_BASE}/admin/clinics/${orgId}/phones/${encodedPhone}`, {
+    method: 'DELETE',
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
