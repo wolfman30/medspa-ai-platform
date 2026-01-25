@@ -1,10 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
   getPortalOverview,
   listConversations,
   listDeposits,
-  clearAllPatientData,
-  clearPatientDataByPhone,
   type PortalDashboardOverview,
 } from '../api/client';
 import type { ConversationListItem } from '../types/conversation';
