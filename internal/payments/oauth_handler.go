@@ -52,6 +52,7 @@ func (h *OAuthHandler) AdminRoutes() chi.Router {
 	r.Get("/{orgID}/square/status", h.HandleStatus)
 	r.Delete("/{orgID}/square/disconnect", h.HandleDisconnect)
 	r.Post("/{orgID}/square/sync-location", h.HandleSyncLocation)
+	r.Post("/{orgID}/square/setup", h.HandleSandboxSetup)
 	r.Put("/{orgID}/phone", h.HandleUpdatePhone)
 	return r
 }
@@ -341,6 +342,72 @@ func (h *OAuthHandler) HandleUpdatePhone(w http.ResponseWriter, r *http.Request)
 		"org_id":       orgID,
 		"phone_number": phone,
 		"message":      "Phone number updated successfully",
+	})
+}
+
+// HandleSandboxSetup creates Square credentials directly for sandbox/dev testing.
+// POST /admin/clinics/{orgID}/square/setup
+// This bypasses the OAuth flow for easier testing in sandbox environments.
+func (h *OAuthHandler) HandleSandboxSetup(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgID")
+	if orgID == "" {
+		http.Error(w, `{"error": "org_id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		AccessToken string `json:"access_token"`
+		LocationID  string `json:"location_id"`
+		PhoneNumber string `json:"phone_number"`
+		MerchantID  string `json:"merchant_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Use defaults from environment if not provided
+	if req.MerchantID == "" {
+		req.MerchantID = "sandbox-merchant"
+	}
+
+	creds := &SquareCredentials{
+		OrgID:          orgID,
+		MerchantID:     req.MerchantID,
+		AccessToken:    req.AccessToken,
+		RefreshToken:   "",
+		TokenExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+		LocationID:     req.LocationID,
+		PhoneNumber:    req.PhoneNumber,
+	}
+
+	if err := h.oauthService.SaveCredentials(r.Context(), orgID, creds); err != nil {
+		h.logger.Error("sandbox setup failed", "org_id", orgID, "error", err)
+		http.Error(w, `{"error": "failed to save credentials"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Update phone number separately if provided (SaveCredentials doesn't include phone)
+	if req.PhoneNumber != "" {
+		phone := req.PhoneNumber
+		if !strings.HasPrefix(phone, "+") {
+			phone = "+" + phone
+		}
+		if err := h.oauthService.UpdatePhoneNumber(r.Context(), orgID, phone); err != nil {
+			h.logger.Warn("failed to set phone number", "org_id", orgID, "error", err)
+		}
+	}
+
+	h.logger.Info("sandbox square setup completed", "org_id", orgID, "location_id", req.LocationID, "phone", req.PhoneNumber)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":      true,
+		"org_id":       orgID,
+		"merchant_id":  req.MerchantID,
+		"location_id":  req.LocationID,
+		"phone_number": req.PhoneNumber,
+		"message":      "Sandbox Square credentials configured successfully",
 	})
 }
 

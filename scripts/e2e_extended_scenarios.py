@@ -1018,7 +1018,7 @@ def test_square_admin(results: TestResults) -> bool:
         print_info("Testing phone number update...")
         resp = requests.put(
             f"{API_URL}/admin/clinics/{TEST_ORG_ID}/phone",
-            json={"phone": TEST_CLINIC_PHONE},
+            json={"phone_number": TEST_CLINIC_PHONE},
             headers=headers,
             timeout=15
         )
