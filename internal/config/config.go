@@ -28,6 +28,7 @@ type Config struct {
 	TelnyxStartReply                string
 	TelnyxFirstContactReply         string
 	TelnyxVoiceAckReply             string
+	TelnyxFromNumber                string
 	TelnyxTrackJobs                 bool
 	TelnyxRetryMaxAttempts          int
 	TelnyxRetryBaseDelay            time.Duration
@@ -170,6 +171,7 @@ func Load() *Config {
 		TelnyxStartReply:                getEnv("TELNYX_START_REPLY", "You're opted back in. Reply STOP to opt out."),
 		TelnyxFirstContactReply:         getEnv("TELNYX_FIRST_CONTACT_REPLY", ""),
 		TelnyxVoiceAckReply:             getEnv("TELNYX_VOICE_ACK_REPLY", ""),
+		TelnyxFromNumber:                getEnv("TELNYX_FROM_NUMBER", ""),
 		TelnyxTrackJobs:                 getEnvAsBool("TELNYX_TRACK_JOBS", false),
 		TelnyxRetryMaxAttempts:          getEnvAsInt("TELNYX_RETRY_MAX_ATTEMPTS", 5),
 		TelnyxRetryBaseDelay:            getEnvAsDuration("TELNYX_RETRY_BASE_DELAY", 5*time.Minute),
