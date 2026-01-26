@@ -65,15 +65,17 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	}
 
 	// Try to get lead details for notifications
-	// NOTE: We intentionally exclude health-related info (services, patient type, past treatments)
+	// NOTE: We exclude health-related info (services, past treatments, scheduling notes)
 	// from email/SMS notifications to avoid PHI in unencrypted channels.
+	// Patient type (new/existing) is safe - it's customer status, not health info.
 	// Full details are available in the secure portal.
-	var leadName, leadPhone, preferredDays, preferredTimes string
+	var leadName, leadPhone, patientType, preferredDays, preferredTimes string
 	if s.leadsRepo != nil && evt.LeadID != "" {
 		lead, err := s.leadsRepo.GetByID(ctx, evt.OrgID, evt.LeadID)
 		if err == nil && lead != nil {
 			leadName = lead.Name
 			leadPhone = lead.Phone
+			patientType = lead.PatientType
 			preferredDays = lead.PreferredDays
 			preferredTimes = lead.PreferredTimes
 		}
@@ -83,6 +85,14 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	}
 	if leadName == "" {
 		leadName = "A patient"
+	}
+
+	// Format patient type for display
+	patientTypeInfo := ""
+	patientTypeHTML := ""
+	if patientType != "" {
+		patientTypeInfo = fmt.Sprintf("\nPatient Type: %s", strings.Title(patientType))
+		patientTypeHTML = fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient Type:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, strings.Title(patientType))
 	}
 
 	// Format amount
@@ -119,14 +129,14 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 		body := fmt.Sprintf(`%s has paid their %s deposit!
 
 Patient: %s
-Phone: %s
+Phone: %s%s
 Amount: %s
 Paid: %s%s%s
 Payment ID: %s
 
 This patient is now a priority lead. Please follow up to confirm their appointment.
 
-— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, transactionTime, preferencesInfo, scheduledInfo, evt.ProviderRef, cfg.Name)
+— %s AI`, leadName, amountStr, leadName, leadPhone, patientTypeInfo, amountStr, transactionTime, preferencesInfo, scheduledInfo, evt.ProviderRef, cfg.Name)
 
 		html := fmt.Sprintf(`<div style="font-family: sans-serif; max-width: 600px;">
 <h2 style="color: #10b981;">💰 Deposit Received!</h2>
@@ -134,7 +144,7 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 <table style="border-collapse: collapse; margin: 20px 0;">
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><a href="tel:%s">%s</a></td></tr>
-  <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
+  %s<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Paid:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   %s%s
 </table>
@@ -143,7 +153,7 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 </p>
 <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">— %s AI</p>
 </div>`,
-			leadName, amountStr, leadName, leadPhone, leadPhone, amountStr, transactionTime,
+			leadName, amountStr, leadName, leadPhone, leadPhone, patientTypeHTML, amountStr, transactionTime,
 			s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
 
 		for _, recipient := range cfg.Notifications.EmailRecipients {
@@ -167,8 +177,12 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 	smsRecipients := cfg.Notifications.GetSMSRecipients()
 	smsTransactionTime := evt.OccurredAt.Format("1/2 3:04PM")
 	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
-		smsBody := fmt.Sprintf("💰 %s paid %s deposit at %s. Phone: %s%s%s. Please call to confirm appointment.",
-			leadName, amountStr, smsTransactionTime, leadPhone, s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor))
+		patientTypeSMS := ""
+		if patientType != "" {
+			patientTypeSMS = fmt.Sprintf(" (%s)", patientType)
+		}
+		smsBody := fmt.Sprintf("💰 %s%s paid %s deposit at %s. Phone: %s%s%s. Please call to confirm appointment.",
+			leadName, patientTypeSMS, amountStr, smsTransactionTime, leadPhone, s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor))
 
 		for _, recipient := range smsRecipients {
 			if err := s.sms.SendSMS(ctx, recipient, smsBody); err != nil {
