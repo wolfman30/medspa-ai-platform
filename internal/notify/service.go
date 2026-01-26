@@ -64,19 +64,18 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 		return nil
 	}
 
-	// Try to get lead details for richer notifications
-	var leadName, leadPhone, serviceInterest, patientType, pastServices, preferredDays, preferredTimes, schedulingNotes string
+	// Try to get lead details for notifications
+	// NOTE: We intentionally exclude health-related info (services, patient type, past treatments)
+	// from email/SMS notifications to avoid PHI in unencrypted channels.
+	// Full details are available in the secure portal.
+	var leadName, leadPhone, preferredDays, preferredTimes string
 	if s.leadsRepo != nil && evt.LeadID != "" {
 		lead, err := s.leadsRepo.GetByID(ctx, evt.OrgID, evt.LeadID)
 		if err == nil && lead != nil {
 			leadName = lead.Name
 			leadPhone = lead.Phone
-			serviceInterest = lead.ServiceInterest
-			patientType = lead.PatientType
-			pastServices = lead.PastServices
 			preferredDays = lead.PreferredDays
 			preferredTimes = lead.PreferredTimes
-			schedulingNotes = lead.SchedulingNotes
 		}
 	}
 	if leadPhone == "" {
@@ -92,25 +91,13 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	// Build scheduled time info if available
 	scheduledInfo := ""
 	if evt.ScheduledFor != nil {
-		scheduledInfo = fmt.Sprintf("\nScheduled for: %s", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
+		scheduledInfo = fmt.Sprintf("\nPreferred time: %s", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
 	}
 
 	// Format transaction time
 	transactionTime := evt.OccurredAt.Format("January 2, 2006 at 3:04 PM")
 
-	// Build service and scheduling preference info
-	serviceInfo := ""
-	if serviceInterest != "" {
-		serviceInfo = fmt.Sprintf("\nService Interest: %s", serviceInterest)
-	}
-	patientTypeInfo := ""
-	if patientType != "" {
-		patientTypeInfo = fmt.Sprintf("\nPatient Type: %s", patientType)
-	}
-	pastServicesInfo := ""
-	if pastServices != "" {
-		pastServicesInfo = fmt.Sprintf("\nPrevious Services: %s", pastServices)
-	}
+	// Build time preferences (not health-related, just scheduling)
 	preferencesInfo := ""
 	if preferredDays != "" || preferredTimes != "" {
 		parts := []string{}
@@ -122,14 +109,11 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 		}
 		preferencesInfo = fmt.Sprintf("\nTime Preferences: %s", strings.Join(parts, ", "))
 	}
-	notesInfo := ""
-	if schedulingNotes != "" {
-		notesInfo = fmt.Sprintf("\nNotes: %s", schedulingNotes)
-	}
 
 	var errs []error
 
 	// Send email notifications
+	// NOTE: Emails exclude health-related info (services, conditions, treatment history) to avoid PHI exposure
 	if cfg.Notifications.EmailEnabled && s.email != nil && len(cfg.Notifications.EmailRecipients) > 0 {
 		subject := fmt.Sprintf("💰 Deposit Received - %s", leadName)
 		body := fmt.Sprintf(`%s has paid their %s deposit!
@@ -137,12 +121,12 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 Patient: %s
 Phone: %s
 Amount: %s
-Paid: %s%s%s%s%s%s%s
+Paid: %s%s%s
 Payment ID: %s
 
 This patient is now a priority lead. Please follow up to confirm their appointment.
 
-— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, transactionTime, patientTypeInfo, pastServicesInfo, serviceInfo, preferencesInfo, scheduledInfo, notesInfo, evt.ProviderRef, cfg.Name)
+— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, transactionTime, preferencesInfo, scheduledInfo, evt.ProviderRef, cfg.Name)
 
 		html := fmt.Sprintf(`<div style="font-family: sans-serif; max-width: 600px;">
 <h2 style="color: #10b981;">💰 Deposit Received!</h2>
@@ -150,19 +134,17 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 <table style="border-collapse: collapse; margin: 20px 0;">
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><a href="tel:%s">%s</a></td></tr>
-  %s%s<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
+  <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Paid:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
-  %s%s%s
+  %s%s
 </table>
 <p style="background: #f0fdf4; padding: 12px; border-radius: 8px; border-left: 4px solid #10b981;">
   ⭐ <strong>Priority Lead</strong> — Please follow up to confirm their appointment.
 </p>
 <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">— %s AI</p>
 </div>`,
-			leadName, amountStr, leadName, leadPhone, leadPhone,
-			s.formatPatientTypeHTML(patientType), s.formatPastServicesHTML(pastServices),
-			amountStr, transactionTime,
-			s.formatServiceHTML(serviceInterest), s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
+			leadName, amountStr, leadName, leadPhone, leadPhone, amountStr, transactionTime,
+			s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
 
 		for _, recipient := range cfg.Notifications.EmailRecipients {
 			msg := EmailMessage{
@@ -181,11 +163,12 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 	}
 
 	// Send SMS to operators (supports multiple recipients)
+	// NOTE: SMS excludes health-related info to avoid PHI exposure
 	smsRecipients := cfg.Notifications.GetSMSRecipients()
 	smsTransactionTime := evt.OccurredAt.Format("1/2 3:04PM")
 	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
-		smsBody := fmt.Sprintf("💰 %s paid %s deposit at %s. Phone: %s%s%s%s. Please call to confirm appointment.",
-			leadName, amountStr, smsTransactionTime, leadPhone, s.formatServiceSMS(serviceInterest), s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor))
+		smsBody := fmt.Sprintf("💰 %s paid %s deposit at %s. Phone: %s%s%s. Please call to confirm appointment.",
+			leadName, amountStr, smsTransactionTime, leadPhone, s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor))
 
 		for _, recipient := range smsRecipients {
 			if err := s.sms.SendSMS(ctx, recipient, smsBody); err != nil {
@@ -211,13 +194,6 @@ func (s *Service) formatScheduledHTML(t *time.Time) string {
 		t.Format("Monday, January 2 at 3:04 PM"))
 }
 
-func (s *Service) formatServiceHTML(service string) string {
-	if service == "" {
-		return ""
-	}
-	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Service Interest:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, service)
-}
-
 func (s *Service) formatPreferencesHTML(days, times string) string {
 	if days == "" && times == "" {
 		return ""
@@ -232,36 +208,11 @@ func (s *Service) formatPreferencesHTML(days, times string) string {
 	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Time Preferences:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, strings.Join(parts, ", "))
 }
 
-func (s *Service) formatPatientTypeHTML(patientType string) string {
-	if patientType == "" {
-		return ""
-	}
-	label := "New Patient"
-	if patientType == "existing" {
-		label = "Existing Patient"
-	}
-	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient Type:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, label)
-}
-
-func (s *Service) formatPastServicesHTML(pastServices string) string {
-	if pastServices == "" {
-		return ""
-	}
-	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Previous Services:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, pastServices)
-}
-
 func (s *Service) formatScheduledSMS(t *time.Time) string {
 	if t == nil {
 		return ""
 	}
 	return fmt.Sprintf(" for %s", t.Format("Mon 1/2 3:04PM"))
-}
-
-func (s *Service) formatServiceSMS(service string) string {
-	if service == "" {
-		return ""
-	}
-	return fmt.Sprintf(". Service: %s", service)
 }
 
 func (s *Service) formatPreferencesSMS(days, times string) string {
