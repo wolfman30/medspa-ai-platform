@@ -146,10 +146,9 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		return nil, fmt.Errorf("leads: lookup by phone failed: %w", err)
 	}
 
+	// Use defaultName as-is; if empty, keep it empty - name will be extracted from conversation
+	// Notification service handles empty names by showing "A patient"
 	name := strings.TrimSpace(defaultName)
-	if name == "" {
-		name = phone
-	}
 	req := &CreateLeadRequest{
 		OrgID:  orgID,
 		Name:   name,
