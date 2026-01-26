@@ -102,10 +102,8 @@ func (r *InMemoryRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 	if latest != nil {
 		return latest, nil
 	}
+	// Use defaultName as-is; if empty, keep it empty - name will be extracted from conversation
 	name := strings.TrimSpace(defaultName)
-	if name == "" {
-		name = phone
-	}
 	req := &CreateLeadRequest{
 		OrgID:   orgID,
 		Name:    name,

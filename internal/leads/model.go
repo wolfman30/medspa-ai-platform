@@ -41,9 +41,7 @@ func (r *CreateLeadRequest) Validate() error {
 	if strings.TrimSpace(r.OrgID) == "" {
 		return ErrMissingOrgID
 	}
-	if r.Name == "" {
-		return ErrInvalidName
-	}
+	// Name is optional - will be extracted from conversation later
 	if r.Email == "" && r.Phone == "" {
 		return ErrMissingContact
 	}

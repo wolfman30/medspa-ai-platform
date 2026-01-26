@@ -792,7 +792,8 @@ func (h *TelnyxWebhookHandler) dispatchConversation(ctx context.Context, evt tel
 	}
 	leadID := fmt.Sprintf("%s:%s", orgID, from)
 	if h.leads != nil {
-		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_sms", from)
+		// Pass empty defaultName - name will be extracted from conversation later
+		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_sms", "")
 		if err != nil {
 			h.logger.Error("failed to persist lead for telnyx inbound", "error", err, "org_id", orgID, "from", from)
 			return
@@ -852,7 +853,8 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	orgID := clinicID.String()
 	leadID := fmt.Sprintf("%s:%s", orgID, from)
 	if h.leads != nil {
-		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_voice", from)
+		// Pass empty defaultName - name will be extracted from conversation later
+		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_voice", "")
 		if err != nil {
 			return fmt.Errorf("persist lead: %w", err)
 		}

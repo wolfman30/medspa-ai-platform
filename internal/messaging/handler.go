@@ -462,7 +462,8 @@ func (h *Handler) ensureLead(ctx context.Context, orgID, phone, source string) (
 	if h.leads == nil {
 		return deterministicLeadID(orgID, normalized), true, nil
 	}
-	lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, normalized, source, normalized)
+	// Pass empty defaultName - name will be extracted from conversation later
+	lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, normalized, source, "")
 	if err != nil {
 		return "", false, err
 	}
