@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -81,6 +82,14 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	if emrAdapter != nil {
 		opts = append(opts, conversation.WithEMR(emrAdapter))
 		logger.Info("EMR integration enabled")
+	}
+
+	// Configure browser sidecar for booking page scraping (fallback when EMR is not available)
+	if cfg.BrowserSidecarURL != "" {
+		browserClient := browser.NewClient(cfg.BrowserSidecarURL, browser.WithLogger(logger))
+		browserAdapter := conversation.NewBrowserAdapter(browserClient, logger)
+		opts = append(opts, conversation.WithBrowserAdapter(browserAdapter))
+		logger.Info("browser sidecar integration enabled", "url", cfg.BrowserSidecarURL)
 	}
 
 	// Wire in leads repository for preference capture

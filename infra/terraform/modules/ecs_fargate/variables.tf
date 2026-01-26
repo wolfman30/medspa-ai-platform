@@ -183,3 +183,34 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# Browser Sidecar Configuration
+variable "enable_browser_sidecar" {
+  description = "Enable the browser sidecar container for booking availability scraping"
+  type        = bool
+  default     = false
+}
+
+variable "browser_sidecar_image_uri" {
+  description = "Full container image URI for the browser sidecar. When empty, uses the module-managed ECR repo."
+  type        = string
+  default     = ""
+}
+
+variable "browser_sidecar_port" {
+  description = "Port the browser sidecar listens on"
+  type        = number
+  default     = 3000
+}
+
+variable "browser_sidecar_cpu" {
+  description = "CPU units allocated to the browser sidecar container"
+  type        = number
+  default     = 512
+}
+
+variable "browser_sidecar_memory" {
+  description = "Memory (MiB) allocated to the browser sidecar container"
+  type        = number
+  default     = 1024
+}

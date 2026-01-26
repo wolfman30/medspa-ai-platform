@@ -20,6 +20,16 @@ resource "aws_cloudwatch_log_group" "migrate" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "browser_sidecar" {
+  count             = var.enable_browser_sidecar ? 1 : 0
+  name              = "/ecs/${local.name_prefix}-browser-sidecar"
+  retention_in_days = 14
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-browser-sidecar-logs"
+  })
+}
+
 resource "aws_ecr_repository" "api" {
   name                 = "${local.name_prefix}-api"
   image_tag_mutability = "MUTABLE"
@@ -31,6 +41,21 @@ resource "aws_ecr_repository" "api" {
 
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-api-ecr"
+  })
+}
+
+resource "aws_ecr_repository" "browser_sidecar" {
+  count                = var.enable_browser_sidecar ? 1 : 0
+  name                 = "${local.name_prefix}-browser-sidecar"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-browser-sidecar-ecr"
   })
 }
 
@@ -366,10 +391,51 @@ locals {
   migrate_image_uri  = "${aws_ecr_repository.api.repository_url}:migrate-${var.image_tag}"
   prod_listener_arns = var.certificate_arn != "" ? [aws_lb_listener.https[0].arn] : [aws_lb_listener.http.arn]
 
+  # Browser sidecar image URI (only computed when enabled)
+  browser_sidecar_image_uri = var.enable_browser_sidecar ? (
+    var.browser_sidecar_image_uri != "" ? var.browser_sidecar_image_uri : "${aws_ecr_repository.browser_sidecar[0].repository_url}:${var.image_tag}"
+  ) : ""
+
+  # Browser sidecar container definition (only when enabled)
+  browser_sidecar_container = var.enable_browser_sidecar ? [{
+    name      = "browser-sidecar"
+    image     = local.browser_sidecar_image_uri
+    essential = false
+    portMappings = [
+      {
+        containerPort = var.browser_sidecar_port
+        hostPort      = var.browser_sidecar_port
+        protocol      = "tcp"
+      }
+    ]
+    environment = [
+      { name = "PORT", value = tostring(var.browser_sidecar_port) },
+      { name = "HEADLESS", value = "true" },
+      { name = "NODE_ENV", value = "production" }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.browser_sidecar[0].name
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "browser"
+      }
+    }
+    healthCheck = {
+      command     = ["CMD-SHELL", "curl -f http://localhost:${var.browser_sidecar_port}/health || exit 1"]
+      interval    = 30
+      timeout     = 10
+      retries     = 3
+      startPeriod = 60
+    }
+  }] : []
+
   base_env = merge({
     PORT = tostring(var.container_port)
     ENV  = var.environment
-  }, var.environment_variables)
+  }, var.environment_variables, var.enable_browser_sidecar ? {
+    BROWSER_SIDECAR_URL = "http://localhost:${var.browser_sidecar_port}"
+  } : {})
 
   env_list = [
     for k, v in local.base_env : {
@@ -397,12 +463,13 @@ resource "aws_ecs_task_definition" "api" {
   family                   = "${local.name_prefix}-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = var.task_cpu
-  memory                   = var.task_memory
+  # Increase CPU/memory when browser sidecar is enabled
+  cpu                      = var.enable_browser_sidecar ? var.task_cpu + var.browser_sidecar_cpu : var.task_cpu
+  memory                   = var.enable_browser_sidecar ? var.task_memory + var.browser_sidecar_memory : var.task_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = "api"
       image     = local.computed_image_uri
@@ -425,7 +492,7 @@ resource "aws_ecs_task_definition" "api" {
         }
       }
     }
-  ])
+  ], local.browser_sidecar_container))
 
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-taskdef"
