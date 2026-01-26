@@ -19,6 +19,7 @@ type Lead struct {
 	// Scheduling preferences (captured during AI conversation)
 	ServiceInterest string `json:"service_interest,omitempty"` // e.g., "Botox", "Filler", "Consultation"
 	PatientType     string `json:"patient_type,omitempty"`     // "new" or "existing"
+	PastServices    string `json:"past_services,omitempty"`    // Services patient received before (for existing patients)
 	PreferredDays   string `json:"preferred_days,omitempty"`   // e.g., "weekdays", "weekends", "any"
 	PreferredTimes  string `json:"preferred_times,omitempty"`  // e.g., "morning", "afternoon", "evening"
 	SchedulingNotes string `json:"scheduling_notes,omitempty"` // free-form notes from conversation

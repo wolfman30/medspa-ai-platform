@@ -14,6 +14,7 @@ type SchedulingPreferences struct {
 	Name            string // Patient's name (extracted from conversation)
 	ServiceInterest string // e.g., "Botox", "Filler", "Consultation"
 	PatientType     string // "new" or "existing"
+	PastServices    string // Services patient received before (for existing patients)
 	PreferredDays   string // e.g., "weekdays", "weekends", "any"
 	PreferredTimes  string // e.g., "morning", "afternoon", "evening"
 	Notes           string // free-form notes from conversation
@@ -147,6 +148,9 @@ func (r *InMemoryRepository) UpdateSchedulingPreferences(ctx context.Context, le
 	}
 	if prefs.PatientType != "" {
 		lead.PatientType = prefs.PatientType
+	}
+	if prefs.PastServices != "" {
+		lead.PastServices = prefs.PastServices
 	}
 	if prefs.PreferredDays != "" {
 		lead.PreferredDays = prefs.PreferredDays

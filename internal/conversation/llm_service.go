@@ -134,6 +134,11 @@ IF missing SERVICE (and have name):
 IF missing PATIENT TYPE (and have name + service):
   → "Are you a new patient or have you visited us before?"
 
+IF PATIENT TYPE = existing/returning AND we DON'T know what services they had before:
+  → "Welcome back! What treatment did you have with us previously?"
+  → This helps us personalize their experience and the clinic will appreciate knowing their history
+  → If they mention multiple services, note all of them (e.g., "Botox and filler")
+
 IF missing DAY preference (and have name + service + patient type):
   → "What days work best for you - weekdays or weekends?"
 
@@ -1720,6 +1725,67 @@ namePatternLoop:
 	if prefs.PatientType == "" {
 		if patientType := patientTypeFromShortReply(history); patientType != "" {
 			prefs.PatientType = patientType
+			hasPreferences = true
+		}
+	}
+
+	// Extract past services for existing/returning patients.
+	// Look for patterns like "I had botox before", "I've gotten filler", "did weight loss", etc.
+	if prefs.PatientType == "existing" || strings.Contains(userMessages, "before") || strings.Contains(userMessages, "previously") || strings.Contains(userMessages, "last time") {
+		pastServicePatterns := []struct {
+			pattern string
+			name    string
+		}{
+			{"had botox", "Botox"},
+			{"got botox", "Botox"},
+			{"did botox", "Botox"},
+			{"had filler", "filler"},
+			{"got filler", "filler"},
+			{"did filler", "filler"},
+			{"had lip", "lip filler"},
+			{"got lip", "lip filler"},
+			{"had hydrafacial", "HydraFacial"},
+			{"got hydrafacial", "HydraFacial"},
+			{"had facial", "facial"},
+			{"got facial", "facial"},
+			{"did facial", "facial"},
+			{"had weight loss", "weight loss"},
+			{"did weight loss", "weight loss"},
+			{"had semaglutide", "semaglutide"},
+			{"did semaglutide", "semaglutide"},
+			{"had laser", "laser"},
+			{"got laser", "laser"},
+			{"had microneedling", "microneedling"},
+			{"got microneedling", "microneedling"},
+			{"had peel", "peel"},
+			{"got peel", "peel"},
+			{"had prp", "PRP"},
+			{"got prp", "PRP"},
+			{"had dysport", "Dysport"},
+			{"got dysport", "Dysport"},
+			{"had jeuveau", "Jeuveau"},
+			{"got jeuveau", "Jeuveau"},
+			{"had xeomin", "Xeomin"},
+			{"got xeomin", "Xeomin"},
+		}
+		var pastServices []string
+		for _, svc := range pastServicePatterns {
+			if strings.Contains(userMessages, svc.pattern) {
+				// Avoid duplicates
+				found := false
+				for _, existing := range pastServices {
+					if strings.EqualFold(existing, svc.name) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					pastServices = append(pastServices, svc.name)
+				}
+			}
+		}
+		if len(pastServices) > 0 {
+			prefs.PastServices = strings.Join(pastServices, ", ")
 			hasPreferences = true
 		}
 	}
