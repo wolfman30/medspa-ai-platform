@@ -65,13 +65,15 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	}
 
 	// Try to get lead details for richer notifications
-	var leadName, leadPhone, serviceInterest, preferredDays, preferredTimes, schedulingNotes string
+	var leadName, leadPhone, serviceInterest, patientType, pastServices, preferredDays, preferredTimes, schedulingNotes string
 	if s.leadsRepo != nil && evt.LeadID != "" {
 		lead, err := s.leadsRepo.GetByID(ctx, evt.OrgID, evt.LeadID)
 		if err == nil && lead != nil {
 			leadName = lead.Name
 			leadPhone = lead.Phone
 			serviceInterest = lead.ServiceInterest
+			patientType = lead.PatientType
+			pastServices = lead.PastServices
 			preferredDays = lead.PreferredDays
 			preferredTimes = lead.PreferredTimes
 			schedulingNotes = lead.SchedulingNotes
@@ -101,6 +103,14 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	if serviceInterest != "" {
 		serviceInfo = fmt.Sprintf("\nService Interest: %s", serviceInterest)
 	}
+	patientTypeInfo := ""
+	if patientType != "" {
+		patientTypeInfo = fmt.Sprintf("\nPatient Type: %s", patientType)
+	}
+	pastServicesInfo := ""
+	if pastServices != "" {
+		pastServicesInfo = fmt.Sprintf("\nPrevious Services: %s", pastServices)
+	}
 	preferencesInfo := ""
 	if preferredDays != "" || preferredTimes != "" {
 		parts := []string{}
@@ -127,12 +137,12 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 Patient: %s
 Phone: %s
 Amount: %s
-Paid: %s%s%s%s%s
+Paid: %s%s%s%s%s%s%s
 Payment ID: %s
 
 This patient is now a priority lead. Please follow up to confirm their appointment.
 
-— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, transactionTime, serviceInfo, preferencesInfo, scheduledInfo, notesInfo, evt.ProviderRef, cfg.Name)
+— %s AI`, leadName, amountStr, leadName, leadPhone, amountStr, transactionTime, patientTypeInfo, pastServicesInfo, serviceInfo, preferencesInfo, scheduledInfo, notesInfo, evt.ProviderRef, cfg.Name)
 
 		html := fmt.Sprintf(`<div style="font-family: sans-serif; max-width: 600px;">
 <h2 style="color: #10b981;">💰 Deposit Received!</h2>
@@ -140,7 +150,7 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 <table style="border-collapse: collapse; margin: 20px 0;">
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><a href="tel:%s">%s</a></td></tr>
-  <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
+  %s%s<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Paid:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>
   %s%s%s
 </table>
@@ -149,7 +159,9 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 </p>
 <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">— %s AI</p>
 </div>`,
-			leadName, amountStr, leadName, leadPhone, leadPhone, amountStr, transactionTime,
+			leadName, amountStr, leadName, leadPhone, leadPhone,
+			s.formatPatientTypeHTML(patientType), s.formatPastServicesHTML(pastServices),
+			amountStr, transactionTime,
 			s.formatServiceHTML(serviceInterest), s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
 
 		for _, recipient := range cfg.Notifications.EmailRecipients {
@@ -218,6 +230,24 @@ func (s *Service) formatPreferencesHTML(days, times string) string {
 		parts = append(parts, times)
 	}
 	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Time Preferences:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, strings.Join(parts, ", "))
+}
+
+func (s *Service) formatPatientTypeHTML(patientType string) string {
+	if patientType == "" {
+		return ""
+	}
+	label := "New Patient"
+	if patientType == "existing" {
+		label = "Existing Patient"
+	}
+	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Patient Type:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, label)
+}
+
+func (s *Service) formatPastServicesHTML(pastServices string) string {
+	if pastServices == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Previous Services:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, pastServices)
 }
 
 func (s *Service) formatScheduledSMS(t *time.Time) string {

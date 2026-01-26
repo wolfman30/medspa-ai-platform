@@ -67,6 +67,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		SELECT id, org_id, name, email, phone, message, source, created_at,
 		       COALESCE(service_interest, '') as service_interest,
 		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(past_services, '') as past_services,
 		       COALESCE(preferred_days, '') as preferred_days,
 		       COALESCE(preferred_times, '') as preferred_times,
 		       COALESCE(scheduling_notes, '') as scheduling_notes,
@@ -88,6 +89,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		&lead.CreatedAt,
 		&lead.ServiceInterest,
 		&lead.PatientType,
+		&lead.PastServices,
 		&lead.PreferredDays,
 		&lead.PreferredTimes,
 		&lead.SchedulingNotes,
@@ -113,6 +115,7 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		SELECT id, org_id, name, email, phone, message, source, created_at,
 		       COALESCE(service_interest, '') as service_interest,
 		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(past_services, '') as past_services,
 		       COALESCE(preferred_days, '') as preferred_days,
 		       COALESCE(preferred_times, '') as preferred_times,
 		       COALESCE(scheduling_notes, '') as scheduling_notes,
@@ -135,6 +138,7 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		&lead.CreatedAt,
 		&lead.ServiceInterest,
 		&lead.PatientType,
+		&lead.PastServices,
 		&lead.PreferredDays,
 		&lead.PreferredTimes,
 		&lead.SchedulingNotes,
@@ -160,21 +164,23 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 
 // UpdateSchedulingPreferences updates a lead's scheduling preferences
 func (r *PostgresRepository) UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error {
-	// Build dynamic query - only update name if provided (don't overwrite with empty)
+	// Build dynamic query - only update fields if provided (don't overwrite with empty)
 	query := `
 		UPDATE leads
 		SET service_interest = COALESCE(NULLIF($2, ''), service_interest),
 		    patient_type = COALESCE(NULLIF($3, ''), patient_type),
-		    preferred_days = COALESCE(NULLIF($4, ''), preferred_days),
-		    preferred_times = COALESCE(NULLIF($5, ''), preferred_times),
-		    scheduling_notes = COALESCE(NULLIF($6, ''), scheduling_notes),
-		    name = COALESCE(NULLIF($7, ''), name)
+		    past_services = COALESCE(NULLIF($4, ''), past_services),
+		    preferred_days = COALESCE(NULLIF($5, ''), preferred_days),
+		    preferred_times = COALESCE(NULLIF($6, ''), preferred_times),
+		    scheduling_notes = COALESCE(NULLIF($7, ''), scheduling_notes),
+		    name = COALESCE(NULLIF($8, ''), name)
 		WHERE id = $1
 	`
 	result, err := r.pool.Exec(ctx, query,
 		leadID,
 		prefs.ServiceInterest,
 		prefs.PatientType,
+		prefs.PastServices,
 		prefs.PreferredDays,
 		prefs.PreferredTimes,
 		prefs.Notes,
@@ -214,6 +220,7 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 		SELECT id, org_id, name, email, phone, message, source, created_at,
 		       COALESCE(service_interest, '') as service_interest,
 		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(past_services, '') as past_services,
 		       COALESCE(preferred_days, '') as preferred_days,
 		       COALESCE(preferred_times, '') as preferred_times,
 		       COALESCE(scheduling_notes, '') as scheduling_notes,
@@ -266,6 +273,7 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 			&lead.CreatedAt,
 			&lead.ServiceInterest,
 			&lead.PatientType,
+			&lead.PastServices,
 			&lead.PreferredDays,
 			&lead.PreferredTimes,
 			&lead.SchedulingNotes,
