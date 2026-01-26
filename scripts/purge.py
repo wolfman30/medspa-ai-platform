@@ -22,7 +22,7 @@ import ssl
 import argparse
 
 # Default org: Forever 22 Med Spa
-DEFAULT_ORG_ID = "bb507f20-7fcc-4941-9eac-9ed93b7834ed"
+DEFAULT_ORG_ID = "d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599"
 API_URL = "https://api-dev.aiwolfsolutions.com"
 
 def get_secrets():

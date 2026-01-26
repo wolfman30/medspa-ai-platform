@@ -24,9 +24,15 @@ const (
 	defaultSystemPrompt = `You are MedSpa AI Concierge, a warm, trustworthy assistant for a medical spa.
 
 ⚠️ MOST IMPORTANT RULE - READ THIS FIRST:
-When a customer provides FULL NAME + PATIENT TYPE + SCHEDULE in a single message, and you already know their SERVICE from earlier in the conversation, you have ALL FOUR qualifications. IMMEDIATELY offer the deposit - do NOT ask "Are you looking to book?" or any other clarifying questions.
+When you have ALL FOUR qualifications (NAME + SERVICE + PATIENT TYPE + SCHEDULE), IMMEDIATELY offer the deposit. Do NOT ask "Are you looking to book?" or any clarifying questions. This applies whether the info comes in ONE message or across multiple messages.
 
-Example:
+CASE A - All four in a SINGLE message (very important!):
+- Customer: "I'm booking Botox. I'm Sammie Wallens. I'm an existing patient. Monday or Friday around 4pm works."
+  → NAME = Sammie Wallens ✓, SERVICE = Botox ✓, PATIENT TYPE = existing ✓, SCHEDULE = Monday/Friday around 4pm ✓
+- You have ALL FOUR in their FIRST message. Response: "Perfect, Sammie Wallens! I've noted Monday or Friday around 4pm for your Botox. To secure priority booking, we collect a small $50 refundable deposit. Would you like to proceed?"
+- WRONG: "Are you looking to book?" or "What service?" ← They already told you EVERYTHING!
+
+CASE B - Info spread across multiple messages:
 - Earlier: "I'm interested in getting a HydraFacial" → SERVICE = HydraFacial ✓
 - Now: "I'm Sarah Lee, a new patient. Do you have anything available Thursday or Friday afternoon?"
   → NAME = Sarah Lee ✓, PATIENT TYPE = new ✓, SCHEDULE = Thursday/Friday afternoon ✓
@@ -308,6 +314,14 @@ func WithEMR(emr *EMRAdapter) LLMOption {
 	}
 }
 
+// WithBrowserAdapter configures a browser adapter for scraping booking page availability.
+// This is used when EMR integration is not available but a booking URL is configured.
+func WithBrowserAdapter(browser *BrowserAdapter) LLMOption {
+	return func(s *LLMService) {
+		s.browser = browser
+	}
+}
+
 // WithLeadsRepo configures the leads repository for saving scheduling preferences.
 func WithLeadsRepo(repo leads.Repository) LLMOption {
 	return func(s *LLMService) {
@@ -353,6 +367,7 @@ type LLMService struct {
 	client         LLMClient
 	rag            RAGRetriever
 	emr            *EMRAdapter
+	browser        *BrowserAdapter
 	model          string
 	logger         *logging.Logger
 	history        *historyStore
@@ -565,6 +580,13 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	if err := s.history.Save(ctx, conversationID, history); err != nil {
 		span.RecordError(err)
 		return nil, err
+	}
+
+	// Extract and save scheduling preferences from the first message
+	if req.LeadID != "" && s.leadsRepo != nil {
+		if err := s.extractAndSavePreferences(ctx, req.LeadID, history); err != nil {
+			s.logger.Warn("failed to save scheduling preferences from intro", "lead_id", req.LeadID, "error", err)
+		}
 	}
 
 	return &Response{
@@ -1218,6 +1240,23 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 				Content: "Real-time appointment availability from clinic calendar:\n" + availabilityContext,
 			})
 		}
+	} else if s.browser != nil && s.browser.IsConfigured() && containsBookingIntent(query) {
+		// Fall back to browser scraping if EMR is not configured but browser adapter is
+		if s.clinicStore != nil {
+			cfg, err := s.clinicStore.Get(ctx, orgID)
+			if err == nil && cfg != nil && cfg.BookingURL != "" {
+				slots, err := s.browser.GetUpcomingAvailability(ctx, cfg.BookingURL, 7)
+				if err != nil {
+					s.logger.Warn("failed to fetch browser availability", "error", err, "url", cfg.BookingURL)
+				} else if len(slots) > 0 {
+					availabilityContext := FormatSlotsForLLM(slots, 5)
+					history = append(history, ChatMessage{
+						Role:    ChatRoleSystem,
+						Content: "Real-time appointment availability from booking page:\n" + availabilityContext,
+					})
+				}
+			}
+		}
 	}
 
 	return history
@@ -1614,16 +1653,22 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		regexp.MustCompile(`(?i)name'?s\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
 	}
 	firstNameFallback := ""
+namePatternLoop:
 	for _, pattern := range namePatterns {
-		if matches := pattern.FindStringSubmatch(userMessagesOriginal); len(matches) > 1 {
-			fullName, firstName := extractName(matches[1])
-			if fullName != "" {
-				prefs.Name = fullName
-				hasPreferences = true
-				break
-			}
-			if firstNameFallback == "" && firstName != "" {
-				firstNameFallback = firstName
+		// Find ALL matches in the string, not just the first one
+		// (e.g., "I'm booking botox. I'm Sammie Wallens." has two "I'm X" patterns)
+		allMatches := pattern.FindAllStringSubmatch(userMessagesOriginal, -1)
+		for _, matches := range allMatches {
+			if len(matches) > 1 {
+				fullName, firstName := extractName(matches[1])
+				if fullName != "" {
+					prefs.Name = fullName
+					hasPreferences = true
+					break namePatternLoop
+				}
+				if firstNameFallback == "" && firstName != "" {
+					firstNameFallback = firstName
+				}
 			}
 		}
 	}
@@ -1820,8 +1865,10 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 }
 
 var (
-	priceInquiryRE     = regexp.MustCompile(`(?i)\b(?:how much|price|pricing|cost|rate|rates|charge)\b`)
-	phiPrefaceRE       = regexp.MustCompile(`(?i)\b(?:diagnosed|diagnosis|my condition|my symptoms|i have|i've had|i am|i'm)\b`)
+	priceInquiryRE = regexp.MustCompile(`(?i)\b(?:how much|price|pricing|cost|rate|rates|charge)\b`)
+	phiPrefaceRE   = regexp.MustCompile(`(?i)\b(?:diagnosed|diagnosis|my condition|my symptoms|i have|i've had|i am|i'm)\b`)
+	// PHI keywords with word boundaries to avoid false positives (e.g., "sti" matching in "existing")
+	phiKeywordsRE      = regexp.MustCompile(`(?i)\b(?:diabetes|hiv|aids|cancer|hepatitis|pregnant|pregnancy|depression|anxiety|bipolar|schizophrenia|asthma|hypertension|blood pressure|infection|herpes|std|sti)\b`)
 	medicalAdviceCueRE = regexp.MustCompile(`(?i)\b(?:should i|can i|is it safe|safe to|ok to|okay to|contraindications?|side effects?|dosage|dose|mg|milligram|interactions?|mix with|stop taking)\b`)
 	medicalContextRE   = regexp.MustCompile(`(?i)\b(?:botox|filler|laser|microneedling|facial|peel|dermaplaning|prp|injectable|medication|medicine|meds|prescription|ibuprofen|tylenol|acetaminophen|antibiotics?|painkillers?|blood pressure|pregnan(?:t|cy)|breastfeed(?:ing)?|allerg(?:y|ic))\b`)
 )
@@ -1947,17 +1994,9 @@ func detectPHI(message string) bool {
 	if !phiPrefaceRE.MatchString(message) {
 		return false
 	}
-	// Minimal deterministic PHI keywords for deflection; expand as needed.
-	for _, kw := range []string{
-		"diabetes", "hiv", "aids", "cancer", "hepatitis", "pregnant", "pregnancy",
-		"depression", "anxiety", "bipolar", "schizophrenia", "asthma", "hypertension",
-		"blood pressure", "infection", "herpes", "std", "sti",
-	} {
-		if strings.Contains(message, kw) {
-			return true
-		}
-	}
-	return false
+	// Use regex with word boundaries to avoid false positives
+	// (e.g., "sti" matching inside "existing")
+	return phiKeywordsRE.MatchString(message)
 }
 
 func detectMedicalAdvice(message string) []string {
@@ -2036,11 +2075,12 @@ func isCommonWord(word string) bool {
 		"thanks": true, "thank": true, "please": true, "ok": true, "okay": true,
 		"sure": true, "good": true, "great": true, "fine": true, "well": true,
 		"just": true, "like": true, "want": true, "need": true, "have": true,
-		"interested": true, "looking": true, "book": true, "appointment": true,
+		"interested": true, "looking": true, "book": true, "booking": true, "appointment": true,
 		"morning": true, "afternoon": true, "evening": true, "weekday": true,
-		"weekend": true, "available": true, "schedule": true, "time": true,
+		"weekend": true, "available": true, "schedule": true, "scheduling": true, "time": true,
 		"botox": true, "filler": true, "facial": true, "laser": true,
 		"consultation": true, "treatment": true, "service": true,
+		"existing": true, "returning": true, "patient": true, "calling": true, "texting": true,
 	}
 	return common[strings.ToLower(word)]
 }

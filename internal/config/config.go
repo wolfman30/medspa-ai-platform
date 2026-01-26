@@ -127,6 +127,9 @@ type Config struct {
 	DisclaimerLevel     string // "short", "medium", or "full"
 	DisclaimerFirstOnly bool   // Only add disclaimer to first message in conversation
 	AuditRetentionDays  int    // How long to retain audit logs (default: 2555 = 7 years)
+
+	// Browser Sidecar Configuration (for scraping booking page availability)
+	BrowserSidecarURL string // URL of the browser sidecar service (e.g., "http://localhost:3000")
 }
 
 // Load reads configuration from environment variables
@@ -270,6 +273,9 @@ func Load() *Config {
 		DisclaimerLevel:     strings.ToLower(strings.TrimSpace(getEnv("DISCLAIMER_LEVEL", "medium"))),
 		DisclaimerFirstOnly: getEnvAsBool("DISCLAIMER_FIRST_ONLY", true),
 		AuditRetentionDays:  getEnvAsInt("AUDIT_RETENTION_DAYS", 2555), // 7 years for HIPAA
+
+		// Browser Sidecar Configuration
+		BrowserSidecarURL: getEnv("BROWSER_SIDECAR_URL", ""),
 	}
 }
 

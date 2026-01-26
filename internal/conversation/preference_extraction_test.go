@@ -43,12 +43,61 @@ func TestExtractAndSavePreferences(t *testing.T) {
 	tests := []struct {
 		name          string
 		conversation  []ChatMessage
+		expectName    string
 		expectService string
 		expectPatient string
 		expectDays    string
 		expectTimes   string
 		expectSaved   bool
 	}{
+		{
+			name: "extracts full name from I'm pattern",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I'm Sammie Wallens. I'm an existing patient."},
+			},
+			expectName:    "Sammie Wallens",
+			expectPatient: "existing",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts full name from my name is pattern",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "My name is Sarah Johnson and I want botox"},
+			},
+			expectName:    "Sarah Johnson",
+			expectService: "botox",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts full name from this is pattern",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "Hi, this is Michael Brown calling about a facial"},
+			},
+			expectName:    "Michael Brown",
+			expectService: "facial",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts all four qualifications from single message",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I'm booking botox. I'm Sammie Wallens. I'm an existing patient. Monday or Friday around 4pm works."},
+			},
+			expectName:    "Sammie Wallens",
+			expectService: "botox",
+			expectPatient: "existing",
+			expectDays:    "monday, friday",
+			expectTimes:   "4pm",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts first name only when no last name provided",
+			conversation: []ChatMessage{
+				{Role: ChatRoleAssistant, Content: "May I have your full name?"},
+				{Role: ChatRoleUser, Content: "Sarah"},
+			},
+			expectName:  "Sarah",
+			expectSaved: true,
+		},
 		{
 			name: "extracts botox and weekday afternoons",
 			conversation: []ChatMessage{
@@ -133,6 +182,9 @@ func TestExtractAndSavePreferences(t *testing.T) {
 			if tt.expectSaved {
 				if mock.savedCount != 1 {
 					t.Errorf("expected 1 save, got %d", mock.savedCount)
+				}
+				if tt.expectName != "" && mock.savedPrefs.Name != tt.expectName {
+					t.Errorf("expected name %q, got %q", tt.expectName, mock.savedPrefs.Name)
 				}
 				if tt.expectService != "" && !strings.Contains(strings.ToLower(mock.savedPrefs.ServiceInterest), strings.ToLower(tt.expectService)) {
 					t.Errorf("expected service %q, got %q", tt.expectService, mock.savedPrefs.ServiceInterest)
