@@ -78,6 +78,35 @@ func TestExtractAndSavePreferences(t *testing.T) {
 			expectSaved:   true,
 		},
 		{
+			name: "extracts full name with smart apostrophe",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I\u2019m Andrew Doe and I want lip filler"},
+			},
+			expectName:    "Andrew Doe",
+			expectService: "filler",
+			expectSaved:   true,
+		},
+		{
+			name: "extracts full name after explicit ask",
+			conversation: []ChatMessage{
+				{Role: ChatRoleAssistant, Content: "May I have your full name (first and last)?"},
+				{Role: ChatRoleUser, Content: "Andrew Doe"},
+			},
+			expectName:  "Andrew Doe",
+			expectSaved: true,
+		},
+		{
+			name: "combines first and last name across replies",
+			conversation: []ChatMessage{
+				{Role: ChatRoleAssistant, Content: "May I have your full name?"},
+				{Role: ChatRoleUser, Content: "Andrew"},
+				{Role: ChatRoleAssistant, Content: "And your last name?"},
+				{Role: ChatRoleUser, Content: "Doe"},
+			},
+			expectName:  "Andrew Doe",
+			expectSaved: true,
+		},
+		{
 			name: "extracts all four qualifications from single message",
 			conversation: []ChatMessage{
 				{Role: ChatRoleUser, Content: "I'm booking botox. I'm Sammie Wallens. I'm an existing patient. Monday or Friday around 4pm works."},
