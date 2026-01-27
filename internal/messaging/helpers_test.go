@@ -25,9 +25,15 @@ func TestGetSmsAckMessage(t *testing.T) {
 	if !containsString(smsAckMessagesFirst, first) {
 		t.Fatalf("unexpected first ack %q", first)
 	}
+	if !strings.Contains(strings.ToLower(first), "medical advice") {
+		t.Fatalf("expected medical advice note in first ack, got %q", first)
+	}
 	follow := GetSmsAckMessage(false)
 	if !containsString(smsAckMessagesFollowUp, follow) {
 		t.Fatalf("unexpected follow-up ack %q", follow)
+	}
+	if strings.Contains(strings.ToLower(follow), "medical advice") {
+		t.Fatalf("did not expect medical advice note in follow-up ack, got %q", follow)
 	}
 }
 

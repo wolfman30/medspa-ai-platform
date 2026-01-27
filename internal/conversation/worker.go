@@ -769,7 +769,7 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 				reply := OutboundReply{
 					OrgID:          evt.OrgID,
 					LeadID:         evt.LeadID,
-					ConversationID: "",
+					ConversationID: smsConversationID(evt.OrgID, evt.LeadPhone),
 					To:             evt.LeadPhone,
 					From:           evt.FromNumber,
 					Body:           body,
@@ -873,7 +873,7 @@ func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.Payme
 			reply := OutboundReply{
 				OrgID:          evt.OrgID,
 				LeadID:         evt.LeadID,
-				ConversationID: "",
+				ConversationID: smsConversationID(evt.OrgID, evt.LeadPhone),
 				To:             evt.LeadPhone,
 				From:           evt.FromNumber,
 				Body:           body,

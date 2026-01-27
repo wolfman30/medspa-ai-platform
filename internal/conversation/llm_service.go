@@ -527,7 +527,6 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogPHIDetected(ctx, req.OrgID, conversationID, req.LeadID, req.Intro, "keyword")
 		}
-		s.savePreferencesNoNote(ctx, req.LeadID, history, "start_phi_deflection")
 		return &Response{
 			ConversationID: conversationID,
 			Message:        phiDeflectionReply,
@@ -558,7 +557,6 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, conversationID, req.LeadID, "[REDACTED]", medicalKeywords)
 		}
-		s.savePreferencesNoNote(ctx, req.LeadID, history, "start_medical_deflection")
 		return &Response{
 			ConversationID: conversationID,
 			Message:        medicalAdviceDeflectionReply,
@@ -767,7 +765,6 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogPHIDetected(ctx, req.OrgID, req.ConversationID, req.LeadID, rawMessage, "keyword")
 		}
-		s.savePreferencesNoNote(ctx, req.LeadID, history, "message_phi_deflection")
 		return &Response{ConversationID: req.ConversationID, Message: phiDeflectionReply, Timestamp: time.Now().UTC()}, nil
 	}
 	if len(medicalKeywords) > 0 {
@@ -785,7 +782,6 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, req.ConversationID, req.LeadID, "[REDACTED]", medicalKeywords)
 		}
-		s.savePreferencesNoNote(ctx, req.LeadID, history, "message_medical_deflection")
 		return &Response{ConversationID: req.ConversationID, Message: medicalAdviceDeflectionReply, Timestamp: time.Now().UTC()}, nil
 	}
 

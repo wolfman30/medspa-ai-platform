@@ -438,6 +438,9 @@ func TestWorkerProcessesPaymentEvent(t *testing.T) {
 	if messenger.lastReply().To != event.LeadPhone {
 		t.Fatalf("expected sms to lead, got %s", messenger.lastReply().To)
 	}
+	if got := messenger.lastReply().ConversationID; got != smsConversationID(event.OrgID, event.LeadPhone) {
+		t.Fatalf("expected conversation id on confirmation sms, got %q", got)
+	}
 	call := bookings.lastCall()
 	if call == nil || call.scheduled == nil || !call.scheduled.Equal(scheduled) {
 		t.Fatalf("expected scheduled time to propagate, got %#v", call)
