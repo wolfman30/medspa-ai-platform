@@ -70,4 +70,3 @@ func IsSmsAckMessage(message string) bool {
 	}
 	return false
 }
-
