@@ -7,7 +7,7 @@ import (
 )
 
 // InstantAckMessage is the fast auto-reply sent immediately for missed-call text-backs.
-const InstantAckMessage = "Hi there! Sorry we missed your call. I'm the virtual receptionist and can help by text. How can I help today - booking an appointment or a quick question? Reply STOP to opt out."
+const InstantAckMessage = "Hi there! Sorry we missed your call. I'm the virtual receptionist and can help by text—though I can't provide medical advice. How can I help today - booking an appointment or a quick question? Reply STOP to opt out."
 
 // InstantAckMessageForClinic personalizes the missed-call ack with a clinic name when available.
 func InstantAckMessageForClinic(clinicName string) string {
@@ -15,7 +15,7 @@ func InstantAckMessageForClinic(clinicName string) string {
 	if name == "" {
 		return InstantAckMessage
 	}
-	return fmt.Sprintf("Hi there! Sorry we missed your call. I'm the virtual receptionist for %s and can help by text. How can I help today - booking an appointment or a quick question? Reply STOP to opt out.", name)
+	return fmt.Sprintf("Hi there! Sorry we missed your call. I'm the virtual receptionist for %s and can help by text—though I can't provide medical advice. How can I help today - booking an appointment or a quick question? Reply STOP to opt out.", name)
 }
 
 // PCIGuardrailMessage is sent when inbound SMS appears to contain payment card details.
@@ -70,3 +70,4 @@ func IsSmsAckMessage(message string) bool {
 	}
 	return false
 }
+
