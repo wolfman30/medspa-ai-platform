@@ -282,6 +282,10 @@ var (
 	depositAskRE         = regexp.MustCompile(`(?i)(?:\bdeposit\b|refundable deposit|payment link|secure (?:my|your) spot|hold (?:my|your) spot|pay a deposit)`)
 )
 
+var serviceHighlightTemplates = map[string]string{
+	"perfect derma": "SIGNATURE SERVICE: Perfect Derma Peel — a popular medium-depth chemical peel that helps brighten and smooth skin tone and texture for a fresh glow. When someone asks about chemical peels, mention Perfect Derma Peel with enthusiasm and invite them to book a consultation.",
+}
+
 func init() {
 	prometheus.MustRegister(llmLatency)
 	prometheus.MustRegister(llmTokensTotal)
@@ -1218,6 +1222,12 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 					Content: personaContext,
 				})
 			}
+			if highlightContext := buildServiceHighlightsContext(cfg, query); highlightContext != "" {
+				history = append(history, ChatMessage{
+					Role:    ChatRoleSystem,
+					Content: highlightContext,
+				})
+			}
 		}
 	}
 
@@ -1279,6 +1289,51 @@ func containsBookingIntent(msg string) bool {
 	keywords := []string{"book", "appointment", "schedule", "available", "availability", "when can", "open slot", "time slot"}
 	for _, kw := range keywords {
 		if strings.Contains(msg, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildServiceHighlightsContext(cfg *clinic.Config, query string) string {
+	if cfg == nil {
+		return ""
+	}
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" || !strings.Contains(query, "peel") {
+		return ""
+	}
+	if clinicHasService(cfg, "perfect derma") {
+		return serviceHighlightTemplates["perfect derma"]
+	}
+	return ""
+}
+
+func clinicHasService(cfg *clinic.Config, needle string) bool {
+	if cfg == nil {
+		return false
+	}
+	needle = strings.ToLower(strings.TrimSpace(needle))
+	if needle == "" {
+		return false
+	}
+	for _, svc := range cfg.Services {
+		if strings.Contains(strings.ToLower(svc), needle) {
+			return true
+		}
+	}
+	for key := range cfg.ServicePriceText {
+		if strings.Contains(strings.ToLower(key), needle) {
+			return true
+		}
+	}
+	for key := range cfg.ServiceDepositAmountCents {
+		if strings.Contains(strings.ToLower(key), needle) {
+			return true
+		}
+	}
+	for _, svc := range cfg.AIPersona.SpecialServices {
+		if strings.Contains(strings.ToLower(svc), needle) {
 			return true
 		}
 	}

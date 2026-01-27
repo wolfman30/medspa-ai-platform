@@ -931,6 +931,48 @@ func TestLLMService_UsesRAGContext(t *testing.T) {
 	}
 }
 
+func TestLLMService_IncludesPerfectDermaHighlightWhenPeelAsked(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(client)
+	cfg := clinic.DefaultConfig("org-peel")
+	cfg.Services = []string{"Perfect Derma Peel", "Botox"}
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("set clinic config: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{
+		response: LLMResponse{Text: "Response"},
+	}
+	service := NewLLMService(mockLLM, client, nil, "anthropic.claude-3-haiku-20240307-v1:0", logging.Default(), WithClinicStore(clinicStore))
+
+	_, err := service.StartConversation(ctx, StartRequest{
+		LeadID:   "lead-42",
+		Intro:    "Do you offer chemical peels?",
+		Source:   "sms",
+		Channel:  ChannelSMS,
+		OrgID:    "org-peel",
+		ClinicID: "clinic-peel",
+	})
+	if err != nil {
+		t.Fatalf("StartConversation returned error: %v", err)
+	}
+
+	foundHighlight := false
+	for _, sys := range mockLLM.lastReq.System {
+		if strings.Contains(sys, "Perfect Derma Peel") {
+			foundHighlight = true
+			break
+		}
+	}
+	if !foundHighlight {
+		t.Fatal("expected Perfect Derma Peel highlight to be injected into system prompt")
+	}
+}
+
 type stubOpenDepositStatusChecker struct {
 	status string
 }
