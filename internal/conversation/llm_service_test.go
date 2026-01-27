@@ -88,7 +88,7 @@ func TestTierA_CI04_PriceServiceInquiry_UsesClinicConfigAndTagsLead(t *testing.T
 	leadsRepo := leads.NewInMemoryRepository()
 	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
 		OrgID:   "org-1",
-		Name:    "Test Lead",
+		Name:    "",
 		Phone:   "+15550000000",
 		Source:  "sms",
 		Message: "",
@@ -115,7 +115,7 @@ func TestTierA_CI04_PriceServiceInquiry_UsesClinicConfigAndTagsLead(t *testing.T
 		ConversationID: start.ConversationID,
 		LeadID:         lead.ID,
 		OrgID:          "org-1",
-		Message:        "How much is Botox?",
+		Message:        "I'm Andrew Doe. How much is Botox?",
 		Channel:        ChannelSMS,
 	})
 	if err != nil {
@@ -133,6 +133,9 @@ func TestTierA_CI04_PriceServiceInquiry_UsesClinicConfigAndTagsLead(t *testing.T
 	updated, err := leadsRepo.GetByID(ctx, "org-1", lead.ID)
 	if err != nil {
 		t.Fatalf("load lead: %v", err)
+	}
+	if updated.Name != "Andrew Doe" {
+		t.Fatalf("expected lead name updated, got %q", updated.Name)
 	}
 	if !strings.Contains(updated.SchedulingNotes, "tag:price_shopper") {
 		t.Fatalf("expected lead tagged as price_shopper, got %q", updated.SchedulingNotes)

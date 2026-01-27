@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -525,6 +527,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogPHIDetected(ctx, req.OrgID, conversationID, req.LeadID, req.Intro, "keyword")
 		}
+		s.savePreferencesNoNote(ctx, req.LeadID, history, "start_phi_deflection")
 		return &Response{
 			ConversationID: conversationID,
 			Message:        phiDeflectionReply,
@@ -555,6 +558,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, conversationID, req.LeadID, "[REDACTED]", medicalKeywords)
 		}
+		s.savePreferencesNoNote(ctx, req.LeadID, history, "start_medical_deflection")
 		return &Response{
 			ConversationID: conversationID,
 			Message:        medicalAdviceDeflectionReply,
@@ -763,6 +767,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogPHIDetected(ctx, req.OrgID, req.ConversationID, req.LeadID, rawMessage, "keyword")
 		}
+		s.savePreferencesNoNote(ctx, req.LeadID, history, "message_phi_deflection")
 		return &Response{ConversationID: req.ConversationID, Message: phiDeflectionReply, Timestamp: time.Now().UTC()}, nil
 	}
 	if len(medicalKeywords) > 0 {
@@ -780,6 +785,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		if s.audit != nil && strings.TrimSpace(req.OrgID) != "" {
 			_ = s.audit.LogMedicalAdviceRefused(ctx, req.OrgID, req.ConversationID, req.LeadID, "[REDACTED]", medicalKeywords)
 		}
+		s.savePreferencesNoNote(ctx, req.LeadID, history, "message_medical_deflection")
 		return &Response{ConversationID: req.ConversationID, Message: medicalAdviceDeflectionReply, Timestamp: time.Now().UTC()}, nil
 	}
 
@@ -812,6 +818,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					span.RecordError(err)
 					return nil, err
 				}
+				s.savePreferencesNoNote(ctx, req.LeadID, history, "price_inquiry")
 				return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
 			}
 		}
@@ -825,6 +832,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			span.RecordError(err)
 			return nil, err
 		}
+		s.savePreferencesNoNote(ctx, req.LeadID, history, "question_selection")
 		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
 	}
 	if isAmbiguousHelp(rawMessage) {
@@ -837,6 +845,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			span.RecordError(err)
 			return nil, err
 		}
+		s.savePreferencesNoNote(ctx, req.LeadID, history, "ambiguous_help")
 		return &Response{ConversationID: req.ConversationID, Message: reply, Timestamp: time.Now().UTC()}, nil
 	}
 
@@ -882,6 +891,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				span.RecordError(err)
 				return nil, err
 			}
+			s.savePreferencesNoNote(ctx, req.LeadID, history, "faq_response")
 			return &Response{ConversationID: req.ConversationID, Message: faqReply, Timestamp: time.Now().UTC()}, nil
 		}
 
@@ -1571,147 +1581,59 @@ func conversationHasDepositAgreement(history []ChatMessage) bool {
 
 // extractAndSavePreferences extracts scheduling preferences from conversation history and saves them.
 func (s *LLMService) extractAndSavePreferences(ctx context.Context, leadID string, history []ChatMessage) error {
+	return s.savePreferencesFromHistory(ctx, leadID, history, true)
+}
+
+func (s *LLMService) savePreferencesFromHistory(ctx context.Context, leadID string, history []ChatMessage, addNote bool) error {
+	if s == nil || s.leadsRepo == nil || strings.TrimSpace(leadID) == "" {
+		return nil
+	}
 	prefs, ok := extractPreferences(history)
 	if !ok {
 		return nil
 	}
-	prefs.Notes = fmt.Sprintf("Auto-extracted from conversation at %s", time.Now().Format(time.RFC3339))
+	if addNote {
+		prefs.Notes = fmt.Sprintf("Auto-extracted from conversation at %s", time.Now().Format(time.RFC3339))
+	}
 	return s.leadsRepo.UpdateSchedulingPreferences(ctx, leadID, prefs)
+}
+
+func (s *LLMService) savePreferencesNoNote(ctx context.Context, leadID string, history []ChatMessage, reason string) {
+	if s == nil {
+		return
+	}
+	if err := s.savePreferencesFromHistory(ctx, leadID, history, false); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("failed to save scheduling preferences", "lead_id", leadID, "reason", reason, "error", err)
+		}
+	}
 }
 
 func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, bool) {
 	prefs := leads.SchedulingPreferences{}
 	hasPreferences := false
 
-	// Helper to capitalize a name properly (first letter uppercase, rest lowercase).
-	capitalizeName := func(s string) string {
-		if len(s) == 0 {
-			return s
-		}
-		return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
-	}
+	userMessages, userMessagesOriginal := collectUserMessages(history)
 
-	// Helper to check if a word looks like a name (starts with a letter, not a common word).
-	isLikelyName := func(s string) bool {
-		if len(s) < 2 || len(s) > 30 {
-			return false
+	fullName, firstNameFallback := findNameInUserMessages(userMessagesOriginal)
+	if fullName == "" {
+		fullNameFromPrompt, firstFromPrompt := nameFromReplyAfterNameQuestion(history)
+		if fullNameFromPrompt != "" {
+			fullName = fullNameFromPrompt
 		}
-		// Must start with a letter
-		first := s[0]
-		if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) {
-			return false
-		}
-		// Check it's not a common word (case insensitive)
-		if isCommonWord(strings.ToLower(s)) {
-			return false
-		}
-		return true
-	}
-
-	extractName := func(raw string) (string, string) {
-		words := strings.Fields(strings.TrimSpace(raw))
-		nameWords := make([]string, 0, 2)
-		for _, word := range words {
-			cleaned := strings.Trim(word, ".,!?")
-			if cleaned == "" {
-				continue
-			}
-			if !isLikelyName(cleaned) {
-				if len(nameWords) > 0 {
-					break
-				}
-				continue
-			}
-			// Capitalize the name properly
-			nameWords = append(nameWords, capitalizeName(cleaned))
-			if len(nameWords) == 2 {
-				break
-			}
-		}
-		if len(nameWords) >= 2 {
-			return strings.Join(nameWords, " "), nameWords[0]
-		}
-		if len(nameWords) == 1 {
-			return "", nameWords[0]
-		}
-		return "", ""
-	}
-
-	// Extract preferred days (only from user messages to avoid confusion with business hours).
-	userMessages := ""
-	userMessagesOriginal := "" // Keep original case for name extraction.
-	for _, msg := range history {
-		if msg.Role == ChatRoleUser {
-			userMessages += strings.ToLower(msg.Content) + " "
-			userMessagesOriginal += msg.Content + " "
+		if firstNameFallback == "" {
+			firstNameFallback = firstFromPrompt
 		}
 	}
-
-	// Extract patient name from user messages.
-	// Patterns are case-insensitive and accept lowercase names (common in SMS).
-	namePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)my name is\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
-		regexp.MustCompile(`(?i)i'?m\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
-		regexp.MustCompile(`(?i)this is\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
-		regexp.MustCompile(`(?i)call me\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
-		regexp.MustCompile(`(?i)it'?s\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})(?:\s|,|\.|!|$)`),
-		regexp.MustCompile(`(?i)name'?s\s+([a-zA-Z][a-zA-Z'-]+(?:\s+[a-zA-Z][a-zA-Z'-]+){0,2})`),
+	if fullName == "" {
+		fullName = combineSplitNameReplies(history, firstNameFallback)
 	}
-	firstNameFallback := ""
-namePatternLoop:
-	for _, pattern := range namePatterns {
-		// Find ALL matches in the string, not just the first one
-		// (e.g., "I'm booking botox. I'm Sammie Wallens." has two "I'm X" patterns)
-		allMatches := pattern.FindAllStringSubmatch(userMessagesOriginal, -1)
-		for _, matches := range allMatches {
-			if len(matches) > 1 {
-				fullName, firstName := extractName(matches[1])
-				if fullName != "" {
-					prefs.Name = fullName
-					hasPreferences = true
-					break namePatternLoop
-				}
-				if firstNameFallback == "" && firstName != "" {
-					firstNameFallback = firstName
-				}
-			}
-		}
-	}
-	if prefs.Name == "" && firstNameFallback != "" {
+	if fullName != "" {
+		prefs.Name = fullName
+		hasPreferences = true
+	} else if firstNameFallback != "" {
 		prefs.Name = firstNameFallback
 		hasPreferences = true
-	}
-
-	// Standalone name response after an explicit name ask.
-	if prefs.Name == "" {
-		for i, msg := range history {
-			if msg.Role != ChatRoleUser {
-				continue
-			}
-			if i == 0 || history[i-1].Role != ChatRoleAssistant {
-				continue
-			}
-			prev := strings.ToLower(history[i-1].Content)
-			if !strings.Contains(prev, "name") || (!strings.Contains(prev, "may i") && !strings.Contains(prev, "what") && !strings.Contains(prev, "your")) {
-				continue
-			}
-			content := strings.TrimSpace(msg.Content)
-			words := strings.Fields(content)
-			if len(words) < 1 || len(words) > 5 {
-				continue
-			}
-			fullName, firstName := extractName(content)
-			if fullName != "" {
-				prefs.Name = fullName
-				hasPreferences = true
-				break
-			}
-			if firstName != "" && len(words) <= 2 {
-				prefs.Name = firstName
-				hasPreferences = true
-				break
-			}
-		}
 	}
 
 	// Extract patient type.
@@ -1928,6 +1850,229 @@ namePatternLoop:
 	}
 
 	return prefs, hasPreferences
+}
+
+const nameWordPattern = `[\p{L}][\p{L}\p{M}'-]*`
+
+var namePhrasePattern = nameWordPattern + `(?:\s+` + nameWordPattern + `){0,2}`
+
+var namePatterns = buildNamePatterns()
+
+var nameTextNormalizer = strings.NewReplacer(
+	"\u2019", "'", // right single quote
+	"\u2018", "'", // left single quote
+	"\u2032", "'", // prime symbol
+)
+
+func buildNamePatterns() []*regexp.Regexp {
+	name := namePhrasePattern
+	return []*regexp.Regexp{
+		regexp.MustCompile(`(?i)my name is\s+(` + name + `)`),
+		regexp.MustCompile(`(?i)i'?m\s+(` + name + `)(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)this is\s+(` + name + `)`),
+		regexp.MustCompile(`(?i)call me\s+(` + name + `)`),
+		regexp.MustCompile(`(?i)it'?s\s+(` + name + `)(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)name'?s\s+(` + name + `)`),
+	}
+}
+
+func normalizeNameText(text string) string {
+	if text == "" {
+		return ""
+	}
+	return nameTextNormalizer.Replace(text)
+}
+
+func collectUserMessages(history []ChatMessage) (lowercase string, original string) {
+	var lowerBuilder strings.Builder
+	var originalBuilder strings.Builder
+	for _, msg := range history {
+		if msg.Role != ChatRoleUser {
+			continue
+		}
+		lowerBuilder.WriteString(strings.ToLower(msg.Content))
+		lowerBuilder.WriteString(" ")
+		originalBuilder.WriteString(msg.Content)
+		originalBuilder.WriteString(" ")
+	}
+	return lowerBuilder.String(), originalBuilder.String()
+}
+
+func findNameInUserMessages(userMessages string) (fullName, firstName string) {
+	normalized := normalizeNameText(userMessages)
+	for _, pattern := range namePatterns {
+		// Find all matches so we can catch later "I'm X" mentions.
+		matches := pattern.FindAllStringSubmatch(normalized, -1)
+		for _, match := range matches {
+			if len(match) < 2 {
+				continue
+			}
+			full, first := fullAndFirstNameFromParts(extractNameParts(match[1]))
+			if full != "" {
+				return full, ""
+			}
+			if firstName == "" && first != "" {
+				firstName = first
+			}
+		}
+	}
+	return "", firstName
+}
+
+func nameFromReplyAfterNameQuestion(history []ChatMessage) (fullName, firstName string) {
+	for i, msg := range history {
+		if msg.Role != ChatRoleUser {
+			continue
+		}
+		prev := previousAssistantMessage(history, i)
+		if prev == "" || !assistantAskedForName(prev) {
+			continue
+		}
+		full, first := fullAndFirstNameFromParts(extractNameParts(msg.Content))
+		if full != "" || first != "" {
+			return full, first
+		}
+	}
+	return "", ""
+}
+
+func combineSplitNameReplies(history []ChatMessage, firstName string) string {
+	first := strings.TrimSpace(firstName)
+	for i, msg := range history {
+		if msg.Role != ChatRoleUser {
+			continue
+		}
+		prev := previousAssistantMessage(history, i)
+		if prev == "" {
+			continue
+		}
+		if first == "" && (assistantAskedForName(prev) || assistantAskedForFirstName(prev)) {
+			full, firstOnly := fullAndFirstNameFromParts(extractNameParts(msg.Content))
+			if full != "" {
+				return full
+			}
+			if firstOnly != "" {
+				first = firstOnly
+			}
+			continue
+		}
+		if first != "" && assistantAskedForLastName(prev) {
+			parts := extractNameParts(msg.Content)
+			if len(parts) == 0 {
+				continue
+			}
+			if len(parts) >= 2 {
+				return parts[0] + " " + parts[1]
+			}
+			return first + " " + parts[0]
+		}
+	}
+	return ""
+}
+
+func assistantAskedForName(message string) bool {
+	message = strings.ToLower(normalizeNameText(message))
+	if !strings.Contains(message, "name") {
+		return false
+	}
+	if strings.Contains(message, "full name") || strings.Contains(message, "first and last") {
+		return true
+	}
+	if strings.Contains(message, "first name") || strings.Contains(message, "last name") {
+		return true
+	}
+	if strings.Contains(message, "your name") {
+		return true
+	}
+	if strings.Contains(message, "may i") || strings.Contains(message, "what") || strings.Contains(message, "can i") || strings.Contains(message, "could i") {
+		return true
+	}
+	return false
+}
+
+func assistantAskedForFirstName(message string) bool {
+	message = strings.ToLower(normalizeNameText(message))
+	return strings.Contains(message, "first name")
+}
+
+func assistantAskedForLastName(message string) bool {
+	message = strings.ToLower(normalizeNameText(message))
+	if strings.Contains(message, "last name") {
+		return true
+	}
+	if strings.Contains(message, "surname") || strings.Contains(message, "family name") {
+		return true
+	}
+	return false
+}
+
+func fullAndFirstNameFromParts(parts []string) (fullName, firstName string) {
+	if len(parts) >= 2 {
+		return parts[0] + " " + parts[1], parts[0]
+	}
+	if len(parts) == 1 {
+		return "", parts[0]
+	}
+	return "", ""
+}
+
+func extractNameParts(raw string) []string {
+	raw = normalizeNameText(raw)
+	words := strings.Fields(strings.TrimSpace(raw))
+	nameWords := make([]string, 0, 2)
+	for _, word := range words {
+		cleaned := cleanNameToken(word)
+		if cleaned == "" {
+			continue
+		}
+		if !looksLikeNameWord(cleaned) {
+			if len(nameWords) > 0 {
+				break
+			}
+			continue
+		}
+		nameWords = append(nameWords, capitalizeNameWord(cleaned))
+		if len(nameWords) == 2 {
+			break
+		}
+	}
+	return nameWords
+}
+
+func cleanNameToken(word string) string {
+	word = strings.TrimSpace(word)
+	if word == "" {
+		return ""
+	}
+	word = strings.Trim(word, ".,!?\"()[]{}")
+	word = strings.Trim(word, "'-")
+	return word
+}
+
+func looksLikeNameWord(word string) bool {
+	count := utf8.RuneCountInString(word)
+	if count < 2 || count > 30 {
+		return false
+	}
+	firstRune, _ := utf8.DecodeRuneInString(word)
+	if !unicode.IsLetter(firstRune) {
+		return false
+	}
+	if isCommonWord(strings.ToLower(word)) {
+		return false
+	}
+	return true
+}
+
+func capitalizeNameWord(word string) string {
+	if word == "" {
+		return ""
+	}
+	firstRune, size := utf8.DecodeRuneInString(word)
+	if firstRune == utf8.RuneError || size == 0 {
+		return word
+	}
+	return strings.ToUpper(string(firstRune)) + strings.ToLower(word[size:])
 }
 
 var (
