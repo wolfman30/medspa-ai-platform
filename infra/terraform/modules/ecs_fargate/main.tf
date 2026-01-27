@@ -433,7 +433,7 @@ locals {
   base_env = merge({
     PORT = tostring(var.container_port)
     ENV  = var.environment
-  }, var.environment_variables, var.enable_browser_sidecar ? {
+    }, var.environment_variables, var.enable_browser_sidecar ? {
     BROWSER_SIDECAR_URL = "http://localhost:${var.browser_sidecar_port}"
   } : {})
 
@@ -464,10 +464,10 @@ resource "aws_ecs_task_definition" "api" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   # Increase CPU/memory when browser sidecar is enabled
-  cpu                      = var.enable_browser_sidecar ? var.task_cpu + var.browser_sidecar_cpu : var.task_cpu
-  memory                   = var.enable_browser_sidecar ? var.task_memory + var.browser_sidecar_memory : var.task_memory
-  execution_role_arn       = aws_iam_role.execution.arn
-  task_role_arn            = aws_iam_role.task.arn
+  cpu                = var.enable_browser_sidecar ? var.task_cpu + var.browser_sidecar_cpu : var.task_cpu
+  memory             = var.enable_browser_sidecar ? var.task_memory + var.browser_sidecar_memory : var.task_memory
+  execution_role_arn = aws_iam_role.execution.arn
+  task_role_arn      = aws_iam_role.task.arn
 
   container_definitions = jsonencode(concat([
     {
