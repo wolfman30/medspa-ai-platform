@@ -87,6 +87,8 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 		leadName = "A patient"
 	}
 
+	location := resolveClinicLocation(cfg)
+
 	// Format patient type for display
 	patientTypeInfo := ""
 	patientTypeHTML := ""
@@ -101,11 +103,11 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 	// Build scheduled time info if available
 	scheduledInfo := ""
 	if evt.ScheduledFor != nil {
-		scheduledInfo = fmt.Sprintf("\nPreferred time: %s", evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM"))
+		scheduledInfo = fmt.Sprintf("\nPreferred time: %s", formatTimeInLocation(*evt.ScheduledFor, location, "Monday, January 2 at 3:04 PM MST"))
 	}
 
 	// Format transaction time
-	transactionTime := evt.OccurredAt.Format("January 2, 2006 at 3:04 PM")
+	transactionTime := formatTimeInLocation(evt.OccurredAt, location, "January 2, 2006 at 3:04 PM MST")
 
 	// Build time preferences (not health-related, just scheduling)
 	preferencesInfo := ""
@@ -154,7 +156,7 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">— %s AI</p>
 </div>`,
 			leadName, amountStr, leadName, leadPhone, leadPhone, patientTypeHTML, amountStr, transactionTime,
-			s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor), cfg.Name)
+			s.formatPreferencesHTML(preferredDays, preferredTimes), s.formatScheduledHTML(evt.ScheduledFor, location), cfg.Name)
 
 		for _, recipient := range cfg.Notifications.EmailRecipients {
 			msg := EmailMessage{
@@ -175,14 +177,14 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 	// Send SMS to operators (supports multiple recipients)
 	// NOTE: SMS excludes health-related info to avoid PHI exposure
 	smsRecipients := cfg.Notifications.GetSMSRecipients()
-	smsTransactionTime := evt.OccurredAt.Format("1/2 3:04PM")
+	smsTransactionTime := formatTimeInLocation(evt.OccurredAt, location, "1/2 3:04PM MST")
 	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
 		patientTypeSMS := ""
 		if patientType != "" {
 			patientTypeSMS = fmt.Sprintf(" (%s)", patientType)
 		}
 		smsBody := fmt.Sprintf("💰 %s%s paid %s deposit at %s. Phone: %s%s%s. Please call to confirm appointment.",
-			leadName, patientTypeSMS, amountStr, smsTransactionTime, leadPhone, s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor))
+			leadName, patientTypeSMS, amountStr, smsTransactionTime, leadPhone, s.formatPreferencesSMS(preferredDays, preferredTimes), s.formatScheduledSMS(evt.ScheduledFor, location))
 
 		for _, recipient := range smsRecipients {
 			if err := s.sms.SendSMS(ctx, recipient, smsBody); err != nil {
@@ -200,12 +202,12 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 	return nil
 }
 
-func (s *Service) formatScheduledHTML(t *time.Time) string {
+func (s *Service) formatScheduledHTML(t *time.Time, loc *time.Location) string {
 	if t == nil {
 		return ""
 	}
 	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Scheduled:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`,
-		t.Format("Monday, January 2 at 3:04 PM"))
+		formatTimeInLocation(*t, loc, "Monday, January 2 at 3:04 PM MST"))
 }
 
 func (s *Service) formatPreferencesHTML(days, times string) string {
@@ -222,11 +224,11 @@ func (s *Service) formatPreferencesHTML(days, times string) string {
 	return fmt.Sprintf(`<tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;"><strong>Time Preferences:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">%s</td></tr>`, strings.Join(parts, ", "))
 }
 
-func (s *Service) formatScheduledSMS(t *time.Time) string {
+func (s *Service) formatScheduledSMS(t *time.Time, loc *time.Location) string {
 	if t == nil {
 		return ""
 	}
-	return fmt.Sprintf(" for %s", t.Format("Mon 1/2 3:04PM"))
+	return fmt.Sprintf(" for %s", formatTimeInLocation(*t, loc, "Mon 1/2 3:04PM MST"))
 }
 
 func (s *Service) formatPreferencesSMS(days, times string) string {
@@ -241,6 +243,25 @@ func (s *Service) formatPreferencesSMS(days, times string) string {
 		parts = append(parts, times)
 	}
 	return fmt.Sprintf(". Prefers: %s", strings.Join(parts, ", "))
+}
+
+func resolveClinicLocation(cfg *clinic.Config) *time.Location {
+	timezone := "America/New_York"
+	if cfg != nil && strings.TrimSpace(cfg.Timezone) != "" {
+		timezone = strings.TrimSpace(cfg.Timezone)
+	}
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}
+
+func formatTimeInLocation(t time.Time, loc *time.Location, layout string) string {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return t.In(loc).Format(layout)
 }
 
 // NotifyNewLead sends notifications when a new lead is created.

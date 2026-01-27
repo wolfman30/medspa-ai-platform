@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -334,6 +335,46 @@ func TestService_NotifyPaymentSuccess_WithScheduledTime(t *testing.T) {
 	}
 }
 
+func TestService_NotifyPaymentSuccess_EmailUsesClinicTimezone(t *testing.T) {
+	emailSender := &mockEmailSender{}
+	clinicStore := &mockClinicStore{
+		configs: map[string]*clinic.Config{
+			"org-123": {
+				OrgID:    "org-123",
+				Name:     "Glow MedSpa",
+				Timezone: "America/New_York",
+				Notifications: clinic.NotificationPrefs{
+					EmailEnabled:    true,
+					EmailRecipients: []string{"owner@clinic.com"},
+					NotifyOnPayment: true,
+				},
+			},
+		},
+	}
+
+	svc := NewService(emailSender, nil, clinicStore, nil, nil)
+
+	occurredAt := time.Date(2025, 1, 15, 15, 0, 0, 0, time.UTC) // 10:00 AM EST
+	err := svc.NotifyPaymentSuccess(context.Background(), events.PaymentSucceededV1{
+		OrgID:       "org-123",
+		LeadID:      "lead-456",
+		AmountCents: 5000,
+		OccurredAt:  occurredAt,
+	})
+
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+	if len(emailSender.sent) != 1 {
+		t.Fatalf("expected 1 email sent, got %d", len(emailSender.sent))
+	}
+
+	body := emailSender.sent[0].Body
+	if !strings.Contains(body, "January 15, 2025 at 10:00 AM EST") {
+		t.Fatalf("expected email body to use EST timezone, got %q", body)
+	}
+}
+
 func TestService_NotifyPaymentSuccess_EmailFailure(t *testing.T) {
 	emailSender := &mockEmailSender{
 		callErr: errors.New("sendgrid down"),
@@ -618,14 +659,14 @@ func TestService_FormatScheduledHTML(t *testing.T) {
 	svc := NewService(nil, nil, nil, nil, nil)
 
 	// Nil time
-	result := svc.formatScheduledHTML(nil)
+	result := svc.formatScheduledHTML(nil, time.UTC)
 	if result != "" {
 		t.Errorf("expected empty string for nil time, got %q", result)
 	}
 
 	// Valid time
 	tm := time.Date(2025, 1, 15, 14, 30, 0, 0, time.UTC)
-	result = svc.formatScheduledHTML(&tm)
+	result = svc.formatScheduledHTML(&tm, time.UTC)
 	if result == "" {
 		t.Error("expected non-empty HTML for valid time")
 	}
@@ -638,14 +679,14 @@ func TestService_FormatScheduledSMS(t *testing.T) {
 	svc := NewService(nil, nil, nil, nil, nil)
 
 	// Nil time
-	result := svc.formatScheduledSMS(nil)
+	result := svc.formatScheduledSMS(nil, time.UTC)
 	if result != "" {
 		t.Errorf("expected empty string for nil time, got %q", result)
 	}
 
 	// Valid time
 	tm := time.Date(2025, 1, 15, 14, 30, 0, 0, time.UTC)
-	result = svc.formatScheduledSMS(&tm)
+	result = svc.formatScheduledSMS(&tm, time.UTC)
 	if result == "" {
 		t.Error("expected non-empty string for valid time")
 	}

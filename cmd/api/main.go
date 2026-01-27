@@ -290,6 +290,13 @@ func main() {
 			// Wrap static resolver with DB lookup for phone numbers
 			numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 		}
+		fallbackFromNumber := strings.TrimSpace(cfg.TelnyxFromNumber)
+		if fallbackFromNumber == "" {
+			fallbackFromNumber = strings.TrimSpace(cfg.TwilioFromNumber)
+		}
+		if fallbackFromNumber != "" {
+			numberResolver = payments.NewFallbackNumberResolver(numberResolver, fallbackFromNumber)
+		}
 
 		// Fake payments mode takes precedence when enabled (for testing when Square sandbox is broken)
 		if cfg.AllowFakePayments {
