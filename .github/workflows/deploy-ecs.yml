@@ -2,6 +2,13 @@
 name: Deploy (Development -> Production)
 
 on:
+  # Auto-deploy to development when CI passes on main
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+  # Manual trigger for production or force redeploy
   workflow_dispatch:
     inputs:
       deploy_development:
@@ -35,11 +42,17 @@ jobs:
     concurrency:
       group: deploy-development
       cancel-in-progress: false
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy_development
+    # Run on: 1) successful CI on main, or 2) manual trigger with deploy_development=true
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_development)
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Use the triggering commit SHA for workflow_run events
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -55,10 +68,12 @@ jobs:
       - name: Set image tag
         id: image_tag
         run: |
+          # Use workflow_run SHA for auto-deploy, otherwise use current SHA
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
           if [ "${{ inputs.force_redeploy }}" = "true" ]; then
-            echo "tag=${{ github.sha }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${COMMIT_SHA}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Terraform init
