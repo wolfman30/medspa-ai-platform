@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { NotificationSettings } from './NotificationSettings';
 import { AIPersonaSettings } from './AIPersonaSettings';
+import { KnowledgeSettings } from './KnowledgeSettings';
 
 interface SettingsPageProps {
   orgId: string;
   onBack: () => void;
 }
 
-type SettingsSection = 'menu' | 'notifications' | 'ai-persona';
+type SettingsSection = 'menu' | 'notifications' | 'ai-persona' | 'knowledge';
 
 export function SettingsPage({ orgId, onBack }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>('menu');
@@ -24,6 +25,15 @@ export function SettingsPage({ orgId, onBack }: SettingsPageProps) {
   if (section === 'ai-persona') {
     return (
       <AIPersonaSettings
+        orgId={orgId}
+        onBack={() => setSection('menu')}
+      />
+    );
+  }
+
+  if (section === 'knowledge') {
+    return (
+      <KnowledgeSettings
         orgId={orgId}
         onBack={() => setSection('menu')}
       />
@@ -70,6 +80,21 @@ export function SettingsPage({ orgId, onBack }: SettingsPageProps) {
                 <h2 className="text-lg font-medium text-gray-900">AI Assistant Persona</h2>
                 <p className="text-sm text-gray-500 mt-1">
                   Customize how your AI assistant communicates with patients
+                </p>
+              </div>
+              <span className="text-indigo-600 text-xl">&rarr;</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setSection('knowledge')}
+            className="w-full bg-white rounded-lg shadow p-6 text-left hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-medium text-gray-900">Clinic Knowledge</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Review and update the knowledge the AI uses for your clinic
                 </p>
               </div>
               <span className="text-indigo-600 text-xl">&rarr;</span>
