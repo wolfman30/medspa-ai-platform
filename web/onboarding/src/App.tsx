@@ -360,6 +360,14 @@ function AuthenticatedApp() {
                 >
                   Settings
                 </button>
+                <a
+                  href={`/portal/orgs/${orgId}/knowledge/page`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs sm:text-sm px-2 py-1 rounded hover:bg-indigo-500"
+                >
+                  Knowledge
+                </a>
               </nav>
             )}
             <button
