@@ -7,6 +7,7 @@ import { ConversationDetail } from './components/ConversationDetail';
 import { DepositList } from './components/DepositList';
 import { DepositDetail } from './components/DepositDetail';
 import { SettingsPage } from './components/SettingsPage';
+import { KnowledgeSettings } from './components/KnowledgeSettings';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -17,7 +18,14 @@ import {
 } from './utils/orgStorage';
 
 type OnboardingDecision = 'idle' | 'loading' | 'ready' | 'not_ready';
-type AppView = 'dashboard' | 'conversations' | 'conversation-detail' | 'deposits' | 'deposit-detail' | 'settings';
+type AppView =
+  | 'dashboard'
+  | 'conversations'
+  | 'conversation-detail'
+  | 'deposits'
+  | 'deposit-detail'
+  | 'settings'
+  | 'knowledge';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -360,14 +368,12 @@ function AuthenticatedApp() {
                 >
                   Settings
                 </button>
-                <a
-                  href={`/portal/orgs/${orgId}/knowledge/page`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs sm:text-sm px-2 py-1 rounded hover:bg-indigo-500"
+                <button
+                  onClick={() => setView('knowledge')}
+                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'knowledge' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
                 >
                   Knowledge
-                </a>
+                </button>
               </nav>
             )}
             <button
@@ -398,6 +404,11 @@ function AuthenticatedApp() {
           />
         ) : view === 'settings' ? (
           <SettingsPage
+            orgId={orgId}
+            onBack={() => setView('conversations')}
+          />
+        ) : view === 'knowledge' ? (
+          <KnowledgeSettings
             orgId={orgId}
             onBack={() => setView('conversations')}
           />
@@ -436,6 +447,11 @@ function AuthenticatedApp() {
           />
         ) : view === 'settings' ? (
           <SettingsPage
+            orgId={orgId}
+            onBack={() => setView('dashboard')}
+          />
+        ) : view === 'knowledge' ? (
+          <KnowledgeSettings
             orgId={orgId}
             onBack={() => setView('dashboard')}
           />
