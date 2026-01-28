@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	httpmiddleware "github.com/wolfman30/medspa-ai-platform/internal/http/middleware"
@@ -47,6 +48,8 @@ type Config struct {
 	DB              *sql.DB
 	TranscriptStore *conversation.SMSTranscriptStore
 	ClinicStore     *clinic.Store
+	KnowledgeRepo   conversation.KnowledgeRepository
+	AuditService    *compliance.AuditService
 
 	// Client self-service registration
 	ClientRegistration *handlers.ClientRegistrationHandler
@@ -211,6 +214,10 @@ func New(cfg *Config) http.Handler {
 			dashboardHandler := handlers.NewPortalDashboardHandler(cfg.DB, cfg.Logger)
 			conversationsHandler := handlers.NewAdminConversationsHandler(cfg.DB, cfg.TranscriptStore, cfg.Logger)
 			depositsHandler := handlers.NewAdminDepositsHandler(cfg.DB, cfg.Logger)
+			var knowledgeHandler *handlers.PortalKnowledgeHandler
+			if cfg.KnowledgeRepo != nil {
+				knowledgeHandler = handlers.NewPortalKnowledgeHandler(cfg.KnowledgeRepo, cfg.AuditService, cfg.Logger)
+			}
 
 			portal.Route("/orgs/{orgID}", func(r chi.Router) {
 				r.Use(requirePortalOrgOwner(cfg.DB, cfg.Logger))
@@ -220,6 +227,11 @@ func New(cfg *Config) http.Handler {
 				r.Get("/deposits", depositsHandler.ListDeposits)
 				r.Get("/deposits/stats", depositsHandler.GetDepositStats)
 				r.Get("/deposits/{depositID}", depositsHandler.GetDeposit)
+				if knowledgeHandler != nil {
+					r.Get("/knowledge", knowledgeHandler.GetKnowledge)
+					r.Put("/knowledge", knowledgeHandler.PutKnowledge)
+					r.Get("/knowledge/page", knowledgeHandler.KnowledgePage)
+				}
 			})
 		})
 	}

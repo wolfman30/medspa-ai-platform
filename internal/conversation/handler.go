@@ -190,44 +190,13 @@ func (h *Handler) AddKnowledge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	if len(payload.Documents) == 0 {
-		http.Error(w, "documents required", http.StatusBadRequest)
+	documents, err := ParseKnowledgePayload(payload.Documents)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	var documents []string
-	if err := json.Unmarshal(payload.Documents, &documents); err != nil {
-		type titledDocument struct {
-			Title   string `json:"title"`
-			Content string `json:"content"`
-		}
-		var titled []titledDocument
-		if err := json.Unmarshal(payload.Documents, &titled); err != nil {
-			http.Error(w, "documents must be an array of strings or {title, content} objects", http.StatusBadRequest)
-			return
-		}
-		documents = make([]string, 0, len(titled))
-		for _, doc := range titled {
-			title := strings.TrimSpace(doc.Title)
-			content := strings.TrimSpace(doc.Content)
-			switch {
-			case title != "" && content != "":
-				documents = append(documents, title+"\n\n"+content)
-			case content != "":
-				documents = append(documents, content)
-			case title != "":
-				documents = append(documents, title)
-			}
-		}
-	}
-	if len(documents) == 0 {
-		http.Error(w, "documents required", http.StatusBadRequest)
-		return
-	}
-
-	const maxDocs = 20
-	if len(documents) > maxDocs {
-		http.Error(w, fmt.Sprintf("maximum %d documents per request", maxDocs), http.StatusBadRequest)
+	if err := ValidateKnowledgeDocuments(documents); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

@@ -42,3 +42,9 @@ func AdminJWT(secret string) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// AdminClaimsFromContext returns admin JWT claims if present.
+func AdminClaimsFromContext(ctx context.Context) (jwt.RegisteredClaims, bool) {
+	claims, ok := ctx.Value(adminClaimsKey).(jwt.RegisteredClaims)
+	return claims, ok
+}

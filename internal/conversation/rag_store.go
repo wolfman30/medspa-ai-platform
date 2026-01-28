@@ -24,6 +24,11 @@ type RAGIngestor interface {
 	AddDocuments(ctx context.Context, clinicID string, contents []string) error
 }
 
+// RAGReplacer replaces all embedded documents for a clinic.
+type RAGReplacer interface {
+	ReplaceDocuments(ctx context.Context, clinicID string, contents []string) error
+}
+
 // MemoryRAGStore keeps embeddings in memory and supports simple cosine retrieval.
 type MemoryRAGStore struct {
 	client embeddingClient
@@ -82,6 +87,34 @@ func (s *MemoryRAGStore) AddDocuments(ctx context.Context, clinicID string, cont
 			embedding: item,
 		})
 	}
+	return nil
+}
+
+// ReplaceDocuments overwrites embedded docs for a clinic.
+func (s *MemoryRAGStore) ReplaceDocuments(ctx context.Context, clinicID string, contents []string) error {
+	if len(contents) == 0 {
+		s.mu.Lock()
+		delete(s.docments, clinicID)
+		s.mu.Unlock()
+		return nil
+	}
+	resp, err := s.client.Embed(ctx, s.model, contents)
+	if err != nil {
+		return err
+	}
+	if len(resp) != len(contents) {
+		return errors.New("conversation: embedding response size mismatch")
+	}
+	newDocs := make([]ragDocument, 0, len(contents))
+	for i, item := range resp {
+		newDocs = append(newDocs, ragDocument{
+			content:   contents[i],
+			embedding: item,
+		})
+	}
+	s.mu.Lock()
+	s.docments[clinicID] = newDocs
+	s.mu.Unlock()
 	return nil
 }
 
