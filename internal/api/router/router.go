@@ -167,6 +167,11 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Put("/config", cfg.ClinicHandler.UpdateConfig)
 					clinicRoutes.Post("/config", cfg.ClinicHandler.UpdateConfig)
 				}
+				if cfg.KnowledgeRepo != nil {
+					knowledgeHandler := handlers.NewPortalKnowledgeHandler(cfg.KnowledgeRepo, cfg.AuditService, cfg.Logger)
+					clinicRoutes.Get("/knowledge", knowledgeHandler.GetKnowledge)
+					clinicRoutes.Put("/knowledge", knowledgeHandler.PutKnowledge)
+				}
 				if cfg.ClinicStatsHandler != nil {
 					clinicRoutes.Get("/stats", cfg.ClinicStatsHandler.GetStats)
 				}

@@ -5,12 +5,13 @@ import { KnowledgeSettings } from './KnowledgeSettings';
 
 interface SettingsPageProps {
   orgId: string;
+  scope: 'admin' | 'portal';
   onBack: () => void;
 }
 
 type SettingsSection = 'menu' | 'notifications' | 'ai-persona' | 'knowledge';
 
-export function SettingsPage({ orgId, onBack }: SettingsPageProps) {
+export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>('menu');
 
   if (section === 'notifications') {
@@ -35,6 +36,7 @@ export function SettingsPage({ orgId, onBack }: SettingsPageProps) {
     return (
       <KnowledgeSettings
         orgId={orgId}
+        scope={scope}
         onBack={() => setSection('menu')}
       />
     );
