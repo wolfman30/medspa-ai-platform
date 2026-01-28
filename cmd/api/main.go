@@ -377,6 +377,8 @@ func main() {
 		DB:                  sqlDB,
 		TranscriptStore:     smsTranscript,
 		ClinicStore:         clinicStore,
+		KnowledgeRepo:       knowledgeRepo,
+		AuditService:        auditSvc,
 		MetricsHandler:      metricsHandler,
 		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 	}

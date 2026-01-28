@@ -25,6 +25,10 @@ const (
 	EventSupervisorReview AuditEventType = "compliance.supervisor_review"
 	// EventResponseModified is logged when AI response is edited for safety.
 	EventResponseModified AuditEventType = "compliance.response_modified"
+	// EventKnowledgeRead is logged when clinic knowledge is read.
+	EventKnowledgeRead AuditEventType = "compliance.knowledge_read"
+	// EventKnowledgeUpdated is logged when clinic knowledge is updated.
+	EventKnowledgeUpdated AuditEventType = "compliance.knowledge_updated"
 )
 
 // AuditEvent represents an immutable compliance audit record.

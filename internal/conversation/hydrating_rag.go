@@ -18,7 +18,10 @@ type HydratingRAGRetriever struct {
 	logger *logging.Logger
 
 	hydratedCounts sync.Map // clinicID -> int
+	hydratedVers   sync.Map // clinicID -> int64
 	locks          sync.Map // clinicID -> *sync.Mutex
+
+	versioner KnowledgeVersioner
 }
 
 func NewHydratingRAGRetriever(ctx context.Context, repo KnowledgeRepository, store *MemoryRAGStore, logger *logging.Logger) *HydratingRAGRetriever {
@@ -40,11 +43,19 @@ func NewHydratingRAGRetriever(ctx context.Context, repo KnowledgeRepository, sto
 		store:  store,
 		logger: logger,
 	}
+	if versioner, ok := repo.(KnowledgeVersioner); ok {
+		h.versioner = versioner
+	}
 
 	// Seed hydrated counts so we don't re-embed docs that were already hydrated on startup.
 	if docsByClinic, err := repo.LoadAll(ctx); err == nil {
 		for clinicID, docs := range docsByClinic {
 			h.hydratedCounts.Store(clinicID, len(docs))
+			if h.versioner != nil {
+				if version, err := h.versioner.GetVersion(ctx, clinicID); err == nil {
+					h.hydratedVers.Store(clinicID, version)
+				}
+			}
 		}
 	} else {
 		logger.Warn("failed to initialize rag hydration state", "error", err)
@@ -75,11 +86,45 @@ func (h *HydratingRAGRetriever) ensureHydrated(ctx context.Context, clinicID str
 		return err
 	}
 
+	if h.versioner != nil {
+		version, err := h.versioner.GetVersion(ctx, clinicID)
+		if err != nil {
+			return err
+		}
+		storedVersion := int64(0)
+		if v, ok := h.hydratedVers.Load(clinicID); ok {
+			if n, ok := v.(int64); ok {
+				storedVersion = n
+			}
+		}
+		if version != storedVersion {
+			if replacer, ok := any(h.store).(RAGReplacer); ok {
+				if err := replacer.ReplaceDocuments(ctx, clinicID, docs); err != nil {
+					return err
+				}
+				h.hydratedCounts.Store(clinicID, len(docs))
+				h.hydratedVers.Store(clinicID, version)
+				return nil
+			}
+			h.logger.Warn("rag store does not support replace; falling back to append", "clinic_id", clinicID)
+		}
+	}
+
 	start := 0
 	if v, ok := h.hydratedCounts.Load(clinicID); ok {
 		if n, ok := v.(int); ok {
 			start = n
 		}
+	}
+	if start > len(docs) {
+		if replacer, ok := any(h.store).(RAGReplacer); ok {
+			if err := replacer.ReplaceDocuments(ctx, clinicID, docs); err != nil {
+				return err
+			}
+			h.hydratedCounts.Store(clinicID, len(docs))
+			return nil
+		}
+		start = 0
 	}
 	if start >= len(docs) {
 		return nil
