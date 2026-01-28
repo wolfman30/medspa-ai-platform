@@ -244,3 +244,138 @@ func parsePortalWindow(r *http.Request) (*time.Time, *time.Time, string, string,
 
 	return &start, &end, start.Format(time.RFC3339), end.Format(time.RFC3339), nil
 }
+
+// IndexPage serves the portal landing page with navigation links.
+// GET /portal/orgs/{orgID}
+func (h *PortalDashboardHandler) IndexPage(w http.ResponseWriter, r *http.Request) {
+	orgID := strings.TrimSpace(chi.URLParam(r, "orgID"))
+	if orgID == "" {
+		jsonError(w, "missing orgID", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(portalIndexHTML))
+}
+
+const portalIndexHTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clinic Portal</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f2ee;
+      --panel: #ffffff;
+      --ink: #2b2a28;
+      --muted: #6a5f55;
+      --accent: #c96e4b;
+      --accent-dark: #a85a3c;
+      --border: #e6dcd5;
+    }
+    body {
+      font-family: "Source Serif 4", "Georgia", serif;
+      margin: 0;
+      padding: 32px;
+      background: radial-gradient(circle at top, #fff3ea, var(--bg));
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 8px;
+    }
+    .subtitle {
+      margin: 0 0 32px;
+      color: var(--muted);
+    }
+    .nav-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .nav-card {
+      display: block;
+      padding: 20px;
+      background: #faf8f6;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-decoration: none;
+      color: var(--ink);
+      transition: all 0.2s ease;
+    }
+    .nav-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 12px rgba(201, 110, 75, 0.15);
+      transform: translateY(-2px);
+    }
+    .nav-card h2 {
+      font-size: 18px;
+      margin: 0 0 8px;
+      color: var(--accent-dark);
+    }
+    .nav-card p {
+      font-size: 14px;
+      margin: 0;
+      color: var(--muted);
+    }
+    .org-id {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .org-id code {
+      background: #f0ebe6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "JetBrains Mono", monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Clinic Portal</h1>
+    <p class="subtitle">Manage your AI assistant settings and view performance.</p>
+
+    <nav class="nav-grid">
+      <a href="knowledge/page" class="nav-card">
+        <h2>Knowledge Base</h2>
+        <p>View and edit the information your AI uses to answer questions.</p>
+      </a>
+      <a href="conversations" class="nav-card" onclick="alert('API endpoint - UI coming soon'); return false;">
+        <h2>Conversations</h2>
+        <p>Review patient conversations handled by the AI.</p>
+      </a>
+      <a href="deposits" class="nav-card" onclick="alert('API endpoint - UI coming soon'); return false;">
+        <h2>Deposits</h2>
+        <p>Track deposits collected through booking links.</p>
+      </a>
+      <a href="dashboard" class="nav-card" onclick="alert('API endpoint - UI coming soon'); return false;">
+        <h2>Dashboard</h2>
+        <p>View performance metrics and conversion rates.</p>
+      </a>
+    </nav>
+
+    <div class="org-id">
+      Organization ID: <code id="orgId"></code>
+    </div>
+  </div>
+  <script>
+    const orgId = window.location.pathname.split("/").filter(Boolean).pop();
+    document.getElementById("orgId").textContent = orgId;
+  </script>
+</body>
+</html>`

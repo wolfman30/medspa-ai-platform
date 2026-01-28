@@ -221,6 +221,7 @@ func New(cfg *Config) http.Handler {
 
 			portal.Route("/orgs/{orgID}", func(r chi.Router) {
 				r.Use(requirePortalOrgOwner(cfg.DB, cfg.Logger))
+				r.Get("/", dashboardHandler.IndexPage)
 				r.Get("/dashboard", dashboardHandler.GetDashboard)
 				r.Get("/conversations", conversationsHandler.ListConversations)
 				r.Get("/conversations/{conversationID}", conversationsHandler.GetConversation)
