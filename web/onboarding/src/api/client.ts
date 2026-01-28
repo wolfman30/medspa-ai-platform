@@ -365,6 +365,33 @@ export async function updatePortalKnowledge(
   return res.json();
 }
 
+export async function getAdminKnowledge(orgId: string): Promise<{ documents: unknown[] }> {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/admin/clinics/${orgId}/knowledge`, {
+    headers: buildHeaders(token),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export async function updateAdminKnowledge(
+  orgId: string,
+  documents: unknown[]
+): Promise<{ documents: number; status: string }> {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}/admin/clinics/${orgId}/knowledge`, {
+    method: 'PUT',
+    headers: buildHeaders(token),
+    body: JSON.stringify({ documents }),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
 export async function activatePhoneNumber(
   orgId: string,
   phoneNumber: string

@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
-import { getPortalKnowledge, updatePortalKnowledge } from '../api/client';
+import {
+  getAdminKnowledge,
+  getPortalKnowledge,
+  updateAdminKnowledge,
+  updatePortalKnowledge,
+} from '../api/client';
 
 interface KnowledgeSettingsProps {
   orgId: string;
+  scope: 'admin' | 'portal';
   onBack: () => void;
 }
 
-export function KnowledgeSettings({ orgId, onBack }: KnowledgeSettingsProps) {
+export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsProps) {
   const [value, setValue] = useState('[]');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -18,7 +24,8 @@ export function KnowledgeSettings({ orgId, onBack }: KnowledgeSettingsProps) {
     let active = true;
     setLoading(true);
     setError(null);
-    getPortalKnowledge(orgId)
+    const loader = scope === 'admin' ? getAdminKnowledge : getPortalKnowledge;
+    loader(orgId)
       .then((data) => {
         if (!active) return;
         const docs = Array.isArray(data.documents) ? data.documents : [];
@@ -53,7 +60,8 @@ export function KnowledgeSettings({ orgId, onBack }: KnowledgeSettingsProps) {
     }
     setSaving(true);
     try {
-      await updatePortalKnowledge(orgId, parsed);
+      const saver = scope === 'admin' ? updateAdminKnowledge : updatePortalKnowledge;
+      await saver(orgId, parsed);
       setEditing(false);
       setSuccess('Knowledge saved.');
     } catch (err) {

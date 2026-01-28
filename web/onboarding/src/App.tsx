@@ -405,11 +405,13 @@ function AuthenticatedApp() {
         ) : view === 'settings' ? (
           <SettingsPage
             orgId={orgId}
+            scope={dataScope}
             onBack={() => setView('conversations')}
           />
         ) : view === 'knowledge' ? (
           <KnowledgeSettings
             orgId={orgId}
+            scope={dataScope}
             onBack={() => setView('conversations')}
           />
         ) : view === 'deposits' ? (
@@ -448,11 +450,13 @@ function AuthenticatedApp() {
         ) : view === 'settings' ? (
           <SettingsPage
             orgId={orgId}
+            scope={dataScope}
             onBack={() => setView('dashboard')}
           />
         ) : view === 'knowledge' ? (
           <KnowledgeSettings
             orgId={orgId}
+            scope={dataScope}
             onBack={() => setView('dashboard')}
           />
         ) : view === 'deposits' ? (
