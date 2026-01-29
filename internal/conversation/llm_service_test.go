@@ -1156,6 +1156,16 @@ func TestBuildSystemPrompt_ReplacesDepositAmount(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_IncludesDeliverabilityGuardrails(t *testing.T) {
+	prompt := buildSystemPrompt(5000)
+	if !strings.Contains(prompt, "DELIVERABILITY SAFETY") {
+		t.Fatalf("expected deliverability guardrails in system prompt")
+	}
+	if !strings.Contains(prompt, "GLP-1") {
+		t.Fatalf("expected GLP-1 guardrail in system prompt")
+	}
+}
+
 func TestLLMService_InjectsDepositAmountContext(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
