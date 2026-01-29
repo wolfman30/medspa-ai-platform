@@ -111,6 +111,44 @@ func TestSquareWebhookHandler_ScheduledFor(t *testing.T) {
 	}
 }
 
+func TestSquareWebhookHandler_UsesFromNumberMetadata(t *testing.T) {
+	orgID := uuid.New().String()
+	leadID := uuid.New().String()
+	intentID := uuid.New().String()
+
+	payments := &stubPaymentStore{}
+	leadsRepo := &stubLeadRepo{
+		lead: &leads.Lead{ID: leadID, OrgID: orgID, Phone: "+15550000000"},
+	}
+	processed := &stubProcessedTracker{}
+	outbox := &stubOutboxWriter{}
+
+	handler := NewSquareWebhookHandler("secret", payments, leadsRepo, processed, outbox, nil, nil, logging.Default())
+
+	body := buildSquarePayload(t, "evt-124", "pay-124", "COMPLETED", map[string]string{
+		"org_id":            orgID,
+		"lead_id":           leadID,
+		"booking_intent_id": intentID,
+		"from_number":       "+16667778888",
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/webhooks/square", bytes.NewReader(body))
+	req.Host = "example.com"
+	sign(req, "secret", body)
+
+	rr := httptest.NewRecorder()
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(outbox.inserted) != 1 {
+		t.Fatalf("expected outbox insert, got %d", len(outbox.inserted))
+	}
+	if outbox.inserted[0].FromNumber != "+16667778888" {
+		t.Fatalf("expected from_number from metadata, got %q", outbox.inserted[0].FromNumber)
+	}
+}
+
 func TestSquareWebhookHandler_AlreadyProcessed(t *testing.T) {
 	orgID := uuid.New().String()
 	leadID := uuid.New().String()

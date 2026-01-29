@@ -80,7 +80,7 @@ func ShouldPreloadDeposit(message string) bool {
 
 // StartPreload begins generating a checkout link in the background.
 // Returns immediately; use GetPreloaded to retrieve the result.
-func (p *DepositPreloader) StartPreload(ctx context.Context, conversationID, orgID, leadID string) {
+func (p *DepositPreloader) StartPreload(ctx context.Context, conversationID, orgID, leadID, fromNumber string) {
 	if p.checkout == nil {
 		return
 	}
@@ -117,6 +117,7 @@ func (p *DepositPreloader) StartPreload(ctx context.Context, conversationID, org
 			AmountCents:     p.defaultAmount,
 			BookingIntentID: prePaymentID,
 			Description:     "Appointment deposit",
+			FromNumber:      fromNumber,
 		})
 
 		if err != nil {

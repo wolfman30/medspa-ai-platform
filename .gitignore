@@ -27,6 +27,7 @@ vendor/
 /bin/
 /dist/
 /build/
+/cmd/bedrocktest/
 
 # IDE files
 .idea/

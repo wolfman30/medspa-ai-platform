@@ -51,6 +51,8 @@ type Config struct {
 	SquareOAuthRedirectURI          string
 	SquareOAuthSuccessURL           string
 	SquareSandbox                   bool
+	SquareCheckoutMode              string
+	SquareCheckoutAllowFallback     bool
 	AllowFakePayments               bool
 	DepositAmountCents              int
 	SandboxAutoPurgePhones          string
@@ -201,6 +203,8 @@ func Load() *Config {
 		SquareOAuthRedirectURI:          getEnv("SQUARE_OAUTH_REDIRECT_URI", ""),
 		SquareOAuthSuccessURL:           getEnv("SQUARE_OAUTH_SUCCESS_URL", ""),
 		SquareSandbox:                   getEnvAsBool("SQUARE_SANDBOX", true),
+		SquareCheckoutMode:              getEnv("SQUARE_CHECKOUT_MODE", "auto"),
+		SquareCheckoutAllowFallback:     getEnvAsBool("SQUARE_CHECKOUT_ALLOW_FALLBACK", true),
 		AllowFakePayments:               getEnvAsBool("ALLOW_FAKE_PAYMENTS", false),
 		DepositAmountCents:              getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
 		SandboxAutoPurgePhones:          getEnv("SANDBOX_AUTO_PURGE_PHONE_DIGITS", ""),

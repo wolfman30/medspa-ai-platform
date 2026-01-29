@@ -51,6 +51,7 @@ func TestSquareCheckoutService_CreatePaymentLink_BuildsValidCheckoutPayload(t *t
 		AmountCents:     5000,
 		BookingIntentID: bookingID,
 		Description:     "Test Deposit",
+		FromNumber:      "+15551112222",
 	})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -76,6 +77,10 @@ func TestSquareCheckoutService_CreatePaymentLink_BuildsValidCheckoutPayload(t *t
 	order := mustMap(t, createOrderReq["order"])
 	if order["location_id"] != locationID {
 		t.Fatalf("expected location_id %s, got %#v", locationID, order["location_id"])
+	}
+	meta := mustMap(t, order["metadata"])
+	if meta["from_number"] != "+15551112222" {
+		t.Fatalf("expected from_number metadata, got %#v", meta["from_number"])
 	}
 
 	items := mustSlice(t, order["line_items"])

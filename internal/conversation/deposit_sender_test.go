@@ -151,6 +151,9 @@ func TestDepositDispatcherUsesResolverFromNumber(t *testing.T) {
 	if sms.last.From != msg.To {
 		t.Fatalf("expected from number %s, got %s", msg.To, sms.last.From)
 	}
+	if checkout.params.FromNumber != msg.To {
+		t.Fatalf("expected checkout from number %s, got %s", msg.To, checkout.params.FromNumber)
+	}
 }
 
 func TestDepositDispatcherFallsBackToResolverFromNumber(t *testing.T) {
@@ -169,6 +172,9 @@ func TestDepositDispatcherFallsBackToResolverFromNumber(t *testing.T) {
 	}
 	if sms.last.From != resolver.from {
 		t.Fatalf("expected from number %s, got %s", resolver.from, sms.last.From)
+	}
+	if checkout.params.FromNumber != resolver.from {
+		t.Fatalf("expected checkout from number %s, got %s", resolver.from, checkout.params.FromNumber)
 	}
 }
 
