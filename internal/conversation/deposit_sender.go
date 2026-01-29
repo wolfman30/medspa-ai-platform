@@ -135,6 +135,16 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		paymentID = uuid.UUID(paymentRow.ID.Bytes)
 	}
 
+	// Prefer the inbound destination number for this conversation (msg.To). This ensures
+	// the deposit link is sent from the same clinic number the patient texted/called.
+	// Only fall back to an org-level default when msg.To is missing (e.g. web lead flow).
+	fromNumber := strings.TrimSpace(msg.To)
+	if fromNumber == "" && d.numbers != nil {
+		if resolved := strings.TrimSpace(d.numbers.DefaultFromNumber(msg.OrgID)); resolved != "" {
+			fromNumber = resolved
+		}
+	}
+
 	// Use preloaded checkout link if available, otherwise create new
 	var link *payments.CheckoutResponse
 	if intent.PreloadedURL != "" {
@@ -157,6 +167,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			SuccessURL:      intent.SuccessURL,
 			CancelURL:       intent.CancelURL,
 			ScheduledFor:    intent.ScheduledFor,
+			FromNumber:      fromNumber,
 		})
 		if err != nil {
 			return fmt.Errorf("deposit: create checkout link: %w", err)
@@ -171,15 +182,6 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 	}
 
 	if link.URL != "" {
-		// Prefer the inbound destination number for this conversation (msg.To). This ensures
-		// the deposit link is sent from the same clinic number the patient texted/called.
-		// Only fall back to an org-level default when msg.To is missing (e.g. web lead flow).
-		fromNumber := strings.TrimSpace(msg.To)
-		if fromNumber == "" && d.numbers != nil {
-			if resolved := strings.TrimSpace(d.numbers.DefaultFromNumber(msg.OrgID)); resolved != "" {
-				fromNumber = resolved
-			}
-		}
 		d.logger.Info("deposit: sending sms with checkout link",
 			"to", msg.From,
 			"from", fromNumber,

@@ -454,7 +454,7 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 				"job_id", payload.ID,
 				"conversation_id", payload.Message.ConversationID,
 			)
-			w.depositPreloader.StartPreload(ctx, payload.Message.ConversationID, payload.Message.OrgID, payload.Message.LeadID)
+			w.depositPreloader.StartPreload(ctx, payload.Message.ConversationID, payload.Message.OrgID, payload.Message.LeadID, payload.Message.To)
 		}
 		w.logger.Info("worker calling ProcessMessage", "job_id", payload.ID, "conversation_id", payload.Message.ConversationID)
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)

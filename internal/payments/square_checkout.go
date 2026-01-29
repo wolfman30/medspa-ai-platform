@@ -44,6 +44,8 @@ type SquareCheckoutService struct {
 	logger      *logging.Logger
 	// Use Payment Links API instead of Checkout API
 	usePaymentLinks bool
+	// Allow fallback to payment links if checkout fails
+	allowPaymentLinkFallback bool
 	// Per-org credentials provider (optional)
 	credsProvider CredentialsProvider
 }
@@ -57,6 +59,7 @@ type CheckoutParams struct {
 	SuccessURL      string
 	CancelURL       string
 	ScheduledFor    *time.Time
+	FromNumber      string
 }
 
 type CheckoutResponse struct {
@@ -71,13 +74,14 @@ func NewSquareCheckoutService(accessToken, locationID, successURL, cancelURL str
 	client := &http.Client{Timeout: 10 * time.Second}
 	baseURL := "https://connect.squareup.com"
 	return &SquareCheckoutService{
-		accessToken: accessToken,
-		locationID:  locationID,
-		successURL:  successURL,
-		cancelURL:   cancelURL,
-		baseURL:     baseURL,
-		httpClient:  client,
-		logger:      logger,
+		accessToken:              accessToken,
+		locationID:               locationID,
+		successURL:               successURL,
+		cancelURL:                cancelURL,
+		baseURL:                  baseURL,
+		httpClient:               client,
+		logger:                   logger,
+		allowPaymentLinkFallback: true,
 	}
 }
 
@@ -99,6 +103,12 @@ func (s *SquareCheckoutService) WithCredentialsProvider(provider CredentialsProv
 // WithPaymentLinks toggles use of Square Payment Links API.
 func (s *SquareCheckoutService) WithPaymentLinks(enabled bool) *SquareCheckoutService {
 	s.usePaymentLinks = enabled
+	return s
+}
+
+// WithPaymentLinkFallback toggles fallback to Payment Links when checkout fails.
+func (s *SquareCheckoutService) WithPaymentLinkFallback(enabled bool) *SquareCheckoutService {
+	s.allowPaymentLinkFallback = enabled
 	return s
 }
 
@@ -185,6 +195,9 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 		"lead_id":           params.LeadID,
 		"booking_intent_id": params.BookingIntentID.String(),
 	}
+	if fromNumber := strings.TrimSpace(params.FromNumber); fromNumber != "" {
+		meta["from_number"] = fromNumber
+	}
 	if scheduledStr != "" {
 		meta["scheduled_for"] = scheduledStr
 	}
@@ -199,7 +212,7 @@ func (s *SquareCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	}
 
 	// Sandbox-hosted checkout may return 500s; fall back to Payment Links if enabled by caller.
-	if !s.usePaymentLinks && strings.Contains(s.baseURL, "squareupsandbox") {
+	if s.allowPaymentLinkFallback && !s.usePaymentLinks && strings.Contains(s.baseURL, "squareupsandbox") {
 		s.logger.Warn("square checkout failed; falling back to payment links", "error", err, "org_id", params.OrgID)
 		if fallback, fallbackErr := s.createPaymentLink(ctx, accessToken, locationID, idempotency, name, params.AmountCents, redirectURL, meta); fallbackErr == nil {
 			return fallback, nil

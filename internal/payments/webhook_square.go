@@ -127,6 +127,7 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	paymentID := strings.TrimSpace(evt.Data.Object.Payment.ID)
 	orderID := evt.Data.Object.Payment.OrderID
 	scheduledStr := metadata["scheduled_for"]
+	fromNumber := metadata["from_number"]
 	var paymentRow *paymentsql.Payment
 
 	if paymentID != "" {
@@ -164,6 +165,9 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 					leadID = orderMeta["lead_id"]
 					intentID = orderMeta["booking_intent_id"]
 					scheduledStr = orderMeta["scheduled_for"]
+					if fromNumber == "" {
+						fromNumber = orderMeta["from_number"]
+					}
 				} else {
 					h.logger.Warn("square webhook missing metadata and payment/order lookup failed", "payment_err", perr, "order_err", oerr, "payment_id", paymentID, "order_id", orderID)
 					w.WriteHeader(http.StatusOK) // acknowledge to avoid retries; cannot progress workflow
@@ -257,9 +261,10 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		LeadPhone:       lead.Phone,
 		ScheduledFor:    scheduledFor,
 	}
-	if h.numbers != nil {
-		event.FromNumber = h.numbers.DefaultFromNumber(orgID)
+	if fromNumber == "" && h.numbers != nil {
+		fromNumber = h.numbers.DefaultFromNumber(orgID)
 	}
+	event.FromNumber = fromNumber
 
 	if _, err := h.outbox.Insert(r.Context(), orgID, "payment_succeeded.v1", event); err != nil {
 		h.logger.Error("failed to enqueue outbox", "error", err)
@@ -285,6 +290,7 @@ func (h *SquareWebhookHandler) handleFailure(r *http.Request, evt squarePaymentE
 	paymentID := strings.TrimSpace(evt.Data.Object.Payment.ID)
 	orderID := evt.Data.Object.Payment.OrderID
 	status := strings.ToUpper(strings.TrimSpace(evt.Data.Object.Payment.Status))
+	fromNumber := metadata["from_number"]
 
 	if paymentID != "" {
 		if processed, err := h.processed.AlreadyProcessed(r.Context(), "square.payment_failed", paymentID); err != nil {
@@ -315,6 +321,9 @@ func (h *SquareWebhookHandler) handleFailure(r *http.Request, evt squarePaymentE
 					orgID = orderMeta["org_id"]
 					leadID = orderMeta["lead_id"]
 					intentID = orderMeta["booking_intent_id"]
+					if fromNumber == "" {
+						fromNumber = orderMeta["from_number"]
+					}
 				} else {
 					h.logger.Warn("square failure webhook missing metadata and payment/order lookup failed", "payment_err", perr, "order_err", oerr, "payment_id", paymentID, "order_id", orderID)
 					return http.StatusOK, "", nil
@@ -381,9 +390,10 @@ func (h *SquareWebhookHandler) handleFailure(r *http.Request, evt squarePaymentE
 		LeadPhone:       lead.Phone,
 		FailureStatus:   status,
 	}
-	if h.numbers != nil {
-		failEvt.FromNumber = h.numbers.DefaultFromNumber(orgID)
+	if fromNumber == "" && h.numbers != nil {
+		fromNumber = h.numbers.DefaultFromNumber(orgID)
 	}
+	failEvt.FromNumber = fromNumber
 	if _, err := h.outbox.Insert(r.Context(), orgID, "payment_failed.v1", failEvt); err != nil {
 		return http.StatusInternalServerError, "", err
 	}
