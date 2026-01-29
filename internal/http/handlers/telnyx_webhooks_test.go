@@ -406,6 +406,53 @@ func TestTelnyxDeliveryStatus(t *testing.T) {
 	}
 }
 
+func TestTelnyxDeliveryStatusRecordPayload(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+	defer mock.Close()
+	store := messaging.NewStore(mock)
+	convStore := &stubConversationStore{}
+	handler := NewTelnyxWebhookHandler(TelnyxWebhookConfig{
+		Store:             store,
+		Processed:         &stubProcessedTracker{},
+		Telnyx:            &testTelnyxClient{},
+		Logger:            logging.Default(),
+		ConversationStore: convStore,
+	})
+
+	mock.ExpectExec("UPDATE messages").
+		WithArgs("msg_outbound_record", "delivery_failed", pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/messages", bytes.NewReader(loadFixture(t, "telnyx_dlr_record_failed.json")))
+	req.Header.Set("Telnyx-Timestamp", "123")
+	req.Header.Set("Telnyx-Signature", "abc")
+	rec := httptest.NewRecorder()
+
+	handler.HandleMessages(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !convStore.updated {
+		t.Fatalf("expected conversation status update")
+	}
+	if convStore.lastPID != "msg_outbound_record" {
+		t.Fatalf("expected provider message id to propagate, got %s", convStore.lastPID)
+	}
+	if convStore.lastStatus != "delivery_failed" {
+		t.Fatalf("expected status delivery_failed, got %s", convStore.lastStatus)
+	}
+	if convStore.lastError == "" {
+		t.Fatalf("expected error reason to be populated")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestTelnyxHostedActivated(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {

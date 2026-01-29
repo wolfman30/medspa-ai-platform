@@ -1,0 +1,22 @@
+{
+  "id": "msg_outbound_record",
+  "record_type": "message",
+  "direction": "outbound",
+  "received_at": "2026-01-29T09:24:29Z",
+  "from": {
+    "phone_number": "+14407448197"
+  },
+  "to": [
+    {
+      "phone_number": "+15005550001",
+      "status": "delivery_failed"
+    }
+  ],
+  "errors": [
+    {
+      "code": "40002",
+      "title": "Blocked as spam - temporary",
+      "detail": "The message was flagged by a SPAM filter and was not delivered. This is a temporary condition."
+    }
+  ]
+}

@@ -132,10 +132,14 @@ func (s *stubConversationPublisher) EnqueueStart(ctx context.Context, jobID stri
 }
 
 type stubConversationStore struct {
-	appended bool
-	lastID   string
-	lastMsg  conversation.SMSTranscriptMessage
-	leadID   uuid.UUID
+	appended   bool
+	lastID     string
+	lastMsg    conversation.SMSTranscriptMessage
+	leadID     uuid.UUID
+	updated    bool
+	lastPID    string
+	lastStatus string
+	lastError  string
 }
 
 func (s *stubConversationStore) AppendMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) error {
@@ -147,6 +151,14 @@ func (s *stubConversationStore) AppendMessage(ctx context.Context, conversationI
 
 func (s *stubConversationStore) LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error {
 	s.leadID = leadID
+	return nil
+}
+
+func (s *stubConversationStore) UpdateMessageStatusByProviderID(ctx context.Context, providerMessageID, status, errorReason string) error {
+	s.updated = true
+	s.lastPID = providerMessageID
+	s.lastStatus = status
+	s.lastError = errorReason
 	return nil
 }
 
