@@ -307,7 +307,9 @@ func main() {
 			fakePaymentsHandler = payments.NewFakePaymentsHandler(paymentsRepo, leadsRepo, processedStore, outboxStore, numberResolver, cfg.PublicBaseURL, logger)
 			logger.Warn("using fake payments mode (ALLOW_FAKE_PAYMENTS=true)")
 		} else {
-			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).
+				WithBaseURL(cfg.SquareBaseURL).
+				WithPaymentLinks(cfg.SquareSandbox)
 			if oauthSvc != nil {
 				squareSvc = squareSvc.WithCredentialsProvider(oauthSvc)
 			}
@@ -572,7 +574,9 @@ func setupInlineWorker(
 			if !hasSquareProvider {
 				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
 			} else {
-				squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+				squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).
+					WithBaseURL(cfg.SquareBaseURL).
+					WithPaymentLinks(cfg.SquareSandbox)
 				if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
 					oauthSvc := payments.NewSquareOAuthService(
 						payments.SquareOAuthConfig{
