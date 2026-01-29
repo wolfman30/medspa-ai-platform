@@ -137,7 +137,9 @@ func Run(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) err
 
 		var squareSvc *payments.SquareCheckoutService
 		if cfg.SquareAccessToken != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "") {
-			squareSvc = payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).WithBaseURL(cfg.SquareBaseURL)
+			squareSvc = payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).
+				WithBaseURL(cfg.SquareBaseURL).
+				WithPaymentLinks(cfg.SquareSandbox)
 		}
 		if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
 			oauthSvc = payments.NewSquareOAuthService(
