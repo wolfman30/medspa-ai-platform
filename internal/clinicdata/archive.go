@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -22,19 +24,22 @@ type S3Client interface {
 
 // Archiver archives conversation data to S3 before deletion.
 // Data is stored in JSONL format optimized for LLM training.
+// PII (names, phones) is redacted for HIPAA compliance.
 type Archiver struct {
-	db     db
-	s3     S3Client
-	bucket string
-	logger *logging.Logger
+	db       db
+	s3       S3Client
+	bucket   string
+	kmsKeyID string // Optional: KMS key for SSE-KMS encryption
+	logger   *logging.Logger
 }
 
 // ArchiverConfig holds configuration for the Archiver.
 type ArchiverConfig struct {
-	DB     db
-	S3     S3Client
-	Bucket string
-	Logger *logging.Logger
+	DB       db
+	S3       S3Client
+	Bucket   string
+	KMSKeyID string // Optional: KMS key ID for server-side encryption (SSE-KMS)
+	Logger   *logging.Logger
 }
 
 // NewArchiver creates a new Archiver instance.
@@ -43,20 +48,22 @@ func NewArchiver(cfg ArchiverConfig) *Archiver {
 		cfg.Logger = logging.Default()
 	}
 	return &Archiver{
-		db:     cfg.DB,
-		s3:     cfg.S3,
-		bucket: cfg.Bucket,
-		logger: cfg.Logger,
+		db:       cfg.DB,
+		s3:       cfg.S3,
+		bucket:   cfg.Bucket,
+		kmsKeyID: cfg.KMSKeyID,
+		logger:   cfg.Logger,
 	}
 }
 
 // ArchivedConversation represents a conversation archived for training.
 // Format optimized for LLM fine-tuning (JSONL).
+// All PII (names, phones) is redacted.
 type ArchivedConversation struct {
 	ConversationID string            `json:"conversation_id"`
 	OrgID          string            `json:"org_id"`
 	OrgName        string            `json:"org_name,omitempty"`
-	Phone          string            `json:"phone_redacted"` // Partially redacted
+	Phone          string            `json:"phone_redacted"` // Fully redacted as [PHONE]
 	Channel        string            `json:"channel"`
 	Messages       []ArchivedMessage `json:"messages"`
 	Metadata       ArchiveMetadata   `json:"metadata"`
@@ -66,10 +73,11 @@ type ArchivedConversation struct {
 
 // ArchivedMessage represents a single message in the conversation.
 type ArchivedMessage struct {
-	Role      string    `json:"role"` // "user" or "assistant"
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
-	Status    string    `json:"status,omitempty"`
+	Role        string    `json:"role"` // "user" or "assistant"
+	Content     string    `json:"content"`
+	Timestamp   time.Time `json:"timestamp"`
+	Status      string    `json:"status,omitempty"`       // e.g., "delivered", "sent", "failed"
+	ErrorReason string    `json:"error_reason,omitempty"` // e.g., "spam", "carrier_rejected" - for training LLM on blocked messages
 }
 
 // ArchiveMetadata contains metadata about the conversation.
@@ -90,6 +98,8 @@ type ArchiveResult struct {
 	MessagesArchived      int
 	S3Key                 string
 	BytesWritten          int64
+	Encrypted             bool   // True if SSE-KMS encryption was applied
+	KMSKeyID              string // KMS key used for encryption (if any)
 }
 
 // ArchiveOrg archives all conversations for an organization before purge.
@@ -136,8 +146,8 @@ func (a *Archiver) ArchiveOrg(ctx context.Context, orgID, orgName string) (*Arch
 	s3Key := fmt.Sprintf("conversations/archive/%d/%02d/%02d/%s/bulk_%s.jsonl",
 		now.Year(), now.Month(), now.Day(), orgID, now.Format("20060102T150405Z"))
 
-	// Upload to S3
-	_, err = a.s3.PutObject(ctx, &s3.PutObjectInput{
+	// Build S3 PutObject input with optional SSE-KMS encryption
+	putInput := &s3.PutObjectInput{
 		Bucket:      aws.String(a.bucket),
 		Key:         aws.String(s3Key),
 		Body:        bytes.NewReader(buf.Bytes()),
@@ -148,8 +158,20 @@ func (a *Archiver) ArchiveOrg(ctx context.Context, orgID, orgName string) (*Arch
 			"archive_reason":     "purge_org",
 			"conversation_count": fmt.Sprintf("%d", len(conversations)),
 			"message_count":      fmt.Sprintf("%d", totalMessages),
+			"pii_redacted":       "true",
 		},
-	})
+	}
+
+	// Apply SSE-KMS encryption if KMS key is configured
+	encrypted := false
+	if a.kmsKeyID != "" {
+		putInput.ServerSideEncryption = types.ServerSideEncryptionAwsKms
+		putInput.SSEKMSKeyId = aws.String(a.kmsKeyID)
+		encrypted = true
+	}
+
+	// Upload to S3
+	_, err = a.s3.PutObject(ctx, putInput)
 	if err != nil {
 		return nil, fmt.Errorf("clinicdata: s3 upload failed: %w", err)
 	}
@@ -159,6 +181,7 @@ func (a *Archiver) ArchiveOrg(ctx context.Context, orgID, orgName string) (*Arch
 		"conversations", len(conversations),
 		"messages", totalMessages,
 		"s3_key", s3Key,
+		"encrypted", encrypted,
 	)
 
 	return &ArchiveResult{
@@ -166,6 +189,8 @@ func (a *Archiver) ArchiveOrg(ctx context.Context, orgID, orgName string) (*Arch
 		MessagesArchived:      totalMessages,
 		S3Key:                 s3Key,
 		BytesWritten:          int64(buf.Len()),
+		Encrypted:             encrypted,
+		KMSKeyID:              a.kmsKeyID,
 	}, nil
 }
 
@@ -209,24 +234,35 @@ func (a *Archiver) ArchivePhone(ctx context.Context, orgID, orgName, phone strin
 		return nil, fmt.Errorf("clinicdata: marshal conversation: %w", err)
 	}
 
-	// Generate S3 key
+	// Generate S3 key (use [PHONE] placeholder instead of actual digits)
 	now := time.Now().UTC()
-	s3Key := fmt.Sprintf("conversations/archive/%d/%02d/%02d/%s/%s_%s.jsonl",
-		now.Year(), now.Month(), now.Day(), orgID, now.Format("20060102T150405Z"), digits)
+	s3Key := fmt.Sprintf("conversations/archive/%d/%02d/%02d/%s/%s_conversation.jsonl",
+		now.Year(), now.Month(), now.Day(), orgID, now.Format("20060102T150405Z"))
 
-	// Upload to S3
-	_, err = a.s3.PutObject(ctx, &s3.PutObjectInput{
+	// Build S3 PutObject input with optional SSE-KMS encryption
+	putInput := &s3.PutObjectInput{
 		Bucket:      aws.String(a.bucket),
 		Key:         aws.String(s3Key),
 		Body:        bytes.NewReader(append(line, '\n')),
 		ContentType: aws.String("application/x-ndjson"),
 		Metadata: map[string]string{
-			"org_id":          orgID,
-			"conversation_id": conversationID,
-			"archive_reason":  "purge_phone",
-			"message_count":   fmt.Sprintf("%d", len(conv.Messages)),
+			"org_id":         orgID,
+			"archive_reason": "purge_phone",
+			"message_count":  fmt.Sprintf("%d", len(conv.Messages)),
+			"pii_redacted":   "true",
 		},
-	})
+	}
+
+	// Apply SSE-KMS encryption if KMS key is configured
+	encrypted := false
+	if a.kmsKeyID != "" {
+		putInput.ServerSideEncryption = types.ServerSideEncryptionAwsKms
+		putInput.SSEKMSKeyId = aws.String(a.kmsKeyID)
+		encrypted = true
+	}
+
+	// Upload to S3
+	_, err = a.s3.PutObject(ctx, putInput)
 	if err != nil {
 		return nil, fmt.Errorf("clinicdata: s3 upload failed: %w", err)
 	}
@@ -235,6 +271,7 @@ func (a *Archiver) ArchivePhone(ctx context.Context, orgID, orgName, phone strin
 		"conversation_id", conversationID,
 		"messages", len(conv.Messages),
 		"s3_key", s3Key,
+		"encrypted", encrypted,
 	)
 
 	return &ArchiveResult{
@@ -242,6 +279,8 @@ func (a *Archiver) ArchivePhone(ctx context.Context, orgID, orgName, phone strin
 		MessagesArchived:      len(conv.Messages),
 		S3Key:                 s3Key,
 		BytesWritten:          int64(len(line) + 1),
+		Encrypted:             encrypted,
+		KMSKeyID:              a.kmsKeyID,
 	}, nil
 }
 
@@ -312,9 +351,29 @@ func (a *Archiver) fetchConversation(ctx context.Context, orgID, orgName, conver
 
 // fetchConversationTx fetches a conversation within an existing transaction.
 func (a *Archiver) fetchConversationTx(ctx context.Context, tx pgx.Tx, orgID, orgName, conversationID, digits string) (*ArchivedConversation, error) {
-	// Fetch messages
+	// First, get the lead's name for redaction (if available)
+	var leadName string
+	var leadID string
+	depositCollected := false
+
+	err := tx.QueryRow(ctx, `
+		SELECT l.id::text, COALESCE(l.name, ''), EXISTS(
+			SELECT 1 FROM payments p WHERE p.lead_id = l.id AND p.status = 'completed'
+		)
+		FROM leads l
+		WHERE l.org_id = $1 AND regexp_replace(l.phone, '\D', '', 'g') = $2
+		LIMIT 1
+	`, orgID, digits).Scan(&leadID, &leadName, &depositCollected)
+	if err != nil && err != pgx.ErrNoRows {
+		a.logger.Warn("clinicdata: failed to fetch lead info", "error", err)
+	}
+
+	// Build list of known names for redaction
+	knownNames := extractNames(leadName)
+
+	// Fetch messages with delivery status for training data
 	msgRows, err := tx.Query(ctx, `
-		SELECT role, content, created_at, COALESCE(status, '')
+		SELECT role, content, created_at, COALESCE(status, ''), COALESCE(error_reason, '')
 		FROM conversation_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC
@@ -330,9 +389,13 @@ func (a *Archiver) fetchConversationTx(ctx context.Context, tx pgx.Tx, orgID, or
 
 	for msgRows.Next() {
 		var msg ArchivedMessage
-		if err := msgRows.Scan(&msg.Role, &msg.Content, &msg.Timestamp, &msg.Status); err != nil {
+		var rawContent string
+		if err := msgRows.Scan(&msg.Role, &rawContent, &msg.Timestamp, &msg.Status, &msg.ErrorReason); err != nil {
 			return nil, err
 		}
+
+		// Redact PII from message content
+		msg.Content = redactPII(rawContent, knownNames)
 		messages = append(messages, msg)
 
 		if msg.Role == "user" {
@@ -353,34 +416,15 @@ func (a *Archiver) fetchConversationTx(ctx context.Context, tx pgx.Tx, orgID, or
 		return nil, nil
 	}
 
-	// Check if deposit was collected (look for payment in related lead)
-	depositCollected := false
-	var leadID string
-	err = tx.QueryRow(ctx, `
-		SELECT l.id::text, EXISTS(
-			SELECT 1 FROM payments p WHERE p.lead_id = l.id AND p.status = 'completed'
-		)
-		FROM leads l
-		WHERE l.org_id = $1 AND regexp_replace(l.phone, '\D', '', 'g') = $2
-		LIMIT 1
-	`, orgID, digits).Scan(&leadID, &depositCollected)
-	if err != nil && err != pgx.ErrNoRows {
-		// Non-fatal, just log
-		a.logger.Warn("clinicdata: failed to check deposit status", "error", err)
-	}
-
-	// Redact phone for privacy (keep last 4 digits)
-	redactedPhone := redactPhone(digits)
-
 	return &ArchivedConversation{
-		ConversationID: conversationID,
+		ConversationID: redactConversationID(conversationID),
 		OrgID:          orgID,
 		OrgName:        orgName,
-		Phone:          redactedPhone,
+		Phone:          "[PHONE]", // Fully redacted
 		Channel:        "sms",
 		Messages:       messages,
 		Metadata: ArchiveMetadata{
-			LeadID:           leadID,
+			LeadID:           "", // Don't include lead ID in archived data
 			MessageCount:     len(messages),
 			UserMessageCount: userCount,
 			AIMessageCount:   aiCount,
@@ -391,17 +435,92 @@ func (a *Archiver) fetchConversationTx(ctx context.Context, tx pgx.Tx, orgID, or
 	}, nil
 }
 
-// redactPhone partially redacts a phone number for privacy.
-// Input: "15551234567" -> Output: "+1-XXX-XXX-4567"
-func redactPhone(digits string) string {
-	if len(digits) < 4 {
-		return "XXXX"
+// redactConversationID removes the phone number from the conversation ID.
+// Input: "sms:org-uuid:15551234567" -> Output: "sms:org-uuid:[PHONE]"
+func redactConversationID(convID string) string {
+	parts := strings.Split(convID, ":")
+	if len(parts) >= 3 {
+		parts[2] = "[PHONE]"
+		return strings.Join(parts, ":")
 	}
-	last4 := digits[len(digits)-4:]
-	if len(digits) >= 11 {
-		return fmt.Sprintf("+%s-XXX-XXX-%s", digits[:1], last4)
+	return convID
+}
+
+// extractNames splits a full name into individual name components for redaction.
+func extractNames(fullName string) []string {
+	fullName = strings.TrimSpace(fullName)
+	if fullName == "" {
+		return nil
 	}
-	return fmt.Sprintf("XXX-XXX-%s", last4)
+
+	var names []string
+	parts := strings.Fields(fullName)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		// Only include names that are at least 2 characters
+		if len(part) >= 2 {
+			names = append(names, part)
+		}
+	}
+	return names
+}
+
+// Regex patterns for detecting names in text
+var (
+	// Patterns like "I'm Sarah", "I am John", "My name is Jane", "This is Mike", "call me Bob"
+	nameIntroPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\b(?:i'?m|i am|my name is|this is|call me|it's|its)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)`),
+		regexp.MustCompile(`(?i)\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+here\b`),
+	}
+
+	// Phone number patterns (various formats)
+	phonePatterns = []*regexp.Regexp{
+		regexp.MustCompile(`\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}`),
+		regexp.MustCompile(`\b[0-9]{10,11}\b`),
+	}
+
+	// Email pattern
+	emailPattern = regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`)
+)
+
+// redactPII removes personally identifiable information from text.
+// Redacts: names (known and detected), phone numbers, emails.
+func redactPII(text string, knownNames []string) string {
+	if text == "" {
+		return text
+	}
+
+	// Redact known names (from lead record)
+	for _, name := range knownNames {
+		if len(name) >= 2 {
+			// Case-insensitive replacement
+			pattern := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(name) + `\b`)
+			text = pattern.ReplaceAllString(text, "[NAME]")
+		}
+	}
+
+	// Detect and redact names from common introduction patterns
+	for _, pattern := range nameIntroPatterns {
+		text = pattern.ReplaceAllStringFunc(text, func(match string) string {
+			// Find the name part and redact it
+			submatches := pattern.FindStringSubmatch(match)
+			if len(submatches) >= 2 {
+				name := submatches[1]
+				return strings.Replace(match, name, "[NAME]", 1)
+			}
+			return match
+		})
+	}
+
+	// Redact phone numbers
+	for _, pattern := range phonePatterns {
+		text = pattern.ReplaceAllString(text, "[PHONE]")
+	}
+
+	// Redact email addresses
+	text = emailPattern.ReplaceAllString(text, "[EMAIL]")
+
+	return text
 }
 
 func formatTime(t time.Time) string {
