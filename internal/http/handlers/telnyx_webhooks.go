@@ -563,27 +563,57 @@ func (h *TelnyxWebhookHandler) handleDeliveryStatus(ctx context.Context, evt tel
 	if err := json.Unmarshal(evt.Payload, &payload); err != nil {
 		return fmt.Errorf("decode delivery payload: %w", err)
 	}
+	providerID, status, errorReason := normalizeTelnyxDelivery(payload)
+	if providerID == "" {
+		return fmt.Errorf("delivery payload missing message id")
+	}
+	if status == "" {
+		status = "unknown"
+	}
 	var deliveredAt, failedAt *time.Time
-	switch strings.ToLower(payload.Status) {
-	case "delivered":
+	lowerStatus := strings.ToLower(status)
+	switch {
+	case lowerStatus == "delivered":
 		deliveredAt = &evt.OccurredAt
-	case "undelivered", "failed":
+	case lowerStatus == "undelivered" || strings.Contains(lowerStatus, "fail"):
 		failedAt = &evt.OccurredAt
 	}
-	if err := h.store.UpdateMessageStatus(ctx, payload.MessageID, payload.Status, deliveredAt, failedAt); err != nil {
+	if err := h.store.UpdateMessageStatus(ctx, providerID, status, deliveredAt, failedAt); err != nil {
 		return fmt.Errorf("update message status: %w", err)
 	}
 	if h.convStore != nil {
 		if updater, ok := h.convStore.(conversationStatusUpdater); ok {
-			if err := updater.UpdateMessageStatusByProviderID(ctx, payload.MessageID, payload.Status, ""); err != nil {
-				h.logger.Warn("failed to update conversation message status", "error", err, "provider_message_id", payload.MessageID)
+			if err := updater.UpdateMessageStatusByProviderID(ctx, providerID, status, errorReason); err != nil {
+				h.logger.Warn("failed to update conversation message status", "error", err, "provider_message_id", providerID)
 			}
 		}
 	}
 	if h.metrics != nil {
-		h.metrics.ObserveInbound(evt.EventType, payload.Status)
+		h.metrics.ObserveInbound(evt.EventType, status)
 	}
 	return nil
+}
+
+func normalizeTelnyxDelivery(payload telnyxDeliveryPayload) (providerID, status, errorReason string) {
+	providerID = strings.TrimSpace(payload.MessageID)
+	if providerID == "" {
+		providerID = strings.TrimSpace(payload.ID)
+	}
+	status = strings.TrimSpace(payload.Status)
+	if status == "" && len(payload.To) > 0 {
+		status = strings.TrimSpace(payload.To[0].Status)
+	}
+	if len(payload.Errors) > 0 {
+		err := payload.Errors[0]
+		errorReason = strings.TrimSpace(err.Detail)
+		if errorReason == "" {
+			errorReason = strings.TrimSpace(err.Title)
+		}
+		if errorReason == "" {
+			errorReason = strings.TrimSpace(err.Code)
+		}
+	}
+	return providerID, status, errorReason
 }
 
 func (h *TelnyxWebhookHandler) handleHostedOrder(ctx context.Context, evt telnyxEvent) error {
@@ -735,6 +765,14 @@ type telnyxDeliveryPayload struct {
 	ID        string `json:"id"`
 	MessageID string `json:"message_id"`
 	Status    string `json:"status"`
+	To        []struct {
+		Status string `json:"status"`
+	} `json:"to"`
+	Errors []struct {
+		Code   string `json:"code"`
+		Title  string `json:"title"`
+		Detail string `json:"detail"`
+	} `json:"errors"`
 }
 
 type telnyxCallPayload struct {
