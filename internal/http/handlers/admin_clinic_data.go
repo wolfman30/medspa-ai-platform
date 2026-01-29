@@ -19,16 +19,18 @@ type adminClinicDataDB interface {
 }
 
 type AdminClinicDataConfig struct {
-	DB     adminClinicDataDB
-	Redis  *redis.Client
-	Logger *logging.Logger
+	DB       adminClinicDataDB
+	Redis    *redis.Client
+	Logger   *logging.Logger
+	Archiver *clinicdata.Archiver // Optional: if set, archives data to S3 before purging
 }
 
 // AdminClinicDataHandler provides privileged endpoints for dev/demo data maintenance.
 type AdminClinicDataHandler struct {
-	db     adminClinicDataDB
-	redis  *redis.Client
-	logger *logging.Logger
+	db       adminClinicDataDB
+	redis    *redis.Client
+	logger   *logging.Logger
+	archiver *clinicdata.Archiver
 }
 
 func NewAdminClinicDataHandler(cfg AdminClinicDataConfig) *AdminClinicDataHandler {
@@ -36,9 +38,10 @@ func NewAdminClinicDataHandler(cfg AdminClinicDataConfig) *AdminClinicDataHandle
 		cfg.Logger = logging.Default()
 	}
 	return &AdminClinicDataHandler{
-		db:     cfg.DB,
-		redis:  cfg.Redis,
-		logger: cfg.Logger,
+		db:       cfg.DB,
+		redis:    cfg.Redis,
+		logger:   cfg.Logger,
+		archiver: cfg.Archiver,
 	}
 }
 
@@ -58,6 +61,12 @@ type PurgePhoneResponse struct {
 		Unsubscribes     int64 `json:"unsubscribes"`
 	} `json:"deleted"`
 	RedisDeleted int64 `json:"redis_deleted"`
+	Archived     *struct {
+		ConversationsArchived int    `json:"conversations_archived"`
+		MessagesArchived      int    `json:"messages_archived"`
+		S3Key                 string `json:"s3_key"`
+		Encrypted             bool   `json:"encrypted"`
+	} `json:"archived,omitempty"`
 }
 
 // PurgeOrg deletes ALL demo data for a clinic/org.
@@ -74,7 +83,13 @@ func (h *AdminClinicDataHandler) PurgeOrg(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := clinicdata.NewPurger(h.db, h.redis, h.logger).PurgeOrg(r.Context(), orgID)
+	purger := clinicdata.NewPurgerWithConfig(clinicdata.PurgerConfig{
+		DB:       h.db,
+		Redis:    h.redis,
+		Logger:   h.logger,
+		Archiver: h.archiver,
+	})
+	result, err := purger.PurgeOrg(r.Context(), orgID)
 	if err != nil {
 		msg := err.Error()
 		switch {
@@ -102,6 +117,19 @@ func (h *AdminClinicDataHandler) PurgeOrg(w http.ResponseWriter, r *http.Request
 	resp.Deleted.Leads = result.Deleted.Leads
 	resp.Deleted.Messages = result.Deleted.Messages
 	resp.Deleted.Unsubscribes = result.Deleted.Unsubscribes
+	if result.Archived != nil && result.Archived.MessagesArchived > 0 {
+		resp.Archived = &struct {
+			ConversationsArchived int    `json:"conversations_archived"`
+			MessagesArchived      int    `json:"messages_archived"`
+			S3Key                 string `json:"s3_key"`
+			Encrypted             bool   `json:"encrypted"`
+		}{
+			ConversationsArchived: result.Archived.ConversationsArchived,
+			MessagesArchived:      result.Archived.MessagesArchived,
+			S3Key:                 result.Archived.S3Key,
+			Encrypted:             result.Archived.Encrypted,
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
@@ -128,7 +156,13 @@ func (h *AdminClinicDataHandler) PurgePhone(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := clinicdata.NewPurger(h.db, h.redis, h.logger).PurgePhone(r.Context(), orgID, phone)
+	purger := clinicdata.NewPurgerWithConfig(clinicdata.PurgerConfig{
+		DB:       h.db,
+		Redis:    h.redis,
+		Logger:   h.logger,
+		Archiver: h.archiver,
+	})
+	result, err := purger.PurgePhone(r.Context(), orgID, phone)
 	if err != nil {
 		msg := err.Error()
 		switch {
@@ -158,6 +192,19 @@ func (h *AdminClinicDataHandler) PurgePhone(w http.ResponseWriter, r *http.Reque
 	resp.Deleted.Leads = result.Deleted.Leads
 	resp.Deleted.Messages = result.Deleted.Messages
 	resp.Deleted.Unsubscribes = result.Deleted.Unsubscribes
+	if result.Archived != nil && result.Archived.MessagesArchived > 0 {
+		resp.Archived = &struct {
+			ConversationsArchived int    `json:"conversations_archived"`
+			MessagesArchived      int    `json:"messages_archived"`
+			S3Key                 string `json:"s3_key"`
+			Encrypted             bool   `json:"encrypted"`
+		}{
+			ConversationsArchived: result.Archived.ConversationsArchived,
+			MessagesArchived:      result.Archived.MessagesArchived,
+			S3Key:                 result.Archived.S3Key,
+			Encrypted:             result.Archived.Encrypted,
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
