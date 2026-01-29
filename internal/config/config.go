@@ -130,6 +130,10 @@ type Config struct {
 
 	// Browser Sidecar Configuration (for scraping booking page availability)
 	BrowserSidecarURL string // URL of the browser sidecar service (e.g., "http://localhost:3000")
+
+	// S3 Archive Configuration (for archiving conversation data before purge)
+	S3ArchiveBucket string // S3 bucket for conversation archives (e.g., "medspa-conversation-archives")
+	S3ArchiveKMSKey string // Optional KMS key ID for SSE-KMS encryption
 }
 
 // Load reads configuration from environment variables
@@ -276,6 +280,10 @@ func Load() *Config {
 
 		// Browser Sidecar Configuration
 		BrowserSidecarURL: getEnv("BROWSER_SIDECAR_URL", ""),
+
+		// S3 Archive Configuration
+		S3ArchiveBucket: getEnv("S3_ARCHIVE_BUCKET", ""),
+		S3ArchiveKMSKey: getEnv("S3_ARCHIVE_KMS_KEY", ""),
 	}
 }
 

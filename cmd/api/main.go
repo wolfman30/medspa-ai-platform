@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -192,11 +193,32 @@ func main() {
 
 	var adminClinicDataHandler *handlers.AdminClinicDataHandler
 	if cfg.Env != "production" && dbPool != nil {
-		adminClinicDataHandler = handlers.NewAdminClinicDataHandler(handlers.AdminClinicDataConfig{
+		adminCfg := handlers.AdminClinicDataConfig{
 			DB:     dbPool,
 			Redis:  redisClient,
 			Logger: logger,
-		})
+		}
+		// Set up S3 archiver if bucket is configured
+		if cfg.S3ArchiveBucket != "" {
+			awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
+			if err != nil {
+				logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
+			} else {
+				s3Client := s3.NewFromConfig(awsCfg)
+				adminCfg.Archiver = clinicdata.NewArchiver(clinicdata.ArchiverConfig{
+					DB:       dbPool,
+					S3:       s3Client,
+					Bucket:   cfg.S3ArchiveBucket,
+					KMSKeyID: cfg.S3ArchiveKMSKey,
+					Logger:   logger,
+				})
+				logger.Info("S3 archiver enabled for admin purge operations",
+					"bucket", cfg.S3ArchiveBucket,
+					"kms_key", cfg.S3ArchiveKMSKey != "",
+				)
+			}
+		}
+		adminClinicDataHandler = handlers.NewAdminClinicDataHandler(adminCfg)
 	}
 
 	// Initialize onboarding handler
