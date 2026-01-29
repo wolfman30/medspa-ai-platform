@@ -18,10 +18,20 @@ type db interface {
 
 // Purger deletes demo/test data for a phone number within a clinic/org.
 // This is intended for development/sandbox environments only.
+// If an Archiver is configured, data is archived to S3 before deletion.
 type Purger struct {
-	db     db
-	redis  *redis.Client
-	logger *logging.Logger
+	db       db
+	redis    *redis.Client
+	logger   *logging.Logger
+	archiver *Archiver
+}
+
+// PurgerConfig holds configuration for creating a Purger.
+type PurgerConfig struct {
+	DB       db
+	Redis    *redis.Client
+	Logger   *logging.Logger
+	Archiver *Archiver // Optional: if set, archives data before purging
 }
 
 func NewPurger(db db, redis *redis.Client, logger *logging.Logger) *Purger {
@@ -32,6 +42,19 @@ func NewPurger(db db, redis *redis.Client, logger *logging.Logger) *Purger {
 		db:     db,
 		redis:  redis,
 		logger: logger,
+	}
+}
+
+// NewPurgerWithConfig creates a Purger with full configuration including archiver.
+func NewPurgerWithConfig(cfg PurgerConfig) *Purger {
+	if cfg.Logger == nil {
+		cfg.Logger = logging.Default()
+	}
+	return &Purger{
+		db:       cfg.DB,
+		redis:    cfg.Redis,
+		logger:   cfg.Logger,
+		archiver: cfg.Archiver,
 	}
 }
 
@@ -58,10 +81,18 @@ type PurgeResult struct {
 	ConversationID string // canonical conversation id (digits form)
 	Deleted        PurgeCounts
 	RedisDeleted   int64
+	// Archive info (populated if archiver is configured)
+	Archived *ArchiveResult
+}
+
+// PurgeOrgOptions provides optional parameters for PurgeOrg.
+type PurgeOrgOptions struct {
+	OrgName string // Used for archive metadata
 }
 
 // PurgeOrg deletes ALL data for an organization. Use with caution!
-func (p *Purger) PurgeOrg(ctx context.Context, orgID string) (PurgeResult, error) {
+// If an archiver is configured, data is archived to S3 first.
+func (p *Purger) PurgeOrg(ctx context.Context, orgID string, opts ...PurgeOrgOptions) (PurgeResult, error) {
 	orgID = strings.TrimSpace(orgID)
 	if p == nil || p.db == nil {
 		return PurgeResult{}, fmt.Errorf("clinicdata: database not configured")
@@ -73,6 +104,29 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string) (PurgeResult, error
 	orgUUID, err := uuid.Parse(orgID)
 	if err != nil {
 		return PurgeResult{}, fmt.Errorf("clinicdata: orgID must be a UUID: %w", err)
+	}
+
+	// Extract options
+	var orgName string
+	if len(opts) > 0 {
+		orgName = opts[0].OrgName
+	}
+
+	// Archive before purging if archiver is configured
+	var archiveResult *ArchiveResult
+	if p.archiver != nil {
+		result, err := p.archiver.ArchiveOrg(ctx, orgID, orgName)
+		if err != nil {
+			p.logger.Error("clinicdata: archive failed, aborting purge", "error", err, "org_id", orgID)
+			return PurgeResult{}, fmt.Errorf("clinicdata: archive failed: %w", err)
+		}
+		archiveResult = result
+		p.logger.Info("clinicdata: archived org data before purge",
+			"org_id", orgID,
+			"conversations", result.ConversationsArchived,
+			"messages", result.MessagesArchived,
+			"s3_key", result.S3Key,
+		)
 	}
 
 	conversationPattern := "sms:" + orgID + ":%"
@@ -209,10 +263,16 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string) (PurgeResult, error
 		}
 	}
 
+	resp.Archived = archiveResult
 	return resp, nil
 }
 
-func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (PurgeResult, error) {
+// PurgePhoneOptions provides optional parameters for PurgePhone.
+type PurgePhoneOptions struct {
+	OrgName string // Used for archive metadata
+}
+
+func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string, opts ...PurgePhoneOptions) (PurgeResult, error) {
 	orgID = strings.TrimSpace(orgID)
 	phone = strings.TrimSpace(phone)
 	if p == nil || p.db == nil {
@@ -233,6 +293,31 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (Pu
 	}
 	digits = normalizeUSDigits(digits)
 	e164 := "+" + digits
+
+	// Extract options
+	var orgName string
+	if len(opts) > 0 {
+		orgName = opts[0].OrgName
+	}
+
+	// Archive before purging if archiver is configured
+	var archiveResult *ArchiveResult
+	if p.archiver != nil {
+		result, err := p.archiver.ArchivePhone(ctx, orgID, orgName, phone)
+		if err != nil {
+			p.logger.Error("clinicdata: archive failed, aborting purge", "error", err, "org_id", orgID, "phone", phone)
+			return PurgeResult{}, fmt.Errorf("clinicdata: archive failed: %w", err)
+		}
+		archiveResult = result
+		if result.MessagesArchived > 0 {
+			p.logger.Info("clinicdata: archived phone data before purge",
+				"org_id", orgID,
+				"phone", phone,
+				"messages", result.MessagesArchived,
+				"s3_key", result.S3Key,
+			)
+		}
+	}
 
 	conversationIDDigits := fmt.Sprintf("sms:%s:%s", orgID, digits)
 	conversationIDE164 := fmt.Sprintf("sms:%s:%s", orgID, e164)
@@ -422,6 +507,7 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string) (Pu
 		}
 	}
 
+	resp.Archived = archiveResult
 	return resp, nil
 }
 
