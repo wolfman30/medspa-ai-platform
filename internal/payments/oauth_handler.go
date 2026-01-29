@@ -217,14 +217,21 @@ func (h *OAuthHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	refreshTokenPresent := strings.TrimSpace(creds.RefreshToken) != ""
+	tokenExpired := time.Now().After(creds.TokenExpiresAt)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"connected":        true,
-		"org_id":           orgID,
-		"merchant_id":      creds.MerchantID,
-		"location_id":      creds.LocationID,
-		"phone_number":     creds.PhoneNumber,
-		"token_expires_at": creds.TokenExpiresAt,
-		"connected_at":     creds.CreatedAt,
+		"connected":               true,
+		"org_id":                  orgID,
+		"merchant_id":             creds.MerchantID,
+		"location_id":             creds.LocationID,
+		"phone_number":            creds.PhoneNumber,
+		"token_expires_at":        creds.TokenExpiresAt,
+		"token_expired":           tokenExpired,
+		"refresh_token_present":   refreshTokenPresent,
+		"connected_at":            creds.CreatedAt,
+		"last_refresh_attempt_at": creds.LastRefreshAttemptAt,
+		"last_refresh_failure_at": creds.LastRefreshFailureAt,
+		"last_refresh_error":      creds.LastRefreshError,
 	})
 }
 

@@ -289,6 +289,24 @@ func (s *Store) UpdateMessageStatusByID(ctx context.Context, msgID uuid.UUID, st
 	return nil
 }
 
+// UpdateMessageProviderID stores the provider message ID for an outbound message.
+func (s *Store) UpdateMessageProviderID(ctx context.Context, msgID uuid.UUID, providerMessageID string) error {
+	providerMessageID = strings.TrimSpace(providerMessageID)
+	if providerMessageID == "" {
+		return nil
+	}
+	query := `
+		UPDATE messages
+		SET provider_message_id = $2
+		WHERE id = $1
+	`
+	_, err := s.pool.Exec(ctx, query, msgID, providerMessageID)
+	if err != nil {
+		return fmt.Errorf("messaging: update provider message id: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) InsertUnsubscribe(ctx context.Context, q Querier, clinicID uuid.UUID, recipient string, source string) error {
 	if q == nil {
 		q = s.pool

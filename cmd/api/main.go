@@ -298,8 +298,10 @@ func main() {
 			numberResolver = payments.NewFallbackNumberResolver(numberResolver, fallbackFromNumber)
 		}
 
-		// Fake payments mode takes precedence when enabled (for testing when Square sandbox is broken)
-		if cfg.AllowFakePayments {
+		hasSquareProvider := strings.TrimSpace(cfg.SquareAccessToken) != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "")
+		useFakePayments := cfg.AllowFakePayments && !hasSquareProvider
+		// Fake payments mode only when Square isn't configured (for testing when sandbox is broken)
+		if useFakePayments {
 			fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
 			checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, fakeSvc, logger, int32(cfg.DepositAmountCents))
 			fakePaymentsHandler = payments.NewFakePaymentsHandler(paymentsRepo, leadsRepo, processedStore, outboxStore, numberResolver, cfg.PublicBaseURL, logger)
@@ -559,13 +561,14 @@ func setupInlineWorker(
 	}
 	if dbPool != nil && outboxStore != nil && paymentChecker != nil {
 		numberResolver := resolver
-		// Fake payments mode takes precedence when enabled (for testing when Square sandbox is broken)
-		if cfg.AllowFakePayments {
+		hasSquareProvider := strings.TrimSpace(cfg.SquareAccessToken) != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "")
+		useFakePayments := cfg.AllowFakePayments && !hasSquareProvider
+		// Fake payments mode only when Square isn't configured (for testing when sandbox is broken)
+		if useFakePayments {
 			fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
 			depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
 			logger.Warn("deposit sender initialized in fake payments mode (ALLOW_FAKE_PAYMENTS=true)")
 		} else {
-			hasSquareProvider := strings.TrimSpace(cfg.SquareAccessToken) != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "")
 			if !hasSquareProvider {
 				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
 			} else {

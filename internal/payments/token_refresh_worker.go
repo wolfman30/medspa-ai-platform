@@ -86,7 +86,13 @@ func (w *TokenRefreshWorker) refreshExpiringTokens(ctx context.Context) {
 				"merchant_id", cred.MerchantID,
 				"error", err,
 			)
+			if recordErr := w.oauthService.RecordRefreshFailure(ctx, cred.OrgID, err); recordErr != nil {
+				w.logger.Warn("failed to record square refresh failure", "org_id", cred.OrgID, "error", recordErr)
+			}
 			continue
+		}
+		if recordErr := w.oauthService.RecordRefreshSuccess(ctx, cred.OrgID); recordErr != nil {
+			w.logger.Warn("failed to record square refresh success", "org_id", cred.OrgID, "error", recordErr)
 		}
 		w.logger.Info("refreshed square token",
 			"org_id", cred.OrgID,

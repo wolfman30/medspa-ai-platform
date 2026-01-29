@@ -121,6 +121,21 @@ export interface PortalDashboardOverview {
   conversion_pct: number;
 }
 
+export interface SquareStatus {
+  connected: boolean;
+  org_id: string;
+  merchant_id?: string;
+  location_id?: string;
+  phone_number?: string;
+  token_expires_at?: string;
+  token_expired?: boolean;
+  refresh_token_present?: boolean;
+  connected_at?: string;
+  last_refresh_attempt_at?: string;
+  last_refresh_failure_at?: string;
+  last_refresh_error?: string;
+}
+
 export interface DayHours {
   open: string;
   close: string;
@@ -238,6 +253,23 @@ export async function getPortalOverview(
   const url = `${API_BASE}/portal/orgs/${orgId}/dashboard${queryString ? '?' + queryString : ''}`;
 
   const res = await fetch(url, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export async function getSquareStatus(
+  orgId: string,
+  scope: ApiScope = 'portal'
+): Promise<SquareStatus> {
+  const path =
+    scope === 'portal'
+      ? `portal/orgs/${orgId}/square/status`
+      : `admin/clinics/${orgId}/square/status`;
+  const res = await fetch(`${API_BASE}/${path}`, {
     headers: await getHeaders(),
   });
   if (!res.ok) {

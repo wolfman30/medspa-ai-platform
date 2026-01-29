@@ -27,6 +27,9 @@ export interface MessageResponse {
   timestamp: string;
   from?: string;
   to?: string;
+  provider_message_id?: string;
+  status?: string;
+  error_reason?: string;
 }
 
 export interface ConversationMeta {

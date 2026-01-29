@@ -586,34 +586,57 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		conversationID = strings.TrimSpace(msg.ConversationID)
 	}
 
+	reply := OutboundReply{
+		OrgID:          msg.OrgID,
+		LeadID:         msg.LeadID,
+		ConversationID: conversationID,
+		To:             msg.From,
+		From:           msg.To,
+		Body:           resp.Message,
+		Metadata: map[string]string{
+			"job_id": payload.ID,
+		},
+	}
+
+	var sendErr error
 	if w.messenger != nil {
 		sendCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		reply := OutboundReply{
-			OrgID:          msg.OrgID,
-			LeadID:         msg.LeadID,
-			ConversationID: conversationID,
-			To:             msg.From,
-			From:           msg.To,
-			Body:           resp.Message,
-			Metadata: map[string]string{
-				"job_id": payload.ID,
-			},
-		}
-
 		if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+			sendErr = err
 			w.logger.Error("failed to send outbound reply", "error", err, "job_id", payload.ID, "org_id", msg.OrgID)
 		}
 	}
 
+	providerMessageID := ""
+	providerStatus := ""
+	if reply.Metadata != nil {
+		providerMessageID = strings.TrimSpace(reply.Metadata["provider_message_id"])
+		providerStatus = strings.TrimSpace(reply.Metadata["provider_status"])
+	}
+	if providerStatus == "" && w.messenger != nil {
+		if sendErr != nil {
+			providerStatus = "failed"
+		} else {
+			providerStatus = "sent"
+		}
+	}
+	errorReason := ""
+	if sendErr != nil {
+		errorReason = sendErr.Error()
+	}
+
 	w.appendTranscript(context.Background(), conversationID, SMSTranscriptMessage{
-		Role:      "assistant",
-		From:      msg.To,
-		To:        msg.From,
-		Body:      resp.Message,
-		Timestamp: resp.Timestamp,
-		Kind:      "ai_reply",
+		Role:              "assistant",
+		From:              msg.To,
+		To:                msg.From,
+		Body:              resp.Message,
+		Timestamp:         resp.Timestamp,
+		Kind:              "ai_reply",
+		ProviderMessageID: providerMessageID,
+		Status:            providerStatus,
+		ErrorReason:       errorReason,
 	})
 	return blocked
 }

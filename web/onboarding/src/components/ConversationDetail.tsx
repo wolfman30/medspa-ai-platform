@@ -26,6 +26,7 @@ function formatTime(dateString: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    timeZone: 'America/New_York',
   });
 }
 
@@ -36,11 +37,13 @@ function formatDate(dateString: string): string {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    timeZone: 'America/New_York',
   });
 }
 
 function MessageBubble({ message }: { message: MessageResponse }) {
   const isUser = message.role === 'user';
+  const statusLabel = message.status ? message.status.replace(/_/g, ' ') : '';
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
@@ -54,8 +57,15 @@ function MessageBubble({ message }: { message: MessageResponse }) {
         <div className="text-sm whitespace-pre-wrap break-words">{message.content}</div>
         <div
           className={`text-xs mt-1 ${isUser ? 'text-indigo-200' : 'text-gray-500'}`}
+          title={message.error_reason || undefined}
         >
           {formatTime(message.timestamp)}
+          {statusLabel ? (
+            <>
+              {' '}
+              &bull; {statusLabel}
+            </>
+          ) : null}
         </div>
       </div>
     </div>
@@ -200,7 +210,7 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
       <div className="bg-white border-t border-gray-200 px-4 py-3">
         <div className="max-w-3xl mx-auto">
           <p className="text-xs text-gray-400 text-center">
-            Source: {conversation.metadata.source} &bull; Auto-refreshes every 10 seconds
+            Source: {conversation.metadata.source} &bull; Times shown in ET &bull; Auto-refreshes every 10 seconds
           </p>
         </div>
       </div>

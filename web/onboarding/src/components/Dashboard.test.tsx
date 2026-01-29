@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { Dashboard } from './Dashboard';
 import {
   getPortalOverview,
+  getSquareConnectUrl,
+  getSquareStatus,
   listConversations,
   listDeposits,
   type PortalDashboardOverview,
@@ -10,6 +12,8 @@ import {
 
 vi.mock('../api/client', () => ({
   getPortalOverview: vi.fn(),
+  getSquareConnectUrl: vi.fn(),
+  getSquareStatus: vi.fn(),
   listConversations: vi.fn(),
   listDeposits: vi.fn(),
 }));
@@ -63,6 +67,17 @@ const sampleDeposits = {
   total_pages: 1,
 };
 
+const sampleSquareStatus = {
+  connected: true,
+  org_id: 'org_123',
+  merchant_id: 'merchant_123',
+  location_id: 'loc_123',
+  token_expires_at: '2026-02-01T00:00:00Z',
+  token_expired: false,
+  refresh_token_present: true,
+  connected_at: '2026-01-01T09:00:00Z',
+};
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -81,6 +96,8 @@ describe('Dashboard', () => {
   it('shows the loading state initially', async () => {
     const deferred = createDeferred<PortalDashboardOverview>();
     vi.mocked(getPortalOverview).mockReturnValue(deferred.promise);
+    vi.mocked(getSquareStatus).mockResolvedValue(sampleSquareStatus);
+    vi.mocked(getSquareConnectUrl).mockResolvedValue('https://example.com/connect');
     vi.mocked(listConversations).mockResolvedValue(sampleConversations);
     vi.mocked(listDeposits).mockResolvedValue(sampleDeposits);
 
@@ -94,6 +111,8 @@ describe('Dashboard', () => {
 
   it('renders dashboard metrics when data loads', async () => {
     vi.mocked(getPortalOverview).mockResolvedValue(sampleStats);
+    vi.mocked(getSquareStatus).mockResolvedValue(sampleSquareStatus);
+    vi.mocked(getSquareConnectUrl).mockResolvedValue('https://example.com/connect');
     vi.mocked(listConversations).mockResolvedValue(sampleConversations);
     vi.mocked(listDeposits).mockResolvedValue(sampleDeposits);
 
@@ -111,6 +130,8 @@ describe('Dashboard', () => {
 
   it('shows an error message when the request fails', async () => {
     vi.mocked(getPortalOverview).mockRejectedValue(new Error('No data'));
+    vi.mocked(getSquareStatus).mockResolvedValue(sampleSquareStatus);
+    vi.mocked(getSquareConnectUrl).mockResolvedValue('https://example.com/connect');
     vi.mocked(listConversations).mockResolvedValue(sampleConversations);
     vi.mocked(listDeposits).mockResolvedValue(sampleDeposits);
 
