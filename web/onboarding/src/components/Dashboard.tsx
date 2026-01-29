@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
   getPortalOverview,
+  getSquareConnectUrl,
+  getSquareStatus,
   listConversations,
   listDeposits,
   type PortalDashboardOverview,
+  type SquareStatus,
 } from '../api/client';
 import type { ConversationListItem } from '../types/conversation';
 import type { DepositListItem } from '../types/deposit';
@@ -57,6 +60,22 @@ function formatStatusLabel(status: string): string {
   return status.replace(/_/g, ' ');
 }
 
+function formatDateTimeET(value?: string | null): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/New_York',
+    timeZoneName: 'short',
+  });
+}
+
 function getConversationStatusClass(status: string): string {
   return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
 }
@@ -77,6 +96,10 @@ function getDepositStatusClass(status: string): string {
   }
 }
 
+function getSquareStatusClass(connected: boolean): string {
+  return connected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+}
+
 export function Dashboard({ orgId }: DashboardProps) {
   const [stats, setStats] = useState<PortalDashboardOverview | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -87,6 +110,10 @@ export function Dashboard({ orgId }: DashboardProps) {
   const [deposits, setDeposits] = useState<DepositListItem[]>([]);
   const [depositsLoading, setDepositsLoading] = useState(true);
   const [depositsError, setDepositsError] = useState<string | null>(null);
+  const [squareStatus, setSquareStatus] = useState<SquareStatus | null>(null);
+  const [squareStatusLoading, setSquareStatusLoading] = useState(true);
+  const [squareStatusError, setSquareStatusError] = useState<string | null>(null);
+  const [squareConnectUrl, setSquareConnectUrl] = useState<string>('');
   const recentLimit = 5;
 
   useEffect(() => {
@@ -175,6 +202,43 @@ export function Dashboard({ orgId }: DashboardProps) {
     };
   }, [orgId, recentLimit]);
 
+  useEffect(() => {
+    let isActive = true;
+    setSquareStatusLoading(true);
+    setSquareStatusError(null);
+    getSquareStatus(orgId, 'portal')
+      .then((data) => {
+        if (!isActive) return;
+        setSquareStatus(data);
+      })
+      .catch((err) => {
+        if (!isActive) return;
+        setSquareStatus(null);
+        setSquareStatusError(err instanceof Error ? err.message : 'Failed to load Square status');
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setSquareStatusLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [orgId]);
+
+  useEffect(() => {
+    let isActive = true;
+    getSquareConnectUrl(orgId)
+      .then((url) => {
+        if (isActive) setSquareConnectUrl(url);
+      })
+      .catch(() => {
+        if (isActive) setSquareConnectUrl('');
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [orgId]);
+
   if (statsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -199,12 +263,121 @@ export function Dashboard({ orgId }: DashboardProps) {
     );
   }
 
+  const hasRefreshFailure = Boolean(
+    squareStatus?.last_refresh_failure_at || squareStatus?.last_refresh_error
+  );
+  const tokenExpired = squareStatus?.token_expired;
+  const refreshTokenMissing =
+    squareStatus?.connected && squareStatus?.refresh_token_present === false;
+  const squareBadgeLabel = squareStatusLoading
+    ? 'Checking...'
+    : squareStatus?.connected
+      ? 'Connected'
+      : 'Not connected';
+  const squareBadgeClass = squareStatusLoading
+    ? 'bg-gray-100 text-gray-600'
+    : getSquareStatusClass(Boolean(squareStatus?.connected));
+
   return (
     <div className="min-h-screen bg-gray-50 py-10">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="mt-1 text-sm text-gray-500">Your latest activity and results at a glance.</p>
+        </div>
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Square Connection</h2>
+              <p className="text-sm text-gray-500">
+                Monitor payment checkout connectivity and token health.
+              </p>
+            </div>
+            <span
+              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${squareBadgeClass}`}
+            >
+              {squareBadgeLabel}
+            </span>
+          </div>
+          {squareStatusLoading ? (
+            <div className="mt-4 text-sm text-gray-500">Loading Square status...</div>
+          ) : squareStatusError ? (
+            <div className="mt-4 text-sm text-red-600">{squareStatusError}</div>
+          ) : squareStatus ? (
+            <div className="mt-4 space-y-4">
+              {!squareStatus.connected ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-gray-600">
+                    Square is not connected. Connect to enable real checkout links.
+                  </p>
+                  {squareConnectUrl ? (
+                    <a
+                      href={squareConnectUrl}
+                      className="inline-flex items-center rounded-md bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                    >
+                      Connect Square
+                    </a>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Merchant ID</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">
+                        {squareStatus.merchant_id || '--'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Location ID</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">
+                        {squareStatus.location_id || '--'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Token Expires</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">
+                        {formatDateTimeET(squareStatus.token_expires_at)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Last Refresh</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">
+                        {formatDateTimeET(squareStatus.last_refresh_attempt_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {hasRefreshFailure ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                      <div className="font-semibold">Square token refresh failed</div>
+                      <div className="mt-1 text-xs">
+                        Last failure: {formatDateTimeET(squareStatus.last_refresh_failure_at)}
+                      </div>
+                      {squareStatus.last_refresh_error ? (
+                        <div className="mt-1 text-xs">Error: {squareStatus.last_refresh_error}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {tokenExpired || refreshTokenMissing ? (
+                    <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                      {tokenExpired ? (
+                        <div>Square access token is expired. Reconnect to restore payments.</div>
+                      ) : null}
+                      {refreshTokenMissing ? (
+                        <div className="mt-1">
+                          Refresh token missing. Reconnect Square to enable automatic refresh.
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 text-sm text-gray-500">No Square status available.</div>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           <div className="bg-white shadow rounded-lg p-6">

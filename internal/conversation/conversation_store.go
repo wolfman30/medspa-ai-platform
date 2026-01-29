@@ -193,10 +193,11 @@ func (s *ConversationStore) AppendMessage(ctx context.Context, conversationID st
 
 	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO conversation_messages (
-			id, conversation_id, role, content, from_phone, to_phone, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+			id, conversation_id, role, content, from_phone, to_phone,
+			provider_message_id, status, error_reason, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE(NULLIF($8, ''), 'delivered'), NULLIF($9, ''), $10)
 		ON CONFLICT (id) DO NOTHING
-	`, msgID, conversationID, msg.Role, msg.Body, msg.From, msg.To, timestamp)
+	`, msgID, conversationID, msg.Role, msg.Body, msg.From, msg.To, msg.ProviderMessageID, msg.Status, msg.ErrorReason, timestamp)
 
 	if err != nil {
 		return fmt.Errorf("conversation: failed to insert message: %w", err)
@@ -377,6 +378,27 @@ func (s *ConversationStore) UpdateStatusByPhone(ctx context.Context, orgID, phon
 
 	conversationID := fmt.Sprintf("sms:%s:%s", orgID, phone)
 	return s.UpdateStatus(ctx, conversationID, status)
+}
+
+// UpdateMessageStatusByProviderID updates a message's status by provider message ID.
+func (s *ConversationStore) UpdateMessageStatusByProviderID(ctx context.Context, providerMessageID, status, errorReason string) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	providerMessageID = strings.TrimSpace(providerMessageID)
+	if providerMessageID == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE conversation_messages
+		SET status = $2,
+			error_reason = COALESCE(NULLIF($3, ''), error_reason)
+		WHERE provider_message_id = $1
+	`, providerMessageID, status, errorReason)
+	if err != nil {
+		return fmt.Errorf("conversation: update message status by provider id: %w", err)
+	}
+	return nil
 }
 
 // HasAssistantMessage returns true if the conversation has any assistant messages stored.

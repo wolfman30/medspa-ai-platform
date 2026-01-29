@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -33,6 +34,10 @@ type SquareCredentials struct {
 	PhoneNumber    string // E.164 format, used as "from" number for SMS confirmations
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	// Refresh diagnostics (optional)
+	LastRefreshAttemptAt *time.Time
+	LastRefreshFailureAt *time.Time
+	LastRefreshError     string
 }
 
 // SquareOAuthService handles Square OAuth operations.
@@ -125,7 +130,11 @@ func (s *SquareOAuthService) ExchangeCode(ctx context.Context, code string) (*Sq
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		detail := formatSquareError(body)
 		s.logger.Error("square token exchange failed", "status", resp.StatusCode, "body", string(body))
+		if detail != "" {
+			return nil, fmt.Errorf("token exchange failed: status %d: %s", resp.StatusCode, detail)
+		}
 		return nil, fmt.Errorf("token exchange failed: status %d", resp.StatusCode)
 	}
 
@@ -178,7 +187,11 @@ func (s *SquareOAuthService) RefreshToken(ctx context.Context, refreshToken stri
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		detail := formatSquareError(body)
 		s.logger.Error("square token refresh failed", "status", resp.StatusCode, "body", string(body))
+		if detail != "" {
+			return nil, fmt.Errorf("token refresh failed: status %d: %s", resp.StatusCode, detail)
+		}
 		return nil, fmt.Errorf("token refresh failed: status %d", resp.StatusCode)
 	}
 
@@ -231,18 +244,70 @@ func (s *SquareOAuthService) SaveCredentials(ctx context.Context, orgID string, 
 	return nil
 }
 
+func timestamptzToPtr(ts pgtype.Timestamptz) *time.Time {
+	if !ts.Valid {
+		return nil
+	}
+	value := ts.Time
+	return &value
+}
+
+func formatSquareError(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+	var parsed struct {
+		Errors []struct {
+			Category string `json:"category"`
+			Code     string `json:"code"`
+			Detail   string `json:"detail"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil && len(parsed.Errors) > 0 {
+		first := parsed.Errors[0]
+		parts := []string{}
+		if first.Category != "" {
+			parts = append(parts, first.Category)
+		}
+		if first.Code != "" {
+			parts = append(parts, first.Code)
+		}
+		label := strings.Join(parts, "/")
+		if first.Detail != "" {
+			if label != "" {
+				return fmt.Sprintf("%s: %s", label, first.Detail)
+			}
+			return first.Detail
+		}
+		if label != "" {
+			return label
+		}
+	}
+	if len(trimmed) > 180 {
+		return trimmed[:180] + "..."
+	}
+	return trimmed
+}
+
 // GetCredentials retrieves Square credentials for a clinic.
 func (s *SquareOAuthService) GetCredentials(ctx context.Context, orgID string) (*SquareCredentials, error) {
 	query := `
 		SELECT org_id, merchant_id, access_token, refresh_token, token_expires_at, 
 		       COALESCE(location_id, '') as location_id, 
 		       COALESCE(phone_number, '') as phone_number,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       last_refresh_attempt_at,
+		       last_refresh_failure_at,
+		       COALESCE(last_refresh_error, '') as last_refresh_error
 		FROM clinic_square_credentials
 		WHERE org_id = $1
 	`
 
 	var creds SquareCredentials
+	var lastAttempt pgtype.Timestamptz
+	var lastFailure pgtype.Timestamptz
+	var lastError string
 	err := s.db.QueryRow(ctx, query, orgID).Scan(
 		&creds.OrgID,
 		&creds.MerchantID,
@@ -253,10 +318,17 @@ func (s *SquareOAuthService) GetCredentials(ctx context.Context, orgID string) (
 		&creds.PhoneNumber,
 		&creds.CreatedAt,
 		&creds.UpdatedAt,
+		&lastAttempt,
+		&lastFailure,
+		&lastError,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get square credentials: %w", err)
 	}
+
+	creds.LastRefreshAttemptAt = timestamptzToPtr(lastAttempt)
+	creds.LastRefreshFailureAt = timestamptzToPtr(lastFailure)
+	creds.LastRefreshError = lastError
 
 	return &creds, nil
 }
@@ -267,7 +339,10 @@ func (s *SquareOAuthService) GetExpiringCredentials(ctx context.Context, within 
 		SELECT org_id, merchant_id, access_token, refresh_token, token_expires_at,
 		       COALESCE(location_id, '') as location_id,
 		       COALESCE(phone_number, '') as phone_number,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       last_refresh_attempt_at,
+		       last_refresh_failure_at,
+		       COALESCE(last_refresh_error, '') as last_refresh_error
 		FROM clinic_square_credentials
 		WHERE token_expires_at < $1
 		ORDER BY token_expires_at ASC
@@ -283,6 +358,9 @@ func (s *SquareOAuthService) GetExpiringCredentials(ctx context.Context, within 
 	var results []SquareCredentials
 	for rows.Next() {
 		var creds SquareCredentials
+		var lastAttempt pgtype.Timestamptz
+		var lastFailure pgtype.Timestamptz
+		var lastError string
 		if err := rows.Scan(
 			&creds.OrgID,
 			&creds.MerchantID,
@@ -293,13 +371,69 @@ func (s *SquareOAuthService) GetExpiringCredentials(ctx context.Context, within 
 			&creds.PhoneNumber,
 			&creds.CreatedAt,
 			&creds.UpdatedAt,
+			&lastAttempt,
+			&lastFailure,
+			&lastError,
 		); err != nil {
 			return nil, fmt.Errorf("scan credentials row: %w", err)
 		}
+		creds.LastRefreshAttemptAt = timestamptzToPtr(lastAttempt)
+		creds.LastRefreshFailureAt = timestamptzToPtr(lastFailure)
+		creds.LastRefreshError = lastError
 		results = append(results, creds)
 	}
 
 	return results, nil
+}
+
+// RecordRefreshFailure stores the latest refresh failure metadata.
+func (s *SquareOAuthService) RecordRefreshFailure(ctx context.Context, orgID string, err error) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	query := `
+		UPDATE clinic_square_credentials
+		SET last_refresh_attempt_at = NOW(),
+			last_refresh_failure_at = NOW(),
+			last_refresh_error = NULLIF($2, ''),
+			updated_at = NOW()
+		WHERE org_id = $1
+	`
+	result, execErr := s.db.Exec(ctx, query, orgID, msg)
+	if execErr != nil {
+		return fmt.Errorf("record refresh failure: %w", execErr)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("no credentials found for org %s", orgID)
+	}
+	return nil
+}
+
+// RecordRefreshSuccess clears any stored refresh failure metadata.
+func (s *SquareOAuthService) RecordRefreshSuccess(ctx context.Context, orgID string) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	query := `
+		UPDATE clinic_square_credentials
+		SET last_refresh_attempt_at = NOW(),
+			last_refresh_failure_at = NULL,
+			last_refresh_error = NULL,
+			updated_at = NOW()
+		WHERE org_id = $1
+	`
+	result, execErr := s.db.Exec(ctx, query, orgID)
+	if execErr != nil {
+		return fmt.Errorf("record refresh success: %w", execErr)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("no credentials found for org %s", orgID)
+	}
+	return nil
 }
 
 // DeleteCredentials removes Square credentials for a clinic (for disconnection).

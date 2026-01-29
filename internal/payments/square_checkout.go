@@ -27,6 +27,11 @@ type CredentialsProvider interface {
 	GetCredentials(ctx context.Context, orgID string) (*SquareCredentials, error)
 }
 
+type LocationSyncer interface {
+	GetDefaultLocation(ctx context.Context, accessToken string) (string, error)
+	UpdateLocationID(ctx context.Context, orgID, locationID string) error
+}
+
 // SquareCheckoutService creates hosted payment links for deposits.
 type SquareCheckoutService struct {
 	// Fallback credentials (used when no per-org credentials exist)
@@ -97,9 +102,21 @@ func (s *SquareCheckoutService) getCredentialsForOrg(ctx context.Context, orgID 
 		if err == nil && creds != nil && creds.AccessToken != "" {
 			locationID := creds.LocationID
 			if locationID == "" {
-				// If no location ID stored, we'd need to fetch it from Square
-				// For now, log a warning
-				s.logger.Warn("no location_id for org, payment may fail", "org_id", orgID)
+				if syncer, ok := s.credsProvider.(LocationSyncer); ok {
+					if fetched, fetchErr := syncer.GetDefaultLocation(ctx, creds.AccessToken); fetchErr != nil {
+						s.logger.Warn("failed to fetch square location for org", "org_id", orgID, "error", fetchErr)
+					} else if fetched != "" {
+						locationID = fetched
+						if updateErr := syncer.UpdateLocationID(ctx, orgID, fetched); updateErr != nil {
+							s.logger.Warn("failed to persist square location_id", "org_id", orgID, "error", updateErr)
+						} else {
+							s.logger.Info("synced square location_id for checkout", "org_id", orgID, "location_id", fetched)
+						}
+					}
+				}
+				if locationID == "" {
+					s.logger.Warn("no location_id for org, payment may fail", "org_id", orgID)
+				}
 			}
 			return creds.AccessToken, locationID, nil
 		}

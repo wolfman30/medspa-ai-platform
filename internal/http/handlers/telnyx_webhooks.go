@@ -39,6 +39,10 @@ type conversationStore interface {
 	LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error
 }
 
+type conversationStatusUpdater interface {
+	UpdateMessageStatusByProviderID(ctx context.Context, providerMessageID, status, errorReason string) error
+}
+
 var errClinicNotFound = errors.New("clinic not found")
 
 // TelnyxWebhookHandler handles inbound Telnyx webhooks for messaging and hosted orders.
@@ -467,13 +471,14 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 	}
 
 	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
-		ID:        msgID.String(),
-		Role:      "user",
-		From:      from,
-		To:        to,
-		Body:      storageBody,
-		Timestamp: evt.OccurredAt,
-		Kind:      "inbound",
+		ID:                msgID.String(),
+		Role:              "user",
+		From:              from,
+		To:                to,
+		Body:              storageBody,
+		Timestamp:         evt.OccurredAt,
+		Kind:              "inbound",
+		ProviderMessageID: payload.ID,
 	})
 
 	if stop {
@@ -567,6 +572,13 @@ func (h *TelnyxWebhookHandler) handleDeliveryStatus(ctx context.Context, evt tel
 	}
 	if err := h.store.UpdateMessageStatus(ctx, payload.MessageID, payload.Status, deliveredAt, failedAt); err != nil {
 		return fmt.Errorf("update message status: %w", err)
+	}
+	if h.convStore != nil {
+		if updater, ok := h.convStore.(conversationStatusUpdater); ok {
+			if err := updater.UpdateMessageStatusByProviderID(ctx, payload.MessageID, payload.Status, ""); err != nil {
+				h.logger.Warn("failed to update conversation message status", "error", err, "provider_message_id", payload.MessageID)
+			}
+		}
 	}
 	if h.metrics != nil {
 		h.metrics.ObserveInbound(evt.EventType, payload.Status)

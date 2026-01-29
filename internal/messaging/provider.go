@@ -38,40 +38,43 @@ func BuildReplyMessenger(cfg ProviderSelectionConfig, logger *logging.Logger) (c
 		preference = SMSProviderAuto
 	}
 
-	order := resolvePreferredOrder(preference)
 	missing := map[string]string{}
+	var telnyxMessenger conversation.ReplyMessenger
+	var twilioMessenger conversation.ReplyMessenger
 
-	for _, provider := range order {
-		switch provider {
-		case SMSProviderTelnyx:
-			if cfg.TelnyxAPIKey != "" && cfg.TelnyxProfileID != "" {
-				return NewTelnyxSender(cfg.TelnyxAPIKey, cfg.TelnyxProfileID, logger), SMSProviderTelnyx, ""
-			}
-			var reasons []string
-			if cfg.TelnyxAPIKey == "" {
-				reasons = append(reasons, "TELNYX_API_KEY missing")
-			}
-			if cfg.TelnyxProfileID == "" {
-				reasons = append(reasons, "TELNYX_MESSAGING_PROFILE_ID missing")
-			}
-			missing[SMSProviderTelnyx] = strings.Join(reasons, ", ")
-
-		case SMSProviderTwilio:
-			if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
-				return NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger), SMSProviderTwilio, ""
-			}
-			var reasons []string
-			if cfg.TwilioAccountSID == "" {
-				reasons = append(reasons, "TWILIO_ACCOUNT_SID missing")
-			}
-			if cfg.TwilioAuthToken == "" {
-				reasons = append(reasons, "TWILIO_AUTH_TOKEN missing")
-			}
-			missing[SMSProviderTwilio] = strings.Join(reasons, ", ")
+	if cfg.TelnyxAPIKey != "" && cfg.TelnyxProfileID != "" {
+		telnyxMessenger = NewTelnyxSender(cfg.TelnyxAPIKey, cfg.TelnyxProfileID, logger)
+	} else {
+		var reasons []string
+		if cfg.TelnyxAPIKey == "" {
+			reasons = append(reasons, "TELNYX_API_KEY missing")
 		}
+		if cfg.TelnyxProfileID == "" {
+			reasons = append(reasons, "TELNYX_MESSAGING_PROFILE_ID missing")
+		}
+		missing[SMSProviderTelnyx] = strings.Join(reasons, ", ")
+	}
+
+	if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
+		twilioMessenger = NewTwilioSender(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber, logger)
+	} else {
+		var reasons []string
+		if cfg.TwilioAccountSID == "" {
+			reasons = append(reasons, "TWILIO_ACCOUNT_SID missing")
+		}
+		if cfg.TwilioAuthToken == "" {
+			reasons = append(reasons, "TWILIO_AUTH_TOKEN missing")
+		}
+		missing[SMSProviderTwilio] = strings.Join(reasons, ", ")
 	}
 
 	if preference != SMSProviderAuto {
+		if preference == SMSProviderTelnyx && telnyxMessenger != nil {
+			return telnyxMessenger, SMSProviderTelnyx, ""
+		}
+		if preference == SMSProviderTwilio && twilioMessenger != nil {
+			return twilioMessenger, SMSProviderTwilio, ""
+		}
 		reason := missing[preference]
 		if reason == "" {
 			reason = fmt.Sprintf("%s messenger not configured", preference)
@@ -79,7 +82,18 @@ func BuildReplyMessenger(cfg ProviderSelectionConfig, logger *logging.Logger) (c
 		return nil, "", reason
 	}
 
+	if telnyxMessenger != nil && twilioMessenger != nil {
+		return NewFailoverMessenger(telnyxMessenger, SMSProviderTelnyx, twilioMessenger, SMSProviderTwilio, logger), SMSProviderTelnyx + "+" + SMSProviderTwilio, ""
+	}
+	if telnyxMessenger != nil {
+		return telnyxMessenger, SMSProviderTelnyx, ""
+	}
+	if twilioMessenger != nil {
+		return twilioMessenger, SMSProviderTwilio, ""
+	}
+
 	var reasons []string
+	order := resolvePreferredOrder(preference)
 	for _, provider := range order {
 		if msg := missing[provider]; msg != "" {
 			reasons = append(reasons, fmt.Sprintf("%s: %s", provider, msg))

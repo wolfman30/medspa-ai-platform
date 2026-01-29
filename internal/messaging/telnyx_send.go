@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -98,13 +99,30 @@ func (s *TelnyxSender) SendReply(ctx context.Context, msg conversation.OutboundR
 			lastErr = err
 		} else {
 			defer resp.Body.Close()
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				if msg.Metadata != nil && len(body) > 0 {
+					var parsed struct {
+						Data struct {
+							ID     string `json:"id"`
+							Status string `json:"status"`
+						} `json:"data"`
+					}
+					if err := json.Unmarshal(body, &parsed); err == nil {
+						if parsed.Data.ID != "" {
+							msg.Metadata["provider_message_id"] = parsed.Data.ID
+						}
+						if parsed.Data.Status != "" {
+							msg.Metadata["provider_status"] = parsed.Data.Status
+						}
+					}
+				}
 				s.logger.Info("telnyx sms sent", "org_id", msg.OrgID, "to", msg.To, "from", msg.From)
 				return nil
 			}
 			// Read error response for better debugging
 			var errorBody map[string]interface{}
-			if json.NewDecoder(resp.Body).Decode(&errorBody) == nil {
+			if len(body) > 0 && json.Unmarshal(body, &errorBody) == nil {
 				lastErr = fmt.Errorf("telnyx send failed: status %d, body: %v", resp.StatusCode, errorBody)
 			} else {
 				lastErr = fmt.Errorf("telnyx send failed: status %d", resp.StatusCode)

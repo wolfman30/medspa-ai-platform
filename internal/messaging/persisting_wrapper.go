@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,11 @@ func (p *PersistingMessenger) SendReply(ctx context.Context, reply conversation.
 		}
 	}
 
+	// Ensure metadata map exists so providers can attach IDs/statuses.
+	if reply.Metadata == nil {
+		reply.Metadata = map[string]string{}
+	}
+
 	// Persist the outbound message before sending
 	now := time.Now()
 	rec := MessageRecord{
@@ -77,9 +83,22 @@ func (p *PersistingMessenger) SendReply(ctx context.Context, reply conversation.
 				p.logger.Warn("failed to update message status to failed", "error", updateErr, "msg_id", msgID)
 			}
 		} else {
-			deliveredAt := time.Now()
-			if updateErr := p.store.UpdateMessageStatusByID(ctx, msgID, "sent", &deliveredAt, nil); updateErr != nil {
+			status := "sent"
+			if raw := strings.TrimSpace(reply.Metadata["provider_status"]); raw != "" {
+				status = raw
+			}
+			var deliveredAt *time.Time
+			if status == "sent" {
+				now := time.Now()
+				deliveredAt = &now
+			}
+			if updateErr := p.store.UpdateMessageStatusByID(ctx, msgID, status, deliveredAt, nil); updateErr != nil {
 				p.logger.Warn("failed to update message status to sent", "error", updateErr, "msg_id", msgID)
+			}
+			if providerID := strings.TrimSpace(reply.Metadata["provider_message_id"]); providerID != "" {
+				if updateErr := p.store.UpdateMessageProviderID(ctx, msgID, providerID); updateErr != nil {
+					p.logger.Warn("failed to update provider message id", "error", updateErr, "msg_id", msgID)
+				}
 			}
 		}
 	}

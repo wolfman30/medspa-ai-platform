@@ -129,6 +129,27 @@ func TestBuildReplyMessengerMissingCredentials(t *testing.T) {
 	}
 }
 
+func TestBuildReplyMessengerAutoFailover(t *testing.T) {
+	messenger, provider, reason := BuildReplyMessenger(ProviderSelectionConfig{
+		Preference:       SMSProviderAuto,
+		TelnyxAPIKey:     "telnyx-key",
+		TelnyxProfileID:  "telnyx-profile",
+		TwilioAccountSID: "twilio-sid",
+		TwilioAuthToken:  "twilio-token",
+		TwilioFromNumber: "+15550001111",
+	}, nil)
+
+	if messenger == nil {
+		t.Fatalf("expected messenger, got nil")
+	}
+	if provider != "telnyx+twilio" {
+		t.Fatalf("expected telnyx+twilio provider, got %q", provider)
+	}
+	if reason != "" {
+		t.Fatalf("unexpected reason %q", reason)
+	}
+}
+
 func TestIsMissedCallStatus(t *testing.T) {
 	if !isMissedCallStatus("no-answer") {
 		t.Fatalf("expected missed call status")

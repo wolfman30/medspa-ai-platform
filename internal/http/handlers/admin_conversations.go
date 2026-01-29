@@ -72,12 +72,15 @@ type ConversationDetailResponse struct {
 
 // MessageResponse represents a message in a conversation.
 type MessageResponse struct {
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	Timestamp string `json:"timestamp"`
-	From      string `json:"from,omitempty"`
-	To        string `json:"to,omitempty"`
+	ID                string `json:"id"`
+	Role              string `json:"role"`
+	Content           string `json:"content"`
+	Timestamp         string `json:"timestamp"`
+	From              string `json:"from,omitempty"`
+	To                string `json:"to,omitempty"`
+	ProviderMessageID string `json:"provider_message_id,omitempty"`
+	Status            string `json:"status,omitempty"`
+	ErrorReason       string `json:"error_reason,omitempty"`
 }
 
 // ConversationMeta contains metadata about a conversation.
@@ -95,6 +98,23 @@ func parseConversationID(conversationID string) (orgID, phone string, ok bool) {
 		return "", "", false
 	}
 	return parts[1], parts[2], true
+}
+
+var easternLocation = loadEasternLocation()
+
+func loadEasternLocation() *time.Location {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return time.FixedZone("EST", -5*60*60)
+	}
+	return loc
+}
+
+func formatTimeEastern(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.In(easternLocation).Format(time.RFC3339)
 }
 
 // hasConversationsTable checks if the conversations table exists
@@ -224,9 +244,9 @@ func (h *AdminConversationsHandler) listFromConversationsTable(w http.ResponseWr
 			continue
 		}
 
-		conv.StartedAt = startedAt.Format(time.RFC3339)
+		conv.StartedAt = formatTimeEastern(startedAt)
 		if lastMessageAt.Valid {
-			formatted := lastMessageAt.Time.Format(time.RFC3339)
+			formatted := formatTimeEastern(lastMessageAt.Time)
 			conv.LastMessageAt = &formatted
 		}
 
@@ -318,14 +338,14 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 			continue
 		}
 
-		lastFormatted := lastActivity.Format(time.RFC3339)
+		lastFormatted := formatTimeEastern(lastActivity)
 		conversations = append(conversations, ConversationListItem{
 			ID:            conversationID,
 			OrgID:         parsedOrgID,
 			CustomerPhone: customerPhone,
 			Status:        status,
 			MessageCount:  jobCount,
-			StartedAt:     firstActivity.Format(time.RFC3339),
+			StartedAt:     formatTimeEastern(firstActivity),
 			LastMessageAt: &lastFormatted,
 		})
 	}
@@ -390,9 +410,9 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 	`, conversationID).Scan(&conv.Status, &conv.Metadata.TotalMessages, &conv.Metadata.CustomerMessages, &conv.Metadata.AIMessages, &startedAt, &lastMessageAt)
 
 	if err == nil {
-		conv.StartedAt = startedAt.Format(time.RFC3339)
+		conv.StartedAt = formatTimeEastern(startedAt)
 		if lastMessageAt.Valid {
-			formatted := lastMessageAt.Time.Format(time.RFC3339)
+			formatted := formatTimeEastern(lastMessageAt.Time)
 			conv.LastMessageAt = &formatted
 		}
 
@@ -410,7 +430,7 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 			conversationID,
 		).Scan(&jobStartedAt)
 		if !jobStartedAt.IsZero() {
-			conv.StartedAt = jobStartedAt.Format(time.RFC3339)
+			conv.StartedAt = formatTimeEastern(jobStartedAt)
 		}
 	}
 
@@ -425,12 +445,15 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 
 			for _, msg := range messages {
 				conv.Messages = append(conv.Messages, MessageResponse{
-					ID:        msg.ID,
-					Role:      msg.Role,
-					Content:   msg.Body,
-					Timestamp: msg.Timestamp.Format(time.RFC3339),
-					From:      msg.From,
-					To:        msg.To,
+					ID:                msg.ID,
+					Role:              msg.Role,
+					Content:           msg.Body,
+					Timestamp:         formatTimeEastern(msg.Timestamp),
+					From:              msg.From,
+					To:                msg.To,
+					ProviderMessageID: msg.ProviderMessageID,
+					Status:            msg.Status,
+					ErrorReason:       msg.ErrorReason,
 				})
 				conv.Metadata.TotalMessages++
 				if msg.Role == "user" {
@@ -452,7 +475,7 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 
 func (h *AdminConversationsHandler) getMessagesFromDB(r *http.Request, conversationID string) ([]MessageResponse, error) {
 	rows, err := h.db.QueryContext(r.Context(), `
-		SELECT id, role, content, from_phone, to_phone, created_at
+		SELECT id, role, content, from_phone, to_phone, provider_message_id, status, error_reason, created_at
 		FROM conversation_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC
@@ -466,13 +489,23 @@ func (h *AdminConversationsHandler) getMessagesFromDB(r *http.Request, conversat
 	for rows.Next() {
 		var msg MessageResponse
 		var fromPhone, toPhone sql.NullString
+		var providerMessageID, status, errorReason sql.NullString
 		var createdAt time.Time
 
-		if err := rows.Scan(&msg.ID, &msg.Role, &msg.Content, &fromPhone, &toPhone, &createdAt); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.Role, &msg.Content, &fromPhone, &toPhone, &providerMessageID, &status, &errorReason, &createdAt); err != nil {
 			continue
 		}
 
-		msg.Timestamp = createdAt.Format(time.RFC3339)
+		msg.Timestamp = formatTimeEastern(createdAt)
+		if providerMessageID.Valid {
+			msg.ProviderMessageID = providerMessageID.String
+		}
+		if status.Valid {
+			msg.Status = status.String
+		}
+		if errorReason.Valid {
+			msg.ErrorReason = errorReason.String
+		}
 		msg.From = fromPhone.String
 		msg.To = toPhone.String
 		messages = append(messages, msg)
@@ -627,7 +660,7 @@ func (h *AdminConversationsHandler) ExportTranscript(w http.ResponseWriter, r *h
 	transcript += "========================\n\n"
 	transcript += "Customer Phone: " + customerPhone + "\n"
 	if !startedAt.IsZero() {
-		transcript += "Started: " + startedAt.Format(time.RFC1123) + "\n"
+		transcript += "Started: " + startedAt.In(easternLocation).Format(time.RFC1123) + "\n"
 	}
 	transcript += "Conversation ID: " + conversationID + "\n\n"
 	transcript += "--- Messages ---\n\n"
@@ -643,7 +676,7 @@ func (h *AdminConversationsHandler) ExportTranscript(w http.ResponseWriter, r *h
 				roleLabel = "Customer"
 			}
 			timestamp, _ := time.Parse(time.RFC3339, msg.Timestamp)
-			transcript += "[" + timestamp.Format("2006-01-02 15:04:05") + "] " + roleLabel + ":\n"
+			transcript += "[" + timestamp.In(easternLocation).Format("2006-01-02 15:04:05") + "] " + roleLabel + ":\n"
 			transcript += msg.Content + "\n\n"
 		}
 	} else if h.transcriptStore != nil {
@@ -657,7 +690,7 @@ func (h *AdminConversationsHandler) ExportTranscript(w http.ResponseWriter, r *h
 				} else if roleLabel == "user" {
 					roleLabel = "Customer"
 				}
-				transcript += "[" + msg.Timestamp.Format("2006-01-02 15:04:05") + "] " + roleLabel + ":\n"
+				transcript += "[" + msg.Timestamp.In(easternLocation).Format("2006-01-02 15:04:05") + "] " + roleLabel + ":\n"
 				transcript += msg.Body + "\n\n"
 			}
 		}

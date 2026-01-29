@@ -98,6 +98,20 @@ func (s *TwilioSender) SendReply(ctx context.Context, msg conversation.OutboundR
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				if msg.Metadata != nil && len(body) > 0 {
+					var parsed struct {
+						SID    string `json:"sid"`
+						Status string `json:"status"`
+					}
+					if err := json.Unmarshal(body, &parsed); err == nil {
+						if parsed.SID != "" {
+							msg.Metadata["provider_message_id"] = parsed.SID
+						}
+						if parsed.Status != "" {
+							msg.Metadata["provider_status"] = parsed.Status
+						}
+					}
+				}
 				s.logger.Info("twilio sms sent", "org_id", msg.OrgID, "to", msg.To)
 				return nil
 			}
