@@ -330,6 +330,7 @@ func main() {
 			logger.Warn("using fake payments mode (ALLOW_FAKE_PAYMENTS=true)")
 		} else {
 			usePaymentLinks := payments.UsePaymentLinks(cfg.SquareCheckoutMode, cfg.SquareSandbox)
+			logger.Info("square checkout mode configured", "mode", cfg.SquareCheckoutMode, "sandbox", cfg.SquareSandbox, "usePaymentLinks", usePaymentLinks)
 			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).
 				WithBaseURL(cfg.SquareBaseURL).
 				WithPaymentLinks(usePaymentLinks).
