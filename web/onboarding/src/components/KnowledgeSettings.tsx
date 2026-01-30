@@ -116,6 +116,38 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
           <p className="text-sm text-gray-600">
             Edit the knowledge the AI uses for this clinic. Do not include any patient-specific information (PHI).
           </p>
+          {!loading && (
+            <div className="flex flex-wrap gap-3 pb-2 border-b border-gray-200">
+              <button
+                onClick={() => { setEditing(true); setSuccess(null); }}
+                className="px-4 py-2 rounded-md border border-indigo-500 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                disabled={editing}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDocuments((prev) => [...prev, { title: '', content: '' }]);
+                  setEditing(true);
+                }}
+                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                disabled={saving}
+              >
+                Add Section
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                disabled={!editing || saving}
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+              <span className="ml-auto text-sm text-gray-500 self-center">
+                {documents.length} section{documents.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
           {loading ? (
             <div className="text-sm text-gray-500">Loading knowledge...</div>
           ) : (

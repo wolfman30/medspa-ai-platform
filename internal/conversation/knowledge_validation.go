@@ -50,7 +50,7 @@ func ValidateKnowledgeDocuments(documents []string) error {
 	if len(documents) == 0 {
 		return errors.New("documents required")
 	}
-	const maxDocs = 20
+	const maxDocs = 50
 	if len(documents) > maxDocs {
 		return fmt.Errorf("maximum %d documents per request", maxDocs)
 	}
