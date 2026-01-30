@@ -84,7 +84,10 @@ func (s *Service) NotifyPaymentSuccess(ctx context.Context, evt events.PaymentSu
 		leadPhone = evt.LeadPhone
 	}
 	if leadName == "" {
-		leadName = "A patient"
+		leadName = evt.LeadName
+	}
+	if leadName == "" {
+		leadName = "A customer"
 	}
 
 	location := resolveClinicLocation(cfg)

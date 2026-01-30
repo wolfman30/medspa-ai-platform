@@ -206,6 +206,7 @@ func (h *FakePaymentsHandler) completePayment(ctx context.Context, paymentID uui
 		AmountCents:     int64(updated.AmountCents),
 		OccurredAt:      time.Now().UTC(),
 		LeadPhone:       lead.Phone,
+		LeadName:        lead.Name,
 		ScheduledFor:    scheduledFor,
 	}
 	if h.numbers != nil {

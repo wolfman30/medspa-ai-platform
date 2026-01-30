@@ -35,6 +35,7 @@ type PaymentSucceededV1 struct {
 	AmountCents     int64      `json:"amount_cents"`
 	OccurredAt      time.Time  `json:"occurred_at"`
 	LeadPhone       string     `json:"lead_phone,omitempty"`
+	LeadName        string     `json:"lead_name,omitempty"`
 	FromNumber      string     `json:"from_number,omitempty"`
 	ScheduledFor    *time.Time `json:"scheduled_for,omitempty"`
 }

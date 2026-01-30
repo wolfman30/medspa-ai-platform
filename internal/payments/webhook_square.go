@@ -259,6 +259,7 @@ func (h *SquareWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		AmountCents:     evt.Data.Object.Payment.AmountMoney.Amount,
 		OccurredAt:      evt.CreatedAt,
 		LeadPhone:       lead.Phone,
+		LeadName:        lead.Name,
 		ScheduledFor:    scheduledFor,
 	}
 	if fromNumber == "" && h.numbers != nil {
