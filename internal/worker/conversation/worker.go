@@ -186,19 +186,24 @@ func Run(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) err
 		}
 
 		// Setup SMS sender for operator notifications (reuse existing messenger)
+		// Prefer Telnyx from number since Telnyx is the primary SMS provider
 		var smsSender notify.SMSSender
-		if messenger != nil && cfg.TwilioFromNumber != "" {
-			smsSender = notify.NewSimpleSMSSender(cfg.TwilioFromNumber, func(ctx context.Context, to, from, body string) error {
+		smsFromNumber := cfg.TelnyxFromNumber
+		if smsFromNumber == "" {
+			smsFromNumber = cfg.TwilioFromNumber
+		}
+		if messenger != nil && smsFromNumber != "" {
+			smsSender = notify.NewSimpleSMSSender(smsFromNumber, func(ctx context.Context, to, from, body string) error {
 				return messenger.SendReply(ctx, conversation.OutboundReply{
 					To:   to,
 					From: from,
 					Body: body,
 				})
 			}, logger)
-			logger.Info("sms sender initialized for operator notifications")
+			logger.Info("sms sender initialized for operator notifications (async workers)", "from", smsFromNumber)
 		} else {
 			smsSender = notify.NewStubSMSSender(logger)
-			logger.Warn("operator SMS notifications disabled (messenger not available)")
+			logger.Warn("operator SMS notifications disabled for async workers (messenger not available or no from number)")
 		}
 
 		notifier = notify.NewService(emailSender, smsSender, clinicStore, leadsRepo, logger)

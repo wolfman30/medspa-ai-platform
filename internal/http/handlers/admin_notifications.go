@@ -28,12 +28,13 @@ func NewAdminNotificationsHandler(clinicStore *clinic.Store, logger *logging.Log
 
 // NotificationSettingsResponse represents notification settings for an org.
 type NotificationSettingsResponse struct {
-	EmailEnabled    bool     `json:"email_enabled"`
-	EmailRecipients []string `json:"email_recipients"`
-	SMSEnabled      bool     `json:"sms_enabled"`
-	SMSRecipients   []string `json:"sms_recipients"`
-	NotifyOnPayment bool     `json:"notify_on_payment"`
-	NotifyOnNewLead bool     `json:"notify_on_new_lead"`
+	EmailEnabled       bool     `json:"email_enabled"`
+	EmailRecipients    []string `json:"email_recipients"`
+	SMSEnabled         bool     `json:"sms_enabled"`
+	SMSRecipients      []string `json:"sms_recipients"`
+	SMSRecipientLegacy string   `json:"sms_recipient_legacy,omitempty"` // Debug: shows legacy single recipient if set
+	NotifyOnPayment    bool     `json:"notify_on_payment"`
+	NotifyOnNewLead    bool     `json:"notify_on_new_lead"`
 }
 
 // UpdateNotificationSettingsRequest represents a request to update notification settings.
@@ -64,12 +65,13 @@ func (h *AdminNotificationsHandler) GetNotificationSettings(w http.ResponseWrite
 
 	// Build response with combined SMS recipients
 	response := NotificationSettingsResponse{
-		EmailEnabled:    cfg.Notifications.EmailEnabled,
-		EmailRecipients: cfg.Notifications.EmailRecipients,
-		SMSEnabled:      cfg.Notifications.SMSEnabled,
-		SMSRecipients:   cfg.Notifications.GetSMSRecipients(),
-		NotifyOnPayment: cfg.Notifications.NotifyOnPayment,
-		NotifyOnNewLead: cfg.Notifications.NotifyOnNewLead,
+		EmailEnabled:       cfg.Notifications.EmailEnabled,
+		EmailRecipients:    cfg.Notifications.EmailRecipients,
+		SMSEnabled:         cfg.Notifications.SMSEnabled,
+		SMSRecipients:      cfg.Notifications.GetSMSRecipients(),
+		SMSRecipientLegacy: cfg.Notifications.SMSRecipient, // Debug: expose legacy field
+		NotifyOnPayment:    cfg.Notifications.NotifyOnPayment,
+		NotifyOnNewLead:    cfg.Notifications.NotifyOnNewLead,
 	}
 
 	// Ensure arrays are not nil
@@ -144,12 +146,13 @@ func (h *AdminNotificationsHandler) UpdateNotificationSettings(w http.ResponseWr
 
 	// Return updated settings
 	response := NotificationSettingsResponse{
-		EmailEnabled:    cfg.Notifications.EmailEnabled,
-		EmailRecipients: cfg.Notifications.EmailRecipients,
-		SMSEnabled:      cfg.Notifications.SMSEnabled,
-		SMSRecipients:   cfg.Notifications.GetSMSRecipients(),
-		NotifyOnPayment: cfg.Notifications.NotifyOnPayment,
-		NotifyOnNewLead: cfg.Notifications.NotifyOnNewLead,
+		EmailEnabled:       cfg.Notifications.EmailEnabled,
+		EmailRecipients:    cfg.Notifications.EmailRecipients,
+		SMSEnabled:         cfg.Notifications.SMSEnabled,
+		SMSRecipients:      cfg.Notifications.GetSMSRecipients(),
+		SMSRecipientLegacy: cfg.Notifications.SMSRecipient, // Should be empty after update
+		NotifyOnPayment:    cfg.Notifications.NotifyOnPayment,
+		NotifyOnNewLead:    cfg.Notifications.NotifyOnNewLead,
 	}
 
 	if response.EmailRecipients == nil {
