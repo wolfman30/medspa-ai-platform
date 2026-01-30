@@ -96,6 +96,7 @@ module "ecs_fargate" {
     TELNYX_API_KEY              = "${module.secrets.secret_arn}:TELNYX_API_KEY::"
     TELNYX_MESSAGING_PROFILE_ID = "${module.secrets.secret_arn}:TELNYX_MESSAGING_PROFILE_ID::"
     TELNYX_WEBHOOK_SECRET       = "${module.secrets.secret_arn}:TELNYX_WEBHOOK_SECRET::"
+    TELNYX_FROM_NUMBER          = "${module.secrets.secret_arn}:TELNYX_FROM_NUMBER::"
 
     PAYMENT_PROVIDER_KEY         = "${module.secrets.secret_arn}:PAYMENT_PROVIDER_KEY::"
     SQUARE_ACCESS_TOKEN          = "${module.secrets.secret_arn}:SQUARE_ACCESS_TOKEN::"
