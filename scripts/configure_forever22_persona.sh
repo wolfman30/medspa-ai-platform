@@ -1,6 +1,5 @@
 #!/bin/bash
 # Configure Forever 22 Med Spa's AI Persona
-# Based on analysis of Brandi Sesock as solo practitioner
 
 # Forever 22 org ID
 ORG_ID="d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599"
@@ -16,7 +15,7 @@ read -r -d '' PAYLOAD << 'EOF'
 {
   "ai_persona": {
     "provider_name": "Brandi",
-    "is_solo_operator": true,
+    "is_solo_operator": false,
     "tone": "warm",
     "custom_greeting": "Hi! This is Brandi's AI assistant at Forever 22 Med Spa. Brandi is currently with a patient, so I'm here to help you get started. What can I help you with today?",
     "busy_message": "Brandi is currently in a treatment with a patient and can't come to the phone right now.",
