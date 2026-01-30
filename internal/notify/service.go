@@ -178,6 +178,12 @@ This patient is now a priority lead. Please follow up to confirm their appointme
 	// NOTE: SMS excludes health-related info to avoid PHI exposure
 	smsRecipients := cfg.Notifications.GetSMSRecipients()
 	smsTransactionTime := formatTimeInLocation(evt.OccurredAt, location, "1/2 3:04PM MST")
+	s.logger.Info("notify: SMS recipient resolution",
+		"org_id", evt.OrgID,
+		"legacy_sms_recipient", cfg.Notifications.SMSRecipient,
+		"sms_recipients_array", cfg.Notifications.SMSRecipients,
+		"resolved_recipients", smsRecipients,
+		"sms_enabled", cfg.Notifications.SMSEnabled)
 	if cfg.Notifications.SMSEnabled && s.sms != nil && len(smsRecipients) > 0 {
 		patientTypeSMS := ""
 		if patientType != "" {
