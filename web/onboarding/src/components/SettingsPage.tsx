@@ -103,6 +103,15 @@ export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
             </div>
           </button>
         </div>
+
+        <div className="mt-8">
+          <button
+            onClick={onBack}
+            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+          >
+            <span>&larr;</span> Back
+          </button>
+        </div>
       </div>
     </div>
   );

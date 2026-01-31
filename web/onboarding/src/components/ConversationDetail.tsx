@@ -207,9 +207,15 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
       </div>
 
       {/* Footer */}
-      <div className="bg-white border-t border-gray-200 px-4 py-3">
-        <div className="max-w-3xl mx-auto">
-          <p className="text-xs text-gray-400 text-center">
+      <div className="bg-white border-t border-gray-200 px-4 py-4">
+        <div className="max-w-3xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            onClick={onBack}
+            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+          >
+            <span>&larr;</span> Back to conversations
+          </button>
+          <p className="text-xs text-gray-400 sm:text-right">
             Source: {conversation.metadata.source} &bull; Times shown in ET &bull; Auto-refreshes every 10 seconds
           </p>
         </div>
