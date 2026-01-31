@@ -235,6 +235,7 @@ func New(cfg *Config) http.Handler {
 				r.Get("/deposits/{depositID}", depositsHandler.GetDeposit)
 				if cfg.SquareOAuth != nil {
 					r.Get("/square/status", cfg.SquareOAuth.HandleStatus)
+					r.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
 				}
 				if knowledgeHandler != nil {
 					r.Get("/knowledge", knowledgeHandler.GetKnowledge)
