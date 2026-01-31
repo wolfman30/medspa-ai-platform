@@ -254,6 +254,15 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
           {deposit.booking_intent_id && <p>Booking Intent ID: {deposit.booking_intent_id}</p>}
           {deposit.conversation_id && <p>Conversation ID: {deposit.conversation_id}</p>}
         </div>
+
+        <div className="mt-8">
+          <button
+            onClick={onBack}
+            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+          >
+            <span>&larr;</span> Back to deposits
+          </button>
+        </div>
       </div>
     </div>
   );
