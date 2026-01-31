@@ -168,10 +168,22 @@ func (h *TelnyxWebhookHandler) voiceAckMessage(ctx context.Context, orgID string
 		return h.voiceAck
 	}
 
-	// Get clinic config to check for AIPersona.CustomGreeting
+	// Get clinic config to check for AIPersona greetings
 	cfg := h.clinicConfig(ctx, orgID)
-	if cfg != nil && strings.TrimSpace(cfg.AIPersona.CustomGreeting) != "" {
-		return cfg.AIPersona.CustomGreeting
+	if cfg != nil {
+		// Use time-aware greeting: after-hours greeting when closed, custom greeting when open
+		now := time.Now()
+		isOpen := cfg.IsOpenAt(now)
+
+		// If closed and has after-hours greeting, use it
+		if !isOpen && strings.TrimSpace(cfg.AIPersona.AfterHoursGreeting) != "" {
+			return cfg.AIPersona.AfterHoursGreeting
+		}
+
+		// If open (or no after-hours greeting) and has custom greeting, use it
+		if strings.TrimSpace(cfg.AIPersona.CustomGreeting) != "" {
+			return cfg.AIPersona.CustomGreeting
+		}
 	}
 
 	// Fall back to template with clinic name
