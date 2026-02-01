@@ -61,14 +61,17 @@ export interface BookingPlatformSelectors {
 // Moxie-specific selectors
 export const MOXIE_SELECTORS: BookingPlatformSelectors = {
   platform: 'moxie',
-  dateSelector: '[data-testid="date-picker"], .date-picker, input[type="date"]',
-  timeSlotSelector: '.time-slot, [data-testid="time-slot"], .appointment-slot',
+  // Moxie uses a calendar with clickable day cells
+  dateSelector: '.calendar-day:not(.disabled), [class*="calendar"] [class*="day"]:not([class*="disabled"])',
+  // Time slots are buttons with times like "6:00pm", "9:30am"
+  timeSlotSelector: 'button:has-text("am"), button:has-text("pm"), .time-slot, [class*="time-slot"], [class*="timeslot"]',
   availableSlotClass: 'available',
   unavailableSlotClass: 'unavailable',
   providerSelector: '.provider-name, [data-testid="provider"]',
   serviceSelector: '.service-name, [data-testid="service"]',
-  nextDayButton: '[data-testid="next-day"], .next-day, button:has-text("Next")',
-  prevDayButton: '[data-testid="prev-day"], .prev-day, button:has-text("Previous")',
+  // Moxie calendar uses month navigation arrows
+  nextDayButton: '.calendar-nav button:last-child, [class*="calendar"] button:has-text(">"), button[aria-label*="next"]',
+  prevDayButton: '.calendar-nav button:first-child, [class*="calendar"] button:has-text("<"), button[aria-label*="prev"]',
 };
 
 // Error types
