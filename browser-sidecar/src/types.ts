@@ -7,6 +7,13 @@ export const AvailabilityRequestSchema = z.object({
   serviceName: z.string().optional(),
   providerName: z.string().optional(),
   timeout: z.number().min(1000).max(60000).default(30000),
+  /**
+   * dryRun: If true, only check availability without booking (default: true)
+   * Currently, the scraper ALWAYS runs in dry-run mode (only checks availability).
+   * This flag is reserved for future functionality when actual booking is implemented.
+   * Production mode (dryRun: false) would complete the booking after deposit collection.
+   */
+  dryRun: z.boolean().optional(),
 });
 
 export type AvailabilityRequest = z.infer<typeof AvailabilityRequestSchema>;
