@@ -115,7 +115,7 @@ export class AvailabilityScraper {
 
         // For Moxie, handle the multi-step booking flow
         if (selectors.platform === 'moxie') {
-          await this.handleMoxieServiceSelection(page);
+          await this.handleMoxieServiceSelection(page, request.serviceName);
         }
 
         await this.navigateToDate(page, request.date, selectors);
@@ -174,7 +174,8 @@ export class AvailabilityScraper {
     bookingUrl: string,
     year: number,
     month: number, // 1-indexed (1 = January, 2 = February, etc.)
-    timeout: number = 60000
+    timeout: number = 60000,
+    serviceName?: string
   ): Promise<{ success: boolean; dates: string[]; error?: string }> {
     if (!this.browser) {
       throw new ScraperError('Browser not initialized', 'NOT_INITIALIZED');
@@ -213,7 +214,7 @@ export class AvailabilityScraper {
 
       // Navigate through service selection to get to calendar
       if (selectors.platform === 'moxie') {
-        await this.handleMoxieServiceSelection(page);
+        await this.handleMoxieServiceSelection(page, serviceName);
       }
 
       await this.saveDebugScreenshot(page, 'available-dates-calendar');
@@ -381,25 +382,106 @@ export class AvailabilityScraper {
   /**
    * Handle Moxie's multi-step booking flow
    */
-  private async handleMoxieServiceSelection(page: Page): Promise<void> {
-    logger.info('Handling Moxie service selection flow...');
+  private async handleMoxieServiceSelection(page: Page, serviceName?: string): Promise<void> {
+    logger.info('Handling Moxie service selection flow...', serviceName ? { requestedService: serviceName } : {});
     await this.saveDebugScreenshot(page, '01-initial-page');
 
-    // Step 1: Click on a multi-provider service (for more availability)
+    // Step 1: Click on the requested service, or fallback to multi-provider service
     let serviceClicked = false;
-    try {
-      const multiProviderElements = await page.$$('text=/\\d+\\s*providers/i');
-      logger.info(`Found ${multiProviderElements.length} elements with "X providers" text`);
+    let selectedServiceName = '';
 
-      if (multiProviderElements.length > 0) {
-        await multiProviderElements[0].click();
-        await this.delay(2000);
-        serviceClicked = true;
-        logger.info('Clicked on service with multiple providers');
-        await this.saveDebugScreenshot(page, '02-after-service-click');
+    // If specific service requested, try to find and click it
+    if (serviceName) {
+      try {
+        logger.info(`Searching for specific service: "${serviceName}"`);
+
+        // First try using the search box if available
+        const searchBox = page.locator('input[placeholder*="Search" i], input[placeholder*="search" i]').first();
+        if (await searchBox.isVisible({ timeout: 2000 })) {
+          logger.info('Using search box to find service');
+          await searchBox.fill(serviceName);
+          await this.delay(1000);
+          await this.saveDebugScreenshot(page, '01b-after-search');
+
+          // Now look for the service in the filtered results
+          // Try multiple strategies to find the service card/button
+          let serviceElement = null;
+
+          // Strategy 1: Look for exact text match in any clickable container
+          const exactMatch = page.locator(`div, button, a, [role="button"]`).filter({
+            hasText: new RegExp(`^${serviceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
+          }).first();
+
+          if (await exactMatch.isVisible({ timeout: 2000 })) {
+            serviceElement = exactMatch;
+          } else {
+            // Strategy 2: Look for partial text match
+            serviceElement = page.locator(`div, button, a`).filter({
+              hasText: new RegExp(serviceName, 'i')
+            }).first();
+          }
+
+          if (serviceElement && await serviceElement.isVisible({ timeout: 3000 })) {
+            const elementText = await serviceElement.textContent();
+            selectedServiceName = elementText?.split('\n')[0]?.trim() || serviceName;
+            await serviceElement.click();
+            await this.delay(2000);
+            serviceClicked = true;
+            logger.info(`✅ Clicked on requested service: "${selectedServiceName}"`);
+            await this.saveDebugScreenshot(page, '02-after-service-click');
+          }
+        } else {
+          // Fallback: Try to find the service by text without search
+          const serviceButton = page.locator(`button, div[role="button"], a`).filter({
+            hasText: new RegExp(serviceName, 'i')
+          }).first();
+
+          if (await serviceButton.isVisible({ timeout: 3000 })) {
+            const buttonText = await serviceButton.textContent();
+            selectedServiceName = buttonText?.trim() || serviceName;
+            await serviceButton.click();
+            await this.delay(2000);
+            serviceClicked = true;
+            logger.info(`✅ Clicked on requested service: "${selectedServiceName}"`);
+            await this.saveDebugScreenshot(page, '02-after-service-click');
+          }
+        }
+
+        if (!serviceClicked) {
+          logger.warn(`Service "${serviceName}" not found, falling back to auto-select`);
+        }
+      } catch (err) {
+        logger.warn(`Failed to find/click service "${serviceName}"`, { error: (err as Error).message });
       }
-    } catch (err) {
-      logger.warn('Failed to find/click multi-provider service', { error: (err as Error).message });
+    }
+
+    // Fallback: Click on a multi-provider service (for more availability)
+    if (!serviceClicked) {
+      try {
+        // Get all service cards/buttons
+        const serviceCards = await page.$$('div[class*="service"], button:has-text("provider")');
+
+        if (serviceCards.length > 0) {
+          // Try to extract service name from the first card
+          const firstCard = serviceCards[0];
+          const cardText = await firstCard.textContent();
+          selectedServiceName = cardText?.split('\n')[0]?.trim() || 'Unknown Service';
+
+          // Look for multi-provider indicator
+          const multiProviderElements = await page.$$('text=/\\d+\\s*providers/i');
+          logger.info(`Found ${multiProviderElements.length} elements with "X providers" text`);
+
+          if (multiProviderElements.length > 0) {
+            await multiProviderElements[0].click();
+            await this.delay(2000);
+            serviceClicked = true;
+            logger.info(`⚠️  Auto-selected first service with multiple providers: "${selectedServiceName}"`);
+            await this.saveDebugScreenshot(page, '02-after-service-click');
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to find/click multi-provider service', { error: (err as Error).message });
+      }
     }
 
     // Fallback: click any service with duration

@@ -34,6 +34,36 @@
 
 **Key files:** `internal/conversation/service.go`, `internal/conversation/llm_service.go`
 
+#### Conversation → Browser Sidecar Integration
+
+The AI conversation extracts customer preferences and passes them to the browser sidecar for availability checking:
+
+| Input from Conversation | Type | Example | Purpose |
+|------------------------|------|---------|---------|
+| `serviceName` | string | `"Ablative Erbium Laser Resurfacing"` | Exact service to book (uses search to find) |
+| `bookingUrl` | string | `"https://app.joinmoxie.com/booking/forever-22"` | Clinic's Moxie booking widget URL |
+| `date` | string (YYYY-MM-DD) | `"2026-02-19"` | Specific date to check availability |
+| Customer preferences (optional) | object | See below | Time/day filters |
+
+**Customer Preference Filters:**
+```typescript
+// Example: "I want Mondays or Thursdays, after 4pm"
+{
+  serviceName: "Ablative Erbium Laser Resurfacing",
+  daysOfWeek: [1, 4],  // 0=Sun, 1=Mon, ..., 6=Sat
+  afterTime: "16:00"   // 24-hour format
+}
+```
+
+**Typical Flow:**
+1. Customer says: "I want laser resurfacing on Mondays or Thursdays after 4pm"
+2. Conversation service extracts: `{ service: "Ablative Erbium Laser Resurfacing", days: [1,4], afterTime: "16:00" }`
+3. Call browser sidecar: `getAvailableDates(url, year, month, timeout, serviceName)`
+4. Filter results using `filterSlots(date, slots, { daysOfWeek: [1,4], afterTime: "16:00" })`
+5. Return ONLY matching times to customer via SMS
+
+**Important:** The browser sidecar currently operates in **dry-run mode only** (checks availability but does NOT book).
+
 ### Step 3: Book and Collect Deposit (if applicable)
 | Deposit Eligibility | Per-clinic configuration (admin sets which services require deposits) |
 |--------------------|-----------------------------------------------------------------------|
@@ -113,6 +143,59 @@ cd browser-sidecar && npm run test:unit
 - Case insensitive: 9:00am, 9:00AM, 9:00Am ✅
 - Invalid formats → 0 (graceful degradation) ✅
 ```
+
+**Slot Filtering (Customer Preferences):**
+
+The browser sidecar includes utilities for filtering time slots based on customer preferences:
+
+```typescript
+// Example: "Mondays through Thursdays after 3pm"
+import { filterSlots, dayNamesToNumbers } from './utils/slot-filter';
+
+const preferences = {
+  daysOfWeek: dayNamesToNumbers(['Monday', 'Tuesday', 'Wednesday', 'Thursday']),
+  afterTime: '15:00', // 3pm in 24-hour format
+};
+
+const filtered = filterSlots(date, slots, preferences);
+// Returns only slots on Mon-Thu after 3pm
+```
+
+| Filter Type | Parameter | Example | Description |
+|-------------|-----------|---------|-------------|
+| Day of week | `daysOfWeek` | `[1, 2, 3, 4]` | Mon=1, Tue=2, ..., Sun=0 |
+| After time | `afterTime` | `"15:00"` | Only times at or after 3pm |
+| Before time | `beforeTime` | `"17:00"` | Only times before 5pm |
+| Combined | Both | See above | Apply day AND time filters |
+
+**Common Preferences (Pre-configured):**
+- `weekdays`: Monday-Friday only
+- `weekends`: Saturday-Sunday only
+- `businessHours`: 9am-5pm
+- `afterWork`: After 5pm
+- `morningOnly`: Before noon
+- `afternoonOnly`: After noon
+
+**Dry Run Mode:**
+
+```typescript
+{
+  "dryRun": true  // Default: only check availability, do NOT book
+}
+```
+
+**IMPORTANT:** The browser sidecar currently **ALWAYS** operates in dry-run mode (availability check only). It does NOT complete bookings. The `dryRun` flag is reserved for future functionality:
+
+- `dryRun: true` (current behavior): Navigate → Select service → Select provider → Extract time slots → STOP
+- `dryRun: false` (future): Complete the above + Fill patient info + Submit booking form
+
+**Real-World Testing:**
+
+The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
+- URL: `https://app.joinmoxie.com/booking/forever-22`
+- Successfully extracted 12 available dates for February 2026
+- Successfully extracted 6 time slots (9:30am - 1:30pm range)
+- Confirmed NO BOOKING was made (dry-run verification)
 
 ---
 
