@@ -1,0 +1,57 @@
+# Dependencies
+**/node_modules
+
+# Build outputs
+**/dist
+**/build
+
+# Infrastructure
+**/.terraform
+*.lock.hcl
+**/.terraform.lock.hcl
+
+# Debug screenshots and images (browser-sidecar)
+**/debug-screenshots
+**/screenshots
+**/test-results
+**/playwright-report
+
+# All image files (these overwhelm context)
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.bmp
+**/*.ico
+**/*.svg
+
+# Coverage and caches
+**/coverage
+**/.nyc_output
+**/*.tsbuildinfo
+**/.cache
+
+# Logs
+**/*.log
+**/npm-debug.log*
+
+# Environment and secrets
+**/.env
+**/.env.*
+
+# IDE and OS
+**/.idea
+**/.vscode
+**/.DS_Store
+**/Thumbs.db
+
+# Git
+**/.git
+
+# Go vendor (if any)
+**/vendor
+
+# Temp files
+**/tmp
+**/temp
