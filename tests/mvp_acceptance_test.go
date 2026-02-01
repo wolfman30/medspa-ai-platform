@@ -207,7 +207,7 @@ func TestMVP_PaymentWebhookUpdatesStatus(t *testing.T) {
 func TestMVP_RequiredDocumentation(t *testing.T) {
 	docs := []string{
 		"../README.md",
-		"../docs/MVP_STATUS.md",
+		"../CLAUDE.md",
 	}
 
 	for _, doc := range docs {
