@@ -20,11 +20,28 @@ type SchedulingPreferences struct {
 	Notes           string // free-form notes from conversation
 }
 
+// SelectedAppointment captures the specific time slot selected by the lead
+type SelectedAppointment struct {
+	DateTime *time.Time // The specific date/time selected
+	Service  string     // The specific service selected
+}
+
 // ListLeadsFilter defines filtering options for listing leads
 type ListLeadsFilter struct {
 	DepositStatus string // "pending", "paid", "failed", or "" for all
 	Limit         int    // max results, default 50
 	Offset        int    // pagination offset
+}
+
+// BookingSessionUpdate contains booking session fields to update
+type BookingSessionUpdate struct {
+	SessionID          string
+	Platform           string
+	Outcome            string
+	ConfirmationNumber string
+	HandoffURL         string
+	HandoffSentAt      *time.Time
+	CompletedAt        *time.Time
 }
 
 // Repository defines the interface for lead storage
@@ -33,7 +50,9 @@ type Repository interface {
 	GetByID(ctx context.Context, orgID string, id string) (*Lead, error)
 	GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*Lead, error)
 	UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error
+	UpdateSelectedAppointment(ctx context.Context, leadID string, appt SelectedAppointment) error
 	UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error
+	UpdateBookingSession(ctx context.Context, leadID string, update BookingSessionUpdate) error
 	ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error)
 }
 
@@ -164,6 +183,23 @@ func (r *InMemoryRepository) UpdateSchedulingPreferences(ctx context.Context, le
 	return nil
 }
 
+// UpdateSelectedAppointment updates a lead's selected appointment time
+func (r *InMemoryRepository) UpdateSelectedAppointment(ctx context.Context, leadID string, appt SelectedAppointment) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lead, ok := r.leads[leadID]
+	if !ok {
+		return ErrLeadNotFound
+	}
+
+	lead.SelectedDateTime = appt.DateTime
+	if appt.Service != "" {
+		lead.SelectedService = appt.Service
+	}
+	return nil
+}
+
 // UpdateDepositStatus updates a lead's deposit status and priority
 func (r *InMemoryRepository) UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error {
 	r.mu.Lock()
@@ -176,6 +212,40 @@ func (r *InMemoryRepository) UpdateDepositStatus(ctx context.Context, leadID str
 
 	lead.DepositStatus = status
 	lead.PriorityLevel = priority
+	return nil
+}
+
+// UpdateBookingSession updates a lead's booking session state
+func (r *InMemoryRepository) UpdateBookingSession(ctx context.Context, leadID string, update BookingSessionUpdate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lead, ok := r.leads[leadID]
+	if !ok {
+		return ErrLeadNotFound
+	}
+
+	if update.SessionID != "" {
+		lead.BookingSessionID = update.SessionID
+	}
+	if update.Platform != "" {
+		lead.BookingPlatform = update.Platform
+	}
+	if update.Outcome != "" {
+		lead.BookingOutcome = update.Outcome
+	}
+	if update.ConfirmationNumber != "" {
+		lead.BookingConfirmationNumber = update.ConfirmationNumber
+	}
+	if update.HandoffURL != "" {
+		lead.BookingHandoffURL = update.HandoffURL
+	}
+	if update.HandoffSentAt != nil {
+		lead.BookingHandoffSentAt = update.HandoffSentAt
+	}
+	if update.CompletedAt != nil {
+		lead.BookingCompletedAt = update.CompletedAt
+	}
 	return nil
 }
 

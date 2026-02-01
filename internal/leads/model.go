@@ -25,6 +25,19 @@ type Lead struct {
 	SchedulingNotes string `json:"scheduling_notes,omitempty"` // free-form notes from conversation
 	DepositStatus   string `json:"deposit_status,omitempty"`   // "pending", "paid", "refunded"
 	PriorityLevel   string `json:"priority_level,omitempty"`   // "normal", "priority" (deposit paid)
+
+	// Selected appointment (set when lead picks a specific time slot)
+	SelectedDateTime *time.Time `json:"selected_datetime,omitempty"` // The specific date/time the lead selected
+	SelectedService  string     `json:"selected_service,omitempty"`  // The specific service selected for booking
+
+	// Booking session state (for Moxie-based booking)
+	BookingSessionID         string     `json:"booking_session_id,omitempty"`          // Sidecar booking session ID
+	BookingPlatform          string     `json:"booking_platform,omitempty"`            // "moxie" or "square"
+	BookingOutcome           string     `json:"booking_outcome,omitempty"`             // "success", "payment_failed", "timeout", "cancelled", "error"
+	BookingConfirmationNumber string    `json:"booking_confirmation_number,omitempty"` // Confirmation number from Moxie
+	BookingHandoffURL        string     `json:"booking_handoff_url,omitempty"`         // URL sent to lead for Step 5
+	BookingHandoffSentAt     *time.Time `json:"booking_handoff_sent_at,omitempty"`     // When the handoff URL was sent
+	BookingCompletedAt       *time.Time `json:"booking_completed_at,omitempty"`        // When booking was completed/failed
 }
 
 // CreateLeadRequest represents the request body for creating a lead

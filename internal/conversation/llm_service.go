@@ -1022,6 +1022,44 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		return nil, err
 	}
 
+	// Check for time selection state (user may be selecting a time slot)
+	timeSelectionState, tsErr := s.history.LoadTimeSelectionState(ctx, req.ConversationID)
+	if tsErr != nil {
+		s.logger.Warn("failed to load time selection state", "error", tsErr)
+	}
+
+	// Handle time selection if user is in that flow
+	var timeSelectionResponse *TimeSelectionResponse
+	if timeSelectionState != nil && len(timeSelectionState.PresentedSlots) > 0 {
+		// User may be selecting a time slot
+		selectedSlot := DetectTimeSelection(rawMessage, timeSelectionState.PresentedSlots)
+		if selectedSlot != nil {
+			s.logger.Info("time slot selected",
+				"slot_index", selectedSlot.Index,
+				"time", selectedSlot.DateTime,
+				"service", timeSelectionState.Service,
+			)
+
+			// Store the selected appointment in the lead
+			if req.LeadID != "" && s.leadsRepo != nil {
+				if err := s.leadsRepo.UpdateSelectedAppointment(ctx, req.LeadID, leads.SelectedAppointment{
+					DateTime: &selectedSlot.DateTime,
+					Service:  timeSelectionState.Service,
+				}); err != nil {
+					s.logger.Warn("failed to save selected appointment", "lead_id", req.LeadID, "error", err)
+				}
+			}
+
+			// Clear the time selection state
+			if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, nil); err != nil {
+				s.logger.Warn("failed to clear time selection state", "error", err)
+			}
+
+			// The confirmation message will be returned in the reply
+			// The deposit will be triggered via the deposit intent below
+		}
+	}
+
 	var depositIntent *DepositIntent
 	if latestTurnAgreedToDeposit(history) {
 		// Deterministic fallback: if the user explicitly agrees to a deposit in their message,
@@ -1057,9 +1095,14 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	}
 
 	// Enforce clinic-configured deposit amounts (override LLM amounts when a rule exists).
+	// Also skip Square deposit if clinic uses Moxie booking.
 	if depositIntent != nil && s.clinicStore != nil && req.OrgID != "" {
 		if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
-			if prefs, ok := extractPreferences(history); ok && prefs.ServiceInterest != "" {
+			// Skip Square deposit if clinic uses Moxie - booking will be handled by browser sidecar
+			if cfg.UsesMoxieBooking() {
+				s.logger.Info("clinic uses Moxie booking - skipping Square deposit intent", "org_id", req.OrgID)
+				depositIntent = nil
+			} else if prefs, ok := extractPreferences(history); ok && prefs.ServiceInterest != "" {
 				if amount := cfg.DepositAmountForService(prefs.ServiceInterest); amount > 0 {
 					depositIntent.AmountCents = int32(amount)
 				}
@@ -1067,11 +1110,65 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
+	// Check if we should trigger time selection before deposit
+	// Only if: deposit intent exists, browser adapter configured, no time selection done, all qualifications met
+	if depositIntent != nil && s.browser != nil && s.browser.IsConfigured() && timeSelectionState == nil {
+		if ShouldFetchAvailability(history, nil) {
+			// Get clinic config for booking URL
+			var bookingURL string
+			if s.clinicStore != nil && req.OrgID != "" {
+				if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
+					bookingURL = cfg.BookingURL
+				}
+			}
+
+			if bookingURL != "" {
+				// Extract service and time preferences
+				prefs, _ := extractPreferences(history)
+				timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
+
+				// Fetch available times
+				slots, err := FetchAvailableTimes(ctx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
+				if err != nil {
+					s.logger.Warn("failed to fetch available times", "error", err)
+				} else if len(slots) > 0 {
+					// Save time selection state
+					state := &TimeSelectionState{
+						PresentedSlots: slots,
+						Service:        prefs.ServiceInterest,
+						BookingURL:     bookingURL,
+						PresentedAt:    time.Now(),
+					}
+					if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, state); err != nil {
+						s.logger.Warn("failed to save time selection state", "error", err)
+					}
+
+					// Return time selection response instead of deposit intent
+					timeSelectionResponse = &TimeSelectionResponse{
+						Slots:      slots,
+						Service:    prefs.ServiceInterest,
+						ExactMatch: len(timePrefs.DaysOfWeek) > 0 || timePrefs.AfterTime != "" || timePrefs.BeforeTime != "",
+						SMSMessage: FormatTimeSlotsForSMS(slots, prefs.ServiceInterest, true),
+					}
+
+					s.logger.Info("triggering time selection flow",
+						"service", prefs.ServiceInterest,
+						"slots", len(slots),
+					)
+
+					// Clear deposit intent - time selection must happen first
+					depositIntent = nil
+				}
+			}
+		}
+	}
+
 	return &Response{
-		ConversationID: req.ConversationID,
-		Message:        reply,
-		Timestamp:      time.Now().UTC(),
-		DepositIntent:  depositIntent,
+		ConversationID:        req.ConversationID,
+		Message:               reply,
+		Timestamp:             time.Now().UTC(),
+		DepositIntent:         depositIntent,
+		TimeSelectionResponse: timeSelectionResponse,
 	}, nil
 }
 

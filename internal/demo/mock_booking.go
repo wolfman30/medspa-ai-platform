@@ -935,6 +935,7 @@ const mockMoxieBookingHTML = `<!DOCTYPE html>
         <div class="progress-step" data-step="3"></div>
         <div class="progress-step" data-step="4"></div>
         <div class="progress-step" data-step="5"></div>
+        <div class="progress-step" data-step="6"></div>
       </div>
 
       <!-- Step 1: Select Services -->
@@ -1077,12 +1078,71 @@ const mockMoxieBookingHTML = `<!DOCTYPE html>
 
         <div class="step-footer">
           <div class="moxie-powered">Powered by Moxie</div>
-          <button class="btn btn-primary" onclick="completeBooking()">Next</button>
+          <button class="btn btn-primary" onclick="goToStep(5)">Next</button>
         </div>
       </div>
 
-      <!-- Step 5: Success -->
+      <!-- Step 5: Payment -->
       <div class="step" id="step5">
+        <div class="step-header">
+          <span class="back-link" onclick="goToStep(4)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m15 18-6-6 6-6"/>
+            </svg>
+            Back
+          </span>
+          <div class="step-label">Step 5</div>
+          <h1 class="step-title">Payment</h1>
+        </div>
+
+        <p style="color: var(--text-muted); margin-bottom: 24px;">Enter your card details to secure your appointment</p>
+
+        <div class="payment-summary" style="background: var(--bg); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>Deposit for appointment</span>
+            <span style="font-weight: 600;">$50.00</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted);">
+            This deposit will be applied to your service total
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Card number</label>
+          <input type="text" class="form-input" id="cardNumber" placeholder="4111 1111 1111 1111" maxlength="19">
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            Test cards: 4111... = success, 4000000000000002 = declined
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Expiry date</label>
+            <input type="text" class="form-input" id="cardExpiry" placeholder="MM/YY" maxlength="5">
+          </div>
+          <div class="form-group">
+            <label class="form-label">CVV</label>
+            <input type="text" class="form-input" id="cardCvv" placeholder="123" maxlength="4">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Name on card</label>
+          <input type="text" class="form-input" id="cardName" placeholder="John Smith">
+        </div>
+
+        <div id="paymentError" style="display: none; background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+          <strong>Payment Failed:</strong> <span id="paymentErrorMsg">Your card was declined</span>
+        </div>
+
+        <div class="step-footer">
+          <div class="moxie-powered">Powered by Moxie</div>
+          <button class="btn btn-primary" id="bookAppointmentBtn" onclick="processPayment()">Book Appointment</button>
+        </div>
+      </div>
+
+      <!-- Step 6: Success -->
+      <div class="step" id="step6">
         <div class="success-screen">
           <div class="success-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1091,6 +1151,11 @@ const mockMoxieBookingHTML = `<!DOCTYPE html>
           </div>
           <h1 class="success-title">Booking Confirmed!</h1>
           <p class="success-message">Your appointment has been scheduled. You'll receive a confirmation via SMS and email.</p>
+
+          <div class="confirmation-number" style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: center;">
+            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Confirmation Number</div>
+            <div id="confirmationNumber" style="font-size: 24px; font-weight: 700; font-family: monospace;">MXE-2026-XXXXX</div>
+          </div>
 
           <div style="background: var(--bg); border-radius: 8px; padding: 20px; text-align: left; max-width: 400px; margin: 0 auto;">
             <div style="margin-bottom: 12px;">
@@ -1584,7 +1649,60 @@ const mockMoxieBookingHTML = `<!DOCTYPE html>
         }
       }
 
-      goToStep(5);
+      // Generate confirmation number
+      const confirmNum = 'MXE-' + new Date().getFullYear() + '-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+      document.getElementById('confirmationNumber').textContent = confirmNum;
+
+      goToStep(6);
+    }
+
+    // Process payment (simulated)
+    function processPayment() {
+      const cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
+      const errorDiv = document.getElementById('paymentError');
+      const errorMsg = document.getElementById('paymentErrorMsg');
+      const bookBtn = document.getElementById('bookAppointmentBtn');
+
+      // Hide any previous error
+      errorDiv.style.display = 'none';
+
+      // Disable button and show loading
+      bookBtn.disabled = true;
+      bookBtn.textContent = 'Processing...';
+
+      // Simulate payment processing delay
+      setTimeout(() => {
+        // Test card numbers for different outcomes
+        if (cardNumber === '4000000000000002') {
+          // Declined card
+          errorMsg.textContent = 'Your card was declined. Please try a different card.';
+          errorDiv.style.display = 'block';
+          bookBtn.disabled = false;
+          bookBtn.textContent = 'Book Appointment';
+          return;
+        }
+
+        if (cardNumber === '4000000000000069') {
+          // Expired card
+          errorMsg.textContent = 'Your card has expired. Please use a valid card.';
+          errorDiv.style.display = 'block';
+          bookBtn.disabled = false;
+          bookBtn.textContent = 'Book Appointment';
+          return;
+        }
+
+        if (cardNumber === '4000000000000127') {
+          // Incorrect CVV
+          errorMsg.textContent = 'Incorrect CVV. Please check your card details.';
+          errorDiv.style.display = 'block';
+          bookBtn.disabled = false;
+          bookBtn.textContent = 'Book Appointment';
+          return;
+        }
+
+        // Success - complete the booking
+        completeBooking();
+      }, 1500); // 1.5 second delay to simulate processing
     }
 
     // Initialize

@@ -1,6 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { getScraper, closeScraper } from './scraper';
-import { AvailabilityRequestSchema, HealthResponse, AvailabilityResponse } from './types';
+import { getSessionManager, closeSessionManager } from './booking-session';
+import {
+  AvailabilityRequestSchema,
+  BookingStartRequestSchema,
+  HealthResponse,
+  AvailabilityResponse,
+} from './types';
 import logger from './logger';
 import { ZodError } from 'zod';
 
@@ -157,6 +163,156 @@ app.post('/api/v1/availability/batch', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// BOOKING SESSION ENDPOINTS
+// ============================================================================
+
+// Start a new booking session
+app.post('/api/v1/booking/start', async (req: Request, res: Response) => {
+  try {
+    const validatedRequest = BookingStartRequestSchema.parse(req.body);
+
+    logger.info('Booking session start request', {
+      url: validatedRequest.bookingUrl,
+      date: validatedRequest.date,
+      time: validatedRequest.time,
+    });
+
+    const sessionManager = await getSessionManager();
+    const result = await sessionManager.startSession(validatedRequest);
+
+    if (result.success) {
+      res.status(201).json(result);
+    } else {
+      res.status(400).json(result);
+    }
+
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn('Invalid booking request', { errors: error.errors });
+      res.status(400).json({
+        success: false,
+        error: 'Invalid request',
+        details: error.errors,
+      });
+      return;
+    }
+
+    logger.error('Booking start failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+// Get handoff URL for a booking session
+app.get('/api/v1/booking/:sessionId/handoff-url', async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+
+    const sessionManager = await getSessionManager();
+    const result = await sessionManager.getHandoffUrl(sessionId);
+
+    if (result.success) {
+      res.json(result);
+    } else if (result.error === 'Session not found') {
+      res.status(404).json(result);
+    } else {
+      res.status(400).json(result);
+    }
+
+  } catch (error) {
+    logger.error('Get handoff URL failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+// Get booking session status
+app.get('/api/v1/booking/:sessionId/status', async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+
+    const sessionManager = await getSessionManager();
+    const result = sessionManager.getSessionStatus(sessionId);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(404).json(result);
+    }
+
+  } catch (error) {
+    logger.error('Get session status failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+// Cancel a booking session
+app.delete('/api/v1/booking/:sessionId', async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+
+    const sessionManager = await getSessionManager();
+    const cancelled = await sessionManager.cancelSession(sessionId);
+
+    if (cancelled) {
+      res.json({ success: true, sessionId, message: 'Session cancelled' });
+    } else {
+      res.status(404).json({ success: false, error: 'Session not found' });
+    }
+
+  } catch (error) {
+    logger.error('Cancel session failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+// List all booking sessions (for debugging)
+app.get('/api/v1/booking/sessions', async (_req: Request, res: Response) => {
+  try {
+    const sessionManager = await getSessionManager();
+    const sessions = sessionManager.listSessions();
+
+    res.json({
+      success: true,
+      activeCount: sessionManager.getActiveSessionCount(),
+      sessions,
+    });
+
+  } catch (error) {
+    logger.error('List sessions failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
@@ -169,7 +325,10 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // Graceful shutdown handler
 async function shutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}, shutting down gracefully...`);
-  await closeScraper();
+  await Promise.all([
+    closeScraper(),
+    closeSessionManager(),
+  ]);
   process.exit(0);
 }
 
