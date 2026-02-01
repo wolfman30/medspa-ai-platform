@@ -31,13 +31,13 @@ type Lead struct {
 	SelectedService  string     `json:"selected_service,omitempty"`  // The specific service selected for booking
 
 	// Booking session state (for Moxie-based booking)
-	BookingSessionID         string     `json:"booking_session_id,omitempty"`          // Sidecar booking session ID
-	BookingPlatform          string     `json:"booking_platform,omitempty"`            // "moxie" or "square"
-	BookingOutcome           string     `json:"booking_outcome,omitempty"`             // "success", "payment_failed", "timeout", "cancelled", "error"
-	BookingConfirmationNumber string    `json:"booking_confirmation_number,omitempty"` // Confirmation number from Moxie
-	BookingHandoffURL        string     `json:"booking_handoff_url,omitempty"`         // URL sent to lead for Step 5
-	BookingHandoffSentAt     *time.Time `json:"booking_handoff_sent_at,omitempty"`     // When the handoff URL was sent
-	BookingCompletedAt       *time.Time `json:"booking_completed_at,omitempty"`        // When booking was completed/failed
+	BookingSessionID          string     `json:"booking_session_id,omitempty"`          // Sidecar booking session ID
+	BookingPlatform           string     `json:"booking_platform,omitempty"`            // "moxie" or "square"
+	BookingOutcome            string     `json:"booking_outcome,omitempty"`             // "success", "payment_failed", "timeout", "cancelled", "error"
+	BookingConfirmationNumber string     `json:"booking_confirmation_number,omitempty"` // Confirmation number from Moxie
+	BookingHandoffURL         string     `json:"booking_handoff_url,omitempty"`         // URL sent to lead for Step 5
+	BookingHandoffSentAt      *time.Time `json:"booking_handoff_sent_at,omitempty"`     // When the handoff URL was sent
+	BookingCompletedAt        *time.Time `json:"booking_completed_at,omitempty"`        // When booking was completed/failed
 }
 
 // CreateLeadRequest represents the request body for creating a lead
