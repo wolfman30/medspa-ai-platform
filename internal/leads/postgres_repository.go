@@ -72,7 +72,16 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		       COALESCE(preferred_times, '') as preferred_times,
 		       COALESCE(scheduling_notes, '') as scheduling_notes,
 		       COALESCE(deposit_status, '') as deposit_status,
-		       COALESCE(priority_level, '') as priority_level
+		       COALESCE(priority_level, '') as priority_level,
+		       selected_datetime,
+		       COALESCE(selected_service, '') as selected_service,
+		       COALESCE(booking_session_id, '') as booking_session_id,
+		       COALESCE(booking_platform, '') as booking_platform,
+		       COALESCE(booking_outcome, '') as booking_outcome,
+		       COALESCE(booking_confirmation_number, '') as booking_confirmation_number,
+		       COALESCE(booking_handoff_url, '') as booking_handoff_url,
+		       booking_handoff_sent_at,
+		       booking_completed_at
 		FROM leads
 		WHERE id = $1 AND org_id = $2
 	`
@@ -95,6 +104,15 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		&lead.SchedulingNotes,
 		&lead.DepositStatus,
 		&lead.PriorityLevel,
+		&lead.SelectedDateTime,
+		&lead.SelectedService,
+		&lead.BookingSessionID,
+		&lead.BookingPlatform,
+		&lead.BookingOutcome,
+		&lead.BookingConfirmationNumber,
+		&lead.BookingHandoffURL,
+		&lead.BookingHandoffSentAt,
+		&lead.BookingCompletedAt,
 	); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrLeadNotFound
@@ -120,7 +138,16 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		       COALESCE(preferred_times, '') as preferred_times,
 		       COALESCE(scheduling_notes, '') as scheduling_notes,
 		       COALESCE(deposit_status, '') as deposit_status,
-		       COALESCE(priority_level, '') as priority_level
+		       COALESCE(priority_level, '') as priority_level,
+		       selected_datetime,
+		       COALESCE(selected_service, '') as selected_service,
+		       COALESCE(booking_session_id, '') as booking_session_id,
+		       COALESCE(booking_platform, '') as booking_platform,
+		       COALESCE(booking_outcome, '') as booking_outcome,
+		       COALESCE(booking_confirmation_number, '') as booking_confirmation_number,
+		       COALESCE(booking_handoff_url, '') as booking_handoff_url,
+		       booking_handoff_sent_at,
+		       booking_completed_at
 		FROM leads
 		WHERE org_id = $1 AND phone = $2
 		ORDER BY created_at DESC
@@ -144,6 +171,15 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		&lead.SchedulingNotes,
 		&lead.DepositStatus,
 		&lead.PriorityLevel,
+		&lead.SelectedDateTime,
+		&lead.SelectedService,
+		&lead.BookingSessionID,
+		&lead.BookingPlatform,
+		&lead.BookingOutcome,
+		&lead.BookingConfirmationNumber,
+		&lead.BookingHandoffURL,
+		&lead.BookingHandoffSentAt,
+		&lead.BookingCompletedAt,
 	); err == nil {
 		return &lead, nil
 	} else if err != pgx.ErrNoRows {
@@ -213,6 +249,24 @@ func (r *PostgresRepository) UpdateDepositStatus(ctx context.Context, leadID str
 	return nil
 }
 
+// UpdateSelectedAppointment updates a lead's selected appointment time and service
+func (r *PostgresRepository) UpdateSelectedAppointment(ctx context.Context, leadID string, appt SelectedAppointment) error {
+	query := `
+		UPDATE leads
+		SET selected_datetime = $2,
+		    selected_service = COALESCE(NULLIF($3, ''), selected_service)
+		WHERE id = $1
+	`
+	result, err := r.pool.Exec(ctx, query, leadID, appt.DateTime, appt.Service)
+	if err != nil {
+		return fmt.Errorf("leads: update selected appointment failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrLeadNotFound
+	}
+	return nil
+}
+
 // ListByOrg retrieves leads for an organization with optional filtering
 func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error) {
 	// Build query with optional filter
@@ -225,7 +279,16 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 		       COALESCE(preferred_times, '') as preferred_times,
 		       COALESCE(scheduling_notes, '') as scheduling_notes,
 		       COALESCE(deposit_status, '') as deposit_status,
-		       COALESCE(priority_level, '') as priority_level
+		       COALESCE(priority_level, '') as priority_level,
+		       selected_datetime,
+		       COALESCE(selected_service, '') as selected_service,
+		       COALESCE(booking_session_id, '') as booking_session_id,
+		       COALESCE(booking_platform, '') as booking_platform,
+		       COALESCE(booking_outcome, '') as booking_outcome,
+		       COALESCE(booking_confirmation_number, '') as booking_confirmation_number,
+		       COALESCE(booking_handoff_url, '') as booking_handoff_url,
+		       booking_handoff_sent_at,
+		       booking_completed_at
 		FROM leads
 		WHERE org_id = $1
 	`
@@ -279,6 +342,15 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 			&lead.SchedulingNotes,
 			&lead.DepositStatus,
 			&lead.PriorityLevel,
+			&lead.SelectedDateTime,
+			&lead.SelectedService,
+			&lead.BookingSessionID,
+			&lead.BookingPlatform,
+			&lead.BookingOutcome,
+			&lead.BookingConfirmationNumber,
+			&lead.BookingHandoffURL,
+			&lead.BookingHandoffSentAt,
+			&lead.BookingCompletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("leads: scan failed: %w", err)
 		}
@@ -290,4 +362,36 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 	}
 
 	return results, nil
+}
+
+// UpdateBookingSession updates a lead's booking session state
+func (r *PostgresRepository) UpdateBookingSession(ctx context.Context, leadID string, update BookingSessionUpdate) error {
+	query := `
+		UPDATE leads
+		SET booking_session_id = COALESCE(NULLIF($2, ''), booking_session_id),
+		    booking_platform = COALESCE(NULLIF($3, ''), booking_platform),
+		    booking_outcome = COALESCE(NULLIF($4, ''), booking_outcome),
+		    booking_confirmation_number = COALESCE(NULLIF($5, ''), booking_confirmation_number),
+		    booking_handoff_url = COALESCE(NULLIF($6, ''), booking_handoff_url),
+		    booking_handoff_sent_at = COALESCE($7, booking_handoff_sent_at),
+		    booking_completed_at = COALESCE($8, booking_completed_at)
+		WHERE id = $1
+	`
+	result, err := r.pool.Exec(ctx, query,
+		leadID,
+		update.SessionID,
+		update.Platform,
+		update.Outcome,
+		update.ConfirmationNumber,
+		update.HandoffURL,
+		update.HandoffSentAt,
+		update.CompletedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("leads: update booking session failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrLeadNotFound
+	}
+	return nil
 }

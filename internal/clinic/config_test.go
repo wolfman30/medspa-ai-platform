@@ -128,3 +128,74 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestUsesMoxieBooking(t *testing.T) {
+	tests := []struct {
+		name            string
+		bookingPlatform string
+		wantMoxie       bool
+		wantSquare      bool
+	}{
+		{
+			name:            "empty platform defaults to Square",
+			bookingPlatform: "",
+			wantMoxie:       false,
+			wantSquare:      true,
+		},
+		{
+			name:            "moxie platform",
+			bookingPlatform: "moxie",
+			wantMoxie:       true,
+			wantSquare:      false,
+		},
+		{
+			name:            "Moxie platform (uppercase)",
+			bookingPlatform: "Moxie",
+			wantMoxie:       true,
+			wantSquare:      false,
+		},
+		{
+			name:            "MOXIE platform (all caps)",
+			bookingPlatform: "MOXIE",
+			wantMoxie:       true,
+			wantSquare:      false,
+		},
+		{
+			name:            "square platform",
+			bookingPlatform: "square",
+			wantMoxie:       false,
+			wantSquare:      true,
+		},
+		{
+			name:            "Square platform (capitalized)",
+			bookingPlatform: "Square",
+			wantMoxie:       false,
+			wantSquare:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig("test-org")
+			cfg.BookingPlatform = tt.bookingPlatform
+
+			if got := cfg.UsesMoxieBooking(); got != tt.wantMoxie {
+				t.Errorf("UsesMoxieBooking() = %v, want %v", got, tt.wantMoxie)
+			}
+			if got := cfg.UsesSquarePayment(); got != tt.wantSquare {
+				t.Errorf("UsesSquarePayment() = %v, want %v", got, tt.wantSquare)
+			}
+		})
+	}
+}
+
+func TestUsesMoxieBooking_NilConfig(t *testing.T) {
+	var cfg *Config = nil
+
+	if cfg.UsesMoxieBooking() {
+		t.Error("expected nil config to return false for UsesMoxieBooking()")
+	}
+	if !cfg.UsesSquarePayment() {
+		t.Error("expected nil config to return true for UsesSquarePayment()")
+	}
+}
