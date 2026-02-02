@@ -92,4 +92,5 @@ nul
 browser-sidecar/debug-screenshots/
 
 package-lock.json
+!browser-sidecar/package-lock.json
 CLAUDE.md
