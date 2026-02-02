@@ -178,3 +178,9 @@ variable "cognito_region" {
   type        = string
   default     = ""
 }
+
+variable "enable_browser_sidecar" {
+  description = "Enable the browser sidecar container for booking availability scraping (Moxie integration)"
+  type        = bool
+  default     = false
+}
