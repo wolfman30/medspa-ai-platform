@@ -387,7 +387,8 @@ func FormatTimeSelectionConfirmation(selectedTime time.Time, service string, dep
 }
 
 // ShouldFetchAvailability checks if we have all required info to fetch availability.
-// Returns true if we have: name, email, service, time preferences, and patient type.
+// Returns true if we have: name, service, time preferences, and patient type.
+// Note: Email is NOT required here - for Moxie clinics, email is collected on the booking page.
 func ShouldFetchAvailability(history []ChatMessage, lead interface{}) bool {
 	prefs, ok := extractPreferences(history)
 	if !ok {
@@ -414,11 +415,6 @@ func ShouldFetchAvailability(history []ChatMessage, lead interface{}) bool {
 		return false
 	}
 
-	// Check for email in history
-	email := ExtractEmailFromHistory(history)
-	if email == "" {
-		return false
-	}
-
+	// Email is collected on the Moxie booking page, not via SMS
 	return true
 }
