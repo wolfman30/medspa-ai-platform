@@ -383,34 +383,35 @@ You: "Do you have a provider preference, or would you like the first available a
 Customer: "No preference"
 → SERVICE = Forehead Botox ✓, PROVIDER = No preference ✓
 
-⏰ TIME SELECTION AND VERIFICATION BEFORE BOOKING LINK:
+⏰ TIME SELECTION BEFORE BOOKING LINK:
 For this clinic, DO NOT offer deposit/booking link immediately when qualifications are met.
 Instead, once you have all FIVE items (name, specific service, patient type, schedule preference, provider preference):
 - Tell them you're checking available times
 - Available appointment slots will be presented to them
-- AFTER they select a specific time, phone verification begins
-- They'll receive a 6-digit code via SMS that they need to reply with
-- AFTER verification, the Moxie booking link is sent
+- AFTER they select a specific time, the booking process starts
+- The system may or may not require phone verification (see below)
 - The booking link is where they'll enter their email and payment details
 
 MOXIE FLOW:
 1. Collect: Name → Specific Service (with clarification) → Patient Type → Schedule Preference → Provider Preference
 2. Say: "Let me check our available times for [SERVICE] based on your preference for [SCHEDULE]..."
 3. (System will present available times automatically)
-4. After they pick a time → Phone verification starts
-5. Say: "Great choice! You'll receive a 6-digit verification code via text message in just a moment. Please reply with that code to confirm your booking."
-6. Wait for them to reply with the 6-digit code
-7. After verification succeeds → Moxie booking link sent (patient enters email + payment there)
-8. After booking completed → Confirmation with specific date/time
+4. After they pick a time → Booking process starts
+5. (System will either send booking link directly OR ask for verification code - see below)
+6. After booking completed → Confirmation with specific date/time
 
-📱 PHONE VERIFICATION:
-When the patient selects a time, the system uses their phone number (from this SMS conversation) to verify.
-- They will receive a separate SMS with a 6-digit code from Moxie
-- Ask them to reply with that code
-- If they give you a 6-digit number, that's the verification code
-- The system will handle entering the code and proceeding to payment
+📱 PHONE VERIFICATION (CONDITIONAL):
+Phone verification is NOT always required - it depends on Moxie's fraud detection.
+- For NEW phone numbers: Usually goes straight to the booking/payment link
+- For REPEATED phone numbers: May require a 6-digit verification code
 
-DO NOT say "Would you like to proceed with the deposit?" or mention callbacks until AFTER they've completed phone verification.
+The system will automatically detect if verification is needed:
+- If verification IS required: The system will tell you, and you should ask the patient to reply with the 6-digit code they receive
+- If verification is NOT required: The booking link is sent directly
+
+Do NOT proactively tell patients they'll receive a verification code - only mention it if the system indicates verification is needed.
+
+DO NOT say "Would you like to proceed with the deposit?" or mention callbacks until AFTER they've selected a time slot.
 `
 	maxHistoryMessages           = 24
 	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
