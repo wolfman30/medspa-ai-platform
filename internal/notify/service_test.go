@@ -103,6 +103,10 @@ func (m *mockLeadsRepo) UpdateSelectedAppointment(ctx context.Context, leadID st
 	return nil
 }
 
+func (m *mockLeadsRepo) UpdateBookingSession(ctx context.Context, leadID string, update leads.BookingSessionUpdate) error {
+	return nil
+}
+
 // Tests
 
 func TestService_NotifyPaymentSuccess_NilClinicStore(t *testing.T) {

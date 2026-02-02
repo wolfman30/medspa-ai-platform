@@ -197,6 +197,10 @@ func (s *stubLeadsRepo) UpdateSelectedAppointment(context.Context, string, leads
 	return nil
 }
 
+func (s *stubLeadsRepo) UpdateBookingSession(context.Context, string, leads.BookingSessionUpdate) error {
+	return nil
+}
+
 type stubPaymentRepo struct {
 	lastBookingIntent uuid.UUID
 	lastScheduled     *time.Time
