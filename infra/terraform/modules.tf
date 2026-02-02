@@ -61,6 +61,9 @@ module "ecs_fargate" {
   deployment_minimum_healthy_percent       = var.deployment_minimum_healthy_percent
   deployment_maximum_percent               = var.deployment_maximum_percent
 
+  # Browser sidecar for Moxie booking availability scraping
+  enable_browser_sidecar = var.enable_browser_sidecar
+
   environment_variables = {
     LOG_LEVEL                    = "info"
     USE_MEMORY_QUEUE             = "true"

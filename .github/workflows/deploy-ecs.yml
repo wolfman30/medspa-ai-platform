@@ -150,7 +150,8 @@ jobs:
             -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
-            -var="enable_blue_green=true"
+            -var="enable_blue_green=true" \
+            -var="enable_browser_sidecar=true"
 
       - name: Login to ECR
         run: |
@@ -176,6 +177,13 @@ jobs:
           IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-voice-lambda:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Build & push browser-sidecar image
+        env:
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-browser-sidecar:${{ steps.image_tag.outputs.tag }}
+        run: |
+          docker build -t "$IMAGE" ./browser-sidecar
           docker push "$IMAGE"
 
       - name: Set up Node
@@ -213,7 +221,8 @@ jobs:
             -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
-            -var="enable_blue_green=true"
+            -var="enable_blue_green=true" \
+            -var="enable_browser_sidecar=true"
 
       - name: Read UI outputs
         id: ui
@@ -449,7 +458,8 @@ jobs:
             -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
-            -var="enable_blue_green=true"
+            -var="enable_blue_green=true" \
+            -var="enable_browser_sidecar=true"
 
       - name: Login to ECR
         run: |
@@ -475,6 +485,13 @@ jobs:
           IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-voice-lambda:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Build & push browser-sidecar image
+        env:
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-browser-sidecar:${{ steps.image_tag.outputs.tag }}
+        run: |
+          docker build -t "$IMAGE" ./browser-sidecar
           docker push "$IMAGE"
 
       - name: Set up Node
@@ -512,7 +529,8 @@ jobs:
             -var="cognito_user_pool_id=${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}" \
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
-            -var="enable_blue_green=true"
+            -var="enable_blue_green=true" \
+            -var="enable_browser_sidecar=true"
 
       - name: Read UI outputs
         id: ui
