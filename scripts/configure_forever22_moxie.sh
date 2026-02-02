@@ -9,11 +9,10 @@ ORG_ID="d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599"
 API_URL="https://dev.aiwolfsolutions.com"
 
 # The Moxie booking configuration for Forever 22
-# NOTE: Update BOOKING_URL with the actual Forever 22 Moxie booking page URL
 read -r -d '' PAYLOAD << 'EOF'
 {
   "booking_platform": "moxie",
-  "booking_url": "https://forever22medspa.moxie.com/book"
+  "booking_url": "https://app.joinmoxie.com/booking/forever-22"
 }
 EOF
 
@@ -37,6 +36,6 @@ curl -X PUT "https://dev.aiwolfsolutions.com/admin/clinics/d0f9d4b4-05d2-40b3-ad
   -H "Content-Type: application/json" \
   -d '{
     "booking_platform": "moxie",
-    "booking_url": "https://forever22medspa.moxie.com/book"
+    "booking_url": "https://app.joinmoxie.com/booking/forever-22"
   }'
 EXAMPLE
