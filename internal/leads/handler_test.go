@@ -142,6 +142,10 @@ func (f failingRepository) UpdateSelectedAppointment(context.Context, string, Se
 	return errors.New("boom")
 }
 
+func (f failingRepository) UpdateBookingSession(context.Context, string, BookingSessionUpdate) error {
+	return errors.New("boom")
+}
+
 func TestCreateWebLead_RepositoryError(t *testing.T) {
 	logger := logging.Default()
 	handler := NewHandler(failingRepository{}, logger)

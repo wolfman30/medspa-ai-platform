@@ -202,3 +202,7 @@ func (s *stubLeadsRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter
 func (s *stubLeadsRepo) UpdateSelectedAppointment(context.Context, string, leads.SelectedAppointment) error {
 	return nil
 }
+
+func (s *stubLeadsRepo) UpdateBookingSession(context.Context, string, leads.BookingSessionUpdate) error {
+	return nil
+}

@@ -43,6 +43,10 @@ func (m *mockLeadsRepo) UpdateSelectedAppointment(ctx context.Context, leadID st
 	return nil
 }
 
+func (m *mockLeadsRepo) UpdateBookingSession(ctx context.Context, leadID string, update leads.BookingSessionUpdate) error {
+	return nil
+}
+
 func TestExtractAndSavePreferences(t *testing.T) {
 	tests := []struct {
 		name          string

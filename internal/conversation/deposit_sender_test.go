@@ -320,6 +320,10 @@ func (s *stubLeadsRepo) UpdateSelectedAppointment(context.Context, string, leads
 	return nil
 }
 
+func (s *stubLeadsRepo) UpdateBookingSession(context.Context, string, leads.BookingSessionUpdate) error {
+	return nil
+}
+
 // helper to satisfy repository expectations
 // keep compiler happy
 var _ = errors.New
