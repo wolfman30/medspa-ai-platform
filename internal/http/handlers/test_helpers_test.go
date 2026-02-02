@@ -198,3 +198,7 @@ func (s *stubLeadsRepo) UpdateDepositStatus(context.Context, string, string, str
 func (s *stubLeadsRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter) ([]*leads.Lead, error) {
 	return nil, nil
 }
+
+func (s *stubLeadsRepo) UpdateSelectedAppointment(context.Context, string, leads.SelectedAppointment) error {
+	return nil
+}

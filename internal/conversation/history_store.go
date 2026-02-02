@@ -71,3 +71,55 @@ func (s *historyStore) Load(ctx context.Context, conversationID string) ([]ChatM
 func conversationKey(id string) string {
 	return fmt.Sprintf("conversation:%s", id)
 }
+
+func timeSelectionKey(conversationID string) string {
+	return fmt.Sprintf("time_selection:%s", conversationID)
+}
+
+// SaveTimeSelectionState persists the time selection state for a conversation.
+func (s *historyStore) SaveTimeSelectionState(ctx context.Context, conversationID string, state *TimeSelectionState) error {
+	ctx, span := s.tracer.Start(ctx, "conversation.save_time_selection")
+	defer span.End()
+
+	if state == nil {
+		// Delete the key if state is nil
+		if err := s.redis.Del(ctx, timeSelectionKey(conversationID)).Err(); err != nil {
+			span.RecordError(err)
+			return fmt.Errorf("conversation: failed to delete time selection state: %w", err)
+		}
+		return nil
+	}
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("conversation: failed to marshal time selection state: %w", err)
+	}
+	if err := s.redis.Set(ctx, timeSelectionKey(conversationID), data, conversationTTL).Err(); err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("conversation: failed to persist time selection state: %w", err)
+	}
+	return nil
+}
+
+// LoadTimeSelectionState retrieves the time selection state for a conversation.
+func (s *historyStore) LoadTimeSelectionState(ctx context.Context, conversationID string) (*TimeSelectionState, error) {
+	ctx, span := s.tracer.Start(ctx, "conversation.load_time_selection")
+	defer span.End()
+
+	data, err := s.redis.Get(ctx, timeSelectionKey(conversationID)).Bytes()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil // No state stored
+		}
+		span.RecordError(err)
+		return nil, fmt.Errorf("conversation: failed to load time selection state: %w", err)
+	}
+
+	var state TimeSelectionState
+	if err := json.Unmarshal(data, &state); err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("conversation: failed to decode time selection state: %w", err)
+	}
+	return &state, nil
+}

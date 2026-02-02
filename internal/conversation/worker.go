@@ -498,7 +498,12 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		if payload.Kind == jobTypeMessage {
 			blocked := w.sendReply(ctx, payload, resp)
 			if !blocked {
-				w.handleDepositIntent(ctx, payload.Message, resp)
+				// Check if this is a time selection response (takes priority over deposit)
+				if resp != nil && resp.TimeSelectionResponse != nil {
+					w.handleTimeSelectionResponse(ctx, payload.Message, resp)
+				} else {
+					w.handleDepositIntent(ctx, payload.Message, resp)
+				}
 			}
 		}
 	}
@@ -699,6 +704,58 @@ func (w *Worker) applySupervisor(ctx context.Context, req SupervisorRequest) (st
 		w.logger.Warn("supervisor mode unknown; allowing reply", "mode", mode)
 		return req.DraftMessage, false
 	}
+}
+
+func (w *Worker) handleTimeSelectionResponse(ctx context.Context, msg MessageRequest, resp *Response) {
+	if resp == nil || resp.TimeSelectionResponse == nil {
+		return
+	}
+	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
+		return
+	}
+
+	tsr := resp.TimeSelectionResponse
+
+	// Send the time selection SMS
+	if tsr.SMSMessage != "" && w.messenger != nil {
+		reply := OutboundReply{
+			OrgID:          msg.OrgID,
+			LeadID:         msg.LeadID,
+			ConversationID: msg.ConversationID,
+			To:             msg.From, // Send to the customer
+			From:           msg.To,   // From the clinic number
+			Body:           tsr.SMSMessage,
+		}
+		if err := w.messenger.SendReply(ctx, reply); err != nil {
+			w.logger.Error("failed to send time selection SMS", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
+			return
+		}
+
+		// Record to transcript
+		if w.transcript != nil {
+			_ = w.transcript.Append(ctx, msg.ConversationID, SMSTranscriptMessage{
+				Role:      "assistant",
+				Body:      tsr.SMSMessage,
+				From:      msg.To,
+				To:        msg.From,
+				Timestamp: time.Now(),
+			})
+		}
+	}
+
+	// Update conversation status to awaiting_time_selection
+	if w.convStore != nil {
+		if err := w.convStore.UpdateStatus(ctx, msg.ConversationID, StatusAwaitingTimeSelection); err != nil {
+			w.logger.Warn("failed to update conversation status to awaiting_time_selection", "error", err, "conversation_id", msg.ConversationID)
+		}
+	}
+
+	w.logger.Info("time selection SMS sent",
+		"conversation_id", msg.ConversationID,
+		"slots_presented", len(tsr.Slots),
+		"service", tsr.Service,
+		"exact_match", tsr.ExactMatch,
+	)
 }
 
 func (w *Worker) handleDepositIntent(ctx context.Context, msg MessageRequest, resp *Response) {

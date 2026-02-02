@@ -458,6 +458,10 @@ func (s *stubLeadRepo) ListByOrg(context.Context, string, leads.ListLeadsFilter)
 	return nil, nil
 }
 
+func (s *stubLeadRepo) UpdateSelectedAppointment(context.Context, string, leads.SelectedAppointment) error {
+	return nil
+}
+
 type stubProcessedTracker struct {
 	already bool
 	marked  bool
