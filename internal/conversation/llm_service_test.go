@@ -1178,14 +1178,15 @@ func TestBuildSystemPrompt_MoxieInstructions(t *testing.T) {
 	if !strings.Contains(promptMoxie, "MOXIE BOOKING CLINIC") {
 		t.Errorf("Moxie prompt should contain 'MOXIE BOOKING CLINIC'")
 	}
-	if !strings.Contains(promptMoxie, "EMAIL") {
-		t.Errorf("Moxie prompt should mention EMAIL as a qualification")
+	// Email is collected on Moxie booking page, not via SMS
+	if !strings.Contains(promptMoxie, "Do NOT ask for email") {
+		t.Errorf("Moxie prompt should say not to ask for email (collected on booking page)")
 	}
 	if !strings.Contains(promptMoxie, "SERVICE CLARIFICATION") {
 		t.Errorf("Moxie prompt should contain service clarification instructions")
 	}
-	if !strings.Contains(promptMoxie, "TIME SELECTION BEFORE DEPOSIT") {
-		t.Errorf("Moxie prompt should explain time selection before deposit")
+	if !strings.Contains(promptMoxie, "TIME SELECTION BEFORE BOOKING LINK") {
+		t.Errorf("Moxie prompt should explain time selection before booking link")
 	}
 }
 
