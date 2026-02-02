@@ -1094,73 +1094,91 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
-	// Enforce clinic-configured deposit amounts (override LLM amounts when a rule exists).
-	// Also skip Square deposit if clinic uses Moxie booking.
-	if depositIntent != nil && s.clinicStore != nil && req.OrgID != "" {
+	// Check if clinic uses Moxie booking (determines flow: Moxie handoff vs Square deposit)
+	var usesMoxie bool
+	var clinicCfg *clinic.Config
+	if s.clinicStore != nil && req.OrgID != "" {
 		if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
-			// Skip Square deposit if clinic uses Moxie - booking will be handled by browser sidecar
-			if cfg.UsesMoxieBooking() {
-				s.logger.Info("clinic uses Moxie booking - skipping Square deposit intent", "org_id", req.OrgID)
-				depositIntent = nil
-			} else if prefs, ok := extractPreferences(history); ok && prefs.ServiceInterest != "" {
-				if amount := cfg.DepositAmountForService(prefs.ServiceInterest); amount > 0 {
-					depositIntent.AmountCents = int32(amount)
-				}
+			clinicCfg = cfg
+			usesMoxie = cfg.UsesMoxieBooking()
+		}
+	}
+
+	// Enforce clinic-configured deposit amounts for Square clinics
+	if depositIntent != nil && clinicCfg != nil && !usesMoxie {
+		if prefs, ok := extractPreferences(history); ok && prefs.ServiceInterest != "" {
+			if amount := clinicCfg.DepositAmountForService(prefs.ServiceInterest); amount > 0 {
+				depositIntent.AmountCents = int32(amount)
 			}
 		}
 	}
 
-	// Check if we should trigger time selection before deposit
-	// Only if: deposit intent exists, browser adapter configured, no time selection done, all qualifications met
-	if depositIntent != nil && s.browser != nil && s.browser.IsConfigured() && timeSelectionState == nil {
-		if ShouldFetchAvailability(history, nil) {
-			// Get clinic config for booking URL
-			var bookingURL string
-			if s.clinicStore != nil && req.OrgID != "" {
-				if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
-					bookingURL = cfg.BookingURL
+	// Check if we should trigger time selection flow
+	// For Moxie: trigger when qualifications are met (no deposit intent needed)
+	// For Square: trigger when deposit intent exists AND qualifications are met
+	shouldTriggerTimeSelection := s.browser != nil && s.browser.IsConfigured() && timeSelectionState == nil
+	if usesMoxie {
+		// Moxie clinics: trigger time selection when lead is qualified (deposit flows through Moxie)
+		shouldTriggerTimeSelection = shouldTriggerTimeSelection && ShouldFetchAvailability(history, nil)
+	} else {
+		// Square clinics: trigger time selection only when deposit intent exists
+		shouldTriggerTimeSelection = shouldTriggerTimeSelection && depositIntent != nil && ShouldFetchAvailability(history, nil)
+	}
+
+	if shouldTriggerTimeSelection {
+		// Get booking URL from clinic config
+		var bookingURL string
+		if clinicCfg != nil {
+			bookingURL = clinicCfg.BookingURL
+		}
+
+		if bookingURL != "" {
+			// Extract service and time preferences
+			prefs, _ := extractPreferences(history)
+			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
+
+			// Fetch available times from booking widget
+			slots, err := FetchAvailableTimes(ctx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
+			if err != nil {
+				s.logger.Warn("failed to fetch available times", "error", err)
+			} else if len(slots) > 0 {
+				// Save time selection state
+				state := &TimeSelectionState{
+					PresentedSlots: slots,
+					Service:        prefs.ServiceInterest,
+					BookingURL:     bookingURL,
+					PresentedAt:    time.Now(),
 				}
-			}
-
-			if bookingURL != "" {
-				// Extract service and time preferences
-				prefs, _ := extractPreferences(history)
-				timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
-
-				// Fetch available times
-				slots, err := FetchAvailableTimes(ctx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
-				if err != nil {
-					s.logger.Warn("failed to fetch available times", "error", err)
-				} else if len(slots) > 0 {
-					// Save time selection state
-					state := &TimeSelectionState{
-						PresentedSlots: slots,
-						Service:        prefs.ServiceInterest,
-						BookingURL:     bookingURL,
-						PresentedAt:    time.Now(),
-					}
-					if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, state); err != nil {
-						s.logger.Warn("failed to save time selection state", "error", err)
-					}
-
-					// Return time selection response instead of deposit intent
-					timeSelectionResponse = &TimeSelectionResponse{
-						Slots:      slots,
-						Service:    prefs.ServiceInterest,
-						ExactMatch: len(timePrefs.DaysOfWeek) > 0 || timePrefs.AfterTime != "" || timePrefs.BeforeTime != "",
-						SMSMessage: FormatTimeSlotsForSMS(slots, prefs.ServiceInterest, true),
-					}
-
-					s.logger.Info("triggering time selection flow",
-						"service", prefs.ServiceInterest,
-						"slots", len(slots),
-					)
-
-					// Clear deposit intent - time selection must happen first
-					depositIntent = nil
+				if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, state); err != nil {
+					s.logger.Warn("failed to save time selection state", "error", err)
 				}
+
+				// Return time selection response
+				timeSelectionResponse = &TimeSelectionResponse{
+					Slots:      slots,
+					Service:    prefs.ServiceInterest,
+					ExactMatch: len(timePrefs.DaysOfWeek) > 0 || timePrefs.AfterTime != "" || timePrefs.BeforeTime != "",
+					SMSMessage: FormatTimeSlotsForSMS(slots, prefs.ServiceInterest, true),
+				}
+
+				s.logger.Info("triggering time selection flow",
+					"service", prefs.ServiceInterest,
+					"slots", len(slots),
+					"uses_moxie", usesMoxie,
+				)
+
+				// Clear deposit intent - time selection must happen first
+				// For Moxie: deposit happens through Moxie after time selection
+				// For Square: deposit link sent after time is selected
+				depositIntent = nil
 			}
 		}
+	}
+
+	// For Moxie clinics: always clear Square deposit intent (payment handled by Moxie)
+	if usesMoxie && depositIntent != nil {
+		s.logger.Info("clinic uses Moxie booking - skipping Square deposit intent", "org_id", req.OrgID)
+		depositIntent = nil
 	}
 
 	return &Response{

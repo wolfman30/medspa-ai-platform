@@ -78,6 +78,7 @@ type UpdateConfigRequest struct {
 	DepositAmountCents     *int               `json:"deposit_amount_cents,omitempty"`
 	Services               []string           `json:"services,omitempty"`
 	BookingURL             string             `json:"booking_url,omitempty"`
+	BookingPlatform        string             `json:"booking_platform,omitempty"`
 	Notifications          *NotificationPrefs `json:"notifications,omitempty"`
 	AIPersona              *AIPersona         `json:"ai_persona,omitempty"`
 }
@@ -169,6 +170,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.BookingURL != "" {
 		cfg.BookingURL = req.BookingURL
+	}
+	if req.BookingPlatform != "" {
+		cfg.BookingPlatform = req.BookingPlatform
 	}
 	if req.Notifications != nil {
 		cfg.Notifications = *req.Notifications
