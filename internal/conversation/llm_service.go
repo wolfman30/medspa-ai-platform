@@ -332,6 +332,61 @@ Customer: "I'd like to book a consultation"
 WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 - "I don't have real-time access to the schedule, but I'll make sure the team knows your preferences."
 - "Let me get your preferred times and the clinic will reach out with available options that match."`
+
+	// moxieSystemPromptAddendum contains additional instructions for Moxie booking clinics.
+	// For Moxie, we need: email + more specific service selection + time selection BEFORE deposit.
+	moxieSystemPromptAddendum = `
+
+🔷 MOXIE BOOKING CLINIC - SPECIAL INSTRUCTIONS:
+This clinic uses Moxie for online booking. The flow is DIFFERENT from standard clinics:
+
+📋 QUALIFICATION CHECKLIST FOR MOXIE - You need FIVE things (not four):
+1. NAME - The patient's full name (first + last)
+2. SERVICE - What SPECIFIC treatment are they interested in? (see below for clarification)
+3. PATIENT TYPE - Are they a new or existing/returning patient?
+4. SCHEDULE - Day AND time preferences (weekdays/weekends + morning/afternoon/evening)
+5. EMAIL - We MUST collect their email address (required for booking confirmation)
+
+🎯 SERVICE CLARIFICATION:
+This clinic's booking system requires SPECIFIC services, not general categories. If a patient mentions a broad category, ask clarifying questions to narrow down to a bookable service.
+
+WHEN TO ASK CLARIFYING QUESTIONS:
+- "Botox" or "neurotoxin" → Ask which treatment AREA (forehead, crow's feet, frown lines, etc.)
+- "Filler" or "dermal filler" → Ask which AREA (lips, cheeks, smile lines, under-eyes, etc.)
+- "Facial" or "peel" → Ask about their primary GOAL or skin concern
+- Any general category → Ask for specifics so we can match to the clinic's actual services
+
+USE CLINIC CONTEXT:
+If you see "Relevant clinic context:" with a services list, use that to guide your clarification questions.
+Match the patient's request to the most specific service the clinic offers.
+
+EXAMPLE CLARIFICATION:
+Customer: "I want Botox"
+You: "Great choice! Which area would you like treated - forehead, crow's feet, frown lines, or multiple areas?"
+Customer: "My forehead"
+→ SERVICE = Forehead Botox ✓ (or whatever the clinic calls this service)
+
+📧 EMAIL COLLECTION:
+After you have NAME and SERVICE, ask for email:
+- "What's the best email address for your booking confirmation?"
+Do NOT proceed to time selection until you have their email.
+
+⏰ TIME SELECTION BEFORE DEPOSIT:
+For this clinic, DO NOT offer deposit immediately when qualifications are met.
+Instead, once you have all FIVE items (name, specific service, patient type, schedule preference, email):
+- Tell them you're checking available times
+- Available appointment slots will be presented to them
+- AFTER they select a specific time, THEN the deposit link is sent
+
+MOXIE FLOW:
+1. Collect: Name → Specific Service (with clarification) → Patient Type → Schedule Preference → Email
+2. Say: "Let me check our available times for [SERVICE] based on your preference for [SCHEDULE]..."
+3. (System will present available times automatically)
+4. After they pick a time → Deposit link sent
+5. After deposit paid → Confirmation with specific date/time
+
+DO NOT say "Would you like to proceed with the deposit?" until AFTER they've selected a specific time slot.
+`
 	maxHistoryMessages           = 24
 	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 	medicalAdviceDeflectionReply = "I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
@@ -341,13 +396,21 @@ var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
 
 // buildSystemPrompt returns the system prompt with the actual deposit amount.
 // If depositCents is 0 or negative, it defaults to $50.
-func buildSystemPrompt(depositCents int) string {
+// If usesMoxie is true, it appends Moxie-specific booking instructions.
+func buildSystemPrompt(depositCents int, usesMoxie bool) string {
 	if depositCents <= 0 {
 		depositCents = 5000 // default $50
 	}
 	depositDollars := fmt.Sprintf("$%d", depositCents/100)
 	// Replace all instances of $50 with the actual deposit amount
-	return strings.ReplaceAll(defaultSystemPrompt, "$50", depositDollars)
+	prompt := strings.ReplaceAll(defaultSystemPrompt, "$50", depositDollars)
+
+	// Append Moxie-specific instructions if clinic uses Moxie booking
+	if usesMoxie {
+		prompt += moxieSystemPromptAddendum
+	}
+
+	return prompt
 }
 
 var llmLatency = prometheus.NewHistogramVec(
@@ -575,16 +638,18 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		safeReq.Intro = redactedIntro
 	}
 
-	// Get clinic-configured deposit amount for system prompt customization
+	// Get clinic-configured deposit amount and booking platform for system prompt customization
 	depositCents := s.deposit.DefaultAmountCents
+	var usesMoxie bool
 	if s.clinicStore != nil && req.OrgID != "" {
 		if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
 			if cfg.DepositAmountCents > 0 {
 				depositCents = int32(cfg.DepositAmountCents)
 			}
+			usesMoxie = cfg.UsesMoxieBooking()
 		}
 	}
-	systemPrompt := buildSystemPrompt(int(depositCents))
+	systemPrompt := buildSystemPrompt(int(depositCents), usesMoxie)
 
 	if req.Silent {
 		history := []ChatMessage{
@@ -766,17 +831,19 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					To:             req.To,
 					Metadata:       req.Metadata,
 				}
-				// Get clinic-configured deposit amount for system prompt
+				// Get clinic-configured deposit amount and booking platform for system prompt
 				depositCents := s.deposit.DefaultAmountCents
+				var usesMoxiePHI bool
 				if s.clinicStore != nil && req.OrgID != "" {
 					if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
 						if cfg.DepositAmountCents > 0 {
 							depositCents = int32(cfg.DepositAmountCents)
 						}
+						usesMoxiePHI = cfg.UsesMoxieBooking()
 					}
 				}
 				history := []ChatMessage{
-					{Role: ChatRoleSystem, Content: buildSystemPrompt(int(depositCents))},
+					{Role: ChatRoleSystem, Content: buildSystemPrompt(int(depositCents), usesMoxiePHI)},
 				}
 				history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
 				history = append(history, ChatMessage{
@@ -809,17 +876,19 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					To:             req.To,
 					Metadata:       req.Metadata,
 				}
-				// Get clinic-configured deposit amount for system prompt
+				// Get clinic-configured deposit amount and booking platform for system prompt
 				depositCents := s.deposit.DefaultAmountCents
+				var usesMoxieMed bool
 				if s.clinicStore != nil && req.OrgID != "" {
 					if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
 						if cfg.DepositAmountCents > 0 {
 							depositCents = int32(cfg.DepositAmountCents)
 						}
+						usesMoxieMed = cfg.UsesMoxieBooking()
 					}
 				}
 				history := []ChatMessage{
-					{Role: ChatRoleSystem, Content: buildSystemPrompt(int(depositCents))},
+					{Role: ChatRoleSystem, Content: buildSystemPrompt(int(depositCents), usesMoxieMed)},
 				}
 				history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, "")
 				history = append(history, ChatMessage{

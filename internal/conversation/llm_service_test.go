@@ -1145,24 +1145,47 @@ func TestBuildSystemPrompt_ReplacesDepositAmount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prompt := buildSystemPrompt(tt.depositCents)
+			prompt := buildSystemPrompt(tt.depositCents, false)
 			if !strings.Contains(prompt, tt.wantContains) {
-				t.Errorf("buildSystemPrompt(%d) should contain %q", tt.depositCents, tt.wantContains)
+				t.Errorf("buildSystemPrompt(%d, false) should contain %q", tt.depositCents, tt.wantContains)
 			}
 			if tt.wantNotContains != "" && strings.Contains(prompt, tt.wantNotContains) {
-				t.Errorf("buildSystemPrompt(%d) should NOT contain %q", tt.depositCents, tt.wantNotContains)
+				t.Errorf("buildSystemPrompt(%d, false) should NOT contain %q", tt.depositCents, tt.wantNotContains)
 			}
 		})
 	}
 }
 
 func TestBuildSystemPrompt_IncludesDeliverabilityGuardrails(t *testing.T) {
-	prompt := buildSystemPrompt(5000)
+	prompt := buildSystemPrompt(5000, false)
 	if !strings.Contains(prompt, "DELIVERABILITY SAFETY") {
 		t.Fatalf("expected deliverability guardrails in system prompt")
 	}
 	if !strings.Contains(prompt, "GLP-1") {
 		t.Fatalf("expected GLP-1 guardrail in system prompt")
+	}
+}
+
+func TestBuildSystemPrompt_MoxieInstructions(t *testing.T) {
+	// Non-Moxie prompt should NOT include Moxie instructions
+	promptNonMoxie := buildSystemPrompt(5000, false)
+	if strings.Contains(promptNonMoxie, "MOXIE BOOKING CLINIC") {
+		t.Errorf("non-Moxie prompt should NOT contain Moxie instructions")
+	}
+
+	// Moxie prompt SHOULD include Moxie instructions
+	promptMoxie := buildSystemPrompt(5000, true)
+	if !strings.Contains(promptMoxie, "MOXIE BOOKING CLINIC") {
+		t.Errorf("Moxie prompt should contain 'MOXIE BOOKING CLINIC'")
+	}
+	if !strings.Contains(promptMoxie, "EMAIL") {
+		t.Errorf("Moxie prompt should mention EMAIL as a qualification")
+	}
+	if !strings.Contains(promptMoxie, "SERVICE CLARIFICATION") {
+		t.Errorf("Moxie prompt should contain service clarification instructions")
+	}
+	if !strings.Contains(promptMoxie, "TIME SELECTION BEFORE DEPOSIT") {
+		t.Errorf("Moxie prompt should explain time selection before deposit")
 	}
 }
 
