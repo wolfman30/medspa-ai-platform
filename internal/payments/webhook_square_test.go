@@ -462,6 +462,10 @@ func (s *stubLeadRepo) UpdateSelectedAppointment(context.Context, string, leads.
 	return nil
 }
 
+func (s *stubLeadRepo) UpdateBookingSession(context.Context, string, leads.BookingSessionUpdate) error {
+	return nil
+}
+
 type stubProcessedTracker struct {
 	already bool
 	marked  bool
