@@ -99,6 +99,10 @@ func (m *mockLeadsRepo) ListByOrg(ctx context.Context, orgID string, filter lead
 	return nil, nil
 }
 
+func (m *mockLeadsRepo) UpdateSelectedAppointment(ctx context.Context, leadID string, appt leads.SelectedAppointment) error {
+	return nil
+}
+
 // Tests
 
 func TestService_NotifyPaymentSuccess_NilClinicStore(t *testing.T) {

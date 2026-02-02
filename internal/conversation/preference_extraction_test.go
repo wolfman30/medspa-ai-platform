@@ -39,6 +39,10 @@ func (m *mockLeadsRepo) ListByOrg(ctx context.Context, orgID string, filter lead
 	return nil, nil
 }
 
+func (m *mockLeadsRepo) UpdateSelectedAppointment(ctx context.Context, leadID string, appt leads.SelectedAppointment) error {
+	return nil
+}
+
 func TestExtractAndSavePreferences(t *testing.T) {
 	tests := []struct {
 		name          string

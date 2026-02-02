@@ -138,6 +138,10 @@ func (f failingRepository) ListByOrg(context.Context, string, ListLeadsFilter) (
 	return nil, errors.New("boom")
 }
 
+func (f failingRepository) UpdateSelectedAppointment(context.Context, string, SelectedAppointment) error {
+	return errors.New("boom")
+}
+
 func TestCreateWebLead_RepositoryError(t *testing.T) {
 	logger := logging.Default()
 	handler := NewHandler(failingRepository{}, logger)

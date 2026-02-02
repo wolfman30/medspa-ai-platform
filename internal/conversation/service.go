@@ -27,6 +27,14 @@ const (
 	ChannelSMS     Channel = "sms"
 )
 
+// Conversation status constants
+const (
+	StatusActive                = "active"
+	StatusEnded                 = "ended"
+	StatusDepositPaid           = "deposit_paid"
+	StatusAwaitingTimeSelection = "awaiting_time_selection"
+)
+
 // StartRequest represents the minimal data we need to open a conversation.
 type StartRequest struct {
 	OrgID          string
@@ -68,12 +76,23 @@ type DepositIntent struct {
 	PreloadedPaymentID string // Pre-generated payment ID to use for intent (UUID string)
 }
 
+// TimeSelectionResponse contains available time slots for the user to choose from.
+// When present, the worker should present these options to the user instead of
+// triggering a deposit.
+type TimeSelectionResponse struct {
+	Slots      []PresentedSlot // Available time slots to present
+	Service    string          // Service being booked
+	ExactMatch bool            // Whether slots match user's exact preferences
+	SMSMessage string          // Pre-formatted SMS message to send
+}
+
 // Response is a simple DTO returned to the API layer.
 type Response struct {
-	ConversationID string
-	Message        string
-	Timestamp      time.Time
-	DepositIntent  *DepositIntent
+	ConversationID        string
+	Message               string
+	Timestamp             time.Time
+	DepositIntent         *DepositIntent
+	TimeSelectionResponse *TimeSelectionResponse // Set when presenting time options
 }
 
 // StubService is a placeholder implementation used until the real engine is ready.
