@@ -337,6 +337,11 @@ WHAT TO SAY IF ASKED ABOUT SPECIFIC TIMES:
 	// For Moxie, we need: email + more specific service selection + time selection BEFORE deposit.
 	moxieSystemPromptAddendum = `
 
+⚠️⚠️⚠️ OVERRIDE - READ THIS FIRST ⚠️⚠️⚠️
+THIS CLINIC USES MOXIE BOOKING. The "IMMEDIATELY offer deposit with 4 qualifications" rule DOES NOT APPLY here.
+For this clinic, you need FIVE qualifications (including EMAIL), and you must WAIT for time selection before deposit.
+IGNORE the 4-qualification deposit rule above. Follow ONLY the Moxie flow below.
+
 🔷 MOXIE BOOKING CLINIC - SPECIAL INSTRUCTIONS:
 This clinic uses Moxie for online booking. The flow is DIFFERENT from standard clinics:
 
@@ -366,10 +371,11 @@ You: "Great choice! Which area would you like treated - forehead, crow's feet, f
 Customer: "My forehead"
 → SERVICE = Forehead Botox ✓ (or whatever the clinic calls this service)
 
-📧 EMAIL COLLECTION:
-After you have NAME and SERVICE, ask for email:
-- "What's the best email address for your booking confirmation?"
-Do NOT proceed to time selection until you have their email.
+📧 EMAIL COLLECTION - CRITICAL STEP:
+After you have the specific SERVICE (e.g., "forehead Botox"), your NEXT response MUST ask for email:
+- "Great! And what's the best email address for your booking confirmation?"
+- Do NOT skip this step. Do NOT proceed to checking availability without email.
+- Do NOT mention deposits, callbacks, or scheduling until you have their email.
 
 ⏰ TIME SELECTION BEFORE DEPOSIT:
 For this clinic, DO NOT offer deposit immediately when qualifications are met.
