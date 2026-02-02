@@ -207,7 +207,7 @@ func TestMVP_PaymentWebhookUpdatesStatus(t *testing.T) {
 func TestMVP_RequiredDocumentation(t *testing.T) {
 	docs := []string{
 		"../README.md",
-		"../CLAUDE.md",
+		// CLAUDE.md is local-only (in .gitignore), not required in repo
 	}
 
 	for _, doc := range docs {
