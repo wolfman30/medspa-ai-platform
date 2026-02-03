@@ -212,5 +212,5 @@ variable "browser_sidecar_cpu" {
 variable "browser_sidecar_memory" {
   description = "Memory (MiB) allocated to the browser sidecar container"
   type        = number
-  default     = 1024
+  default     = 2048
 }
