@@ -23,7 +23,7 @@ RUN npm run build
 ##
 ## Production stage
 ##
-FROM mcr.microsoft.com/playwright:v1.41.0-jammy
+FROM mcr.microsoft.com/playwright:v1.58.1-jammy
 
 WORKDIR /app
 
