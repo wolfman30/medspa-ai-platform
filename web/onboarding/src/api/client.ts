@@ -195,6 +195,8 @@ export interface ClinicConfig {
   business_hours?: BusinessHours;
   services?: string[];
   notifications?: NotificationSettings;
+  booking_platform?: string;
+  booking_url?: string;
 }
 
 export async function createClinic(data: {

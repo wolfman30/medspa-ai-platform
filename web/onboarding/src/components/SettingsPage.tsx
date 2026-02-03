@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NotificationSettings } from './NotificationSettings';
 import { AIPersonaSettings } from './AIPersonaSettings';
 import { KnowledgeSettings } from './KnowledgeSettings';
+import { BookingSettings } from './BookingSettings';
 
 interface SettingsPageProps {
   orgId: string;
@@ -9,7 +10,7 @@ interface SettingsPageProps {
   onBack: () => void;
 }
 
-type SettingsSection = 'menu' | 'notifications' | 'ai-persona' | 'knowledge';
+type SettingsSection = 'menu' | 'notifications' | 'ai-persona' | 'knowledge' | 'booking';
 
 export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>('menu');
@@ -37,6 +38,15 @@ export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
       <KnowledgeSettings
         orgId={orgId}
         scope={scope}
+        onBack={() => setSection('menu')}
+      />
+    );
+  }
+
+  if (section === 'booking') {
+    return (
+      <BookingSettings
+        orgId={orgId}
         onBack={() => setSection('menu')}
       />
     );
@@ -97,6 +107,21 @@ export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
                 <h2 className="text-lg font-medium text-gray-900">Clinic Knowledge</h2>
                 <p className="text-sm text-gray-500 mt-1">
                   Review and update the knowledge the AI uses for your clinic
+                </p>
+              </div>
+              <span className="text-indigo-600 text-xl">&rarr;</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setSection('booking')}
+            className="w-full bg-white rounded-lg shadow p-6 text-left hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-medium text-gray-900">Booking Configuration</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Choose your booking platform and configure how the AI schedules appointments
                 </p>
               </div>
               <span className="text-indigo-600 text-xl">&rarr;</span>
