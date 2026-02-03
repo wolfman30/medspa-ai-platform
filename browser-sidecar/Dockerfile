@@ -31,16 +31,20 @@ WORKDIR /app
 RUN groupadd -r browser && useradd -r -g browser browser
 
 # Copy package files and install production dependencies only
+# Skip browser download - we use the pre-installed browsers in the base image
 COPY package*.json ./
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci --only=production && npm cache clean --force
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
 # Set environment variables
+# PLAYWRIGHT_BROWSERS_PATH tells Playwright where the pre-installed browsers are
 ENV NODE_ENV=production \
     PORT=3000 \
-    HEADLESS=true
+    HEADLESS=true \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # Expose port
 EXPOSE 3000

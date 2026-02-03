@@ -33,6 +33,12 @@ export interface AvailabilityResponse {
   slots: TimeSlot[];
   provider?: string;
   service?: string;
+  /**
+   * List of available providers for the selected service.
+   * If only one provider exists, AI should skip asking for preference.
+   * If multiple providers exist, AI should ask which one the patient prefers.
+   */
+  providers?: string[];
   scrapedAt: string;   // ISO timestamp
   error?: string;
 }

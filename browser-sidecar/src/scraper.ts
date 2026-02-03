@@ -113,16 +113,19 @@ export class AvailabilityScraper {
 
         const selectors = await this.detectPlatform(page);
 
-        // For Moxie, handle the multi-step booking flow
+        // For Moxie, handle the multi-step booking flow and get available providers
+        let detectedProviders: string[] = [];
         if (selectors.platform === 'moxie') {
-          await this.handleMoxieServiceSelection(page, request.serviceName);
+          detectedProviders = await this.handleMoxieServiceSelection(page, request.serviceName);
         }
 
         await this.navigateToDate(page, request.date, selectors);
         const slots = await this.extractTimeSlots(page, selectors);
 
         const duration = Date.now() - startTime;
-        logger.info(`Successfully scraped ${slots.length} slots in ${duration}ms`);
+        logger.info(`Successfully scraped ${slots.length} slots in ${duration}ms`, {
+          providers: detectedProviders.length,
+        });
 
         return {
           success: true,
@@ -131,6 +134,7 @@ export class AvailabilityScraper {
           slots,
           provider: request.providerName,
           service: request.serviceName,
+          providers: detectedProviders.length > 0 ? detectedProviders : undefined,
           scrapedAt: new Date().toISOString(),
         };
 
@@ -176,7 +180,7 @@ export class AvailabilityScraper {
     month: number, // 1-indexed (1 = January, 2 = February, etc.)
     timeout: number = 60000,
     serviceName?: string
-  ): Promise<{ success: boolean; dates: string[]; error?: string }> {
+  ): Promise<{ success: boolean; dates: string[]; providers?: string[]; error?: string }> {
     if (!this.browser) {
       throw new ScraperError('Browser not initialized', 'NOT_INITIALIZED');
     }
@@ -212,9 +216,10 @@ export class AvailabilityScraper {
 
       const selectors = await this.detectPlatform(page);
 
-      // Navigate through service selection to get to calendar
+      // Navigate through service selection to get to calendar and detect providers
+      let detectedProviders: string[] = [];
       if (selectors.platform === 'moxie') {
-        await this.handleMoxieServiceSelection(page, serviceName);
+        detectedProviders = await this.handleMoxieServiceSelection(page, serviceName);
       }
 
       await this.saveDebugScreenshot(page, 'available-dates-calendar');
@@ -316,9 +321,15 @@ export class AvailabilityScraper {
       });
 
       const duration = Date.now() - startTime;
-      logger.info(`Got available dates in ${duration}ms`);
+      logger.info(`Got available dates in ${duration}ms`, {
+        providers: detectedProviders.length,
+      });
 
-      return { success: true, dates };
+      return {
+        success: true,
+        dates,
+        providers: detectedProviders.length > 0 ? detectedProviders : undefined,
+      };
 
     } catch (error) {
       logger.error('Failed to get available dates', { error: (error as Error).message });
@@ -381,10 +392,14 @@ export class AvailabilityScraper {
 
   /**
    * Handle Moxie's multi-step booking flow
+   * Returns the list of available providers detected from the provider selection panel
    */
-  private async handleMoxieServiceSelection(page: Page, serviceName?: string): Promise<void> {
+  private async handleMoxieServiceSelection(page: Page, serviceName?: string): Promise<string[]> {
     logger.info('Handling Moxie service selection flow...', serviceName ? { requestedService: serviceName } : {});
     await this.saveDebugScreenshot(page, '01-initial-page');
+
+    // Will be populated with detected providers
+    let detectedProviders: string[] = [];
 
     // Step 1: Click on the requested service, or fallback to multi-provider service
     let serviceClicked = false;
@@ -501,7 +516,75 @@ export class AvailabilityScraper {
     await this.saveDebugScreenshot(page, '03-provider-panel');
     await this.delay(1000);
 
-    // Step 2: Select "No preference (first available)" provider
+    // Step 2a: Detect available providers from the provider selection panel
+    try {
+      detectedProviders = await page.evaluate(() => {
+        const providers: string[] = [];
+
+        // Look for provider names near radio buttons
+        const radioLabels = Array.from(document.querySelectorAll('label, [role="radio"], input[type="radio"]'));
+
+        for (const el of radioLabels) {
+          // Get the text content, which should be the provider name
+          let labelText = '';
+
+          if (el.tagName === 'LABEL') {
+            labelText = (el as HTMLElement).textContent?.trim() || '';
+          } else if (el.tagName === 'INPUT') {
+            // For input[type="radio"], look for associated label or nearby text
+            const id = el.getAttribute('id');
+            if (id) {
+              const associatedLabel = document.querySelector(`label[for="${id}"]`);
+              if (associatedLabel) {
+                labelText = associatedLabel.textContent?.trim() || '';
+              }
+            }
+            // Also check parent/sibling elements
+            const parent = el.parentElement;
+            if (parent && !labelText) {
+              labelText = parent.textContent?.trim() || '';
+            }
+          }
+
+          // Filter out generic options and empty strings
+          if (labelText &&
+              !labelText.toLowerCase().includes('no preference') &&
+              !labelText.toLowerCase().includes('first available') &&
+              labelText.length > 2 &&
+              labelText.length < 100) {
+            // Clean up the text - remove extra whitespace and non-name content
+            const cleanName = labelText.split('\n')[0].trim();
+            if (cleanName && !providers.includes(cleanName)) {
+              providers.push(cleanName);
+            }
+          }
+        }
+
+        // Also look for provider cards/buttons with names
+        const providerElements = Array.from(document.querySelectorAll('[class*="provider"], [data-provider], .provider-option'));
+        for (const el of providerElements) {
+          const text = (el as HTMLElement).textContent?.trim();
+          if (text &&
+              !text.toLowerCase().includes('no preference') &&
+              !text.toLowerCase().includes('first available') &&
+              text.length > 2 &&
+              text.length < 100) {
+            const cleanName = text.split('\n')[0].trim();
+            if (cleanName && !providers.includes(cleanName)) {
+              providers.push(cleanName);
+            }
+          }
+        }
+
+        return providers;
+      });
+
+      logger.info(`Detected ${detectedProviders.length} providers: ${detectedProviders.join(', ')}`);
+    } catch (err) {
+      logger.warn('Failed to detect providers', { error: (err as Error).message });
+    }
+
+    // Step 2b: Select "No preference (first available)" provider
     let providerSelected = false;
     try {
       const noPreferenceLocator = page.locator('text=/no preference|first available/i').first();
@@ -580,7 +663,9 @@ export class AvailabilityScraper {
     await this.saveDebugScreenshot(page, '05-after-next-step');
     await this.delay(2000);
     await this.saveDebugScreenshot(page, '06-calendar-view');
-    logger.info('Moxie service selection flow complete');
+    logger.info('Moxie service selection flow complete', { providers: detectedProviders });
+
+    return detectedProviders;
   }
 
   private async navigateToDate(

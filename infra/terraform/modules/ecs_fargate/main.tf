@@ -411,7 +411,8 @@ locals {
     environment = [
       { name = "PORT", value = tostring(var.browser_sidecar_port) },
       { name = "HEADLESS", value = "true" },
-      { name = "NODE_ENV", value = "production" }
+      { name = "NODE_ENV", value = "production" },
+      { name = "PLAYWRIGHT_BROWSERS_PATH", value = "/ms-playwright" }
     ]
     logConfiguration = {
       logDriver = "awslogs"
