@@ -117,6 +117,10 @@ func (r *RedisKnowledgeRepository) LoadAll(ctx context.Context) (map[string][]st
 			return nil, fmt.Errorf("conversation: scan knowledge keys failed: %w", err)
 		}
 		for _, key := range keys {
+			// Skip version keys (STRING type) — only process document keys (LIST type).
+			if strings.HasPrefix(key, knowledgeVersionKeyPrefix) {
+				continue
+			}
 			clinicID := strings.TrimPrefix(key, knowledgeKeyPrefix)
 			docs, err := r.client.LRange(ctx, key, 0, -1).Result()
 			if err != nil {
