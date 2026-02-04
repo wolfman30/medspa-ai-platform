@@ -43,6 +43,7 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
     TELNYX_API_KEY              = ""
     TELNYX_MESSAGING_PROFILE_ID = ""
     TELNYX_WEBHOOK_SECRET       = ""
+    TELNYX_FROM_NUMBER          = ""
 
     # Cognito (admin dashboard auth)
     COGNITO_USER_POOL_ID = ""
@@ -67,6 +68,11 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
     SENDGRID_API_KEY    = ""
     SENDGRID_FROM_EMAIL = ""
     SENDGRID_FROM_NAME  = "MedSpa AI"
+    SES_FROM_EMAIL      = ""
+    SES_FROM_NAME       = "MedSpa AI"
+
+    # Feature flags
+    DISABLE_PAYMENT_COOLDOWN = "false"
 
     # EMR (Nextech)
     NEXTECH_BASE_URL      = ""
