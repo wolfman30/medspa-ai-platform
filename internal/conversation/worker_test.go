@@ -11,7 +11,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -1081,4 +1083,390 @@ func TestPaymentConfirmationMessage_NilEvent(t *testing.T) {
 	if msg != "" {
 		t.Errorf("expected empty string for nil event, got %q", msg)
 	}
+}
+
+// --- Moxie booking test stubs ---
+
+type stubBrowserBookingClient struct {
+	startResp    *browser.BookingStartResponse
+	startErr     error
+	handoffResp  *browser.BookingHandoffResponse
+	handoffErr   error
+	handoffCalls int
+	statusResp   *browser.BookingStatusResponse
+	statusErr    error
+	cancelErr    error
+	cancelCalled bool
+	mu           sync.Mutex
+}
+
+func (s *stubBrowserBookingClient) StartBookingSession(ctx context.Context, req browser.BookingStartRequest) (*browser.BookingStartResponse, error) {
+	if s.startErr != nil {
+		return nil, s.startErr
+	}
+	return s.startResp, nil
+}
+
+func (s *stubBrowserBookingClient) GetHandoffURL(ctx context.Context, sessionID string) (*browser.BookingHandoffResponse, error) {
+	s.mu.Lock()
+	s.handoffCalls++
+	s.mu.Unlock()
+	if s.handoffErr != nil {
+		return nil, s.handoffErr
+	}
+	return s.handoffResp, nil
+}
+
+func (s *stubBrowserBookingClient) GetBookingStatus(ctx context.Context, sessionID string) (*browser.BookingStatusResponse, error) {
+	if s.statusErr != nil {
+		return nil, s.statusErr
+	}
+	return s.statusResp, nil
+}
+
+func (s *stubBrowserBookingClient) CancelBookingSession(ctx context.Context, sessionID string) error {
+	s.mu.Lock()
+	s.cancelCalled = true
+	s.mu.Unlock()
+	return s.cancelErr
+}
+
+type recordingMessenger struct {
+	replies []OutboundReply
+	mu      sync.Mutex
+}
+
+func (r *recordingMessenger) SendReply(ctx context.Context, reply OutboundReply) error {
+	r.mu.Lock()
+	r.replies = append(r.replies, reply)
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *recordingMessenger) allReplies() []OutboundReply {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]OutboundReply, len(r.replies))
+	copy(out, r.replies)
+	return out
+}
+
+type bookingReplyService struct {
+	bookingReq *BookingRequest
+}
+
+func (s *bookingReplyService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
+	return &Response{ConversationID: req.ConversationID}, nil
+}
+
+func (s *bookingReplyService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
+	return &Response{
+		ConversationID: req.ConversationID,
+		Message:        "Great! I'm booking that for you now.",
+		BookingRequest: s.bookingReq,
+	}, nil
+}
+
+func (s *bookingReplyService) GetHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	return []Message{}, nil
+}
+
+func TestHandleMoxieBooking_HappyPath(t *testing.T) {
+	browserClient := &stubBrowserBookingClient{
+		startResp: &browser.BookingStartResponse{
+			Success:   true,
+			SessionID: "session-abc",
+			State:     "navigating",
+		},
+		handoffResp: &browser.BookingHandoffResponse{
+			Success:    true,
+			SessionID:  "session-abc",
+			HandoffURL: "https://moxie.com/pay/session-abc",
+			State:      "ready_for_handoff",
+		},
+	}
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(context.Background(), &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Patient",
+		Phone:   "+15551234567",
+		Source:  "sms",
+		Message: "Botox",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	messenger := &recordingMessenger{}
+	svc := &bookingReplyService{
+		bookingReq: &BookingRequest{
+			BookingURL:  "https://app.joinmoxie.com/booking/test",
+			Date:        "2026-02-10",
+			Time:        "3:30pm",
+			Service:     "Botox",
+			LeadID:      lead.ID,
+			OrgID:       "org-1",
+			FirstName:   "Test",
+			LastName:    "Patient",
+			Phone:       "+15551234567",
+			CallbackURL: "https://api.example.com/webhooks/booking/callback?orgId=org-1",
+		},
+	}
+
+	queue := newScriptedQueue()
+	store := &stubJobUpdater{}
+	worker := NewWorker(svc, queue, store, messenger, nil, logging.Default(),
+		WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0),
+		WithBrowserBookingClient(browserClient),
+		WithWorkerLeadsRepo(leadsRepo),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:          "job-booking",
+		Kind:        jobTypeMessage,
+		TrackStatus: true,
+		Message: MessageRequest{
+			ConversationID: "conv-booking",
+			Message:        "1",
+			OrgID:          "org-1",
+			LeadID:         lead.ID,
+			Channel:        ChannelSMS,
+			From:           "+15551234567",
+			To:             "+15559999999",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{
+		ID:            "msg-booking",
+		Body:          string(body),
+		ReceiptHandle: "rh-booking",
+	})
+
+	// Wait for handoff SMS to be sent (the AI reply + handoff SMS = 2 messages)
+	waitFor(func() bool {
+		return len(messenger.allReplies()) >= 2
+	}, 5*time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	replies := messenger.allReplies()
+	// First reply is the AI message, second is the handoff URL
+	foundHandoff := false
+	for _, r := range replies {
+		if strings.Contains(r.Body, "https://moxie.com/pay/session-abc") {
+			foundHandoff = true
+			if r.To != "+15551234567" {
+				t.Errorf("handoff SMS sent to wrong number: %q", r.To)
+			}
+			break
+		}
+	}
+	if !foundHandoff {
+		t.Fatalf("expected handoff URL SMS, got replies: %v", replies)
+	}
+
+	// Verify lead was updated with session ID and handoff URL
+	updatedLead, err := leadsRepo.GetByID(context.Background(), "org-1", lead.ID)
+	if err != nil {
+		t.Fatalf("get lead: %v", err)
+	}
+	if updatedLead.BookingSessionID != "session-abc" {
+		t.Errorf("lead booking session ID = %q, want session-abc", updatedLead.BookingSessionID)
+	}
+	if updatedLead.BookingPlatform != "moxie" {
+		t.Errorf("lead booking platform = %q, want moxie", updatedLead.BookingPlatform)
+	}
+	if updatedLead.BookingHandoffURL != "https://moxie.com/pay/session-abc" {
+		t.Errorf("lead booking handoff URL = %q, want moxie pay URL", updatedLead.BookingHandoffURL)
+	}
+	if updatedLead.BookingHandoffSentAt == nil {
+		t.Error("expected BookingHandoffSentAt to be set")
+	}
+}
+
+func TestHandleMoxieBooking_StartFails_FallbackSMS(t *testing.T) {
+	browserClient := &stubBrowserBookingClient{
+		startErr: errors.New("sidecar down"),
+	}
+	messenger := &recordingMessenger{}
+	svc := &bookingReplyService{
+		bookingReq: &BookingRequest{
+			BookingURL: "https://app.joinmoxie.com/booking/test",
+			Date:       "2026-02-10",
+			Time:       "3:30pm",
+			LeadID:     "lead-1",
+			OrgID:      "org-1",
+		},
+	}
+
+	queue := newScriptedQueue()
+	store := &stubJobUpdater{}
+	worker := NewWorker(svc, queue, store, messenger, nil, logging.Default(),
+		WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0),
+		WithBrowserBookingClient(browserClient),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:   "job-fail",
+		Kind: jobTypeMessage,
+		Message: MessageRequest{
+			ConversationID: "conv-fail",
+			Message:        "1",
+			OrgID:          "org-1",
+			LeadID:         "lead-1",
+			Channel:        ChannelSMS,
+			From:           "+15551234567",
+			To:             "+15559999999",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-fail", Body: string(body), ReceiptHandle: "rh-fail"})
+
+	// Wait for fallback SMS
+	waitFor(func() bool {
+		return len(messenger.allReplies()) >= 2
+	}, 3*time.Second, t)
+
+	cancel()
+	worker.Wait()
+
+	foundFallback := false
+	for _, r := range messenger.allReplies() {
+		if strings.Contains(r.Body, "trouble starting your booking") {
+			foundFallback = true
+			break
+		}
+	}
+	if !foundFallback {
+		t.Fatalf("expected fallback SMS, got: %v", messenger.allReplies())
+	}
+}
+
+func TestHandleMoxieBooking_NoBrowserClient_NoError(t *testing.T) {
+	messenger := &recordingMessenger{}
+	svc := &bookingReplyService{
+		bookingReq: &BookingRequest{
+			BookingURL: "https://app.joinmoxie.com/booking/test",
+			Date:       "2026-02-10",
+			Time:       "3:30pm",
+			LeadID:     "lead-1",
+			OrgID:      "org-1",
+		},
+	}
+
+	queue := newScriptedQueue()
+	store := &stubJobUpdater{}
+	// No WithBrowserBookingClient — simulates unconfigured env
+	worker := NewWorker(svc, queue, store, messenger, nil, logging.Default(),
+		WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:   "job-nobrowser",
+		Kind: jobTypeMessage,
+		Message: MessageRequest{
+			ConversationID: "conv-nobrowser",
+			Message:        "1",
+			OrgID:          "org-1",
+			Channel:        ChannelSMS,
+			From:           "+15551234567",
+			To:             "+15559999999",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-nobrowser", Body: string(body), ReceiptHandle: "rh-nobrowser"})
+
+	// Wait for the AI reply (just 1 message, no handoff)
+	waitFor(func() bool {
+		return len(messenger.allReplies()) >= 1
+	}, 3*time.Second, t)
+
+	// Give a brief moment to ensure no second message arrives
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	worker.Wait()
+
+	replies := messenger.allReplies()
+	// Should only have the AI reply, no handoff or fallback
+	for _, r := range replies {
+		if strings.Contains(r.Body, "moxie.com") || strings.Contains(r.Body, "trouble") {
+			t.Errorf("unexpected booking-related SMS when no browser client: %q", r.Body)
+		}
+	}
+}
+
+func TestHandleMoxieBooking_Dispatch_BookingRequestTriggersHandling(t *testing.T) {
+	// Verify that Response.BookingRequest triggers handleMoxieBooking dispatch
+	browserClient := &stubBrowserBookingClient{
+		startResp: &browser.BookingStartResponse{
+			Success:   true,
+			SessionID: "session-dispatch",
+		},
+		handoffResp: &browser.BookingHandoffResponse{
+			Success:    true,
+			SessionID:  "session-dispatch",
+			HandoffURL: "https://moxie.com/pay/dispatch-test",
+		},
+	}
+	messenger := &recordingMessenger{}
+	svc := &bookingReplyService{
+		bookingReq: &BookingRequest{
+			BookingURL: "https://app.joinmoxie.com/booking/test",
+			Date:       "2026-02-10",
+			Time:       "3:30pm",
+			LeadID:     "lead-1",
+			OrgID:      "org-1",
+		},
+	}
+
+	queue := newScriptedQueue()
+	store := &stubJobUpdater{}
+	worker := NewWorker(svc, queue, store, messenger, nil, logging.Default(),
+		WithWorkerCount(1), WithReceiveBatchSize(1), WithReceiveWaitSeconds(0),
+		WithBrowserBookingClient(browserClient),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker.Start(ctx)
+
+	payload := queuePayload{
+		ID:   "job-dispatch",
+		Kind: jobTypeMessage,
+		Message: MessageRequest{
+			ConversationID: "conv-dispatch",
+			Message:        "1",
+			OrgID:          "org-1",
+			Channel:        ChannelSMS,
+			From:           "+15551234567",
+			To:             "+15559999999",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	queue.enqueue(queueMessage{ID: "msg-dispatch", Body: string(body), ReceiptHandle: "rh-dispatch"})
+
+	waitFor(func() bool {
+		for _, r := range messenger.allReplies() {
+			if strings.Contains(r.Body, "dispatch-test") {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, t)
+
+	cancel()
+	worker.Wait()
 }

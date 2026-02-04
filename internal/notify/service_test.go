@@ -107,6 +107,14 @@ func (m *mockLeadsRepo) UpdateBookingSession(ctx context.Context, leadID string,
 	return nil
 }
 
+func (m *mockLeadsRepo) GetByBookingSessionID(ctx context.Context, sessionID string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (m *mockLeadsRepo) UpdateEmail(ctx context.Context, leadID string, email string) error {
+	return nil
+}
+
 // Tests
 
 func TestService_NotifyPaymentSuccess_NilClinicStore(t *testing.T) {

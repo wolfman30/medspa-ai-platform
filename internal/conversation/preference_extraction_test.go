@@ -9,8 +9,10 @@ import (
 )
 
 type mockLeadsRepo struct {
-	savedPrefs leads.SchedulingPreferences
-	savedCount int
+	savedPrefs      leads.SchedulingPreferences
+	savedCount      int
+	savedEmail      string
+	savedEmailCount int
 }
 
 func (m *mockLeadsRepo) Create(ctx context.Context, req *leads.CreateLeadRequest) (*leads.Lead, error) {
@@ -44,6 +46,16 @@ func (m *mockLeadsRepo) UpdateSelectedAppointment(ctx context.Context, leadID st
 }
 
 func (m *mockLeadsRepo) UpdateBookingSession(ctx context.Context, leadID string, update leads.BookingSessionUpdate) error {
+	return nil
+}
+
+func (m *mockLeadsRepo) GetByBookingSessionID(ctx context.Context, sessionID string) (*leads.Lead, error) {
+	return nil, leads.ErrLeadNotFound
+}
+
+func (m *mockLeadsRepo) UpdateEmail(ctx context.Context, leadID string, email string) error {
+	m.savedEmail = email
+	m.savedEmailCount++
 	return nil
 }
 

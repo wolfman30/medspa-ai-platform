@@ -466,6 +466,14 @@ func (s *stubLeadRepo) UpdateBookingSession(context.Context, string, leads.Booki
 	return nil
 }
 
+func (s *stubLeadRepo) GetByBookingSessionID(context.Context, string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadRepo) UpdateEmail(context.Context, string, string) error {
+	return nil
+}
+
 type stubProcessedTracker struct {
 	already bool
 	marked  bool

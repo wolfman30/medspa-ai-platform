@@ -228,6 +228,175 @@ func (c *Client) GetBatchAvailability(ctx context.Context, req BatchAvailability
 	return &result, nil
 }
 
+// ---------------------------------------------------------------------------
+// Booking session types (mirror browser-sidecar/src/types.ts)
+// ---------------------------------------------------------------------------
+
+// BookingLeadInfo contains patient details for the booking form.
+type BookingLeadInfo struct {
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Phone     string `json:"phone"`
+	Email     string `json:"email"`
+	Notes     string `json:"notes,omitempty"`
+}
+
+// BookingStartRequest starts a new booking session on the browser sidecar.
+type BookingStartRequest struct {
+	BookingURL  string          `json:"bookingUrl"`
+	Date        string          `json:"date"` // YYYY-MM-DD
+	Time        string          `json:"time"` // e.g. "2:30pm"
+	Lead        BookingLeadInfo `json:"lead"`
+	Service     string          `json:"service,omitempty"`
+	Provider    string          `json:"provider,omitempty"`
+	CallbackURL string          `json:"callbackUrl,omitempty"`
+	Timeout     int             `json:"timeout,omitempty"` // milliseconds, default 120000
+}
+
+// BookingStartResponse is returned when a booking session is created.
+type BookingStartResponse struct {
+	Success   bool   `json:"success"`
+	SessionID string `json:"sessionId"`
+	State     string `json:"state"`
+	Error     string `json:"error,omitempty"`
+}
+
+// BookingHandoffResponse contains the payment handoff URL.
+type BookingHandoffResponse struct {
+	Success    bool   `json:"success"`
+	SessionID  string `json:"sessionId"`
+	HandoffURL string `json:"handoffUrl"`
+	ExpiresAt  string `json:"expiresAt"`
+	State      string `json:"state"`
+	Error      string `json:"error,omitempty"`
+}
+
+// BookingConfirmationDetails contains extracted confirmation info.
+type BookingConfirmationDetails struct {
+	ConfirmationNumber string `json:"confirmationNumber,omitempty"`
+	AppointmentTime    string `json:"appointmentTime,omitempty"`
+	Provider           string `json:"provider,omitempty"`
+	Service            string `json:"service,omitempty"`
+	RawText            string `json:"rawText,omitempty"`
+}
+
+// BookingStatusResponse represents the current state of a booking session.
+type BookingStatusResponse struct {
+	Success             bool                        `json:"success"`
+	SessionID           string                      `json:"sessionId"`
+	State               string                      `json:"state"`
+	Outcome             string                      `json:"outcome,omitempty"`
+	ConfirmationDetails *BookingConfirmationDetails `json:"confirmationDetails,omitempty"`
+	Error               string                      `json:"error,omitempty"`
+	CreatedAt           string                      `json:"createdAt"`
+	UpdatedAt           string                      `json:"updatedAt"`
+}
+
+// StartBookingSession initiates a booking session on the browser sidecar.
+// The sidecar automates Steps 1-4 (service, provider, date/time, contact info)
+// and stops at Step 5 (payment page).
+func (c *Client) StartBookingSession(ctx context.Context, req BookingStartRequest) (*BookingStartResponse, error) {
+	if req.Timeout == 0 {
+		req.Timeout = 120000
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("browser: marshal booking request: %w", err)
+	}
+
+	c.logger.Info("starting booking session", "url", req.BookingURL, "date", req.Date, "time", req.Time)
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/booking/start", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("browser: create booking request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("browser: booking request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result BookingStartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("browser: decode booking response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetHandoffURL retrieves the payment handoff URL for a booking session.
+// Returns the URL when the sidecar has navigated to the payment step.
+func (c *Client) GetHandoffURL(ctx context.Context, sessionID string) (*BookingHandoffResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+"/api/v1/booking/"+sessionID+"/handoff-url", nil)
+	if err != nil {
+		return nil, fmt.Errorf("browser: create handoff request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("browser: handoff request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result BookingHandoffResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("browser: decode handoff response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetBookingStatus checks the current state of a booking session.
+func (c *Client) GetBookingStatus(ctx context.Context, sessionID string) (*BookingStatusResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+"/api/v1/booking/"+sessionID+"/status", nil)
+	if err != nil {
+		return nil, fmt.Errorf("browser: create status request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("browser: status request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result BookingStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("browser: decode status response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// CancelBookingSession cancels an active booking session.
+func (c *Client) CancelBookingSession(ctx context.Context, sessionID string) error {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		c.baseURL+"/api/v1/booking/"+sessionID, nil)
+	if err != nil {
+		return fmt.Errorf("browser: create cancel request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("browser: cancel request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("browser: booking session not found: %s", sessionID)
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("browser: cancel failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
 // GetAvailableSlots is a convenience method that returns only available slots.
 func (c *Client) GetAvailableSlots(ctx context.Context, bookingURL, date string) ([]TimeSlot, error) {
 	resp, err := c.GetAvailability(ctx, AvailabilityRequest{

@@ -345,14 +345,13 @@ IGNORE the standard deposit rule above. Follow ONLY the Moxie flow below.
 🔷 MOXIE BOOKING CLINIC - SPECIAL INSTRUCTIONS:
 This clinic uses Moxie for online booking. The flow is DIFFERENT from standard clinics:
 
-📋 QUALIFICATION CHECKLIST FOR MOXIE - You need FIVE things:
+📋 QUALIFICATION CHECKLIST FOR MOXIE - You need SIX things:
 1. NAME - The patient's full name (first + last)
 2. SERVICE - What SPECIFIC treatment are they interested in? (see below for clarification)
 3. PATIENT TYPE - Are they a new or existing/returning patient?
 4. SCHEDULE - Day AND time preferences (weekdays/weekends + morning/afternoon/evening)
 5. PROVIDER PREFERENCE - Which provider do they want, or no preference? (see below)
-
-NOTE: Do NOT ask for email - the Moxie booking page will collect their email and payment info.
+6. EMAIL - The patient's email address (needed for booking confirmation)
 
 🎯 SERVICE CLARIFICATION - IMPORTANT:
 This clinic's booking system requires SPECIFIC services, not general categories. If a patient mentions a broad category, ask clarifying questions to narrow down to a bookable service.
@@ -390,13 +389,13 @@ Customer: "No preference"
 
 ⏰ TIME SELECTION BEFORE BOOKING LINK:
 For this clinic, DO NOT offer deposit/booking link immediately when qualifications are met.
-Instead, once you have all FIVE items (name, specific service, patient type, schedule preference, provider preference):
+Instead, once you have all SIX items (name, specific service, patient type, schedule preference, provider preference, email):
 - Tell them you're checking available times
 - ⚠️ CRITICAL: Do NOT invent or guess appointment times. The system will provide REAL availability.
 - If the system hasn't provided times yet, say "Let me check what's available..." and WAIT
 - Available appointment slots will be presented to them automatically by the system
 - AFTER they select a specific time, the booking process starts
-- The booking link is where they'll enter their email and payment details (the booking system handles deposits, NOT you)
+- The booking link is where they'll complete payment (the booking system handles deposits, NOT you)
 
 🚫 FORBIDDEN RESPONSES - NEVER SAY THESE:
 - "Our team will reach out..." or "We'll contact you..." or "Someone will get back to you..."
@@ -406,7 +405,7 @@ Instead, once you have all FIVE items (name, specific service, patient type, sch
 - NEVER say the clinic is closed as a reason you can't check times. The system checks availability 24/7.
 
 MOXIE FLOW:
-1. Collect: Name → Specific Service (with clarification) → Patient Type → Schedule Preference → Provider Preference
+1. Collect: Name → Specific Service (with clarification) → Patient Type → Schedule Preference → Provider Preference → Email
 2. Say: "Let me check our available times for [SERVICE] based on your preference for [SCHEDULE]..."
 3. (System will present available times automatically - WAIT for this, do NOT make up times)
 4. After they pick a time → Booking process starts
@@ -575,6 +574,13 @@ func WithPaymentChecker(checker PaymentStatusChecker) LLMOption {
 	}
 }
 
+// WithAPIBaseURL sets the public API base URL (used for building callback URLs).
+func WithAPIBaseURL(url string) LLMOption {
+	return func(s *LLMService) {
+		s.apiBaseURL = url
+	}
+}
+
 type depositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -597,6 +603,7 @@ type LLMService struct {
 	audit          *compliance.AuditService
 	paymentChecker PaymentStatusChecker
 	faqClassifier  *FAQClassifier
+	apiBaseURL     string // Public API base URL for callback URLs
 }
 
 // NewLLMService returns an LLM-backed Service implementation.
@@ -808,6 +815,11 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	if req.LeadID != "" && s.leadsRepo != nil {
 		if err := s.extractAndSavePreferences(ctx, req.LeadID, history); err != nil {
 			s.logger.Warn("failed to save scheduling preferences from intro", "lead_id", req.LeadID, "error", err)
+		}
+		if email := ExtractEmailFromHistory(history); email != "" {
+			if err := s.leadsRepo.UpdateEmail(ctx, req.LeadID, email); err != nil {
+				s.logger.Warn("failed to save email", "lead_id", req.LeadID, "error", err)
+			}
 		}
 	}
 
@@ -1138,9 +1150,10 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 	// Handle time selection if user is in that flow
 	var timeSelectionResponse *TimeSelectionResponse
+	var selectedSlot *PresentedSlot
 	if timeSelectionState != nil && len(timeSelectionState.PresentedSlots) > 0 {
 		// User may be selecting a time slot
-		selectedSlot := DetectTimeSelection(rawMessage, timeSelectionState.PresentedSlots)
+		selectedSlot = DetectTimeSelection(rawMessage, timeSelectionState.PresentedSlots)
 		if selectedSlot != nil {
 			s.logger.Info("time slot selected",
 				"slot_index", selectedSlot.Index,
@@ -1199,6 +1212,11 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	if req.LeadID != "" && s.leadsRepo != nil {
 		if err := s.extractAndSavePreferences(ctx, req.LeadID, history); err != nil {
 			s.logger.Warn("failed to save scheduling preferences", "lead_id", req.LeadID, "error", err)
+		}
+		if email := ExtractEmailFromHistory(history); email != "" {
+			if err := s.leadsRepo.UpdateEmail(ctx, req.LeadID, email); err != nil {
+				s.logger.Warn("failed to save email", "lead_id", req.LeadID, "error", err)
+			}
 		}
 	}
 
@@ -1289,12 +1307,73 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		depositIntent = nil
 	}
 
+	// For Moxie clinics: build a BookingRequest when the patient selects a time slot
+	var bookingRequest *BookingRequest
+	if usesMoxie && selectedSlot != nil && clinicCfg != nil && clinicCfg.BookingURL != "" {
+		firstName, lastName := splitName("")
+		phone := req.From
+		email := ""
+
+		// Fetch lead details for name/email
+		if req.LeadID != "" && s.leadsRepo != nil {
+			if lead, err := s.leadsRepo.GetByID(ctx, req.OrgID, req.LeadID); err == nil && lead != nil {
+				firstName, lastName = splitName(lead.Name)
+				if lead.Phone != "" {
+					phone = lead.Phone
+				}
+				email = lead.Email
+			}
+		}
+
+		// Fallback: extract email from conversation history if not on the lead
+		if email == "" {
+			email = ExtractEmailFromHistory(history)
+		}
+
+		if email == "" {
+			s.logger.Warn("booking blocked: no email for Moxie booking", "lead_id", req.LeadID)
+			// bookingRequest stays nil — AI will ask for email per prompt
+		} else {
+			// Format date and time from the selected slot
+			dateStr := selectedSlot.DateTime.Format("2006-01-02")
+			timeStr := strings.ToLower(selectedSlot.DateTime.Format("3:04pm"))
+
+			// Build callback URL
+			var callbackURL string
+			if s.apiBaseURL != "" {
+				callbackURL = fmt.Sprintf("%s/webhooks/booking/callback?orgId=%s&from=%s",
+					strings.TrimRight(s.apiBaseURL, "/"), req.OrgID, req.From)
+			}
+
+			bookingRequest = &BookingRequest{
+				BookingURL:  clinicCfg.BookingURL,
+				Date:        dateStr,
+				Time:        timeStr,
+				Service:     timeSelectionState.Service,
+				LeadID:      req.LeadID,
+				OrgID:       req.OrgID,
+				FirstName:   firstName,
+				LastName:    lastName,
+				Phone:       phone,
+				Email:       email,
+				CallbackURL: callbackURL,
+			}
+			s.logger.Info("booking request prepared for Moxie",
+				"booking_url", clinicCfg.BookingURL,
+				"date", dateStr,
+				"time", timeStr,
+				"lead_id", req.LeadID,
+			)
+		}
+	}
+
 	return &Response{
 		ConversationID:        req.ConversationID,
 		Message:               reply,
 		Timestamp:             time.Now().UTC(),
 		DepositIntent:         depositIntent,
 		TimeSelectionResponse: timeSelectionResponse,
+		BookingRequest:        bookingRequest,
 	}, nil
 }
 
@@ -2795,4 +2874,18 @@ func looksLikePhone(name string, phone string) bool {
 		}
 	}
 	return digits >= 7
+}
+
+// splitName splits a full name into first and last name.
+// "Andy Wolf" → ("Andy", "Wolf"), "Madonna" → ("Madonna", ""), "  " → ("", "").
+func splitName(full string) (string, string) {
+	parts := strings.Fields(full)
+	switch len(parts) {
+	case 0:
+		return "", ""
+	case 1:
+		return parts[0], ""
+	default:
+		return parts[0], strings.Join(parts[1:], " ")
+	}
 }

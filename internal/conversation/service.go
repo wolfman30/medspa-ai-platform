@@ -86,6 +86,23 @@ type TimeSelectionResponse struct {
 	SMSMessage string          // Pre-formatted SMS message to send
 }
 
+// BookingRequest instructs the worker to start a browser-sidecar booking session.
+// Populated by the LLM service when a Moxie-clinic patient selects a time slot.
+type BookingRequest struct {
+	BookingURL  string // Moxie booking page URL
+	Date        string // YYYY-MM-DD
+	Time        string // e.g. "3:30pm"
+	Service     string
+	Provider    string
+	LeadID      string
+	OrgID       string
+	FirstName   string
+	LastName    string
+	Phone       string
+	Email       string
+	CallbackURL string // POST target for outcome notifications
+}
+
 // Response is a simple DTO returned to the API layer.
 type Response struct {
 	ConversationID        string
@@ -93,6 +110,7 @@ type Response struct {
 	Timestamp             time.Time
 	DepositIntent         *DepositIntent
 	TimeSelectionResponse *TimeSelectionResponse // Set when presenting time options
+	BookingRequest        *BookingRequest        // Set when Moxie booking should be initiated
 }
 
 // StubService is a placeholder implementation used until the real engine is ready.

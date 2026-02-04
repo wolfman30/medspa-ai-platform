@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/tenancy"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -440,4 +442,187 @@ type stubRAGIngestor struct {
 func (s *stubRAGIngestor) AddDocuments(ctx context.Context, clinicID string, docs []string) error {
 	s.calls++
 	return nil
+}
+
+// --- Booking callback handler tests ---
+
+type callbackMessenger struct {
+	replies []OutboundReply
+	mu      sync.Mutex
+}
+
+func (m *callbackMessenger) SendReply(ctx context.Context, reply OutboundReply) error {
+	m.mu.Lock()
+	m.replies = append(m.replies, reply)
+	m.mu.Unlock()
+	return nil
+}
+
+func setupBookingCallbackTest(t *testing.T) (*BookingCallbackHandler, *leads.InMemoryRepository, *callbackMessenger, *leads.Lead) {
+	t.Helper()
+	repo := leads.NewInMemoryRepository()
+	lead, err := repo.Create(context.Background(), &leads.CreateLeadRequest{
+		OrgID:   "org-1",
+		Name:    "Test Patient",
+		Phone:   "+15551234567",
+		Source:  "sms",
+		Message: "Botox",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+	// Set booking session ID on lead
+	if err := repo.UpdateBookingSession(context.Background(), lead.ID, leads.BookingSessionUpdate{
+		SessionID: "session-abc",
+		Platform:  "moxie",
+	}); err != nil {
+		t.Fatalf("update booking session: %v", err)
+	}
+
+	messenger := &callbackMessenger{}
+	handler := NewBookingCallbackHandler(repo, messenger, logging.Default())
+	return handler, repo, messenger, lead
+}
+
+func TestBookingCallback_Success(t *testing.T) {
+	handler, repo, messenger, lead := setupBookingCallbackTest(t)
+
+	body := `{"sessionId":"session-abc","state":"completed","outcome":"success","confirmationDetails":{"confirmationNumber":"CONF-123","appointmentTime":"Feb 10 at 3:30 PM"}}`
+	req := httptest.NewRequest("POST", "/webhooks/booking/callback?orgId=org-1&from=%2B15559999999", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify lead updated
+	updated, _ := repo.GetByID(context.Background(), "org-1", lead.ID)
+	if updated.BookingOutcome != "success" {
+		t.Errorf("outcome = %q, want success", updated.BookingOutcome)
+	}
+	if updated.BookingConfirmationNumber != "CONF-123" {
+		t.Errorf("confirmation = %q, want CONF-123", updated.BookingConfirmationNumber)
+	}
+	if updated.BookingCompletedAt == nil {
+		t.Error("expected BookingCompletedAt to be set")
+	}
+
+	// Verify SMS sent
+	messenger.mu.Lock()
+	defer messenger.mu.Unlock()
+	if len(messenger.replies) != 1 {
+		t.Fatalf("expected 1 SMS, got %d", len(messenger.replies))
+	}
+	sms := messenger.replies[0]
+	if !strings.Contains(sms.Body, "confirmed") {
+		t.Errorf("SMS body = %q, want confirmation message", sms.Body)
+	}
+	if !strings.Contains(sms.Body, "CONF-123") {
+		t.Errorf("SMS body = %q, want confirmation number", sms.Body)
+	}
+	if sms.To != "+15551234567" {
+		t.Errorf("SMS to = %q, want patient phone", sms.To)
+	}
+	if sms.From != "+15559999999" {
+		t.Errorf("SMS from = %q, want clinic number", sms.From)
+	}
+}
+
+func TestBookingCallback_PaymentFailed(t *testing.T) {
+	handler, repo, messenger, lead := setupBookingCallbackTest(t)
+
+	body := `{"sessionId":"session-abc","state":"failed","outcome":"payment_failed"}`
+	req := httptest.NewRequest("POST", "/webhooks/booking/callback?orgId=org-1&from=%2B15559999999", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	updated, _ := repo.GetByID(context.Background(), "org-1", lead.ID)
+	if updated.BookingOutcome != "payment_failed" {
+		t.Errorf("outcome = %q, want payment_failed", updated.BookingOutcome)
+	}
+
+	messenger.mu.Lock()
+	defer messenger.mu.Unlock()
+	if len(messenger.replies) != 1 {
+		t.Fatalf("expected 1 SMS, got %d", len(messenger.replies))
+	}
+	if !strings.Contains(messenger.replies[0].Body, "payment didn't go through") {
+		t.Errorf("SMS = %q, want payment failed message", messenger.replies[0].Body)
+	}
+}
+
+func TestBookingCallback_Timeout(t *testing.T) {
+	handler, _, messenger, _ := setupBookingCallbackTest(t)
+
+	body := `{"sessionId":"session-abc","state":"completed","outcome":"timeout"}`
+	req := httptest.NewRequest("POST", "/webhooks/booking/callback?orgId=org-1&from=%2B15559999999", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	messenger.mu.Lock()
+	defer messenger.mu.Unlock()
+	if len(messenger.replies) != 1 {
+		t.Fatalf("expected 1 SMS, got %d", len(messenger.replies))
+	}
+	if !strings.Contains(messenger.replies[0].Body, "expired") {
+		t.Errorf("SMS = %q, want expiration message", messenger.replies[0].Body)
+	}
+}
+
+func TestBookingCallback_InvalidJSON(t *testing.T) {
+	handler, _, _, _ := setupBookingCallbackTest(t)
+
+	req := httptest.NewRequest("POST", "/webhooks/booking/callback?orgId=org-1", strings.NewReader("not json"))
+	rr := httptest.NewRecorder()
+
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestBookingCallback_MissingSessionID(t *testing.T) {
+	handler, _, _, _ := setupBookingCallbackTest(t)
+
+	body := `{"state":"completed","outcome":"success"}`
+	req := httptest.NewRequest("POST", "/webhooks/booking/callback?orgId=org-1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestBookingCallback_UnknownSession(t *testing.T) {
+	handler, _, _, _ := setupBookingCallbackTest(t)
+
+	body := `{"sessionId":"session-unknown","state":"completed","outcome":"success"}`
+	req := httptest.NewRequest("POST", "/webhooks/booking/callback?orgId=org-1&from=%2B15559999999", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.Handle(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
 }

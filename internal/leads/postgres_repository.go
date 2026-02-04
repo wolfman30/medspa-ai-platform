@@ -122,6 +122,68 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 	return &lead, nil
 }
 
+// GetByBookingSessionID retrieves a lead by its booking session ID.
+func (r *PostgresRepository) GetByBookingSessionID(ctx context.Context, sessionID string) (*Lead, error) {
+	query := `
+		SELECT id, org_id, name, email, phone, message, source, created_at,
+		       COALESCE(service_interest, '') as service_interest,
+		       COALESCE(patient_type, '') as patient_type,
+		       COALESCE(past_services, '') as past_services,
+		       COALESCE(preferred_days, '') as preferred_days,
+		       COALESCE(preferred_times, '') as preferred_times,
+		       COALESCE(scheduling_notes, '') as scheduling_notes,
+		       COALESCE(deposit_status, '') as deposit_status,
+		       COALESCE(priority_level, '') as priority_level,
+		       selected_datetime,
+		       COALESCE(selected_service, '') as selected_service,
+		       COALESCE(booking_session_id, '') as booking_session_id,
+		       COALESCE(booking_platform, '') as booking_platform,
+		       COALESCE(booking_outcome, '') as booking_outcome,
+		       COALESCE(booking_confirmation_number, '') as booking_confirmation_number,
+		       COALESCE(booking_handoff_url, '') as booking_handoff_url,
+		       booking_handoff_sent_at,
+		       booking_completed_at
+		FROM leads
+		WHERE booking_session_id = $1
+		LIMIT 1
+	`
+	row := r.pool.QueryRow(ctx, query, sessionID)
+	var lead Lead
+	if err := row.Scan(
+		&lead.ID,
+		&lead.OrgID,
+		&lead.Name,
+		&lead.Email,
+		&lead.Phone,
+		&lead.Message,
+		&lead.Source,
+		&lead.CreatedAt,
+		&lead.ServiceInterest,
+		&lead.PatientType,
+		&lead.PastServices,
+		&lead.PreferredDays,
+		&lead.PreferredTimes,
+		&lead.SchedulingNotes,
+		&lead.DepositStatus,
+		&lead.PriorityLevel,
+		&lead.SelectedDateTime,
+		&lead.SelectedService,
+		&lead.BookingSessionID,
+		&lead.BookingPlatform,
+		&lead.BookingOutcome,
+		&lead.BookingConfirmationNumber,
+		&lead.BookingHandoffURL,
+		&lead.BookingHandoffSentAt,
+		&lead.BookingCompletedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrLeadNotFound
+		}
+		return nil, fmt.Errorf("leads: select by booking session failed: %w", err)
+	}
+	return &lead, nil
+}
+
 // GetOrCreateByPhone finds the most recent lead for an org/phone or creates a new one.
 func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*Lead, error) {
 	phone = strings.TrimSpace(phone)
@@ -362,6 +424,19 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 	}
 
 	return results, nil
+}
+
+// UpdateEmail updates a lead's email address. Empty strings are ignored (COALESCE).
+func (r *PostgresRepository) UpdateEmail(ctx context.Context, leadID string, email string) error {
+	query := `UPDATE leads SET email = COALESCE(NULLIF($2, ''), email) WHERE id = $1`
+	result, err := r.pool.Exec(ctx, query, leadID, email)
+	if err != nil {
+		return fmt.Errorf("leads: update email: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrLeadNotFound
+	}
+	return nil
 }
 
 // UpdateBookingSession updates a lead's booking session state

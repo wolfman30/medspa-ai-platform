@@ -113,6 +113,12 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		logger.Info("payment checker wired into conversation service")
 	}
 
+	// Wire in public base URL for callback URL construction
+	if cfg.PublicBaseURL != "" {
+		opts = append(opts, conversation.WithAPIBaseURL(cfg.PublicBaseURL))
+		logger.Info("API base URL wired for booking callbacks", "url", cfg.PublicBaseURL)
+	}
+
 	// Build primary LLM client based on provider configuration
 	var primaryClient conversation.LLMClient
 	var modelID string

@@ -26,6 +26,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
+	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
@@ -381,37 +382,45 @@ func main() {
 		logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
 	}
 
+	// Create booking callback handler for browser sidecar outcome notifications
+	var bookingCallbackHandler *conversation.BookingCallbackHandler
+	if leadsRepo != nil && webhookMessenger != nil {
+		bookingCallbackHandler = conversation.NewBookingCallbackHandler(leadsRepo, webhookMessenger, logger)
+		logger.Info("booking callback handler initialized")
+	}
+
 	// Setup router
 	routerCfg := &router.Config{
-		Logger:              logger,
-		LeadsHandler:        leadsHandler,
-		MessagingHandler:    messagingHandler,
-		ConversationHandler: conversationHandler,
-		PaymentsHandler:     checkoutHandler,
-		FakePayments:        fakePaymentsHandler,
-		SquareWebhook:       squareWebhookHandler,
-		SquareOAuth:         squareOAuthHandler,
-		AdminMessaging:      adminMessagingHandler,
-		AdminClinicData:     adminClinicDataHandler,
-		TelnyxWebhooks:      telnyxWebhookHandler,
-		ClinicHandler:       clinicHandler,
-		ClinicStatsHandler:  clinicStatsHandler,
-		ClinicDashboard:     clinicDashboardHandler,
-		AdminOnboarding:     adminOnboardingHandler,
-		OnboardingToken:     cfg.OnboardingToken,
-		ClientRegistration:  clientRegistrationHandler,
-		AdminAuthSecret:     cfg.AdminJWTSecret,
-		CognitoUserPoolID:   cfg.CognitoUserPoolID,
-		CognitoClientID:     cfg.CognitoClientID,
-		CognitoRegion:       cfg.CognitoRegion,
-		DB:                  sqlDB,
-		TranscriptStore:     smsTranscript,
-		ClinicStore:         clinicStore,
-		KnowledgeRepo:       knowledgeRepo,
-		AuditService:        auditSvc,
-		MetricsHandler:      metricsHandler,
-		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
-		MockBooking:         demo.NewMockBookingHandler(),
+		Logger:                 logger,
+		LeadsHandler:           leadsHandler,
+		MessagingHandler:       messagingHandler,
+		ConversationHandler:    conversationHandler,
+		PaymentsHandler:        checkoutHandler,
+		FakePayments:           fakePaymentsHandler,
+		SquareWebhook:          squareWebhookHandler,
+		SquareOAuth:            squareOAuthHandler,
+		AdminMessaging:         adminMessagingHandler,
+		AdminClinicData:        adminClinicDataHandler,
+		TelnyxWebhooks:         telnyxWebhookHandler,
+		ClinicHandler:          clinicHandler,
+		ClinicStatsHandler:     clinicStatsHandler,
+		ClinicDashboard:        clinicDashboardHandler,
+		AdminOnboarding:        adminOnboardingHandler,
+		OnboardingToken:        cfg.OnboardingToken,
+		ClientRegistration:     clientRegistrationHandler,
+		AdminAuthSecret:        cfg.AdminJWTSecret,
+		CognitoUserPoolID:      cfg.CognitoUserPoolID,
+		CognitoClientID:        cfg.CognitoClientID,
+		CognitoRegion:          cfg.CognitoRegion,
+		DB:                     sqlDB,
+		TranscriptStore:        smsTranscript,
+		ClinicStore:            clinicStore,
+		KnowledgeRepo:          knowledgeRepo,
+		AuditService:           auditSvc,
+		MetricsHandler:         metricsHandler,
+		CORSAllowedOrigins:     cfg.CORSAllowedOrigins,
+		MockBooking:            demo.NewMockBookingHandler(),
+		BookingCallbackHandler: bookingCallbackHandler,
 	}
 	r := router.New(routerCfg)
 
@@ -720,13 +729,7 @@ func setupInlineWorker(
 		}
 	}
 
-	worker := conversation.NewWorker(
-		processor,
-		memoryQueue,
-		jobUpdater,
-		messenger,
-		bookingBridge,
-		logger,
+	workerOpts := []conversation.WorkerOption{
 		conversation.WithWorkerCount(cfg.WorkerCount),
 		conversation.WithDepositSender(depositSender),
 		conversation.WithDepositPreloader(depositPreloader),
@@ -740,6 +743,24 @@ func setupInlineWorker(
 		conversation.WithConversationStore(convStore),
 		conversation.WithSupervisor(supervisor),
 		conversation.WithSupervisorMode(conversation.ParseSupervisorMode(cfg.SupervisorMode)),
+		conversation.WithWorkerLeadsRepo(leadsRepo),
+	}
+
+	// Wire browser sidecar booking client into worker for Moxie booking automation
+	if cfg.BrowserSidecarURL != "" {
+		browserClient := browser.NewClient(cfg.BrowserSidecarURL, browser.WithLogger(logger))
+		workerOpts = append(workerOpts, conversation.WithBrowserBookingClient(browserClient))
+		logger.Info("browser booking client wired into inline worker", "url", cfg.BrowserSidecarURL)
+	}
+
+	worker := conversation.NewWorker(
+		processor,
+		memoryQueue,
+		jobUpdater,
+		messenger,
+		bookingBridge,
+		logger,
+		workerOpts...,
 	)
 	worker.Start(ctx)
 	logger.Info("inline conversation workers started", "count", cfg.WorkerCount)

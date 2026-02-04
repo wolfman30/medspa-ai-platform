@@ -324,6 +324,14 @@ func (s *stubLeadsRepo) UpdateBookingSession(context.Context, string, leads.Book
 	return nil
 }
 
+func (s *stubLeadsRepo) GetByBookingSessionID(context.Context, string) (*leads.Lead, error) {
+	return nil, leads.ErrLeadNotFound
+}
+
+func (s *stubLeadsRepo) UpdateEmail(context.Context, string, string) error {
+	return nil
+}
+
 // helper to satisfy repository expectations
 // keep compiler happy
 var _ = errors.New

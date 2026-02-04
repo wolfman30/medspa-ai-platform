@@ -62,9 +62,38 @@ The AI conversation extracts customer preferences and passes them to the browser
 4. Filter results using `filterSlots(date, slots, { daysOfWeek: [1,4], afterTime: "16:00" })`
 5. Return ONLY matching times to customer via SMS
 
-**Important:** The browser sidecar currently operates in **dry-run mode only** (checks availability but does NOT book).
+**Important:** For availability checking, the browser sidecar operates in **dry-run mode** (checks availability but does NOT book). For booking automation (Step 3a), the sidecar navigates Steps 1-4 of the Moxie flow and hands off at the payment page for the patient to complete.
 
-### Step 3: Book and Collect Deposit (if applicable)
+### Step 3: Book and Collect Deposit
+
+Booking behavior depends on the clinic's platform:
+
+#### Step 3a: Moxie Clinics — Browser Sidecar Booking Automation
+
+When the patient selects a time slot from a Moxie-powered clinic, the system automates the booking flow via the browser sidecar:
+
+| Phase | What Happens | Actor |
+|-------|-------------|-------|
+| 1. Start session | Worker sends booking request to sidecar with patient info, service, provider, date/time | Go Worker |
+| 2. Automate Steps 1-4 | Sidecar navigates Moxie booking widget: service → provider → date/time → contact info | Browser Sidecar |
+| 3. Handoff at Step 5 | Sidecar stops at the payment page, returns handoff URL | Browser Sidecar |
+| 4. Send handoff SMS | Worker sends patient the payment page link via SMS | Go Worker |
+| 5. Monitor outcome | Sidecar polls the page every 2s for booking outcome (success, payment failure, timeout) | Browser Sidecar |
+| 6. Callback | Sidecar POSTs outcome to `POST /webhooks/booking/callback` | Browser Sidecar → Go API |
+| 7. Outcome SMS | Callback handler sends confirmation or failure SMS to patient | Go API |
+
+**Booking Session States:** `created → navigating → ready_for_handoff → monitoring → completed/failed/abandoned`
+
+**Outcome SMS Messages:**
+- `success` → "Your appointment is confirmed! Confirmation #..."
+- `payment_failed` → "Your payment didn't go through. Reply YES to try again."
+- `slot_unavailable` → "That time slot is no longer available. Want me to check other times?"
+- `timeout` → "Your booking session expired. Want to try again?"
+
+**Key files:** `internal/conversation/worker.go` (handleMoxieBooking), `internal/conversation/handler.go` (BookingCallbackHandler), `internal/browser/client.go` (booking session methods)
+
+#### Step 3b: Square Clinics — Deposit Collection
+
 | Deposit Eligibility | Per-clinic configuration (admin sets which services require deposits) |
 |--------------------|-----------------------------------------------------------------------|
 | Payment | Square checkout link (PCI-compliant hosted page) |
@@ -101,7 +130,9 @@ cd browser-sidecar && npm run test:unit
 | 2 | AI extracts: service, date/time, patient type, name | Lead record has all fields populated |
 | 2 | Check available appointment times from Moxie | Browser sidecar returns time slots |
 | 2 | Navigate Moxie multi-step booking flow | Integration tests verify flow completion |
-| 3 | Deposit link sent for configured services | Checkout URL in SMS for deposit-eligible services |
+| 3 | Moxie booking: sidecar automates Steps 1-4, handoff URL sent | Worker test verifies session start + handoff SMS |
+| 3 | Moxie booking: callback handles outcome (success/failure) | Handler test verifies outcome SMS + lead update |
+| 3 | Deposit link sent for configured services (Square clinics) | Checkout URL in SMS for deposit-eligible services |
 | 3 | Payment processed and recorded | Square webhook updates payment status |
 | 4 | Patient receives confirmation SMS | Outbox message sent on payment success |
 | 4 | Operator notified | Lead marked qualified with preferences |
@@ -264,11 +295,12 @@ internal/
   clinic/              # Per-clinic config
   http/handlers/       # Webhook handlers
   events/              # Outbox for confirmations (Step 4)
-  browser/             # Browser sidecar client (Go)
+  browser/             # Browser sidecar client (Go) — availability + booking session methods
 browser-sidecar/       # Playwright service (TypeScript/Node.js)
   src/
     scraper.ts         # Availability scraper (Moxie)
-    server.ts          # HTTP API for booking checks
+    booking-session.ts # Booking session manager (Steps 1-4 automation + outcome monitoring)
+    server.ts          # HTTP API for availability + booking sessions
     types.ts           # Request/response schemas
   tests/
     unit/              # 96 unit tests
@@ -296,6 +328,15 @@ migrations/            # Database migrations
 | `GET /ready` | K8s readiness probe | <100ms |
 | `POST /api/v1/availability` | Scrape single date availability | <45s |
 | `POST /api/v1/availability/batch` | Scrape 1-7 dates (max) | <5min |
+| `POST /api/v1/booking/start` | Start booking session (automates Steps 1-4) | <90s |
+| `GET /api/v1/booking/:sessionId/handoff-url` | Get payment page URL for patient handoff | <1s |
+| `GET /api/v1/booking/:sessionId/status` | Check session state/outcome | <1s |
+| `DELETE /api/v1/booking/:sessionId` | Cancel active booking session | <5s |
+
+**Booking Callback (Go API):**
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /webhooks/booking/callback` | Receive booking outcome from sidecar |
 
 ---
 

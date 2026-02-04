@@ -206,3 +206,11 @@ func (s *stubLeadsRepo) UpdateSelectedAppointment(context.Context, string, leads
 func (s *stubLeadsRepo) UpdateBookingSession(context.Context, string, leads.BookingSessionUpdate) error {
 	return nil
 }
+
+func (s *stubLeadsRepo) GetByBookingSessionID(context.Context, string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) UpdateEmail(context.Context, string, string) error {
+	return nil
+}

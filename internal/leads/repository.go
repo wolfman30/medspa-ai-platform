@@ -49,10 +49,12 @@ type Repository interface {
 	Create(ctx context.Context, req *CreateLeadRequest) (*Lead, error)
 	GetByID(ctx context.Context, orgID string, id string) (*Lead, error)
 	GetOrCreateByPhone(ctx context.Context, orgID string, phone string, source string, defaultName string) (*Lead, error)
+	GetByBookingSessionID(ctx context.Context, sessionID string) (*Lead, error)
 	UpdateSchedulingPreferences(ctx context.Context, leadID string, prefs SchedulingPreferences) error
 	UpdateSelectedAppointment(ctx context.Context, leadID string, appt SelectedAppointment) error
 	UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error
 	UpdateBookingSession(ctx context.Context, leadID string, update BookingSessionUpdate) error
+	UpdateEmail(ctx context.Context, leadID string, email string) error
 	ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error)
 }
 
@@ -104,6 +106,19 @@ func (r *InMemoryRepository) GetByID(ctx context.Context, orgID string, id strin
 	}
 
 	return lead, nil
+}
+
+// GetByBookingSessionID retrieves a lead by its booking session ID.
+func (r *InMemoryRepository) GetByBookingSessionID(ctx context.Context, sessionID string) (*Lead, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, lead := range r.leads {
+		if lead.BookingSessionID == sessionID {
+			return lead, nil
+		}
+	}
+	return nil, ErrLeadNotFound
 }
 
 // GetOrCreateByPhone retrieves the most recent lead for an org/phone or creates one.
@@ -212,6 +227,22 @@ func (r *InMemoryRepository) UpdateDepositStatus(ctx context.Context, leadID str
 
 	lead.DepositStatus = status
 	lead.PriorityLevel = priority
+	return nil
+}
+
+// UpdateEmail updates a lead's email address. Empty strings are ignored.
+func (r *InMemoryRepository) UpdateEmail(ctx context.Context, leadID string, email string) error {
+	if email == "" {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lead, ok := r.leads[leadID]
+	if !ok {
+		return ErrLeadNotFound
+	}
+	lead.Email = email
 	return nil
 }
 

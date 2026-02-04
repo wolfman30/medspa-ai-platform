@@ -370,6 +370,294 @@ func TestFormatSlotsForDisplay(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------------
+// Booking session tests
+// ---------------------------------------------------------------------------
+
+func TestClient_StartBookingSession(t *testing.T) {
+	t.Run("successful start", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/booking/start" {
+				t.Errorf("expected path /api/v1/booking/start, got %s", r.URL.Path)
+			}
+			if r.Method != http.MethodPost {
+				t.Errorf("expected POST method, got %s", r.Method)
+			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Error("expected Content-Type application/json")
+			}
+
+			var req BookingStartRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("failed to decode request: %v", err)
+			}
+			if req.BookingURL != "https://app.joinmoxie.com/booking/test" {
+				t.Errorf("unexpected bookingUrl: %s", req.BookingURL)
+			}
+			if req.Date != "2026-02-05" {
+				t.Errorf("unexpected date: %s", req.Date)
+			}
+			if req.Time != "3:30pm" {
+				t.Errorf("unexpected time: %s", req.Time)
+			}
+			if req.Lead.FirstName != "Andy" || req.Lead.LastName != "Wolf" {
+				t.Errorf("unexpected lead name: %s %s", req.Lead.FirstName, req.Lead.LastName)
+			}
+			if req.CallbackURL != "https://api.example.com/webhooks/booking/callback" {
+				t.Errorf("unexpected callbackUrl: %s", req.CallbackURL)
+			}
+			if req.Timeout != 120000 {
+				t.Errorf("expected default timeout 120000, got %d", req.Timeout)
+			}
+
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(BookingStartResponse{
+				Success:   true,
+				SessionID: "sess-123",
+				State:     "created",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		resp, err := client.StartBookingSession(context.Background(), BookingStartRequest{
+			BookingURL: "https://app.joinmoxie.com/booking/test",
+			Date:       "2026-02-05",
+			Time:       "3:30pm",
+			Lead: BookingLeadInfo{
+				FirstName: "Andy",
+				LastName:  "Wolf",
+				Phone:     "+15551234567",
+				Email:     "andy@example.com",
+			},
+			Service:     "Botox",
+			Provider:    "Gale",
+			CallbackURL: "https://api.example.com/webhooks/booking/callback",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !resp.Success {
+			t.Error("expected success to be true")
+		}
+		if resp.SessionID != "sess-123" {
+			t.Errorf("expected sessionId sess-123, got %s", resp.SessionID)
+		}
+		if resp.State != "created" {
+			t.Errorf("expected state created, got %s", resp.State)
+		}
+	})
+
+	t.Run("validation error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(BookingStartResponse{
+				Success: false,
+				Error:   "Invalid request: date is required",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		resp, err := client.StartBookingSession(context.Background(), BookingStartRequest{
+			BookingURL: "https://app.joinmoxie.com/booking/test",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resp.Success {
+			t.Error("expected success to be false")
+		}
+		if resp.Error == "" {
+			t.Error("expected error message")
+		}
+	})
+
+	t.Run("network error", func(t *testing.T) {
+		client := NewClient("http://localhost:99999")
+		_, err := client.StartBookingSession(context.Background(), BookingStartRequest{
+			BookingURL: "https://example.com",
+			Date:       "2026-02-05",
+			Time:       "3:30pm",
+			Lead:       BookingLeadInfo{FirstName: "Test"},
+		})
+		if err == nil {
+			t.Error("expected error for network failure")
+		}
+	})
+}
+
+func TestClient_GetHandoffURL(t *testing.T) {
+	t.Run("success with handoff URL", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/booking/sess-123/handoff-url" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Method != http.MethodGet {
+				t.Errorf("expected GET method, got %s", r.Method)
+			}
+
+			json.NewEncoder(w).Encode(BookingHandoffResponse{
+				Success:    true,
+				SessionID:  "sess-123",
+				HandoffURL: "https://app.joinmoxie.com/booking/checkout/abc",
+				ExpiresAt:  "2026-02-05T16:30:00Z",
+				State:      "monitoring",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		resp, err := client.GetHandoffURL(context.Background(), "sess-123")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !resp.Success {
+			t.Error("expected success to be true")
+		}
+		if resp.HandoffURL != "https://app.joinmoxie.com/booking/checkout/abc" {
+			t.Errorf("unexpected handoff URL: %s", resp.HandoffURL)
+		}
+		if resp.State != "monitoring" {
+			t.Errorf("expected state monitoring, got %s", resp.State)
+		}
+	})
+
+	t.Run("not ready yet", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(BookingHandoffResponse{
+				Success:   false,
+				SessionID: "sess-123",
+				State:     "navigating",
+				Error:     "Session still navigating, please wait",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		resp, err := client.GetHandoffURL(context.Background(), "sess-123")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resp.Success {
+			t.Error("expected success to be false")
+		}
+		if resp.State != "navigating" {
+			t.Errorf("expected state navigating, got %s", resp.State)
+		}
+	})
+}
+
+func TestClient_GetBookingStatus(t *testing.T) {
+	t.Run("completed with confirmation", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/booking/sess-456/status" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+
+			json.NewEncoder(w).Encode(BookingStatusResponse{
+				Success:   true,
+				SessionID: "sess-456",
+				State:     "completed",
+				Outcome:   "success",
+				ConfirmationDetails: &BookingConfirmationDetails{
+					ConfirmationNumber: "CONF-789",
+					AppointmentTime:    "3:30 PM",
+				},
+				CreatedAt: "2026-02-05T15:00:00Z",
+				UpdatedAt: "2026-02-05T15:05:00Z",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		resp, err := client.GetBookingStatus(context.Background(), "sess-456")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !resp.Success {
+			t.Error("expected success to be true")
+		}
+		if resp.Outcome != "success" {
+			t.Errorf("expected outcome success, got %s", resp.Outcome)
+		}
+		if resp.ConfirmationDetails == nil {
+			t.Fatal("expected confirmation details")
+		}
+		if resp.ConfirmationDetails.ConfirmationNumber != "CONF-789" {
+			t.Errorf("unexpected confirmation number: %s", resp.ConfirmationDetails.ConfirmationNumber)
+		}
+	})
+
+	t.Run("still monitoring", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(BookingStatusResponse{
+				Success:   true,
+				SessionID: "sess-456",
+				State:     "monitoring",
+				CreatedAt: "2026-02-05T15:00:00Z",
+				UpdatedAt: "2026-02-05T15:00:00Z",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		resp, err := client.GetBookingStatus(context.Background(), "sess-456")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resp.State != "monitoring" {
+			t.Errorf("expected state monitoring, got %s", resp.State)
+		}
+		if resp.Outcome != "" {
+			t.Errorf("expected empty outcome, got %s", resp.Outcome)
+		}
+	})
+}
+
+func TestClient_CancelBookingSession(t *testing.T) {
+	t.Run("successful cancel", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/booking/sess-789" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Method != http.MethodDelete {
+				t.Errorf("expected DELETE method, got %s", r.Method)
+			}
+
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success":   true,
+				"sessionId": "sess-789",
+				"message":   "Session cancelled",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		err := client.CancelBookingSession(context.Background(), "sess-789")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Session not found",
+			})
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL)
+		err := client.CancelBookingSession(context.Background(), "sess-nonexistent")
+		if err == nil {
+			t.Error("expected error for not found session")
+		}
+	})
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }
