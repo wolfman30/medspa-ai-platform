@@ -1,10 +1,14 @@
 package conversation
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 )
 
 func TestDetectTimeSelection(t *testing.T) {
@@ -259,4 +263,188 @@ func TestFormatSlotNoLongerAvailableMessage(t *testing.T) {
 		assert.Contains(t, result, "10:00 AM slot was just booked")
 		assert.Contains(t, result, "check for other available times")
 	})
+}
+
+// dateAwareMock returns different responses per date string.
+type dateAwareMock struct {
+	responses map[string]*browser.AvailabilityResponse
+	callCount atomic.Int32
+}
+
+func (m *dateAwareMock) GetAvailability(_ context.Context, req browser.AvailabilityRequest) (*browser.AvailabilityResponse, error) {
+	m.callCount.Add(1)
+	resp, ok := m.responses[req.Date]
+	if !ok {
+		return &browser.AvailabilityResponse{Success: true, Slots: nil}, nil
+	}
+	return resp, nil
+}
+
+func (m *dateAwareMock) IsReady(_ context.Context) bool { return true }
+
+// makeSlotResponse builds an AvailabilityResponse with the given times.
+func makeSlotResponse(times ...string) *browser.AvailabilityResponse {
+	slots := make([]browser.TimeSlot, len(times))
+	for i, t := range times {
+		slots[i] = browser.TimeSlot{Time: t, Available: true}
+	}
+	return &browser.AvailabilityResponse{Success: true, Slots: slots}
+}
+
+func TestFetchAvailableTimes_Parallel(t *testing.T) {
+	// Use a date-aware mock that returns slots for two different dates.
+	// Today's date varies, so we compute the qualifying dates dynamically.
+	now := time.Now()
+	day0 := now.Format("2006-01-02")
+	day1 := now.AddDate(0, 0, 1).Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day0: makeSlotResponse("10:00 AM", "11:00 AM"),
+			day1: makeSlotResponse("2:00 PM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	slots, err := FetchAvailableTimes(context.Background(), adapter, "https://example.com/book", "Botox", TimePreferences{})
+	require.NoError(t, err)
+
+	// Should get slots from both days (3 total)
+	assert.Len(t, slots, 3)
+	// Slots should be in chronological order
+	assert.True(t, slots[0].DateTime.Before(slots[1].DateTime), "slot 0 should be before slot 1")
+	assert.True(t, slots[1].DateTime.Before(slots[2].DateTime), "slot 1 should be before slot 2")
+	// Indexes should be 1-based sequential
+	assert.Equal(t, 1, slots[0].Index)
+	assert.Equal(t, 2, slots[1].Index)
+	assert.Equal(t, 3, slots[2].Index)
+
+	// All 7 dates should have been fetched (parallel)
+	assert.Equal(t, int32(daysToSearch), mock.callCount.Load())
+}
+
+func TestFetchAvailableTimes_DayOfWeekFilter(t *testing.T) {
+	// Set up mock with slots on every day
+	now := time.Now()
+	responses := make(map[string]*browser.AvailabilityResponse)
+	for i := 0; i < daysToSearch; i++ {
+		d := now.AddDate(0, 0, i).Format("2006-01-02")
+		responses[d] = makeSlotResponse("9:00 AM")
+	}
+	mock := &dateAwareMock{responses: responses}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	// Only fetch Mondays (weekday 1)
+	prefs := TimePreferences{DaysOfWeek: []int{1}} // Monday
+	slots, err := FetchAvailableTimes(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	require.NoError(t, err)
+
+	// Every returned slot should be on a Monday
+	for _, s := range slots {
+		assert.Equal(t, time.Monday, s.DateTime.Weekday(), "slot %s should be Monday", s.TimeStr)
+	}
+}
+
+func TestFetchAvailableTimesWithFallback_ExactMatch(t *testing.T) {
+	now := time.Now()
+	day0 := now.Format("2006-01-02")
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day0: makeSlotResponse("3:00 PM", "4:00 PM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+	prefs := TimePreferences{AfterTime: "15:00"} // after 3pm
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	require.NoError(t, err)
+
+	assert.True(t, result.ExactMatch)
+	assert.Equal(t, daysToSearch, result.SearchedDays)
+	assert.Len(t, result.Slots, 2)
+	assert.Empty(t, result.Message)
+}
+
+func TestFetchAvailableTimesWithFallback_RelaxedDayOfWeek(t *testing.T) {
+	// Exact prefs: only Sundays after 3pm — no slots.
+	// Relaxed: drop day filter, keep time filter — finds slots.
+	now := time.Now()
+
+	// Put an afternoon slot on day 0 (which is "today", probably not Sunday)
+	day0 := now.Format("2006-01-02")
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day0: makeSlotResponse("4:00 PM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	// Ask for Sundays only (weekday 0) after 3pm
+	prefs := TimePreferences{DaysOfWeek: []int{0}, AfterTime: "15:00"}
+
+	// Only works if today is not Sunday
+	if now.Weekday() == time.Sunday {
+		t.Skip("today is Sunday, test not applicable")
+	}
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	require.NoError(t, err)
+
+	// Should find slots via relaxed day-of-week (step 2)
+	assert.False(t, result.ExactMatch)
+	assert.Len(t, result.Slots, 1)
+	assert.Empty(t, result.Message)
+}
+
+func TestFetchAvailableTimesWithFallback_ExtendedSearch(t *testing.T) {
+	// No slots in days 0-6, but slots on day 14
+	now := time.Now()
+	day14 := now.AddDate(0, 0, 14).Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day14: makeSlotResponse("10:00 AM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+	prefs := TimePreferences{} // no day filter, so step 2 is skipped
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	require.NoError(t, err)
+
+	// Should find via extended search (step 3)
+	assert.True(t, result.ExactMatch)
+	assert.Equal(t, extendedDaysToSearch, result.SearchedDays)
+	assert.Len(t, result.Slots, 1)
+	assert.Empty(t, result.Message)
+}
+
+func TestFetchAvailableTimesWithFallback_NothingFound(t *testing.T) {
+	// Empty mock — no slots at all
+	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
+	adapter := NewBrowserAdapter(mock, nil)
+	prefs := TimePreferences{AfterTime: "15:00"}
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	require.NoError(t, err)
+
+	assert.Nil(t, result.Slots)
+	assert.False(t, result.ExactMatch)
+	assert.Equal(t, extendedDaysToSearch, result.SearchedDays)
+	assert.Contains(t, result.Message, "Botox")
+	assert.Contains(t, result.Message, "4 weeks")
+}
+
+func TestFetchAvailableTimes_NilAdapter(t *testing.T) {
+	_, err := FetchAvailableTimes(context.Background(), nil, "https://example.com/book", "Botox", TimePreferences{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestFetchAvailableTimes_EmptyBookingURL(t *testing.T) {
+	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
+	adapter := NewBrowserAdapter(mock, nil)
+	_, err := FetchAvailableTimes(context.Background(), adapter, "", "Botox", TimePreferences{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "booking URL")
 }
