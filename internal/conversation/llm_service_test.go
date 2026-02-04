@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -1178,9 +1179,9 @@ func TestBuildSystemPrompt_MoxieInstructions(t *testing.T) {
 	if !strings.Contains(promptMoxie, "MOXIE BOOKING CLINIC") {
 		t.Errorf("Moxie prompt should contain 'MOXIE BOOKING CLINIC'")
 	}
-	// Email is collected on Moxie booking page, not via SMS
-	if !strings.Contains(promptMoxie, "Do NOT ask for email") {
-		t.Errorf("Moxie prompt should say not to ask for email (collected on booking page)")
+	// Email is now part of the qualification checklist
+	if !strings.Contains(promptMoxie, "EMAIL") {
+		t.Errorf("Moxie prompt should include EMAIL as a qualification item")
 	}
 	if !strings.Contains(promptMoxie, "SERVICE CLARIFICATION") {
 		t.Errorf("Moxie prompt should contain service clarification instructions")
@@ -1236,5 +1237,516 @@ func TestLLMService_InjectsDepositAmountContext(t *testing.T) {
 	}
 	if !foundDepositContext {
 		t.Fatalf("expected deposit amount context with $75 to be injected into system prompts")
+	}
+}
+
+func TestSplitName(t *testing.T) {
+	tests := []struct {
+		full      string
+		wantFirst string
+		wantLast  string
+	}{
+		{"Andy Wolf", "Andy", "Wolf"},
+		{"Madonna", "Madonna", ""},
+		{"", "", ""},
+		{"  ", "", ""},
+		{"Mary Jane Watson", "Mary", "Jane Watson"},
+		{"  Spaced  Name  ", "Spaced", "Name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.full, func(t *testing.T) {
+			first, last := splitName(tt.full)
+			if first != tt.wantFirst || last != tt.wantLast {
+				t.Errorf("splitName(%q) = (%q, %q), want (%q, %q)", tt.full, first, last, tt.wantFirst, tt.wantLast)
+			}
+		})
+	}
+}
+
+func TestMoxieTimeSelection_BookingRequestPopulated(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(rdb)
+
+	// Set up Moxie clinic config
+	cfg := clinic.DefaultConfig("org-moxie")
+	cfg.BookingPlatform = "moxie"
+	cfg.BookingURL = "https://app.joinmoxie.com/booking/forever-22"
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("save clinic config: %v", err)
+	}
+
+	// Create lead
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-moxie",
+		Name:    "Andy Wolf",
+		Phone:   "+15551234567",
+		Email:   "andy@example.com",
+		Source:  "sms",
+		Message: "I want Botox",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	// Build LLM service
+	mockLLM := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Welcome!"},
+			{Text: "Great choice! I've booked your Botox appointment."},
+		},
+	}
+	svc := NewLLMService(mockLLM, rdb, nil, "test-model", logging.Default(),
+		WithLeadsRepo(leadsRepo),
+		WithClinicStore(clinicStore),
+		WithAPIBaseURL("https://api.example.com"),
+	)
+
+	// Start conversation
+	convID := "conv-moxie-" + uuid.NewString()
+	_, err = svc.StartConversation(ctx, StartRequest{
+		ConversationID: convID,
+		LeadID:         lead.ID,
+		OrgID:          "org-moxie",
+		Intro:          "I want Botox",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// Simulate: save time selection state as if slots were already presented
+	slotTime := time.Date(2026, 2, 10, 15, 30, 0, 0, time.UTC)
+	state := &TimeSelectionState{
+		PresentedSlots: []PresentedSlot{
+			{Index: 1, DateTime: slotTime, TimeStr: "Mon Feb 10 at 3:30 PM", Service: "Botox", Available: true},
+			{Index: 2, DateTime: slotTime.Add(time.Hour), TimeStr: "Mon Feb 10 at 4:30 PM", Service: "Botox", Available: true},
+		},
+		Service:     "Botox",
+		BookingURL:  "https://app.joinmoxie.com/booking/forever-22",
+		PresentedAt: time.Now(),
+	}
+	if err := svc.history.SaveTimeSelectionState(ctx, convID, state); err != nil {
+		t.Fatalf("save time selection state: %v", err)
+	}
+
+	// User selects slot 1
+	resp, err := svc.ProcessMessage(ctx, MessageRequest{
+		ConversationID: convID,
+		Message:        "1",
+		LeadID:         lead.ID,
+		OrgID:          "org-moxie",
+		Channel:        ChannelSMS,
+		From:           "+15551234567",
+	})
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	// BookingRequest should be populated
+	if resp.BookingRequest == nil {
+		t.Fatal("expected BookingRequest to be populated for Moxie time selection")
+	}
+	br := resp.BookingRequest
+	if br.BookingURL != "https://app.joinmoxie.com/booking/forever-22" {
+		t.Errorf("BookingURL = %q, want Moxie URL", br.BookingURL)
+	}
+	if br.Date != "2026-02-10" {
+		t.Errorf("Date = %q, want 2026-02-10", br.Date)
+	}
+	if br.Time != "3:30pm" {
+		t.Errorf("Time = %q, want 3:30pm", br.Time)
+	}
+	if br.FirstName != "Andy" {
+		t.Errorf("FirstName = %q, want Andy", br.FirstName)
+	}
+	if br.LastName != "Wolf" {
+		t.Errorf("LastName = %q, want Wolf", br.LastName)
+	}
+	if br.Phone != "+15551234567" {
+		t.Errorf("Phone = %q, want +15551234567", br.Phone)
+	}
+	if br.Email != "andy@example.com" {
+		t.Errorf("Email = %q, want andy@example.com", br.Email)
+	}
+	if br.LeadID != lead.ID {
+		t.Errorf("LeadID = %q, want %q", br.LeadID, lead.ID)
+	}
+	if br.OrgID != "org-moxie" {
+		t.Errorf("OrgID = %q, want org-moxie", br.OrgID)
+	}
+	if br.Service != "Botox" {
+		t.Errorf("Service = %q, want Botox", br.Service)
+	}
+	if !strings.Contains(br.CallbackURL, "/webhooks/booking/callback") {
+		t.Errorf("CallbackURL = %q, want to contain /webhooks/booking/callback", br.CallbackURL)
+	}
+	if !strings.Contains(br.CallbackURL, "orgId=org-moxie") {
+		t.Errorf("CallbackURL = %q, want to contain orgId=org-moxie", br.CallbackURL)
+	}
+
+	// Deposit intent should be nil for Moxie
+	if resp.DepositIntent != nil {
+		t.Error("expected DepositIntent to be nil for Moxie clinic")
+	}
+}
+
+func TestSquareTimeSelection_BookingRequestNil(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(rdb)
+
+	// Set up Square clinic config (default)
+	cfg := clinic.DefaultConfig("org-square")
+	cfg.BookingPlatform = "square"
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("save clinic config: %v", err)
+	}
+
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-square",
+		Name:    "Jane Doe",
+		Phone:   "+15559876543",
+		Source:  "sms",
+		Message: "Botox please",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Welcome!"},
+			{Text: "Great, let me send you the deposit link."},
+		},
+	}
+	svc := NewLLMService(mockLLM, rdb, nil, "test-model", logging.Default(),
+		WithLeadsRepo(leadsRepo),
+		WithClinicStore(clinicStore),
+		WithAPIBaseURL("https://api.example.com"),
+	)
+
+	convID := "conv-square-" + uuid.NewString()
+	_, err = svc.StartConversation(ctx, StartRequest{
+		ConversationID: convID,
+		LeadID:         lead.ID,
+		OrgID:          "org-square",
+		Intro:          "Botox please",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// Simulate time selection state
+	slotTime := time.Date(2026, 2, 10, 14, 0, 0, 0, time.UTC)
+	state := &TimeSelectionState{
+		PresentedSlots: []PresentedSlot{
+			{Index: 1, DateTime: slotTime, TimeStr: "Mon Feb 10 at 2:00 PM", Service: "Botox", Available: true},
+		},
+		Service:     "Botox",
+		PresentedAt: time.Now(),
+	}
+	if err := svc.history.SaveTimeSelectionState(ctx, convID, state); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	resp, err := svc.ProcessMessage(ctx, MessageRequest{
+		ConversationID: convID,
+		Message:        "1",
+		LeadID:         lead.ID,
+		OrgID:          "org-square",
+		Channel:        ChannelSMS,
+		From:           "+15559876543",
+	})
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	// BookingRequest should be nil for Square clinics
+	if resp.BookingRequest != nil {
+		t.Error("expected BookingRequest to be nil for Square clinic")
+	}
+}
+
+func TestMoxieTimeSelection_NoBookingURL_NoBookingRequest(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(rdb)
+
+	// Moxie clinic but no booking URL
+	cfg := clinic.DefaultConfig("org-nourl")
+	cfg.BookingPlatform = "moxie"
+	cfg.BookingURL = "" // No URL configured
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("save clinic config: %v", err)
+	}
+
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-nourl",
+		Name:    "Test User",
+		Phone:   "+15551111111",
+		Source:  "sms",
+		Message: "Botox",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Welcome!"},
+			{Text: "OK, noted."},
+		},
+	}
+	svc := NewLLMService(mockLLM, rdb, nil, "test-model", logging.Default(),
+		WithLeadsRepo(leadsRepo),
+		WithClinicStore(clinicStore),
+	)
+
+	convID := "conv-nourl-" + uuid.NewString()
+	_, err = svc.StartConversation(ctx, StartRequest{
+		ConversationID: convID,
+		LeadID:         lead.ID,
+		OrgID:          "org-nourl",
+		Intro:          "Botox",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	slotTime := time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC)
+	state := &TimeSelectionState{
+		PresentedSlots: []PresentedSlot{
+			{Index: 1, DateTime: slotTime, TimeStr: "Mon Feb 10 at 10:00 AM", Service: "Botox", Available: true},
+		},
+		Service:     "Botox",
+		PresentedAt: time.Now(),
+	}
+	if err := svc.history.SaveTimeSelectionState(ctx, convID, state); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	resp, err := svc.ProcessMessage(ctx, MessageRequest{
+		ConversationID: convID,
+		Message:        "1",
+		LeadID:         lead.ID,
+		OrgID:          "org-nourl",
+		Channel:        ChannelSMS,
+		From:           "+15551111111",
+	})
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	if resp.BookingRequest != nil {
+		t.Error("expected BookingRequest to be nil when no booking URL is configured")
+	}
+}
+
+func TestMoxieTimeSelection_NoEmail_BookingBlocked(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(rdb)
+
+	cfg := clinic.DefaultConfig("org-noemail")
+	cfg.BookingPlatform = "moxie"
+	cfg.BookingURL = "https://app.joinmoxie.com/booking/forever-22"
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("save clinic config: %v", err)
+	}
+
+	// Lead created WITHOUT email
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-noemail",
+		Name:    "Andy Wolf",
+		Phone:   "+15551234567",
+		Source:  "sms",
+		Message: "Botox",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Welcome!"},
+			{Text: "I need your email to complete the booking."},
+		},
+	}
+	svc := NewLLMService(mockLLM, rdb, nil, "test-model", logging.Default(),
+		WithLeadsRepo(leadsRepo),
+		WithClinicStore(clinicStore),
+		WithAPIBaseURL("https://api.example.com"),
+	)
+
+	convID := "conv-noemail-" + uuid.NewString()
+	_, err = svc.StartConversation(ctx, StartRequest{
+		ConversationID: convID,
+		LeadID:         lead.ID,
+		OrgID:          "org-noemail",
+		Intro:          "Botox please",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	slotTime := time.Date(2026, 2, 10, 15, 30, 0, 0, time.UTC)
+	state := &TimeSelectionState{
+		PresentedSlots: []PresentedSlot{
+			{Index: 1, DateTime: slotTime, TimeStr: "Mon Feb 10 at 3:30 PM", Service: "Botox", Available: true},
+		},
+		Service:     "Botox",
+		BookingURL:  "https://app.joinmoxie.com/booking/forever-22",
+		PresentedAt: time.Now(),
+	}
+	if err := svc.history.SaveTimeSelectionState(ctx, convID, state); err != nil {
+		t.Fatalf("save time selection state: %v", err)
+	}
+
+	// User selects slot but NO email in conversation or lead
+	resp, err := svc.ProcessMessage(ctx, MessageRequest{
+		ConversationID: convID,
+		Message:        "1",
+		LeadID:         lead.ID,
+		OrgID:          "org-noemail",
+		Channel:        ChannelSMS,
+		From:           "+15551234567",
+	})
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	// BookingRequest should be nil — email required for Moxie
+	if resp.BookingRequest != nil {
+		t.Error("expected BookingRequest to be nil when email is missing")
+	}
+}
+
+func TestMoxieTimeSelection_EmailFallbackFromConversation(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	clinicStore := clinic.NewStore(rdb)
+
+	cfg := clinic.DefaultConfig("org-emailfb")
+	cfg.BookingPlatform = "moxie"
+	cfg.BookingURL = "https://app.joinmoxie.com/booking/forever-22"
+	if err := clinicStore.Set(ctx, cfg); err != nil {
+		t.Fatalf("save clinic config: %v", err)
+	}
+
+	// Lead created WITHOUT email
+	leadsRepo := leads.NewInMemoryRepository()
+	lead, err := leadsRepo.Create(ctx, &leads.CreateLeadRequest{
+		OrgID:   "org-emailfb",
+		Name:    "Andy Wolf",
+		Phone:   "+15551234567",
+		Source:  "sms",
+		Message: "Botox",
+	})
+	if err != nil {
+		t.Fatalf("create lead: %v", err)
+	}
+
+	mockLLM := &stubLLMClient{
+		responses: []LLMResponse{
+			{Text: "Welcome!"},
+			{Text: "Thanks for your email!"},
+			{Text: "Great, I've booked your appointment."},
+		},
+	}
+	svc := NewLLMService(mockLLM, rdb, nil, "test-model", logging.Default(),
+		WithLeadsRepo(leadsRepo),
+		WithClinicStore(clinicStore),
+		WithAPIBaseURL("https://api.example.com"),
+	)
+
+	convID := "conv-emailfb-" + uuid.NewString()
+	_, err = svc.StartConversation(ctx, StartRequest{
+		ConversationID: convID,
+		LeadID:         lead.ID,
+		OrgID:          "org-emailfb",
+		Intro:          "Botox please",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// User provides email in a follow-up message (gets saved to lead via extraction)
+	_, err = svc.ProcessMessage(ctx, MessageRequest{
+		ConversationID: convID,
+		Message:        "My email is andy@example.com",
+		LeadID:         lead.ID,
+		OrgID:          "org-emailfb",
+		Channel:        ChannelSMS,
+		From:           "+15551234567",
+	})
+	if err != nil {
+		t.Fatalf("process email message: %v", err)
+	}
+
+	// Verify email was saved to lead
+	updatedLead, err := leadsRepo.GetByID(ctx, "org-emailfb", lead.ID)
+	if err != nil {
+		t.Fatalf("get lead: %v", err)
+	}
+	if updatedLead.Email != "andy@example.com" {
+		t.Fatalf("expected lead email to be andy@example.com, got %q", updatedLead.Email)
+	}
+
+	// Now set up time selection state and select a slot
+	slotTime := time.Date(2026, 2, 10, 15, 30, 0, 0, time.UTC)
+	state := &TimeSelectionState{
+		PresentedSlots: []PresentedSlot{
+			{Index: 1, DateTime: slotTime, TimeStr: "Mon Feb 10 at 3:30 PM", Service: "Botox", Available: true},
+		},
+		Service:     "Botox",
+		BookingURL:  "https://app.joinmoxie.com/booking/forever-22",
+		PresentedAt: time.Now(),
+	}
+	if err := svc.history.SaveTimeSelectionState(ctx, convID, state); err != nil {
+		t.Fatalf("save time selection state: %v", err)
+	}
+
+	resp, err := svc.ProcessMessage(ctx, MessageRequest{
+		ConversationID: convID,
+		Message:        "1",
+		LeadID:         lead.ID,
+		OrgID:          "org-emailfb",
+		Channel:        ChannelSMS,
+		From:           "+15551234567",
+	})
+	if err != nil {
+		t.Fatalf("process slot selection: %v", err)
+	}
+
+	// BookingRequest should be populated with email from lead (saved earlier via extraction)
+	if resp.BookingRequest == nil {
+		t.Fatal("expected BookingRequest to be populated when email was provided in conversation")
+	}
+	if resp.BookingRequest.Email != "andy@example.com" {
+		t.Errorf("Email = %q, want andy@example.com", resp.BookingRequest.Email)
 	}
 }

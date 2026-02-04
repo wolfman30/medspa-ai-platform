@@ -57,6 +57,9 @@ type Config struct {
 
 	// Mock booking pages for testing (dev only)
 	MockBooking *demo.MockBookingHandler
+
+	// Booking callback handler (browser sidecar → Go API)
+	BookingCallbackHandler *conversation.BookingCallbackHandler
 }
 
 // New creates a new Chi router with all routes configured
@@ -98,6 +101,9 @@ func New(cfg *Config) http.Handler {
 			public.Post("/webhooks/telnyx/messages", cfg.TelnyxWebhooks.HandleMessages)
 			public.Post("/webhooks/telnyx/hosted", cfg.TelnyxWebhooks.HandleHosted)
 			public.Post("/webhooks/telnyx/voice", cfg.TelnyxWebhooks.HandleVoice)
+		}
+		if cfg.BookingCallbackHandler != nil {
+			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)
 		}
 		if cfg.MetricsHandler != nil {
 			public.Handle("/metrics", cfg.MetricsHandler)

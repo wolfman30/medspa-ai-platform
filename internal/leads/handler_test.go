@@ -146,6 +146,14 @@ func (f failingRepository) UpdateBookingSession(context.Context, string, Booking
 	return errors.New("boom")
 }
 
+func (f failingRepository) GetByBookingSessionID(context.Context, string) (*Lead, error) {
+	return nil, errors.New("boom")
+}
+
+func (f failingRepository) UpdateEmail(context.Context, string, string) error {
+	return errors.New("boom")
+}
+
 func TestCreateWebLead_RepositoryError(t *testing.T) {
 	logger := logging.Default()
 	handler := NewHandler(failingRepository{}, logger)

@@ -393,6 +393,14 @@ func (s *stubLeadsRepo) UpdateBookingSession(context.Context, string, leads.Book
 	return nil
 }
 
+func (s *stubLeadsRepo) GetByBookingSessionID(context.Context, string) (*leads.Lead, error) {
+	return nil, nil
+}
+
+func (s *stubLeadsRepo) UpdateEmail(context.Context, string, string) error {
+	return nil
+}
+
 type stubConversationStore struct {
 	appended           bool
 	lastConversationID string

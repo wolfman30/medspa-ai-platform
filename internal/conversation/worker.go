@@ -11,10 +11,20 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
+
+// BrowserBookingClient is the subset of browser.Client used for Moxie booking sessions.
+type BrowserBookingClient interface {
+	StartBookingSession(ctx context.Context, req browser.BookingStartRequest) (*browser.BookingStartResponse, error)
+	GetHandoffURL(ctx context.Context, sessionID string) (*browser.BookingHandoffResponse, error)
+	GetBookingStatus(ctx context.Context, sessionID string) (*browser.BookingStatusResponse, error)
+	CancelBookingSession(ctx context.Context, sessionID string) error
+}
 
 // PaymentNotifier sends notifications when payments are received.
 type PaymentNotifier interface {
@@ -46,6 +56,8 @@ type Worker struct {
 	supervisorMode   SupervisorMode
 	transcript       *SMSTranscriptStore
 	convStore        *ConversationStore
+	browserBooking   BrowserBookingClient
+	leadsRepo        leads.Repository
 	logger           *logging.Logger
 
 	cfg workerConfig
@@ -68,6 +80,8 @@ type workerConfig struct {
 	supervisorMode   SupervisorMode
 	transcript       *SMSTranscriptStore
 	convStore        *ConversationStore
+	browserBooking   BrowserBookingClient
+	leadsRepo        leads.Repository
 }
 
 const (
@@ -219,6 +233,20 @@ func WithClinicConfigStore(store *clinic.Store) WorkerOption {
 	}
 }
 
+// WithBrowserBookingClient wires a browser sidecar client for Moxie booking sessions.
+func WithBrowserBookingClient(client BrowserBookingClient) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.browserBooking = client
+	}
+}
+
+// WithWorkerLeadsRepo wires a leads repository for booking session updates.
+func WithWorkerLeadsRepo(repo leads.Repository) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.leadsRepo = repo
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -270,6 +298,8 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		supervisorMode:   cfg.supervisorMode,
 		transcript:       cfg.transcript,
 		convStore:        cfg.convStore,
+		browserBooking:   cfg.browserBooking,
+		leadsRepo:        cfg.leadsRepo,
 		logger:           logger,
 		cfg:              cfg,
 	}
@@ -501,6 +531,8 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 				// Check if this is a time selection response (takes priority over deposit)
 				if resp != nil && resp.TimeSelectionResponse != nil {
 					w.handleTimeSelectionResponse(ctx, payload.Message, resp)
+				} else if resp != nil && resp.BookingRequest != nil {
+					w.handleMoxieBooking(ctx, payload.Message, resp.BookingRequest)
 				} else {
 					w.handleDepositIntent(ctx, payload.Message, resp)
 				}
@@ -756,6 +788,159 @@ func (w *Worker) handleTimeSelectionResponse(ctx context.Context, msg MessageReq
 		"service", tsr.Service,
 		"exact_match", tsr.ExactMatch,
 	)
+}
+
+func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req *BookingRequest) {
+	if req == nil {
+		return
+	}
+	if w.browserBooking == nil {
+		w.logger.Warn("booking request received but no browser booking client configured",
+			"org_id", req.OrgID, "lead_id", req.LeadID)
+		return
+	}
+
+	// Step 1: Start the booking session on the sidecar
+	startReq := browser.BookingStartRequest{
+		BookingURL: req.BookingURL,
+		Date:       req.Date,
+		Time:       req.Time,
+		Lead: browser.BookingLeadInfo{
+			FirstName: req.FirstName,
+			LastName:  req.LastName,
+			Phone:     req.Phone,
+			Email:     req.Email,
+		},
+		Service:     req.Service,
+		Provider:    req.Provider,
+		CallbackURL: req.CallbackURL,
+	}
+
+	startResp, err := w.browserBooking.StartBookingSession(ctx, startReq)
+	if err != nil {
+		w.logger.Error("failed to start Moxie booking session", "error", err,
+			"org_id", req.OrgID, "lead_id", req.LeadID, "booking_url", req.BookingURL)
+		w.sendBookingFallbackSMS(ctx, msg, "We're having trouble starting your booking right now. Please try again in a moment or call the clinic directly.")
+		return
+	}
+	if !startResp.Success {
+		w.logger.Error("Moxie booking session start failed", "error", startResp.Error,
+			"org_id", req.OrgID, "lead_id", req.LeadID)
+		w.sendBookingFallbackSMS(ctx, msg, "We're having trouble starting your booking right now. Please try again in a moment or call the clinic directly.")
+		return
+	}
+
+	sessionID := startResp.SessionID
+	w.logger.Info("Moxie booking session started", "session_id", sessionID,
+		"org_id", req.OrgID, "lead_id", req.LeadID)
+
+	// Step 2: Update lead with session ID
+	if w.leadsRepo != nil && req.LeadID != "" {
+		if err := w.leadsRepo.UpdateBookingSession(ctx, req.LeadID, leads.BookingSessionUpdate{
+			SessionID: sessionID,
+			Platform:  "moxie",
+		}); err != nil {
+			w.logger.Warn("failed to update lead with booking session", "error", err,
+				"lead_id", req.LeadID, "session_id", sessionID)
+		}
+	}
+
+	// Step 3: Poll for handoff URL (every 2s, up to 60s)
+	var handoffURL string
+	pollCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-pollCtx.Done():
+			w.logger.Warn("Moxie booking handoff URL timed out", "session_id", sessionID,
+				"org_id", req.OrgID, "lead_id", req.LeadID)
+			_ = w.browserBooking.CancelBookingSession(ctx, sessionID)
+			w.sendBookingFallbackSMS(ctx, msg, "We're having trouble completing your booking right now. Please try again in a moment or call the clinic directly.")
+			return
+		case <-ticker.C:
+			resp, err := w.browserBooking.GetHandoffURL(pollCtx, sessionID)
+			if err != nil {
+				w.logger.Debug("handoff URL poll error", "error", err, "session_id", sessionID)
+				continue
+			}
+			if resp.Success && resp.HandoffURL != "" {
+				handoffURL = resp.HandoffURL
+				goto gotHandoff
+			}
+		}
+	}
+
+gotHandoff:
+	w.logger.Info("Moxie booking handoff URL received", "session_id", sessionID,
+		"handoff_url", handoffURL[:min(50, len(handoffURL))], "org_id", req.OrgID)
+
+	// Step 4: Send handoff URL to patient via SMS
+	handoffMsg := fmt.Sprintf("Your booking is almost complete! Tap the link below to finish with payment:\n%s", handoffURL)
+	if w.messenger != nil {
+		reply := OutboundReply{
+			OrgID:          msg.OrgID,
+			LeadID:         msg.LeadID,
+			ConversationID: msg.ConversationID,
+			To:             msg.From,
+			From:           msg.To,
+			Body:           handoffMsg,
+		}
+		if err := w.messenger.SendReply(ctx, reply); err != nil {
+			w.logger.Error("failed to send booking handoff SMS", "error", err,
+				"session_id", sessionID, "org_id", req.OrgID)
+		}
+	}
+
+	// Step 5: Update lead with handoff URL
+	if w.leadsRepo != nil && req.LeadID != "" {
+		now := time.Now()
+		if err := w.leadsRepo.UpdateBookingSession(ctx, req.LeadID, leads.BookingSessionUpdate{
+			HandoffURL:    handoffURL,
+			HandoffSentAt: &now,
+		}); err != nil {
+			w.logger.Warn("failed to update lead with handoff URL", "error", err,
+				"lead_id", req.LeadID, "session_id", sessionID)
+		}
+	}
+
+	// Record to transcript
+	w.appendTranscript(ctx, msg.ConversationID, SMSTranscriptMessage{
+		Role:      "assistant",
+		From:      msg.To,
+		To:        msg.From,
+		Body:      handoffMsg,
+		Timestamp: time.Now(),
+		Kind:      "booking_handoff",
+	})
+}
+
+func (w *Worker) sendBookingFallbackSMS(ctx context.Context, msg MessageRequest, body string) {
+	if w.messenger == nil {
+		return
+	}
+	reply := OutboundReply{
+		OrgID:          msg.OrgID,
+		LeadID:         msg.LeadID,
+		ConversationID: msg.ConversationID,
+		To:             msg.From,
+		From:           msg.To,
+		Body:           body,
+	}
+	if err := w.messenger.SendReply(ctx, reply); err != nil {
+		w.logger.Error("failed to send booking fallback SMS", "error", err, "org_id", msg.OrgID)
+	}
+	w.appendTranscript(ctx, msg.ConversationID, SMSTranscriptMessage{
+		Role:      "assistant",
+		From:      msg.To,
+		To:        msg.From,
+		Body:      body,
+		Timestamp: time.Now(),
+		Kind:      "booking_fallback",
+	})
 }
 
 func (w *Worker) handleDepositIntent(ctx context.Context, msg MessageRequest, resp *Response) {
