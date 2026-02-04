@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
@@ -34,14 +36,118 @@ const maxSlotsToPresent = 6
 // daysToSearch is the number of days to search for availability
 const daysToSearch = 7
 
+// perDateTimeout is the timeout in ms for each individual date fetch.
+const perDateTimeout = 15000
+
+// extendedDaysToSearch is the number of days to search in the extended fallback.
+const extendedDaysToSearch = 28
+
+// dateResult holds the result of fetching availability for a single date.
+type dateResult struct {
+	dateStr string
+	slots   []PresentedSlot
+}
+
+// AvailabilityResult wraps the output of FetchAvailableTimesWithFallback.
+type AvailabilityResult struct {
+	Slots        []PresentedSlot
+	ExactMatch   bool   // true if slots match user preferences
+	SearchedDays int    // how many days were searched
+	Message      string // message for when no slots found at all
+}
+
 // FetchAvailableTimes fetches available times from the browser sidecar
-// and filters based on user preferences.
+// and filters based on user preferences. Dates are fetched in parallel.
 func FetchAvailableTimes(
 	ctx context.Context,
 	adapter *BrowserAdapter,
 	bookingURL string,
 	serviceName string,
 	prefs TimePreferences,
+) ([]PresentedSlot, error) {
+	return fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, 0, daysToSearch)
+}
+
+// FetchAvailableTimesWithFallback tries multiple strategies to find available times:
+// 1. Exact preferences for 7 days
+// 2. Relaxed day-of-week filter (keep time filter) for 7 days
+// 3. Exact preferences for days 8-28
+// 4. Returns a helpful message if nothing found
+func FetchAvailableTimesWithFallback(
+	ctx context.Context,
+	adapter *BrowserAdapter,
+	bookingURL string,
+	serviceName string,
+	prefs TimePreferences,
+) (*AvailabilityResult, error) {
+	// Step 1: Exact preferences, 7 days
+	slots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, 0, daysToSearch)
+	if err != nil {
+		return nil, err
+	}
+	if len(slots) > 0 {
+		return &AvailabilityResult{
+			Slots:        slots,
+			ExactMatch:   true,
+			SearchedDays: daysToSearch,
+		}, nil
+	}
+
+	// Step 2: Relax day-of-week filter (keep time filter), 7 days
+	if len(prefs.DaysOfWeek) > 0 {
+		relaxedPrefs := TimePreferences{
+			AfterTime:  prefs.AfterTime,
+			BeforeTime: prefs.BeforeTime,
+			// DaysOfWeek intentionally omitted
+		}
+		slots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, relaxedPrefs, 0, daysToSearch)
+		if err != nil {
+			return nil, err
+		}
+		if len(slots) > 0 {
+			return &AvailabilityResult{
+				Slots:        slots,
+				ExactMatch:   false,
+				SearchedDays: daysToSearch,
+			}, nil
+		}
+	}
+
+	// Step 3: Exact preferences, days 8-28
+	slots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, daysToSearch, extendedDaysToSearch)
+	if err != nil {
+		return nil, err
+	}
+	if len(slots) > 0 {
+		return &AvailabilityResult{
+			Slots:        slots,
+			ExactMatch:   true,
+			SearchedDays: extendedDaysToSearch,
+		}, nil
+	}
+
+	// Step 4: Nothing found at all
+	return &AvailabilityResult{
+		Slots:        nil,
+		ExactMatch:   false,
+		SearchedDays: extendedDaysToSearch,
+		Message: fmt.Sprintf(
+			"I wasn't able to find available times for %s matching your preferences in the next 4 weeks. "+
+				"Would you like to try different days or times?",
+			serviceName,
+		),
+	}, nil
+}
+
+// fetchSlotsForDateRange fetches availability for a range of days in parallel,
+// filtering by preferences. startDay and endDay are offsets from today (0-based).
+func fetchSlotsForDateRange(
+	ctx context.Context,
+	adapter *BrowserAdapter,
+	bookingURL string,
+	serviceName string,
+	prefs TimePreferences,
+	startDay, endDay int,
 ) ([]PresentedSlot, error) {
 	if adapter == nil || !adapter.IsConfigured() {
 		return nil, fmt.Errorf("browser adapter not configured")
@@ -50,23 +156,12 @@ func FetchAvailableTimes(
 		return nil, fmt.Errorf("booking URL is required")
 	}
 
-	// Generate dates for next 7 days
+	// Build list of qualifying dates
 	now := time.Now()
-	dates := make([]string, daysToSearch)
-	for i := 0; i < daysToSearch; i++ {
-		dates[i] = now.AddDate(0, 0, i).Format("2006-01-02")
-	}
-
-	// Fetch availability for each date
-	var allSlots []PresentedSlot
-	index := 1
-
-	for _, dateStr := range dates {
-		// Check if this day matches user preferences
-		date, err := time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			continue
-		}
+	var qualifyingDates []string
+	for i := startDay; i < endDay; i++ {
+		date := now.AddDate(0, 0, i)
+		dateStr := date.Format("2006-01-02")
 
 		// Filter by day of week if specified
 		if len(prefs.DaysOfWeek) > 0 {
@@ -82,65 +177,85 @@ func FetchAvailableTimes(
 				continue
 			}
 		}
+		qualifyingDates = append(qualifyingDates, dateStr)
+	}
 
-		// Fetch slots for this date
-		resp, err := adapter.client.GetAvailability(ctx, browser.AvailabilityRequest{
-			BookingURL:  bookingURL,
-			Date:        dateStr,
-			ServiceName: serviceName,
-			Timeout:     30000,
-		})
-		if err != nil {
-			continue // Skip dates that fail
-		}
-		if !resp.Success {
-			continue
-		}
+	if len(qualifyingDates) == 0 {
+		return nil, nil
+	}
 
-		// Filter and convert slots
-		for _, slot := range resp.Slots {
-			if !slot.Available {
-				continue
-			}
+	// Fetch all qualifying dates in parallel
+	var mu sync.Mutex
+	var results []dateResult
+	var wg sync.WaitGroup
 
-			// Parse slot time
-			slotTime, err := parseTimeSlot(dateStr, slot.Time)
-			if err != nil {
-				continue
-			}
-
-			// Filter by time preferences
-			if !matchesTimePreferences(slotTime, prefs) {
-				continue
-			}
-
-			allSlots = append(allSlots, PresentedSlot{
-				Index:     index,
-				DateTime:  slotTime,
-				TimeStr:   formatSlotForDisplay(slotTime),
-				Service:   serviceName,
-				Available: true,
+	for _, dateStr := range qualifyingDates {
+		wg.Add(1)
+		go func(d string) {
+			defer wg.Done()
+			resp, err := adapter.client.GetAvailability(ctx, browser.AvailabilityRequest{
+				BookingURL:  bookingURL,
+				Date:        d,
+				ServiceName: serviceName,
+				Timeout:     perDateTimeout,
 			})
-			index++
+			if err != nil || !resp.Success {
+				return
+			}
 
-			// Stop if we have enough slots
+			var slots []PresentedSlot
+			for _, slot := range resp.Slots {
+				if !slot.Available {
+					continue
+				}
+				slotTime, err := parseTimeSlot(d, slot.Time)
+				if err != nil {
+					continue
+				}
+				if !matchesTimePreferences(slotTime, prefs) {
+					continue
+				}
+				slots = append(slots, PresentedSlot{
+					DateTime:  slotTime,
+					TimeStr:   formatSlotForDisplay(slotTime),
+					Service:   serviceName,
+					Available: true,
+				})
+			}
+			if len(slots) > 0 {
+				mu.Lock()
+				results = append(results, dateResult{dateStr: d, slots: slots})
+				mu.Unlock()
+			}
+		}(dateStr)
+	}
+	wg.Wait()
+
+	// Sort results by date to maintain chronological order
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].dateStr < results[j].dateStr
+	})
+
+	// Flatten and limit
+	var allSlots []PresentedSlot
+	for _, dr := range results {
+		for _, s := range dr.slots {
+			allSlots = append(allSlots, s)
 			if len(allSlots) >= maxSlotsToPresent*2 {
 				break
 			}
 		}
-
-		// Stop early if we have plenty of options
 		if len(allSlots) >= maxSlotsToPresent*2 {
 			break
 		}
 	}
 
-	// Return top slots (limit to maxSlotsToPresent)
+	// Trim to maxSlotsToPresent
 	if len(allSlots) > maxSlotsToPresent {
 		allSlots = allSlots[:maxSlotsToPresent]
 	}
 
-	// Re-index slots 1 to N
+	// Index slots 1 to N
 	for i := range allSlots {
 		allSlots[i].Index = i + 1
 	}
@@ -148,7 +263,7 @@ func FetchAvailableTimes(
 	return allSlots, nil
 }
 
-// FetchAlternativeTimes fetches times without preference filtering
+// FetchAlternativeTimes fetches times without preference filtering.
 // Used when exact matches are not available.
 func FetchAlternativeTimes(
 	ctx context.Context,
@@ -156,7 +271,6 @@ func FetchAlternativeTimes(
 	bookingURL string,
 	serviceName string,
 ) ([]PresentedSlot, error) {
-	// Fetch with no preferences to get any available slots
 	return FetchAvailableTimes(ctx, adapter, bookingURL, serviceName, TimePreferences{})
 }
 

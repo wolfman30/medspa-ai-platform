@@ -394,6 +394,11 @@ Instead, once you have all SIX items (name, specific service, patient type, sche
 - ⚠️ CRITICAL: Do NOT invent or guess appointment times. The system will provide REAL availability.
 - If the system hasn't provided times yet, say "Let me check what's available..." and WAIT
 - Available appointment slots will be presented to them automatically by the system
+- If the system tells you no times were found matching preferences, help the patient:
+  * Suggest relaxing time constraints ("Would you be open to mornings as well?")
+  * Suggest different days ("What about Tuesdays or Fridays?")
+  * Offer to check the following month
+  * NEVER make up availability — only present times the system provides
 - AFTER they select a specific time, the booking process starts
 - The booking link is where they'll complete payment (the booking system handles deposits, NOT you)
 
@@ -1263,14 +1268,14 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			prefs, _ := extractPreferences(history)
 			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
-			// Fetch available times from booking widget
-			slots, err := FetchAvailableTimes(ctx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
+			// Fetch available times with fallback strategies
+			result, err := FetchAvailableTimesWithFallback(ctx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)
-			} else if len(slots) > 0 {
+			} else if len(result.Slots) > 0 {
 				// Save time selection state
 				state := &TimeSelectionState{
-					PresentedSlots: slots,
+					PresentedSlots: result.Slots,
 					Service:        prefs.ServiceInterest,
 					BookingURL:     bookingURL,
 					PresentedAt:    time.Now(),
@@ -1281,22 +1286,36 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 				// Return time selection response
 				timeSelectionResponse = &TimeSelectionResponse{
-					Slots:      slots,
+					Slots:      result.Slots,
 					Service:    prefs.ServiceInterest,
-					ExactMatch: len(timePrefs.DaysOfWeek) > 0 || timePrefs.AfterTime != "" || timePrefs.BeforeTime != "",
-					SMSMessage: FormatTimeSlotsForSMS(slots, prefs.ServiceInterest, true),
+					ExactMatch: result.ExactMatch,
+					SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
 				}
 
 				s.logger.Info("triggering time selection flow",
 					"service", prefs.ServiceInterest,
-					"slots", len(slots),
+					"slots", len(result.Slots),
+					"exact_match", result.ExactMatch,
+					"searched_days", result.SearchedDays,
 					"uses_moxie", usesMoxie,
 				)
 
 				// Clear deposit intent - time selection must happen first
-				// For Moxie: deposit happens through Moxie after time selection
-				// For Square: deposit link sent after time is selected
 				depositIntent = nil
+			} else {
+				// No slots found even after fallback — tell the patient
+				timeSelectionResponse = &TimeSelectionResponse{
+					Slots:      nil,
+					Service:    prefs.ServiceInterest,
+					ExactMatch: false,
+					SMSMessage: result.Message,
+				}
+
+				s.logger.Info("no available times found after fallback",
+					"service", prefs.ServiceInterest,
+					"searched_days", result.SearchedDays,
+					"uses_moxie", usesMoxie,
+				)
 			}
 		}
 	}
