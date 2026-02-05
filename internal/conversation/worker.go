@@ -526,14 +526,16 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			}
 		}
 		if payload.Kind == jobTypeMessage {
-			blocked := w.sendReply(ctx, payload, resp)
-			if !blocked {
-				// Check if this is a time selection response (takes priority over deposit)
-				if resp != nil && resp.TimeSelectionResponse != nil {
-					w.handleTimeSelectionResponse(ctx, payload.Message, resp)
-				} else if resp != nil && resp.BookingRequest != nil {
-					w.handleMoxieBooking(ctx, payload.Message, resp.BookingRequest)
-				} else {
+			// Time selection responses take priority over LLM reply — send only the slots/fallback message
+			if resp != nil && resp.TimeSelectionResponse != nil && resp.TimeSelectionResponse.SMSMessage != "" {
+				w.handleTimeSelectionResponse(ctx, payload.Message, resp)
+			} else if resp != nil && resp.BookingRequest != nil && w.browserBooking != nil {
+				// Booking response: skip LLM reply, go directly to Moxie
+				w.handleMoxieBooking(ctx, payload.Message, resp.BookingRequest)
+			} else {
+				// Normal path: send LLM reply, then check deposit intent
+				blocked := w.sendReply(ctx, payload, resp)
+				if !blocked {
 					w.handleDepositIntent(ctx, payload.Message, resp)
 				}
 			}
