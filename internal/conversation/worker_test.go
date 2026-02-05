@@ -1246,16 +1246,16 @@ func TestHandleMoxieBooking_HappyPath(t *testing.T) {
 		ReceiptHandle: "rh-booking",
 	})
 
-	// Wait for handoff SMS to be sent (the AI reply + handoff SMS = 2 messages)
+	// Wait for handoff SMS to be sent (booking response skips AI reply)
 	waitFor(func() bool {
-		return len(messenger.allReplies()) >= 2
+		return len(messenger.allReplies()) >= 1
 	}, 5*time.Second, t)
 
 	cancel()
 	worker.Wait()
 
 	replies := messenger.allReplies()
-	// First reply is the AI message, second is the handoff URL
+	// Should only have the handoff URL (no AI reply when booking is triggered)
 	foundHandoff := false
 	for _, r := range replies {
 		if strings.Contains(r.Body, "https://moxie.com/pay/session-abc") {
@@ -1331,9 +1331,9 @@ func TestHandleMoxieBooking_StartFails_FallbackSMS(t *testing.T) {
 	body, _ := json.Marshal(payload)
 	queue.enqueue(queueMessage{ID: "msg-fail", Body: string(body), ReceiptHandle: "rh-fail"})
 
-	// Wait for fallback SMS
+	// Wait for fallback SMS (booking response skips AI reply)
 	waitFor(func() bool {
-		return len(messenger.allReplies()) >= 2
+		return len(messenger.allReplies()) >= 1
 	}, 3*time.Second, t)
 
 	cancel()
