@@ -1247,14 +1247,25 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// Check if we should trigger time selection flow
 	// For Moxie: trigger when qualifications are met (no deposit intent needed)
 	// For Square: trigger when deposit intent exists AND qualifications are met
-	shouldTriggerTimeSelection := s.browser != nil && s.browser.IsConfigured() && timeSelectionState == nil
+	browserReady := s.browser != nil && s.browser.IsConfigured()
+	qualificationsMet := ShouldFetchAvailability(history, nil)
+	shouldTriggerTimeSelection := browserReady && timeSelectionState == nil
 	if usesMoxie {
 		// Moxie clinics: trigger time selection when lead is qualified (deposit flows through Moxie)
-		shouldTriggerTimeSelection = shouldTriggerTimeSelection && ShouldFetchAvailability(history, nil)
+		shouldTriggerTimeSelection = shouldTriggerTimeSelection && qualificationsMet
 	} else {
 		// Square clinics: trigger time selection only when deposit intent exists
-		shouldTriggerTimeSelection = shouldTriggerTimeSelection && depositIntent != nil && ShouldFetchAvailability(history, nil)
+		shouldTriggerTimeSelection = shouldTriggerTimeSelection && depositIntent != nil && qualificationsMet
 	}
+
+	s.logger.Info("time selection trigger check",
+		"conversation_id", req.ConversationID,
+		"browser_ready", browserReady,
+		"qualifications_met", qualificationsMet,
+		"time_selection_state_exists", timeSelectionState != nil,
+		"uses_moxie", usesMoxie,
+		"should_trigger", shouldTriggerTimeSelection,
+	)
 
 	if shouldTriggerTimeSelection {
 		// Get booking URL from clinic config
@@ -1268,8 +1279,10 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			prefs, _ := extractPreferences(history)
 			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
-			// Fetch available times with fallback strategies
-			result, err := FetchAvailableTimesWithFallback(ctx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
+			// Fetch available times with a hard deadline to prevent blocking the worker
+			fetchCtx, fetchCancel := context.WithTimeout(ctx, 25*time.Second)
+			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs)
+			fetchCancel()
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)
 			} else if len(result.Slots) > 0 {
@@ -2283,8 +2296,9 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		}
 	}
 
-	// Extract preferred times - first check for specific times like "2pm", "2:30 pm", "around 3"
-	specificTimeRE := regexp.MustCompile(`(?i)(?:around |about |at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)`)
+	// Extract preferred times - check for specific times like "2pm", "2:30 pm", "around 3pm", "after 3p"
+	// Supports shorthand "3p"/"3a" in addition to full "3pm"/"3am"
+	specificTimeRE := regexp.MustCompile(`(?i)(?:around |about |at |after |before )?(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)\b`)
 	if matches := specificTimeRE.FindAllStringSubmatch(userMessages, -1); len(matches) > 0 {
 		// Extract all specific times mentioned
 		times := []string{}
@@ -2292,6 +2306,12 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 			hour := match[1]
 			minutes := match[2]
 			ampm := strings.ToLower(strings.ReplaceAll(match[3], ".", ""))
+			// Normalize shorthand: "a" → "am", "p" → "pm"
+			if ampm == "a" {
+				ampm = "am"
+			} else if ampm == "p" {
+				ampm = "pm"
+			}
 
 			// Format the time nicely
 			timeStr := hour
@@ -2558,9 +2578,15 @@ var (
 	priceInquiryRE = regexp.MustCompile(`(?i)\b(?:how much|price|pricing|cost|rate|rates|charge)\b`)
 	phiPrefaceRE   = regexp.MustCompile(`(?i)\b(?:diagnosed|diagnosis|my condition|my symptoms|i have|i've had|i am|i'm)\b`)
 	// PHI keywords with word boundaries to avoid false positives (e.g., "sti" matching in "existing")
-	phiKeywordsRE      = regexp.MustCompile(`(?i)\b(?:diabetes|hiv|aids|cancer|hepatitis|pregnant|pregnancy|depression|anxiety|bipolar|schizophrenia|asthma|hypertension|blood pressure|infection|herpes|std|sti)\b`)
-	medicalAdviceCueRE = regexp.MustCompile(`(?i)\b(?:should i|can i|is it safe|safe to|ok to|okay to|contraindications?|side effects?|dosage|dose|mg|milligram|interactions?|mix with|stop taking)\b`)
-	medicalContextRE   = regexp.MustCompile(`(?i)\b(?:botox|filler|laser|microneedling|facial|peel|dermaplaning|prp|injectable|medication|medicine|meds|prescription|ibuprofen|tylenol|acetaminophen|antibiotics?|painkillers?|blood pressure|pregnan(?:t|cy)|breastfeed(?:ing)?|allerg(?:y|ic))\b`)
+	phiKeywordsRE = regexp.MustCompile(`(?i)\b(?:diabetes|hiv|aids|cancer|hepatitis|pregnant|pregnancy|depression|anxiety|bipolar|schizophrenia|asthma|hypertension|blood pressure|infection|herpes|std|sti)\b`)
+	// Strong medical advice cues — always trigger with any medical/service context
+	strongMedicalCueRE = regexp.MustCompile(`(?i)\b(?:is it safe|safe to|ok to|okay to|contraindications?|side effects?|dosage|dose|mg|milligram|interactions?|mix with|stop taking)\b`)
+	// Weak medical advice cues — only trigger with medical-specific context (not service names alone)
+	weakMedicalCueRE = regexp.MustCompile(`(?i)\b(?:should i|can i)\b`)
+	// Full medical context (services + medical terms) — used with strong cues
+	medicalContextRE = regexp.MustCompile(`(?i)\b(?:botox|filler|laser|microneedling|facial|peel|dermaplaning|prp|injectable|medication|medicine|meds|prescription|ibuprofen|tylenol|acetaminophen|antibiotics?|painkillers?|blood pressure|pregnan(?:t|cy)|breastfeed(?:ing)?|allerg(?:y|ic))\b`)
+	// Medical-specific context (conditions/medications only, no service names) — used with weak cues
+	medicalSpecificContextRE = regexp.MustCompile(`(?i)\b(?:medication|medicine|meds|prescription|ibuprofen|tylenol|acetaminophen|antibiotics?|painkillers?|blood pressure|pregnan(?:t|cy)|breastfeed(?:ing)?|allerg(?:y|ic))\b`)
 )
 
 func isPriceInquiry(message string) bool {
@@ -2694,11 +2720,22 @@ func detectMedicalAdvice(message string) []string {
 	if message == "" {
 		return nil
 	}
-	if !medicalAdviceCueRE.MatchString(message) {
+	hasStrongCue := strongMedicalCueRE.MatchString(message)
+	hasWeakCue := weakMedicalCueRE.MatchString(message)
+	if !hasStrongCue && !hasWeakCue {
 		return nil
 	}
-	if !medicalContextRE.MatchString(message) {
-		return nil
+	// Strong cues ("is it safe", "side effects", etc.) trigger with any medical context
+	// Weak cues ("can i", "should i") only trigger with medical-specific context
+	// (medications, conditions) — not just service names like "botox" which indicate booking intent
+	if hasStrongCue {
+		if !medicalContextRE.MatchString(message) {
+			return nil
+		}
+	} else {
+		if !medicalSpecificContextRE.MatchString(message) {
+			return nil
+		}
 	}
 	keywords := []string{}
 	for _, kw := range []string{

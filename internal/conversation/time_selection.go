@@ -94,6 +94,9 @@ func FetchAvailableTimesWithFallback(
 	}
 
 	// Step 2: Relax day-of-week filter (keep time filter), 7 days
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if len(prefs.DaysOfWeek) > 0 {
 		relaxedPrefs := TimePreferences{
 			AfterTime:  prefs.AfterTime,
@@ -114,6 +117,9 @@ func FetchAvailableTimesWithFallback(
 	}
 
 	// Step 3: Exact preferences, days 8-28
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	slots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, daysToSearch, extendedDaysToSearch)
 	if err != nil {
 		return nil, err
