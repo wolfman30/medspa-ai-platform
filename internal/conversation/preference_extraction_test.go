@@ -207,6 +207,33 @@ func TestExtractAndSavePreferences(t *testing.T) {
 			expectSaved:   true,
 		},
 		{
+			name: "extracts time shorthand 3p as 3pm",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "I prefer Mondays and Wednesdays after 3p"},
+			},
+			expectDays:  "monday, wednesday",
+			expectTimes: "3pm",
+			expectSaved: true,
+		},
+		{
+			name: "extracts time shorthand 10a as 10am",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "Can I come in around 10a on Tuesday?"},
+			},
+			expectDays:  "tuesday",
+			expectTimes: "10am",
+			expectSaved: true,
+		},
+		{
+			name: "extracts time with after prefix",
+			conversation: []ChatMessage{
+				{Role: ChatRoleUser, Content: "Any time after 2pm on Thursday works"},
+			},
+			expectDays:  "thursday",
+			expectTimes: "2pm",
+			expectSaved: true,
+		},
+		{
 			name: "no preferences mentioned",
 			conversation: []ChatMessage{
 				{Role: ChatRoleUser, Content: "What are your hours?"},
