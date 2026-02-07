@@ -486,6 +486,25 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			)
 			w.depositPreloader.StartPreload(ctx, payload.Message.ConversationID, payload.Message.OrgID, payload.Message.LeadID, payload.Message.To)
 		}
+		// Set up progress callback to send intermediate SMS during long searches
+		payload.Message.OnProgress = func(progressCtx context.Context, msg string) {
+			if w.messenger == nil {
+				return
+			}
+			reply := OutboundReply{
+				OrgID:          payload.Message.OrgID,
+				LeadID:         payload.Message.LeadID,
+				ConversationID: payload.Message.ConversationID,
+				To:             payload.Message.From,
+				From:           payload.Message.To,
+				Body:           msg,
+			}
+			sendCtx, cancel := context.WithTimeout(progressCtx, 5*time.Second)
+			defer cancel()
+			if err := w.messenger.SendReply(sendCtx, reply); err != nil {
+				w.logger.Warn("failed to send progress SMS", "error", err)
+			}
+		}
 		w.logger.Info("worker calling ProcessMessage", "job_id", payload.ID, "conversation_id", payload.Message.ConversationID)
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
 	case jobTypePayment:

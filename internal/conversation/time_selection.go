@@ -33,14 +33,20 @@ type TimeSelectionState struct {
 // maxSlotsToPresent is the maximum number of slots to show at once
 const maxSlotsToPresent = 6
 
-// daysToSearch is the number of days to search for availability
+// daysToSearch is the number of days to search for availability (non-fallback).
 const daysToSearch = 7
 
 // perDateTimeout is the timeout in ms for each individual date fetch.
 const perDateTimeout = 15000
 
-// extendedDaysToSearch is the number of days to search in the extended fallback.
-const extendedDaysToSearch = 28
+// batchSize is the number of days per progressive search batch.
+const batchSize = 14
+
+// maxCalendarDays is the Moxie calendar horizon (~3 months).
+const maxCalendarDays = 90
+
+// relaxedFallbackDays is the window for relaxed-preference fallback searches.
+const relaxedFallbackDays = 28
 
 // dateResult holds the result of fetching availability for a single date.
 type dateResult struct {
@@ -68,42 +74,121 @@ func FetchAvailableTimes(
 	return fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, 0, daysToSearch)
 }
 
-// FetchAvailableTimesWithFallback tries multiple strategies to find available times:
-// 1. Exact preferences for 7 days
-// 2. Relaxed day-of-week filter (keep time filter) for 7 days
-// 3. Exact preferences for days 8-28
-// 4. Returns a helpful message if nothing found
+// FetchAvailableTimesWithFallback progressively searches for available times:
+// Phase 1: Exact preferences in 14-day batches up to 90 days
+// Phase 2: Adjacent alternatives (same time/different days, same days/different times)
+// Phase 3: Nothing found — suggest adjusting preferences
 func FetchAvailableTimesWithFallback(
 	ctx context.Context,
 	adapter *BrowserAdapter,
 	bookingURL string,
 	serviceName string,
 	prefs TimePreferences,
+	onProgress func(ctx context.Context, msg string),
 ) (*AvailabilityResult, error) {
-	// Step 1: Exact preferences, 7 days
-	slots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, 0, daysToSearch)
-	if err != nil {
-		return nil, err
-	}
-	if len(slots) > 0 {
-		return &AvailabilityResult{
-			Slots:        slots,
-			ExactMatch:   true,
-			SearchedDays: daysToSearch,
-		}, nil
+	// Phase 1: Progressive exact-preference search in batchSize-day windows
+	searchedUpTo := 0
+	for startDay := 0; startDay < maxCalendarDays; startDay += batchSize {
+		if ctx.Err() != nil {
+			break
+		}
+
+		// Send progress update BEFORE starting non-first batches
+		if onProgress != nil && startDay > 0 {
+			onProgress(ctx, fmt.Sprintf(
+				"I've checked the next %s — no availability matching your preferences yet. Searching further out...",
+				humanizeDays(startDay),
+			))
+		}
+
+		endDay := startDay + batchSize
+		if endDay > maxCalendarDays {
+			endDay = maxCalendarDays
+		}
+
+		slots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, startDay, endDay)
+		if err != nil {
+			return nil, err
+		}
+		searchedUpTo = endDay
+
+		if len(slots) > 0 {
+			return &AvailabilityResult{
+				Slots:        slots,
+				ExactMatch:   true,
+				SearchedDays: endDay,
+			}, nil
+		}
 	}
 
-	// Step 2: Relax day-of-week filter (keep time filter), 7 days
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	if len(prefs.DaysOfWeek) > 0 {
+	// Phase 2: Adjacent alternatives (only when patient has BOTH day AND time prefs)
+	hasDayPrefs := len(prefs.DaysOfWeek) > 0
+	hasTimePrefs := prefs.AfterTime != "" || prefs.BeforeTime != ""
+
+	if ctx.Err() == nil && hasDayPrefs && hasTimePrefs {
+		// Try two targeted relaxations
+		// 2a: Same time, different days (drop DaysOfWeek, keep time filter)
+		sameTimePrefs := TimePreferences{
+			AfterTime:  prefs.AfterTime,
+			BeforeTime: prefs.BeforeTime,
+		}
+		sameTimeSlots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, sameTimePrefs, 0, relaxedFallbackDays)
+		if err != nil {
+			return nil, err
+		}
+
+		// 2b: Same days, different times (keep DaysOfWeek, drop time filter)
+		var sameDaySlots []PresentedSlot
+		if ctx.Err() == nil {
+			sameDayPrefs := TimePreferences{
+				DaysOfWeek: prefs.DaysOfWeek,
+			}
+			sameDaySlots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, sameDayPrefs, 0, relaxedFallbackDays)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		hasSameTime := len(sameTimeSlots) > 0
+		hasSameDay := len(sameDaySlots) > 0
+
+		if hasSameTime && hasSameDay {
+			// Both alternatives exist — ask patient to choose
+			return &AvailabilityResult{
+				Slots:        nil,
+				ExactMatch:   false,
+				SearchedDays: searchedUpTo,
+				Message: fmt.Sprintf(
+					"I've searched the entire availability for %s over the next %s and couldn't find times matching your exact preferences. "+
+						"I can help with a slight adjustment:\n"+
+						"1. Same time on different days of the week\n"+
+						"2. Different times on your preferred days\n\n"+
+						"Just let me know which you'd prefer!",
+					serviceName, humanizeDays(searchedUpTo),
+				),
+			}, nil
+		} else if hasSameTime {
+			// Only same-time-different-days has results — present directly
+			return &AvailabilityResult{
+				Slots:        sameTimeSlots,
+				ExactMatch:   false,
+				SearchedDays: searchedUpTo,
+			}, nil
+		} else if hasSameDay {
+			// Only same-days-different-times has results — present directly
+			return &AvailabilityResult{
+				Slots:        sameDaySlots,
+				ExactMatch:   false,
+				SearchedDays: searchedUpTo,
+			}, nil
+		}
+	} else if ctx.Err() == nil && hasDayPrefs {
+		// Only day prefs, no time prefs — try relaxing day filter
 		relaxedPrefs := TimePreferences{
 			AfterTime:  prefs.AfterTime,
 			BeforeTime: prefs.BeforeTime,
-			// DaysOfWeek intentionally omitted
 		}
-		slots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, relaxedPrefs, 0, daysToSearch)
+		slots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, relaxedPrefs, 0, relaxedFallbackDays)
 		if err != nil {
 			return nil, err
 		}
@@ -111,36 +196,23 @@ func FetchAvailableTimesWithFallback(
 			return &AvailabilityResult{
 				Slots:        slots,
 				ExactMatch:   false,
-				SearchedDays: daysToSearch,
+				SearchedDays: searchedUpTo,
 			}, nil
 		}
 	}
 
-	// Step 3: Exact preferences, days 8-28
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
+	// Phase 3: Nothing found after exhaustive search
+	if searchedUpTo == 0 {
+		searchedUpTo = maxCalendarDays
 	}
-	slots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, daysToSearch, extendedDaysToSearch)
-	if err != nil {
-		return nil, err
-	}
-	if len(slots) > 0 {
-		return &AvailabilityResult{
-			Slots:        slots,
-			ExactMatch:   true,
-			SearchedDays: extendedDaysToSearch,
-		}, nil
-	}
-
-	// Step 4: Nothing found at all
 	return &AvailabilityResult{
 		Slots:        nil,
 		ExactMatch:   false,
-		SearchedDays: extendedDaysToSearch,
+		SearchedDays: searchedUpTo,
 		Message: fmt.Sprintf(
-			"I wasn't able to find available times for %s matching your preferences in the next 4 weeks. "+
-				"Would you like to try different days or times?",
-			serviceName,
+			"I've searched the entire availability for %s over the next %s and couldn't find times matching your preferences. "+
+				"Would you like to try different days or a wider time window?",
+			serviceName, humanizeDays(searchedUpTo),
 		),
 	}, nil
 }
@@ -314,6 +386,24 @@ func parseTimeToMinutes(timeStr string) int {
 	return hours*60 + minutes
 }
 
+// humanizeDays converts a day count to a human-readable duration string.
+func humanizeDays(days int) string {
+	switch {
+	case days <= 7:
+		return "week"
+	case days <= 14:
+		return "2 weeks"
+	case days >= 84:
+		return "3 months"
+	case days >= 56:
+		return "2 months"
+	case days >= 28:
+		return "month"
+	default:
+		return fmt.Sprintf("%d weeks", days/7)
+	}
+}
+
 // formatSlotForDisplay formats a time slot for SMS display
 func formatSlotForDisplay(t time.Time) string {
 	// Format: "Mon Feb 10 at 10:00 AM"
@@ -358,73 +448,115 @@ var ordinalMap = map[string]int{
 }
 
 // DetectTimeSelection parses user message to detect time slot selection.
+// prefs is used to disambiguate bare hours (e.g., "6" when both 6am and 6pm exist).
 // Returns the selected slot or nil if not a selection.
-func DetectTimeSelection(message string, presentedSlots []PresentedSlot) *PresentedSlot {
+func DetectTimeSelection(message string, presentedSlots []PresentedSlot, prefs TimePreferences) *PresentedSlot {
 	message = strings.TrimSpace(strings.ToLower(message))
 	if message == "" || len(presentedSlots) == 0 {
 		return nil
 	}
 
-	// Try to extract a number
-	var selectedIndex int
-
-	// Pattern 1: Just a number
-	if num, err := strconv.Atoi(message); err == nil && num >= 1 && num <= len(presentedSlots) {
-		selectedIndex = num
-	}
-
-	// Pattern 2: "option N" or "number N" or "#N"
-	if selectedIndex == 0 {
-		re := regexp.MustCompile(`(?i)(?:option|number|#|choice)?\s*(\d+)`)
-		if matches := re.FindStringSubmatch(message); len(matches) > 1 {
-			if num, err := strconv.Atoi(matches[1]); err == nil && num >= 1 && num <= len(presentedSlots) {
-				selectedIndex = num
-			}
+	// Priority 1: Explicit "option N", "#N", "choice N" — always slot index
+	optionRE := regexp.MustCompile(`(?i)^(?:option|number|#|choice)\s*(\d+)$`)
+	if matches := optionRE.FindStringSubmatch(message); len(matches) > 1 {
+		if num, err := strconv.Atoi(matches[1]); err == nil && num >= 1 && num <= len(presentedSlots) {
+			return &presentedSlots[num-1]
 		}
 	}
 
-	// Pattern 3: Ordinal words
-	if selectedIndex == 0 {
-		for word, num := range ordinalMap {
-			if strings.Contains(message, word) && num >= 1 && num <= len(presentedSlots) {
-				selectedIndex = num
-				break
-			}
+	// Priority 2: Ordinal words ("the first one", "second", "3rd")
+	for word, num := range ordinalMap {
+		if strings.Contains(message, word) && num >= 1 && num <= len(presentedSlots) {
+			return &presentedSlots[num-1]
 		}
 	}
 
-	// Pattern 4: Time match - find slot that matches mentioned time
-	if selectedIndex == 0 {
-		timeRE := regexp.MustCompile(`(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`)
-		if matches := timeRE.FindStringSubmatch(message); len(matches) > 0 {
-			hour, _ := strconv.Atoi(matches[1])
-			minute := 0
-			if matches[2] != "" {
-				minute, _ = strconv.Atoi(matches[2])
-			}
-			meridiem := strings.ToLower(matches[3])
-			if meridiem == "pm" && hour != 12 {
-				hour += 12
-			} else if meridiem == "am" && hour == 12 {
-				hour = 0
-			}
+	// Priority 3: Time with explicit am/pm/a/p — match against slot times
+	// Handles: "2pm", "10:30am", "3p", "I'll take the 2pm", "I want 6pm"
+	timeWithMeridiemRE := regexp.MustCompile(`(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|am|pm|a|p)\b`)
+	if matches := timeWithMeridiemRE.FindStringSubmatch(message); len(matches) > 0 {
+		hour, _ := strconv.Atoi(matches[1])
+		minute := 0
+		if matches[2] != "" {
+			minute, _ = strconv.Atoi(matches[2])
+		}
+		meridiem := strings.ToLower(matches[3])
+		meridiem = strings.ReplaceAll(meridiem, ".", "")
+		if meridiem == "p" {
+			meridiem = "pm"
+		} else if meridiem == "a" {
+			meridiem = "am"
+		}
+		if meridiem == "pm" && hour != 12 {
+			hour += 12
+		} else if meridiem == "am" && hour == 12 {
+			hour = 0
+		}
 
-			// Find matching slot
-			for _, slot := range presentedSlots {
-				if slot.DateTime.Hour() == hour && slot.DateTime.Minute() == minute {
-					selectedIndex = slot.Index
-					break
-				}
+		for i := range presentedSlots {
+			if presentedSlots[i].DateTime.Hour() == hour && presentedSlots[i].DateTime.Minute() == minute {
+				return &presentedSlots[i]
 			}
 		}
+		// Explicit time given but no slot matches — fall through to return nil
+		return nil
 	}
 
-	// Return selected slot
-	if selectedIndex > 0 && selectedIndex <= len(presentedSlots) {
-		return &presentedSlots[selectedIndex-1]
+	// Priority 4: Extract a bare number from the message
+	// Could be a slot index OR a bare hour — need to disambiguate
+	bareNumRE := regexp.MustCompile(`\b(\d{1,2})\b`)
+	if matches := bareNumRE.FindStringSubmatch(message); len(matches) > 1 {
+		num, _ := strconv.Atoi(matches[1])
+		isValidIndex := num >= 1 && num <= len(presentedSlots)
+
+		// If it's a valid slot index, prefer index.
+		// The SMS says "Reply with the number of your preferred time",
+		// so small numbers (1-6) are primarily slot indices.
+		// For time-based selection, patient should use am/pm (handled by Priority 3).
+		if isValidIndex {
+			return &presentedSlots[num-1]
+		}
+
+		// Number is out of index range — try as a bare hour match.
+		// E.g., "6" with only 3 slots → look for 6:00 AM or 6:00 PM.
+		var hourMatches []*PresentedSlot
+		for i := range presentedSlots {
+			slotHour := presentedSlots[i].DateTime.Hour()
+			if slotHour == num || slotHour == num+12 || (num == 12 && slotHour == 0) {
+				hourMatches = append(hourMatches, &presentedSlots[i])
+			}
+		}
+
+		switch len(hourMatches) {
+		case 1:
+			return hourMatches[0]
+		case 0:
+			return nil
+		default:
+			// Multiple slots share this hour (e.g., 6am and 6pm)
+			filtered := disambiguateByPrefs(hourMatches, prefs)
+			if len(filtered) == 1 {
+				return filtered[0]
+			}
+			return nil
+		}
 	}
 
 	return nil
+}
+
+// disambiguateByPrefs filters candidate slots using the patient's time preferences.
+func disambiguateByPrefs(candidates []*PresentedSlot, prefs TimePreferences) []*PresentedSlot {
+	if prefs.AfterTime == "" && prefs.BeforeTime == "" {
+		return candidates // no preferences to filter with
+	}
+	var filtered []*PresentedSlot
+	for _, slot := range candidates {
+		if matchesTimePreferences(slot.DateTime, prefs) {
+			filtered = append(filtered, slot)
+		}
+	}
+	return filtered
 }
 
 // VerifySlotStillAvailable re-checks if a specific slot is still available

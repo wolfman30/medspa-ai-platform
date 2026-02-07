@@ -62,6 +62,10 @@ type MessageRequest struct {
 	From           string
 	To             string
 	Metadata       map[string]string
+	// OnProgress is an optional callback for sending progress updates during
+	// long-running operations (e.g., progressive availability search).
+	// The worker sets this to send intermediate SMS messages to the patient.
+	OnProgress func(ctx context.Context, msg string) `json:"-"`
 }
 
 // Deposit intent for payment processing.
