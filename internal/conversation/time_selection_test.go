@@ -62,7 +62,7 @@ func TestDetectTimeSelection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectTimeSelection(tt.message, slots)
+			result := DetectTimeSelection(tt.message, slots, TimePreferences{})
 
 			if tt.expectedIndex == 0 {
 				assert.Nil(t, result, "expected no selection for message: %s", tt.message)
@@ -77,10 +77,10 @@ func TestDetectTimeSelection(t *testing.T) {
 }
 
 func TestDetectTimeSelection_EmptySlots(t *testing.T) {
-	result := DetectTimeSelection("1", []PresentedSlot{})
+	result := DetectTimeSelection("1", []PresentedSlot{}, TimePreferences{})
 	assert.Nil(t, result)
 
-	result = DetectTimeSelection("1", nil)
+	result = DetectTimeSelection("1", nil, TimePreferences{})
 	assert.Nil(t, result)
 }
 
@@ -356,18 +356,18 @@ func TestFetchAvailableTimesWithFallback_ExactMatch(t *testing.T) {
 	adapter := NewBrowserAdapter(mock, nil)
 	prefs := TimePreferences{AfterTime: "15:00"} // after 3pm
 
-	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
 	require.NoError(t, err)
 
 	assert.True(t, result.ExactMatch)
-	assert.Equal(t, daysToSearch, result.SearchedDays)
+	assert.Equal(t, batchSize, result.SearchedDays) // first batch is 14 days
 	assert.Len(t, result.Slots, 2)
 	assert.Empty(t, result.Message)
 }
 
 func TestFetchAvailableTimesWithFallback_RelaxedDayOfWeek(t *testing.T) {
-	// Exact prefs: only Sundays after 3pm — no slots.
-	// Relaxed: drop day filter, keep time filter — finds slots.
+	// Exact prefs: only Sundays after 3pm — no slots in 90 days.
+	// Phase 2 relaxed: drop day filter, keep time filter — finds slots on day 0.
 	now := time.Now()
 
 	// Put an afternoon slot on day 0 (which is "today", probably not Sunday)
@@ -387,17 +387,17 @@ func TestFetchAvailableTimesWithFallback_RelaxedDayOfWeek(t *testing.T) {
 		t.Skip("today is Sunday, test not applicable")
 	}
 
-	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
 	require.NoError(t, err)
 
-	// Should find slots via relaxed day-of-week (step 2)
+	// Should find slots via Phase 2 adjacent proposals (same time, different days)
 	assert.False(t, result.ExactMatch)
 	assert.Len(t, result.Slots, 1)
 	assert.Empty(t, result.Message)
 }
 
 func TestFetchAvailableTimesWithFallback_ExtendedSearch(t *testing.T) {
-	// No slots in days 0-6, but slots on day 14
+	// No slots in days 0-13 (first batch), but slots on day 14 (second batch)
 	now := time.Now()
 	day14 := now.AddDate(0, 0, 14).Format("2006-01-02")
 
@@ -407,32 +407,32 @@ func TestFetchAvailableTimesWithFallback_ExtendedSearch(t *testing.T) {
 		},
 	}
 	adapter := NewBrowserAdapter(mock, nil)
-	prefs := TimePreferences{} // no day filter, so step 2 is skipped
+	prefs := TimePreferences{} // no day filter
 
-	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
 	require.NoError(t, err)
 
-	// Should find via extended search (step 3)
+	// Should find in second progressive batch [14,28)
 	assert.True(t, result.ExactMatch)
-	assert.Equal(t, extendedDaysToSearch, result.SearchedDays)
+	assert.Equal(t, batchSize*2, result.SearchedDays) // 28
 	assert.Len(t, result.Slots, 1)
 	assert.Empty(t, result.Message)
 }
 
 func TestFetchAvailableTimesWithFallback_NothingFound(t *testing.T) {
-	// Empty mock — no slots at all
+	// Empty mock — no slots at all. Only time prefs (no day filter), so no adjacent proposals.
 	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
 	adapter := NewBrowserAdapter(mock, nil)
 	prefs := TimePreferences{AfterTime: "15:00"}
 
-	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs)
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
 	require.NoError(t, err)
 
 	assert.Nil(t, result.Slots)
 	assert.False(t, result.ExactMatch)
-	assert.Equal(t, extendedDaysToSearch, result.SearchedDays)
+	assert.Equal(t, maxCalendarDays, result.SearchedDays) // searched all 90 days
 	assert.Contains(t, result.Message, "Botox")
-	assert.Contains(t, result.Message, "4 weeks")
+	assert.Contains(t, result.Message, "3 months")
 }
 
 func TestFetchAvailableTimes_NilAdapter(t *testing.T) {
@@ -447,4 +447,394 @@ func TestFetchAvailableTimes_EmptyBookingURL(t *testing.T) {
 	_, err := FetchAvailableTimes(context.Background(), adapter, "", "Botox", TimePreferences{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "booking URL")
+}
+
+// === Progressive Search + Adjacent Proposal Tests ===
+
+func TestProgressiveBatch_FirstBatch(t *testing.T) {
+	// Slot on day 3 → found in first batch [0,14)
+	now := time.Now()
+	day3 := now.AddDate(0, 0, 3).Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day3: makeSlotResponse("10:00 AM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", TimePreferences{}, nil)
+	require.NoError(t, err)
+
+	assert.True(t, result.ExactMatch)
+	assert.Equal(t, batchSize, result.SearchedDays) // 14 (first batch)
+	assert.Len(t, result.Slots, 1)
+	assert.Empty(t, result.Message)
+}
+
+func TestProgressiveBatch_ThirdBatch(t *testing.T) {
+	// No slots days 0-27, slot on day 35 → found in batch [28,42)
+	now := time.Now()
+	day35 := now.AddDate(0, 0, 35).Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day35: makeSlotResponse("2:00 PM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", TimePreferences{}, nil)
+	require.NoError(t, err)
+
+	assert.True(t, result.ExactMatch)
+	assert.Equal(t, batchSize*3, result.SearchedDays) // 42
+	assert.Len(t, result.Slots, 1)
+}
+
+func TestProgressiveBatch_LastBatch(t *testing.T) {
+	// Slot on day 85 → found in final batch [84,90)
+	now := time.Now()
+	day85 := now.AddDate(0, 0, 85).Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day85: makeSlotResponse("11:00 AM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", TimePreferences{}, nil)
+	require.NoError(t, err)
+
+	assert.True(t, result.ExactMatch)
+	assert.Equal(t, maxCalendarDays, result.SearchedDays) // 90
+	assert.Len(t, result.Slots, 1)
+}
+
+func TestNothingFound_90Days(t *testing.T) {
+	// No slots anywhere in 90 days, only time prefs (no day filter → no adjacent proposals)
+	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", TimePreferences{AfterTime: "20:00"}, nil)
+	require.NoError(t, err)
+
+	assert.Nil(t, result.Slots)
+	assert.False(t, result.ExactMatch)
+	assert.Equal(t, maxCalendarDays, result.SearchedDays)
+	assert.Contains(t, result.Message, "3 months")
+	assert.Contains(t, result.Message, "Botox")
+}
+
+func TestAdjacentProposal_BothAlternatives(t *testing.T) {
+	// Patient wants Mondays after 3pm. Nothing matches in 90 days.
+	// But Tuesday at 4pm exists (same time, different day)
+	// And Monday at 10am exists (same day, different time)
+	// → Message should ask patient to choose.
+	now := time.Now()
+
+	// Find a nearby Monday and Tuesday
+	daysUntilMon := (int(time.Monday) - int(now.Weekday()) + 7) % 7
+	if daysUntilMon == 0 {
+		daysUntilMon = 7
+	}
+	monday := now.AddDate(0, 0, daysUntilMon)
+	tuesday := monday.AddDate(0, 0, 1)
+
+	monStr := monday.Format("2006-01-02")
+	tueStr := tuesday.Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			monStr: makeSlotResponse("10:00 AM"),           // Monday morning (wrong time)
+			tueStr: makeSlotResponse("4:00 PM", "5:00 PM"), // Tuesday afternoon (wrong day)
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	prefs := TimePreferences{DaysOfWeek: []int{1}, AfterTime: "15:00"} // Monday after 3pm
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
+	require.NoError(t, err)
+
+	// Should propose adjacent alternatives
+	assert.Nil(t, result.Slots, "should not have exact-match slots")
+	assert.False(t, result.ExactMatch)
+	assert.Contains(t, result.Message, "adjustment")
+	assert.Contains(t, result.Message, "different days")
+	assert.Contains(t, result.Message, "Different times")
+}
+
+func TestAdjacentProposal_OnlyDiffDays(t *testing.T) {
+	// Patient wants Mondays after 3pm. Nothing matches exactly.
+	// Tuesday at 4pm exists (same time, different day) — but no Monday morning slots.
+	// → Should present the different-day slots directly.
+	now := time.Now()
+
+	// Find a nearby Tuesday
+	daysUntilTue := (int(time.Tuesday) - int(now.Weekday()) + 7) % 7
+	if daysUntilTue == 0 {
+		daysUntilTue = 7
+	}
+	tuesday := now.AddDate(0, 0, daysUntilTue)
+	tueStr := tuesday.Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			tueStr: makeSlotResponse("4:00 PM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	prefs := TimePreferences{DaysOfWeek: []int{1}, AfterTime: "15:00"} // Monday after 3pm
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
+	require.NoError(t, err)
+
+	// Should present the different-day slots directly
+	assert.False(t, result.ExactMatch)
+	assert.NotEmpty(t, result.Slots, "should present the alternative slots")
+	assert.Len(t, result.Slots, 1)
+	assert.Empty(t, result.Message, "no message when slots are presented directly")
+}
+
+func TestAdjacentProposal_NeitherAlternative(t *testing.T) {
+	// Patient wants Mondays after 3pm. Nothing matches at all.
+	// No same-time-different-day, no same-day-different-time.
+	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	prefs := TimePreferences{DaysOfWeek: []int{1}, AfterTime: "15:00"}
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
+	require.NoError(t, err)
+
+	assert.Nil(t, result.Slots)
+	assert.Contains(t, result.Message, "3 months")
+}
+
+func TestHumanizeDays(t *testing.T) {
+	tests := []struct {
+		days     int
+		expected string
+	}{
+		{7, "week"},
+		{14, "2 weeks"},
+		{21, "3 weeks"},
+		{28, "month"},
+		{56, "2 months"},
+		{84, "3 months"},
+		{90, "3 months"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, humanizeDays(tt.days))
+		})
+	}
+}
+
+func TestProgressiveSearch_StopsEarly(t *testing.T) {
+	// Slot on day 0 → mock should only be called for first batch (14 dates max)
+	now := time.Now()
+	day0 := now.Format("2006-01-02")
+
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day0: makeSlotResponse("10:00 AM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", TimePreferences{}, nil)
+	require.NoError(t, err)
+
+	assert.Len(t, result.Slots, 1)
+	// Should have only called the mock for the first batch (14 dates), not all 90
+	assert.LessOrEqual(t, mock.callCount.Load(), int32(batchSize))
+}
+
+// === Progress Callback Tests ===
+
+func TestProgressiveSearch_CallsProgressCallback(t *testing.T) {
+	// No slots at all → should call progress callback after each empty batch (except first)
+	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	var progressMessages []string
+	onProgress := func(_ context.Context, msg string) {
+		progressMessages = append(progressMessages, msg)
+	}
+
+	result, err := FetchAvailableTimesWithFallback(
+		context.Background(), adapter, "https://example.com/book", "Botox",
+		TimePreferences{AfterTime: "20:00"}, onProgress,
+	)
+	require.NoError(t, err)
+	assert.Nil(t, result.Slots)
+
+	// 90 days / 14 per batch = 7 batches (rounding up: 0-14, 14-28, ..., 84-90)
+	// Progress called after batches 2-7 (skip first), so ~6 calls
+	assert.GreaterOrEqual(t, len(progressMessages), 4, "should send multiple progress messages")
+	// Each message should mention the search range
+	for _, msg := range progressMessages {
+		assert.Contains(t, msg, "no availability")
+	}
+}
+
+func TestProgressiveSearch_NoCallbackOnFirstBatch(t *testing.T) {
+	// Slot on day 20 (batch 2) → progress callback should fire after batch 1 but NOT before
+	now := time.Now()
+	day20 := now.AddDate(0, 0, 20).Format("2006-01-02")
+	mock := &dateAwareMock{
+		responses: map[string]*browser.AvailabilityResponse{
+			day20: makeSlotResponse("3:00 PM"),
+		},
+	}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	var progressMessages []string
+	onProgress := func(_ context.Context, msg string) {
+		progressMessages = append(progressMessages, msg)
+	}
+
+	result, err := FetchAvailableTimesWithFallback(
+		context.Background(), adapter, "https://example.com/book", "Botox",
+		TimePreferences{}, onProgress,
+	)
+	require.NoError(t, err)
+	assert.Len(t, result.Slots, 1)
+
+	// Only 1 progress message (after batch 1 was empty, before batch 2 found the slot)
+	assert.Equal(t, 1, len(progressMessages), "should send exactly 1 progress message between batches")
+}
+
+func TestProgressiveSearch_NilCallbackSafe(t *testing.T) {
+	// Ensure nil callback doesn't panic
+	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
+	adapter := NewBrowserAdapter(mock, nil)
+
+	result, err := FetchAvailableTimesWithFallback(
+		context.Background(), adapter, "https://example.com/book", "Botox",
+		TimePreferences{}, nil,
+	)
+	require.NoError(t, err)
+	assert.Nil(t, result.Slots)
+	assert.Contains(t, result.Message, "3 months")
+}
+
+// === Disambiguation Tests (TDD: these should FAIL until implementation is added) ===
+
+func TestDetectTimeSelection_BareHour_SingleMatch(t *testing.T) {
+	// Patient says "6" and only 6:00 PM exists among presented slots → select it
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 10:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 14, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 2:00 PM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 18, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 6:00 PM"},
+	}
+
+	result := DetectTimeSelection("6", slots, TimePreferences{})
+	require.NotNil(t, result, "bare hour '6' should match the 6:00 PM slot")
+	assert.Equal(t, 3, result.Index)
+}
+
+func TestDetectTimeSelection_BareHour_AmbiguousWithPrefs(t *testing.T) {
+	// Patient says "6" and BOTH 6:00 AM and 6:00 PM exist,
+	// but patient previously said "after 3pm" → should pick 6:00 PM
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 6, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 6:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 10:00 AM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 18, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 6:00 PM"},
+	}
+	prefs := TimePreferences{AfterTime: "15:00"} // after 3pm
+
+	result := DetectTimeSelection("6", slots, prefs)
+	require.NotNil(t, result, "bare hour '6' with 'after 3pm' prefs should select 6:00 PM")
+	assert.Equal(t, 3, result.Index)
+}
+
+func TestDetectTimeSelection_BareHour_AmbiguousNoPrefs(t *testing.T) {
+	// Patient says "6" and BOTH 6:00 AM and 6:00 PM exist,
+	// NO time preference → return nil (LLM will ask for clarification)
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 6, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 6:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 10:00 AM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 18, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 6:00 PM"},
+	}
+
+	result := DetectTimeSelection("6", slots, TimePreferences{})
+	// Should NOT match because 6 is ambiguous (6am vs 6pm) and there are only 3 slots (so 6 is out of index range)
+	// But the system should also not match it as an index since 6 > len(slots)
+	// This should return nil — LLM asks for clarification
+	assert.Nil(t, result, "bare hour '6' with 6am AND 6pm and no prefs should return nil for clarification")
+}
+
+func TestDetectTimeSelection_BareHour_PrefersMorning(t *testing.T) {
+	// Patient says "9" and both 9:00 AM exists,
+	// patient has "before noon" preference → pick 9:00 AM
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 9, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 9:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 14, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 2:00 PM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 15, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 3:00 PM"},
+	}
+	prefs := TimePreferences{BeforeTime: "12:00"} // morning
+
+	result := DetectTimeSelection("9", slots, prefs)
+	require.NotNil(t, result, "bare hour '9' with morning prefs should select 9:00 AM")
+	assert.Equal(t, 1, result.Index)
+}
+
+func TestDetectTimeSelection_NaturalPhrase_IllTakeThe2pm(t *testing.T) {
+	// Patient says "I'll take the 2pm" → should match the 2:00 PM slot
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 10:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 11, 30, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 11:30 AM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 14, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 2:00 PM"},
+	}
+
+	result := DetectTimeSelection("I'll take the 2pm", slots, TimePreferences{})
+	require.NotNil(t, result, "'I'll take the 2pm' should match the 2:00 PM slot")
+	assert.Equal(t, 3, result.Index)
+}
+
+func TestDetectTimeSelection_NaturalPhrase_IWant6(t *testing.T) {
+	// Patient says "I want 6" with afterTime preference → should pick 6:00 PM
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 6, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 6:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 14, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 2:00 PM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 18, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 6:00 PM"},
+	}
+	prefs := TimePreferences{AfterTime: "15:00"} // after 3pm
+
+	result := DetectTimeSelection("I want 6", slots, prefs)
+	require.NotNil(t, result, "'I want 6' with 'after 3pm' prefs should select 6:00 PM")
+	assert.Equal(t, 3, result.Index)
+}
+
+func TestDetectTimeSelection_BareHour_IndexTakesPriority(t *testing.T) {
+	// Patient says "3" and there are 4 slots. Slot 3 is at 2:00 PM.
+	// No slot is at 3:00 hour. So "3" should be treated as slot index 3.
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 10:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 9, 11, 30, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 11:30 AM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 14, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 2:00 PM"},
+		{Index: 4, DateTime: time.Date(2026, 2, 12, 15, 30, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 3:30 PM"},
+	}
+
+	result := DetectTimeSelection("3", slots, TimePreferences{})
+	require.NotNil(t, result, "'3' as a bare number should match slot index 3")
+	assert.Equal(t, 3, result.Index)
+}
+
+func TestDetectTimeSelection_ShorthandTime_3p(t *testing.T) {
+	// Patient says "3p" → should match 3:00 PM or 3:30 PM slot
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 9, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 9 at 10:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 12, 15, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 3:00 PM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 12, 16, 0, 0, 0, time.Local), TimeStr: "Thu Feb 12 at 4:00 PM"},
+	}
+
+	result := DetectTimeSelection("3p", slots, TimePreferences{})
+	require.NotNil(t, result, "'3p' should match the 3:00 PM slot")
+	assert.Equal(t, 2, result.Index)
 }

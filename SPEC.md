@@ -15,26 +15,56 @@
 
 ---
 
-## 2. The 4-Step Process
+## 2. The 5-Step Process
 
-### Step 1: Missed Call → Instant Text Back
-| Trigger | Phone call goes unanswered (after-hours) |
-|---------|------------------------------------------|
+### Step 1: Lead Engagement — Instant Text Back
+| Trigger | Phone call goes unanswered OR direct inbound SMS |
+|---------|--------------------------------------------------|
 | Action | Send SMS within 5 seconds |
-| Message | "Sorry we missed your call, I can help by text..." |
-| SLA | <5 seconds from missed call to SMS sent |
+| Message | Clinic-configured greeting (time-aware: business hours vs after-hours) |
+| SLA | <5 seconds from missed call/inbound SMS to response sent |
+
+**Lead sources:**
+- Missed calls (voice webhook triggers SMS)
+- Direct inbound SMS (patient texts the clinic number)
 
 **Key files:** `internal/http/handlers/telnyx_webhooks.go`, `internal/messaging/handler.go`
 
-### Step 2: AI Qualifies the Lead
+### Step 2: AI Qualifies the Lead (5 Qualifications)
+
 | What | Multi-turn SMS conversation via Claude (AWS Bedrock) |
 |------|-----------------------------------------------------|
-| Extracts | Desired service, preferred date/time, new vs existing patient, full name |
+| Extracts | 5 qualifications (see below) |
 | Constraints | No medical advice, HIPAA-compliant, warm conversational tone |
 
 **Key files:** `internal/conversation/service.go`, `internal/conversation/llm_service.go`
 
-#### Conversation → Browser Sidecar Integration
+#### The 5 Qualifications (Trigger for Booking Flow)
+
+The AI collects these 5 pieces of information before the booking flow can begin. **All 5 must be collected** to transition from Step 2 → Step 3. Phone number is already known (patient called/texted in).
+
+| # | Qualification | How Collected | Example | Purpose |
+|---|--------------|---------------|---------|---------|
+| 1 | **Full name** (first + last) | AI asks | "Sammie Wallens" | Booking form, personalization |
+| 2 | **Email** | AI asks | "sammie@email.com" | Moxie booking form, operator follow-up |
+| 3 | **Service** | AI asks or infers from conversation | "Botox", "Lip Filler" | Determine what to book |
+| 4 | **Patient type** (new/existing) | AI asks | "new patient" | Operator context in notifications |
+| 5 | **Time preferences** | AI asks | "Mondays after 4pm" | Filter available slots |
+
+**Collection priority order:**
+1. Name (ask early to personalize)
+2. Service (what they want)
+3. Email (needed for booking)
+4. Patient type (new or returning)
+5. Time preferences (days + times)
+
+**What happens when all 5 are collected:**
+- **Moxie clinics →** Check availability via browser sidecar → Present matching time slots → Patient picks → Auto-book (Moxie handles payment)
+- **Square clinics →** Offer refundable deposit → Send Square checkout link → Patient pays → Operator manually confirms appointment
+
+**How the system decides which path:** If the clinic has a `bookingUrl` configured (Moxie booking widget URL), use the Moxie auto-booking path. Otherwise, use the Square deposit path.
+
+#### Conversation → Browser Sidecar Integration (Moxie Path)
 
 The AI conversation extracts customer preferences and passes them to the browser sidecar for availability checking:
 
@@ -64,13 +94,34 @@ The AI conversation extracts customer preferences and passes them to the browser
 
 **Important:** For availability checking, the browser sidecar operates in **dry-run mode** (checks availability but does NOT book). For booking automation (Step 3a), the sidecar navigates Steps 1-4 of the Moxie flow and hands off at the payment page for the patient to complete.
 
-### Step 3: Book and Collect Deposit
+#### Time Slot Selection (Patient Picks a Time)
 
-Booking behavior depends on the clinic's platform:
+After presenting available times, the system must detect which slot the patient selected. The detection is **natural language aware** — patients should not be forced into a rigid format.
 
-#### Step 3a: Moxie Clinics — Browser Sidecar Booking Automation
+**Supported selection formats:**
+| Patient Says | Detection Method | Example |
+|-------------|-----------------|---------|
+| Slot number | Index match | "2", "option 3", "#1", "the first one" |
+| Explicit time | Time match against presented slots | "I'll take the 2pm", "10:30 works" |
+| Bare hour | Hour match with disambiguation | "6" → match against slot hours |
+| Natural language | LLM interprets if regex fails | "the afternoon one", "the Monday slot" |
 
-When the patient selects a time slot from a Moxie-powered clinic, the system automates the booking flow via the browser sidecar:
+**Disambiguation rules for bare hours (e.g., patient says "6"):**
+
+1. If only ONE presented slot has that hour (e.g., only 6:00 PM exists) → select it automatically
+2. If MULTIPLE slots share that hour (e.g., both 6:00 AM and 6:00 PM) AND the patient previously stated a time preference (e.g., "after 3pm") → use the preference to disambiguate (select 6:00 PM)
+3. If MULTIPLE slots share that hour AND NO preference helps → return no match; the LLM will ask: "Did you mean 6:00 AM or 6:00 PM?"
+4. If the bare number is a valid slot index AND does not match any slot hour → treat as slot index (e.g., "3" with 3 slots but none at 3:00)
+
+**Key files:** `internal/conversation/time_selection.go` (DetectTimeSelection), `internal/conversation/llm_service.go`
+
+### Step 3: Book or Collect Deposit
+
+Booking behavior depends on the clinic's platform (determined by whether `bookingUrl` is configured):
+
+#### Step 3a: Moxie Clinics — Auto-Booking (No Deposit from Us)
+
+When all 5 qualifications are met and the patient selects a time slot, the system automates the booking flow via the browser sidecar. **Moxie handles payment directly** — we do not collect a separate deposit.
 
 | Phase | What Happens | Actor |
 |-------|-------------|-------|
@@ -92,22 +143,40 @@ When the patient selects a time slot from a Moxie-powered clinic, the system aut
 
 **Key files:** `internal/conversation/worker.go` (handleMoxieBooking), `internal/conversation/handler.go` (BookingCallbackHandler), `internal/browser/client.go` (booking session methods)
 
-#### Step 3b: Square Clinics — Deposit Collection
+#### Step 3b: Square Clinics — Deposit Collection (No Auto-Booking)
+
+When all 5 qualifications are met and the clinic does NOT have a Moxie booking URL, the system collects a refundable deposit. **The operator manually confirms the appointment** — the system does not auto-book.
 
 | Deposit Eligibility | Per-clinic configuration (admin sets which services require deposits) |
 |--------------------|-----------------------------------------------------------------------|
 | Payment | Square checkout link (PCI-compliant hosted page) |
 | On Success | SMS confirmation sent to patient |
+| Next Step | Operator manually contacts patient to finalize appointment time |
 
 **Key files:** `internal/conversation/deposit_sender.go`, `internal/payments/square_checkout.go`
 
-### Step 4: Confirm to Patient and Operator
-| To Patient | Confirmation SMS with appointment details + deposit status |
-|------------|-----------------------------------------------------------|
-| To Operator | Notification of qualified lead ready for confirmation |
+### Step 4: Notify Patient and Operator
+
+| To Patient | Confirmation SMS with appointment details (Moxie) or deposit receipt (Square) |
+|------------|-------------------------------------------------------------------------------|
+| To Operator | Email + SMS notification with lead details (name, phone, service, patient type, time preferences, deposit amount) |
 | Reminders | Future phase: 1 week, 1 day, 3 hours before appointment |
 
-**Key files:** `internal/payments/handler.go` (webhook), `internal/events/outbox.go`
+**Operator notification channels:**
+- **Email:** HTML-formatted notification via AWS SES with lead details and priority status
+- **SMS:** Short notification with customer name, service, and deposit amount
+
+**Key files:** `internal/notify/service.go`, `internal/payments/handler.go` (webhook), `internal/events/outbox.go`
+
+### Step 5: Clinic Knowledge & AI Persona (Per-Clinic Configuration)
+
+Each clinic configures:
+- **AI Persona:** Provider name(s), tone, custom greetings (business hours vs after-hours), busy messages
+- **Clinic Knowledge:** Up to 50 sections of clinic-specific information (services, pricing, policies, FAQs) that the AI uses as context
+
+These are managed via the admin portal and stored in Redis.
+
+**Key files:** `internal/clinic/config.go`, `internal/conversation/knowledge_repository.go`, `web/onboarding/src/components/AIPersonaSettings.tsx`, `web/onboarding/src/components/KnowledgeSettings.tsx`
 
 ---
 
@@ -126,8 +195,8 @@ cd browser-sidecar && npm run test:unit
 
 | Step | Criteria | Test |
 |------|----------|------|
-| 1 | Missed call triggers SMS within 5 seconds | Webhook → SMS timestamp delta |
-| 2 | AI extracts: service, date/time, patient type, name | Lead record has all fields populated |
+| 1 | Missed call OR inbound SMS triggers response within 5 seconds | Webhook → SMS timestamp delta |
+| 2 | AI extracts all 5 qualifications: name, email, service, patient type, time prefs | Lead record has all fields populated |
 | 2 | Check available appointment times from Moxie | Browser sidecar returns time slots |
 | 2 | Navigate Moxie multi-step booking flow | Integration tests verify flow completion |
 | 3 | Moxie booking: sidecar automates Steps 1-4, handoff URL sent | Worker test verifies session start + handoff SMS |
@@ -254,11 +323,19 @@ The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
 ### Medical Liability (No Medical Advice)
 | AI CAN | AI CANNOT |
 |--------|-----------|
-| Explain services offered | Advise what treatment is right |
-| Describe procedures | Diagnose symptoms or conditions |
-| Share general pricing | Recommend treatment for complaints |
-| Answer FAQs (recovery, prep) | Advise on medical emergencies |
-| Refer to medical professionals | Provide any clinical guidance |
+| Explain services offered | Diagnose symptoms or conditions |
+| Describe procedures in general terms | Recommend specific treatments for conditions |
+| Share general pricing | Prescribe dosages (specific units/syringes for an individual) |
+| Answer FAQs (recovery time, prep) | Clear patients for treatment based on medical conditions |
+| Provide general dosage ranges from knowledge base | Advise on medication interactions or contraindications |
+| Refer to medical professionals | Minimize post-procedure symptoms ("that's normal") |
+| Direct emergencies to 911/ER | Say whether treatments are safe during pregnancy/breastfeeding |
+
+**Emergency Protocol:** Vision problems, breathing difficulty, vascular compromise → Immediately direct to 911/ER. Do NOT diagnose, minimize, or mention callback times.
+
+**Contraindication Deflection:** Pregnancy, autoimmune conditions, blood thinners, Accutane, keloids, etc. → Always defer to provider consultation.
+
+**Key files:** `internal/conversation/llm_service.go` (system prompt guardrails)
 
 ### PCI (Payment Security)
 | Requirement | Implementation |
