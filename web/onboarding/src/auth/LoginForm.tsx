@@ -109,26 +109,28 @@ export function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+    <div className="ui-page flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="ui-card ui-card-solid p-8 space-y-6">
+          <div className="flex items-start gap-3">
+            <div className="ui-brandmark" aria-hidden="true" />
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
             {mode === 'login' && 'Sign in to your account'}
             {mode === 'register' && 'Create your account'}
             {mode === 'confirm' && 'Confirm your email'}
             {mode === 'setup-clinic' && 'Set up your clinic'}
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            MedSpa AI Receptionist Portal
-          </p>
-        </div>
+              <p className="ui-muted mt-1">Medspa Concierge Portal</p>
+            </div>
+          </div>
 
         {mode === 'login' && (
-          <div className="mt-8">
+          <div className="mt-4">
             <button
               type="button"
               onClick={loginWithGoogle}
-              className="w-full flex items-center justify-center gap-3 py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="ui-btn ui-btn-ghost w-full py-3 justify-center"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
@@ -153,10 +155,10 @@ export function LoginForm() {
 
             <div className="mt-6 relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+                <div className="w-full border-t border-slate-200" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">Or continue with email</span>
+                <span className="px-2 bg-white text-slate-500">Or continue with email</span>
               </div>
             </div>
           </div>
@@ -164,15 +166,15 @@ export function LoginForm() {
 
         <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-sm font-medium text-red-800">{error}</p>
             </div>
           )}
 
           {(mode === 'login' || mode === 'register') ? (
             <div className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="ui-label">
                   Email address
                 </label>
                 <input
@@ -181,7 +183,7 @@ export function LoginForm() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="ui-input mt-2"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -189,7 +191,7 @@ export function LoginForm() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="ui-label">
                   Password
                 </label>
                 <input
@@ -198,7 +200,7 @@ export function LoginForm() {
                   type="password"
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   required
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="ui-input mt-2"
                   placeholder="Enter password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -208,7 +210,7 @@ export function LoginForm() {
               {mode === 'register' && (
                 <>
                   <div>
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="confirmPassword" className="ui-label">
                       Confirm Password
                     </label>
                     <input
@@ -217,27 +219,27 @@ export function LoginForm() {
                       type="password"
                       autoComplete="new-password"
                       required
-                      className={`mt-1 appearance-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                      className={`ui-input mt-2 ${
                         confirmPassword && !passwordsMatch
                           ? 'border-red-300 bg-red-50'
                           : confirmPassword && passwordsMatch
                           ? 'border-green-300 bg-green-50'
-                          : 'border-gray-300'
+                          : ''
                       }`}
                       placeholder="Confirm password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                     />
                     {confirmPassword && !passwordsMatch && (
-                      <p className="mt-1 text-sm text-red-600">Passwords do not match</p>
+                      <p className="mt-2 text-sm font-medium text-red-700">Passwords do not match</p>
                     )}
                     {confirmPassword && passwordsMatch && (
-                      <p className="mt-1 text-sm text-green-600">Passwords match</p>
+                      <p className="mt-2 text-sm font-medium text-emerald-700">Passwords match</p>
                     )}
                   </div>
 
-                  <div className="bg-gray-50 rounded-md p-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Password requirements:</p>
+                  <div className="rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4">
+                    <p className="text-sm font-semibold text-slate-800 mb-2">Password requirements</p>
                     <ul className="space-y-1">
                       {PASSWORD_REQUIREMENTS.map((req, index) => {
                         const met = req.test(password);
@@ -252,7 +254,7 @@ export function LoginForm() {
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
                               </svg>
                             )}
-                            <span className={met ? 'text-green-700' : 'text-gray-500'}>
+                            <span className={met ? 'text-emerald-800' : 'text-slate-500'}>
                               {req.label}
                             </span>
                           </li>
@@ -265,10 +267,10 @@ export function LoginForm() {
             </div>
           ) : mode === 'confirm' ? (
             <div>
-              <label htmlFor="code" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="code" className="ui-label">
                 Confirmation code
               </label>
-              <p className="text-sm text-gray-500 mb-2">
+              <p className="ui-muted mt-2 mb-3">
                 Check your email for a verification code
               </p>
               <input
@@ -276,7 +278,7 @@ export function LoginForm() {
                 name="code"
                 type="text"
                 required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="ui-input"
                 placeholder="Enter 6-digit code"
                 value={confirmCode}
                 onChange={(e) => setConfirmCode(e.target.value)}
@@ -284,11 +286,11 @@ export function LoginForm() {
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="ui-muted">
                 Welcome! Let's set up your clinic profile to get started.
               </p>
               <div>
-                <label htmlFor="clinicName" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="clinicName" className="ui-label">
                   Clinic Name
                 </label>
                 <input
@@ -296,21 +298,21 @@ export function LoginForm() {
                   name="clinicName"
                   type="text"
                   required
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="ui-input mt-2"
                   placeholder="Your MedSpa Name"
                   value={clinicName}
                   onChange={(e) => setClinicName(e.target.value)}
                 />
               </div>
               <div>
-                <label htmlFor="clinicPhone" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="clinicPhone" className="ui-label">
                   Business Phone (optional)
                 </label>
                 <input
                   id="clinicPhone"
                   name="clinicPhone"
                   type="tel"
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="ui-input mt-2"
                   placeholder="+1 (555) 123-4567"
                   value={clinicPhone}
                   onChange={(e) => setClinicPhone(e.target.value)}
@@ -323,7 +325,7 @@ export function LoginForm() {
             <button
               type="submit"
               disabled={loading || (mode === 'register' && (!passwordValidation.valid || !passwordsMatch)) || (mode === 'setup-clinic' && !clinicName.trim())}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ui-btn ui-btn-primary w-full py-3"
             >
               {loading ? (
                 <span className="flex items-center">
@@ -348,7 +350,7 @@ export function LoginForm() {
             <div className="text-center">
               <button
                 type="button"
-                className="text-sm text-indigo-600 hover:text-indigo-500"
+                className="ui-link text-sm font-semibold"
                 onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
               >
                 {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
@@ -356,6 +358,7 @@ export function LoginForm() {
             </div>
           )}
         </form>
+        </div>
       </div>
     </div>
   );

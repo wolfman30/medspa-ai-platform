@@ -4,7 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book Your Appointment | MedSpa</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    />
     <style>
+        :root {
+            --brand: #4c1d95;
+            --brand-2: #312e81;
+            --ink: #0f172a;
+            --muted: #475569;
+            --border: rgba(15, 23, 42, 0.12);
+            --surface: rgba(255, 255, 255, 0.86);
+            --radius: 22px;
+            --shadow: 0 1px 0 rgba(15, 23, 42, 0.05), 0 32px 70px rgba(15, 23, 42, 0.22);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,26 +29,36 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(1200px circle at 20% 0%, rgba(139, 92, 246, 0.55), transparent 60%),
+                radial-gradient(900px circle at 85% 45%, rgba(79, 70, 229, 0.55), transparent 55%),
+                linear-gradient(130deg, #0b102a, #312e81 35%, #4f46e5 70%, #8b5cf6);
+            background-size: 240% 240%;
+            animation: bgShift 18s ease-in-out infinite;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            color: var(--ink);
         }
 
         .container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            box-shadow: var(--shadow);
             width: 100%;
             max-width: 480px;
             overflow: hidden;
+            backdrop-filter: blur(16px);
         }
 
         .header {
-            background: #1a1a2e;
+            background:
+                radial-gradient(900px circle at 20% 0%, rgba(255, 255, 255, 0.14), transparent 55%),
+                linear-gradient(130deg, #0b102a, #312e81 35%, #4f46e5 70%, #8b5cf6);
             color: white;
             padding: 32px;
             text-align: center;
@@ -39,26 +66,28 @@
 
         .header h1 {
             font-size: 24px;
-            font-weight: 600;
+            font-weight: 650;
+            letter-spacing: -0.02em;
             margin-bottom: 8px;
         }
 
         .header p {
-            color: #a0aec0;
+            color: rgba(255, 255, 255, 0.82);
             font-size: 14px;
         }
 
         .sandbox-badge {
             display: inline-block;
-            background: #f6ad55;
-            color: #744210;
+            background: rgba(255, 255, 255, 0.14);
+            color: rgba(255, 255, 255, 0.88);
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 650;
             padding: 4px 12px;
             border-radius: 100px;
             margin-top: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
         }
 
         .form-section {
@@ -72,8 +101,8 @@
         .form-group label {
             display: block;
             font-size: 13px;
-            font-weight: 600;
-            color: #4a5568;
+            font-weight: 650;
+            color: var(--muted);
             margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -83,18 +112,19 @@
         .form-group select {
             width: 100%;
             padding: 14px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
             font-size: 16px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            background: #f7fafc;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--ink);
         }
 
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: rgba(124, 58, 237, 0.55);
+            box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.16);
             background: white;
         }
 
@@ -107,19 +137,19 @@
         .submit-btn {
             width: 100%;
             padding: 16px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 55%, #4f46e5 100%);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 999px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 650;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .submit-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 18px 40px rgba(9, 4, 32, 0.35);
         }
 
         .submit-btn:active {
@@ -129,12 +159,12 @@
         .footer-note {
             text-align: center;
             padding: 16px 32px 32px;
-            color: #718096;
+            color: rgba(15, 23, 42, 0.55);
             font-size: 13px;
         }
 
         .footer-note a {
-            color: #667eea;
+            color: var(--brand);
             text-decoration: none;
         }
 
@@ -148,7 +178,7 @@
         .success-icon {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -164,29 +194,30 @@
 
         .success-container h2 {
             font-size: 24px;
-            color: #1a1a2e;
+            color: var(--ink);
             margin-bottom: 12px;
         }
 
         .success-container p {
-            color: #718096;
+            color: var(--muted);
             line-height: 1.6;
             margin-bottom: 24px;
         }
 
         .confirmation-details {
-            background: #f7fafc;
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.75);
+            border-radius: 18px;
             padding: 20px;
             text-align: left;
             margin-bottom: 24px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
         }
 
         .confirmation-details .detail-row {
             display: flex;
             justify-content: space-between;
             padding: 8px 0;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
 
         .confirmation-details .detail-row:last-child {
@@ -194,24 +225,25 @@
         }
 
         .confirmation-details .label {
-            color: #718096;
+            color: rgba(15, 23, 42, 0.6);
             font-size: 14px;
         }
 
         .confirmation-details .value {
-            color: #1a1a2e;
-            font-weight: 500;
+            color: var(--ink);
+            font-weight: 600;
             font-size: 14px;
         }
 
         .confirmation-number {
-            background: #edf2f7;
+            background: rgba(124, 58, 237, 0.08);
             padding: 12px 20px;
-            border-radius: 8px;
+            border-radius: 14px;
             font-family: 'Monaco', 'Consolas', monospace;
             font-size: 18px;
-            color: #667eea;
+            color: var(--brand);
             letter-spacing: 2px;
+            border: 1px solid rgba(124, 58, 237, 0.16);
         }
 
         .back-btn {
@@ -219,19 +251,32 @@
             margin-top: 16px;
             padding: 12px 24px;
             background: transparent;
-            color: #667eea;
-            border: 2px solid #667eea;
-            border-radius: 8px;
+            color: var(--brand);
+            border: 1px solid rgba(124, 58, 237, 0.28);
+            border-radius: 999px;
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 650;
             cursor: pointer;
             transition: all 0.2s;
             text-decoration: none;
         }
 
         .back-btn:hover {
-            background: #667eea;
+            background: var(--brand);
+            border-color: transparent;
             color: white;
+        }
+
+        @keyframes bgShift {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            body { animation: none; }
+            .submit-btn { transition: none; }
+            .submit-btn:hover { transform: none; }
         }
 
         @media (max-width: 480px) {

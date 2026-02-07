@@ -475,18 +475,18 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
 
   if (loading && !state.orgId) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="ui-page">
+      <div className="ui-container max-w-3xl">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Welcome to MedSpa AI</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Welcome to Medspa Concierge</h1>
+          <p className="ui-muted mt-2">
             Let's set up your AI receptionist in a few simple steps.
           </p>
         </div>
@@ -494,12 +494,12 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
         <StepIndicator steps={STEPS} currentStep={state.currentStep} />
 
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-sm font-medium text-red-800">{error}</p>
           </div>
         )}
 
-        <div className="bg-white shadow rounded-lg p-6 sm:p-8">
+        <div className="ui-card ui-card-solid p-6 sm:p-8">
           {state.currentStep === 0 && (
             <ClinicInfoForm
               defaultValues={state.clinicInfo || undefined}
@@ -543,7 +543,7 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
           )}
         </div>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-slate-500">
           Need help? Contact support@aiwolfsolutions.com
         </p>
       </div>

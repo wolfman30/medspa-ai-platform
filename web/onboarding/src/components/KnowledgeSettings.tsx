@@ -100,27 +100,27 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-3xl mx-auto px-4">
+    <div className="ui-page">
+      <div className="ui-container max-w-3xl">
         <div className="mb-6 flex items-center gap-4">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Clinic Knowledge</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Clinic Knowledge</h1>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <p className="text-sm text-gray-600">
+        <div className="ui-card ui-card-solid p-6 space-y-4">
+          <p className="ui-muted">
             Edit the knowledge the AI uses for this clinic. Do not include any patient-specific information (PHI).
           </p>
           {!loading && (
-            <div className="flex flex-wrap gap-3 pb-2 border-b border-gray-200">
+            <div className="flex flex-wrap gap-3 pb-3 border-b border-slate-200/70">
               <button
                 onClick={() => { setEditing(true); setSuccess(null); }}
-                className="px-4 py-2 rounded-md border border-indigo-500 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                className="ui-btn ui-btn-ghost"
                 disabled={editing}
               >
                 Edit
@@ -131,37 +131,37 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
                   setDocuments((prev) => [...prev, { title: '', content: '' }]);
                   setEditing(true);
                 }}
-                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                className="ui-btn ui-btn-ghost"
                 disabled={saving}
               >
                 Add Section
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="ui-btn ui-btn-primary"
                 disabled={!editing || saving}
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>
-              <span className="ml-auto text-sm text-gray-500 self-center">
+              <span className="ml-auto text-sm text-slate-500 self-center">
                 {documents.length} section{documents.length !== 1 ? 's' : ''}
               </span>
             </div>
           )}
           {loading ? (
-            <div className="text-sm text-gray-500">Loading knowledge...</div>
+            <div className="ui-muted">Loading knowledge...</div>
           ) : (
             <>
               {documents.length === 0 ? (
-                <div className="border border-dashed border-gray-200 rounded-lg p-6 text-sm text-gray-500 bg-gray-50">
+                <div className="border border-dashed border-slate-200 rounded-2xl p-6 text-sm text-slate-600 bg-slate-50/60">
                   No knowledge sections yet. Click “Add Section” to start.
                 </div>
               ) : (
                 <div className="space-y-4">
                   {documents.map((doc, index) => (
-                    <div key={`${index}`} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <div key={`${index}`} className="border border-slate-200/80 rounded-2xl p-5 bg-slate-50/60">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-semibold text-gray-700">
+                        <span className="text-sm font-semibold text-slate-700">
                           Section {index + 1}
                         </span>
                         {editing && (
@@ -170,17 +170,17 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
                             onClick={() => {
                               setDocuments((prev) => prev.filter((_, i) => i !== index));
                             }}
-                            className="text-xs text-red-600 hover:text-red-700"
+                            className="text-xs font-semibold text-red-700 hover:text-red-800"
                           >
                             Remove
                           </button>
                         )}
                       </div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                      <label className="ui-label mb-2">
                         Title (optional)
                       </label>
                       <input
-                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-800 bg-white disabled:bg-gray-100"
+                        className="ui-input"
                         value={doc.title}
                         onChange={(e) => {
                           const next = e.target.value;
@@ -190,11 +190,11 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
                         }}
                         disabled={!editing}
                       />
-                      <label className="block text-xs font-medium text-gray-600 mt-3 mb-1">
+                      <label className="ui-label mt-4 mb-2">
                         Details
                       </label>
                       <textarea
-                        className="w-full h-32 border border-gray-200 rounded-md p-3 text-sm text-gray-800 bg-white disabled:bg-gray-100"
+                        className="ui-textarea h-32"
                         value={doc.content}
                         onChange={(e) => {
                           const next = e.target.value;
@@ -211,7 +211,7 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => { setEditing(true); setSuccess(null); }}
-                  className="px-4 py-2 rounded-md border border-indigo-500 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                  className="ui-btn ui-btn-ghost"
                   disabled={editing}
                 >
                   Edit
@@ -222,24 +222,24 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
                     setDocuments((prev) => [...prev, { title: '', content: '' }]);
                     setEditing(true);
                   }}
-                  className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  className="ui-btn ui-btn-ghost"
                   disabled={saving}
                 >
                   Add Section
                 </button>
                 <button
                   onClick={handleSave}
-                  className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="ui-btn ui-btn-primary"
                   disabled={!editing || saving}
                 >
                   {saving ? 'Saving...' : 'Save'}
                 </button>
               </div>
               {error && (
-                <div className="text-sm text-red-600">{error}</div>
+                <div className="text-sm font-medium text-red-700">{error}</div>
               )}
               {success && (
-                <div className="text-sm text-green-600">{success}</div>
+                <div className="text-sm font-medium text-emerald-700">{success}</div>
               )}
             </>
           )}
@@ -248,9 +248,9 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
         <div className="mt-8">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
         </div>
       </div>

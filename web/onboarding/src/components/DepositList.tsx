@@ -40,14 +40,14 @@ function getStatusColor(status: string): string {
   switch (status.toLowerCase()) {
     case 'succeeded':
     case 'completed':
-      return 'bg-green-100 text-green-800';
+      return 'ui-badge-success';
     case 'pending':
-      return 'bg-yellow-100 text-yellow-800';
+      return 'ui-badge-warning';
     case 'failed':
     case 'refunded':
-      return 'bg-red-100 text-red-800';
+      return 'ui-badge-danger';
     default:
-      return 'bg-gray-100 text-gray-800';
+      return 'ui-badge-muted';
   }
 }
 
@@ -106,14 +106,14 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6 sm:py-10">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Deposits</h1>
+    <div className="ui-page">
+      <div className="ui-container">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">Deposits</h1>
           <button
             onClick={loadDeposits}
             disabled={loading}
-            className="px-3 py-2 text-sm sm:px-4 sm:text-base bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 w-full sm:w-auto"
+            className="ui-btn ui-btn-primary w-full sm:w-auto"
           >
             {loading ? 'Loading...' : 'Refresh'}
           </button>
@@ -122,33 +122,33 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
         {/* Stats Cards */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-            <div className="bg-white rounded-lg shadow p-3 sm:p-4">
-              <p className="text-xs sm:text-sm text-gray-500">Total Collected</p>
-              <p className="text-lg sm:text-2xl font-bold text-green-600">
+            <div className="ui-card ui-card-solid p-4">
+              <p className="ui-kicker">Total Collected</p>
+              <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-emerald-700">
                 {formatCents(stats.total_amount_cents)}
               </p>
-              <p className="text-xs text-gray-400">{stats.total_deposits} deposits</p>
+              <p className="ui-help">{stats.total_deposits} deposits</p>
             </div>
-            <div className="bg-white rounded-lg shadow p-3 sm:p-4">
-              <p className="text-xs sm:text-sm text-gray-500">This Week</p>
-              <p className="text-lg sm:text-2xl font-bold text-indigo-600">
+            <div className="ui-card ui-card-solid p-4">
+              <p className="ui-kicker">This Week</p>
+              <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-violet-700">
                 {formatCents(stats.week_amount_cents)}
               </p>
-              <p className="text-xs text-gray-400">{stats.week_count} deposits</p>
+              <p className="ui-help">{stats.week_count} deposits</p>
             </div>
-            <div className="bg-white rounded-lg shadow p-3 sm:p-4">
-              <p className="text-xs sm:text-sm text-gray-500">Today</p>
-              <p className="text-lg sm:text-2xl font-bold text-blue-600">
+            <div className="ui-card ui-card-solid p-4">
+              <p className="ui-kicker">Today</p>
+              <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-indigo-700">
                 {formatCents(stats.today_amount_cents)}
               </p>
-              <p className="text-xs text-gray-400">{stats.today_count} deposits</p>
+              <p className="ui-help">{stats.today_count} deposits</p>
             </div>
-            <div className="bg-white rounded-lg shadow p-3 sm:p-4">
-              <p className="text-xs sm:text-sm text-gray-500">Average</p>
-              <p className="text-lg sm:text-2xl font-bold text-gray-700">
+            <div className="ui-card ui-card-solid p-4">
+              <p className="ui-kicker">Average</p>
+              <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-slate-900">
                 {formatCents(stats.average_amount_cents)}
               </p>
-              <p className="text-xs text-gray-400">per deposit</p>
+              <p className="ui-help">per deposit</p>
             </div>
           </div>
         )}
@@ -158,7 +158,7 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
           <select
             value={statusFilter}
             onChange={(e) => handleStatusChange(e.target.value)}
-            className="px-3 py-2 text-sm sm:px-4 sm:text-base border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+            className="ui-select sm:w-56"
           >
             <option value="">All Statuses</option>
             <option value="succeeded">Succeeded</option>
@@ -172,11 +172,11 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
               placeholder="Filter by phone..."
               value={phoneFilter}
               onChange={(e) => setPhoneFilter(e.target.value)}
-              className="flex-1 px-3 py-2 text-sm sm:px-4 sm:text-base border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="ui-input flex-1"
             />
             <button
               type="submit"
-              className="px-3 py-2 text-sm sm:px-4 sm:text-base bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+              className="ui-btn ui-btn-ghost"
             >
               Search
             </button>
@@ -184,38 +184,38 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
         </div>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error}
           </div>
         )}
 
         {/* Deposits Table */}
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="ui-card ui-card-solid overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="ui-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                  <th className="ui-th">
                     Patient
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                  <th className="ui-th">
                     Service
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                  <th className="ui-th">
                     Amount
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                  <th className="ui-th">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                  <th className="ui-th">
                     Date
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {deposits.length === 0 && !loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500 sm:px-6">
+                  <tr className="ui-row">
+                    <td colSpan={5} className="ui-td py-10 text-center text-slate-500">
                       No deposits found
                     </td>
                   </tr>
@@ -224,43 +224,41 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
                     <tr
                       key={deposit.id}
                       onClick={() => onSelect(deposit.id)}
-                      className="hover:bg-gray-50 cursor-pointer"
+                      className="ui-row ui-row-hover cursor-pointer"
                     >
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <td className="ui-td whitespace-nowrap">
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className="text-sm font-semibold text-slate-900">
                             {deposit.lead_name || 'Unknown'}
                           </span>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-slate-500">
                             {formatPhone(deposit.lead_phone)}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
-                        <span className="text-sm text-gray-900">
+                      <td className="ui-td whitespace-nowrap">
+                        <span className="text-sm font-medium text-slate-900">
                           {deposit.service_interest || '-'}
                         </span>
                         {deposit.patient_type && (
-                          <span className="hidden sm:inline ml-2 text-xs text-gray-500">
+                          <span className="hidden sm:inline ml-2 text-xs text-slate-500">
                             ({deposit.patient_type})
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
-                        <span className="text-sm font-semibold text-gray-900">
+                      <td className="ui-td whitespace-nowrap">
+                        <span className="text-sm font-semibold text-slate-900">
                           {formatCents(deposit.amount_cents)}
                         </span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <td className="ui-td whitespace-nowrap">
                         <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                            deposit.status
-                          )}`}
+                          className={`ui-badge ${getStatusColor(deposit.status)}`}
                         >
                           {deposit.status}
                         </span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                      <td className="ui-td whitespace-nowrap text-slate-500">
                         {timeAgo(deposit.created_at)}
                       </td>
                     </tr>
@@ -277,24 +275,24 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-2 text-sm sm:px-4 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+              className="ui-btn ui-btn-ghost"
             >
               Prev
             </button>
-            <span className="text-xs sm:text-sm text-gray-600">
+            <span className="text-xs sm:text-sm text-slate-600">
               {page} / {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-3 py-2 text-sm sm:px-4 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+              className="ui-btn ui-btn-ghost"
             >
               Next
             </button>
           </div>
         )}
 
-        <p className="mt-4 text-xs text-gray-400 text-center">
+        <p className="mt-6 text-xs text-slate-400 text-center">
           Auto-refreshes every 30 seconds
         </p>
       </div>

@@ -32,13 +32,13 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Payment Setup</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Payment Setup</h2>
+        <p className="ui-muted mt-1">
           Connect your Square account to accept deposits and payments from clients.
         </p>
       </div>
 
-      <div className="bg-gray-50 rounded-lg p-6">
+      <div className="border border-slate-200/80 bg-slate-50/60 rounded-2xl p-6">
         {isConnected ? (
           <div className="text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
@@ -90,7 +90,7 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
             ) : (
               <a
                 href={connectUrl || '#'}
-                className="mt-4 inline-flex items-center rounded-md border border-transparent bg-black py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:opacity-50"
+                className="ui-btn ui-btn-dark mt-4"
                 aria-disabled={!connectUrl}
               >
                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
@@ -103,13 +103,13 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
         )}
       </div>
 
-      <div className="bg-blue-50 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-blue-900">Why Square?</h4>
-        <ul className="mt-2 text-sm text-blue-700 space-y-1">
-          <li>- Secure payment processing with PCI compliance</li>
-          <li>- Accept deposits for appointment requests</li>
-          <li>- Automatic payment reminders</li>
-          <li>- Works alongside your booking system (no EMR/EHR or CRM sync in phase 1)</li>
+      <div className="border border-slate-200/70 bg-slate-50/40 rounded-2xl p-5">
+        <h4 className="ui-kicker text-slate-600">Why Square?</h4>
+        <ul className="mt-2 text-sm text-slate-700 space-y-1">
+          <li>Secure payment processing with PCI compliance</li>
+          <li>Accept deposits for appointment requests</li>
+          <li>Automatic payment reminders</li>
+          <li>Works alongside your booking system (no EMR/EHR or CRM sync in phase 1)</li>
         </ul>
       </div>
 
@@ -117,14 +117,14 @@ export function PaymentSetup({ orgId, isConnected, merchantId, onBack, onContinu
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          className="ui-btn ui-btn-ghost"
         >
           Back
         </button>
         <button
           type="button"
           onClick={onContinue}
-          className="rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="ui-btn ui-btn-primary"
         >
           {isConnected ? 'Continue' : 'Skip for Now'}
         </button>

@@ -122,23 +122,23 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
 
   if (!settings) {
     return (
-      <div className="min-h-screen bg-gray-50 py-10">
-        <div className="max-w-2xl mx-auto px-4">
+      <div className="ui-page">
+        <div className="ui-container max-w-2xl space-y-4">
           <button
             onClick={onBack}
-            className="mb-4 text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error || 'Failed to load settings'}
           </div>
         </div>
@@ -147,49 +147,49 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-2xl mx-auto px-4">
+    <div className="ui-page">
+      <div className="ui-container max-w-2xl">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="ui-link font-semibold flex items-center gap-2"
             >
-              <span>&larr;</span> Back
+              <span aria-hidden="true">&larr;</span> Back
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">Notification Settings</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Notification Settings</h1>
           </div>
           {saving && (
-            <span className="text-sm text-gray-500">Saving...</span>
+            <span className="text-sm text-slate-500">Saving...</span>
           )}
         </div>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md text-green-700">
+          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800">
             {success}
           </div>
         )}
 
         {/* Event Toggles */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Notification Events</h2>
+        <div className="ui-card ui-card-solid p-6 mb-6">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Notification Events</h2>
           <div className="space-y-4">
             <label className="flex items-center justify-between">
               <div>
-                <span className="font-medium text-gray-700">Payment Received</span>
-                <p className="text-sm text-gray-500">Get notified when a patient pays their deposit</p>
+                <span className="font-semibold text-slate-800">Payment Received</span>
+                <p className="ui-muted mt-1">Get notified when a patient pays their deposit</p>
               </div>
               <button
                 onClick={() => handleToggle('notify_on_payment')}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  settings.notify_on_payment ? 'bg-indigo-600' : 'bg-gray-200'
+                  settings.notify_on_payment ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
                 }`}
               >
                 <span
@@ -202,13 +202,13 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
 
             <label className="flex items-center justify-between">
               <div>
-                <span className="font-medium text-gray-700">New Lead</span>
-                <p className="text-sm text-gray-500">Get notified when a new lead comes in</p>
+                <span className="font-semibold text-slate-800">New Lead</span>
+                <p className="ui-muted mt-1">Get notified when a new lead comes in</p>
               </div>
               <button
                 onClick={() => handleToggle('notify_on_new_lead')}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  settings.notify_on_new_lead ? 'bg-indigo-600' : 'bg-gray-200'
+                  settings.notify_on_new_lead ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
                 }`}
               >
                 <span
@@ -222,13 +222,13 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
         </div>
 
         {/* SMS Settings */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="ui-card ui-card-solid p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">SMS Notifications</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900">SMS Notifications</h2>
             <button
               onClick={() => handleToggle('sms_enabled')}
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                settings.sms_enabled ? 'bg-indigo-600' : 'bg-gray-200'
+                settings.sms_enabled ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
               }`}
             >
               <span
@@ -241,7 +241,7 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
 
           {settings.sms_enabled && (
             <>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="ui-muted mb-4">
                 Add phone numbers to receive SMS notifications
               </p>
 
@@ -253,12 +253,12 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
                   value={newSmsRecipient}
                   onChange={(e) => setNewSmsRecipient(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addSmsRecipient()}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                  className="ui-input flex-1"
                 />
                 <button
                   onClick={addSmsRecipient}
                   disabled={!newSmsRecipient.trim()}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                  className="ui-btn ui-btn-primary px-4"
                 >
                   Add
                 </button>
@@ -267,19 +267,19 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
               {/* Phone list */}
               <div className="space-y-2">
                 {settings.sms_recipients.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No SMS recipients configured</p>
+                  <p className="text-sm text-slate-500 italic">No SMS recipients configured</p>
                 ) : (
                   settings.sms_recipients.map((phone) => (
                     <div
                       key={phone}
-                      className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-md"
+                      className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl border border-slate-200/70 bg-white/70"
                     >
-                      <span className="text-sm font-medium text-gray-700">
+                      <span className="text-sm font-semibold text-slate-700">
                         {formatPhone(phone)}
                       </span>
                       <button
                         onClick={() => removeSmsRecipient(phone)}
-                        className="text-red-600 hover:text-red-800 text-sm"
+                        className="text-red-700 hover:text-red-800 text-sm font-semibold"
                       >
                         Remove
                       </button>
@@ -292,13 +292,13 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
         </div>
 
         {/* Email Settings */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="ui-card ui-card-solid p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Email Notifications</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900">Email Notifications</h2>
             <button
               onClick={() => handleToggle('email_enabled')}
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                settings.email_enabled ? 'bg-indigo-600' : 'bg-gray-200'
+                settings.email_enabled ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
               }`}
             >
               <span
@@ -311,7 +311,7 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
 
           {settings.email_enabled && (
             <>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="ui-muted mb-4">
                 Add email addresses to receive email notifications
               </p>
 
@@ -323,12 +323,12 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
                   value={newEmailRecipient}
                   onChange={(e) => setNewEmailRecipient(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addEmailRecipient()}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                  className="ui-input flex-1"
                 />
                 <button
                   onClick={addEmailRecipient}
                   disabled={!newEmailRecipient.trim()}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                  className="ui-btn ui-btn-primary px-4"
                 >
                   Add
                 </button>
@@ -337,17 +337,17 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
               {/* Email list */}
               <div className="space-y-2">
                 {settings.email_recipients.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No email recipients configured</p>
+                  <p className="text-sm text-slate-500 italic">No email recipients configured</p>
                 ) : (
                   settings.email_recipients.map((email) => (
                     <div
                       key={email}
-                      className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-md"
+                      className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl border border-slate-200/70 bg-white/70"
                     >
-                      <span className="text-sm font-medium text-gray-700">{email}</span>
+                      <span className="text-sm font-semibold text-slate-700">{email}</span>
                       <button
                         onClick={() => removeEmailRecipient(email)}
-                        className="text-red-600 hover:text-red-800 text-sm"
+                        className="text-red-700 hover:text-red-800 text-sm font-semibold"
                       >
                         Remove
                       </button>
@@ -359,16 +359,16 @@ export function NotificationSettings({ orgId, onBack }: NotificationSettingsProp
           )}
         </div>
 
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-xs text-slate-400 text-center">
           Changes are saved automatically
         </p>
 
         <div className="mt-8">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
         </div>
       </div>

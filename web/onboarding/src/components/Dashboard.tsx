@@ -77,27 +77,23 @@ function formatDateTimeET(value?: string | null): string {
 }
 
 function getConversationStatusClass(status: string): string {
-  return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
+  return status === 'active' ? 'ui-badge-success' : 'ui-badge-muted';
 }
 
 function getDepositStatusClass(status: string): string {
   switch (status.toLowerCase()) {
     case 'succeeded':
     case 'completed':
-      return 'bg-green-100 text-green-800';
+      return 'ui-badge-success';
     case 'pending':
     case 'deposit_pending':
-      return 'bg-yellow-100 text-yellow-800';
+      return 'ui-badge-warning';
     case 'failed':
     case 'refunded':
-      return 'bg-red-100 text-red-800';
+      return 'ui-badge-danger';
     default:
-      return 'bg-gray-100 text-gray-800';
+      return 'ui-badge-muted';
   }
-}
-
-function getSquareStatusClass(connected: boolean): string {
-  return connected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
 }
 
 export function Dashboard({ orgId }: DashboardProps) {
@@ -274,46 +270,49 @@ export function Dashboard({ orgId }: DashboardProps) {
     : squareStatus?.connected
       ? 'Connected'
       : 'Not connected';
-  const squareBadgeClass = squareStatusLoading
-    ? 'bg-gray-100 text-gray-600'
-    : getSquareStatusClass(Boolean(squareStatus?.connected));
+  const squareBadgeVariant = squareStatusLoading
+    ? 'ui-badge-muted'
+    : squareStatus?.connected
+      ? 'ui-badge-success'
+      : 'ui-badge-danger';
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="ui-page">
+      <div className="ui-container ui-stack">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">Your latest activity and results at a glance.</p>
+          <h1 className="ui-h1">Dashboard</h1>
+          <p className="ui-muted mt-1">Your latest activity and results at a glance.</p>
         </div>
-        <div className="bg-white shadow rounded-lg p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="ui-card ui-card-solid">
+          <div className="ui-card-header">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Square Connection</h2>
-              <p className="text-sm text-gray-500">
+              <h2 className="ui-h2">Square Connection</h2>
+              <p className="ui-muted">
                 Monitor payment checkout connectivity and token health.
               </p>
             </div>
             <span
-              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${squareBadgeClass}`}
+              className={`ui-badge ${squareBadgeVariant}`}
             >
               {squareBadgeLabel}
             </span>
           </div>
+          <div className="ui-card-body">
           {squareStatusLoading ? (
-            <div className="mt-4 text-sm text-gray-500">Loading Square status...</div>
+            <div className="ui-muted">Loading Square status...</div>
           ) : squareStatusError ? (
-            <div className="mt-4 text-sm text-red-600">{squareStatusError}</div>
+            <div className="text-sm font-medium text-red-700">{squareStatusError}</div>
           ) : squareStatus ? (
-            <div className="mt-4 space-y-4">
+            <div className="space-y-4">
               {!squareStatus.connected ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-gray-600">
+                  <p className="ui-muted">
                     Square is not connected. Connect to enable real checkout links.
                   </p>
                   {squareConnectUrl ? (
                     <a
                       href={squareConnectUrl}
-                      className="inline-flex items-center rounded-md bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                      className="ui-btn ui-btn-dark"
                     >
                       Connect Square
                     </a>
@@ -323,45 +322,45 @@ export function Dashboard({ orgId }: DashboardProps) {
                 <>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Merchant ID</p>
-                      <p className="mt-1 text-sm font-medium text-gray-900">
+                      <p className="ui-kicker">Merchant ID</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
                         {squareStatus.merchant_id || '--'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Location ID</p>
-                      <p className="mt-1 text-sm font-medium text-gray-900">
+                      <p className="ui-kicker">Location ID</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
                         {squareStatus.location_id || '--'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Token Expires</p>
-                      <p className="mt-1 text-sm font-medium text-gray-900">
+                      <p className="ui-kicker">Token Expires</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
                         {formatDateTimeET(squareStatus.token_expires_at)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Last Refresh</p>
-                      <p className="mt-1 text-sm font-medium text-gray-900">
+                      <p className="ui-kicker">Last Refresh</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
                         {formatDateTimeET(squareStatus.last_refresh_attempt_at)}
                       </p>
                     </div>
                   </div>
 
                   {hasRefreshFailure ? (
-                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                       <div className="font-semibold">Square token refresh failed</div>
-                      <div className="mt-1 text-xs">
+                      <div className="mt-1 text-xs text-red-700">
                         Last failure: {formatDateTimeET(squareStatus.last_refresh_failure_at)}
                       </div>
                       {squareStatus.last_refresh_error ? (
-                        <div className="mt-1 text-xs">Error: {squareStatus.last_refresh_error}</div>
+                        <div className="mt-1 text-xs text-red-700">Error: {squareStatus.last_refresh_error}</div>
                       ) : null}
                     </div>
                   ) : null}
 
                   {tokenExpired || refreshTokenMissing ? (
-                    <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                       {tokenExpired ? (
                         <div>Square access token is expired. Reconnect to restore payments.</div>
                       ) : null}
@@ -376,85 +375,84 @@ export function Dashboard({ orgId }: DashboardProps) {
               )}
             </div>
           ) : (
-            <div className="mt-4 text-sm text-gray-500">No Square status available.</div>
+            <div className="ui-muted">No Square status available.</div>
           )}
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Conversations</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
+          <div className="ui-card ui-card-solid p-6">
+            <p className="ui-kicker">Conversations</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatCount(stats.conversations)}
             </p>
           </div>
-          <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Deposits Collected</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
+          <div className="ui-card ui-card-solid p-6">
+            <p className="ui-kicker">Deposits Collected</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatCount(stats.successful_deposits)}
             </p>
           </div>
-          <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Total Collected</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
+          <div className="ui-card ui-card-solid p-6">
+            <p className="ui-kicker">Total Collected</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatCents(stats.total_collected_cents)}
             </p>
           </div>
-          <div className="bg-white shadow rounded-lg p-6">
-            <p className="text-sm text-gray-500">Conversion</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
+          <div className="ui-card ui-card-solid p-6">
+            <p className="ui-kicker">Conversion</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatPercent(stats.conversion_pct)}
             </p>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Conversations</h2>
-              <span className="text-xs text-gray-400">Latest {recentLimit}</span>
+          <div className="ui-card ui-card-solid overflow-hidden">
+            <div className="ui-card-header">
+              <h2 className="ui-h2">Recent Conversations</h2>
+              <span className="ui-muted">Latest {recentLimit}</span>
             </div>
             {conversationsLoading ? (
-              <div className="px-6 py-6 text-sm text-gray-500">Loading conversations...</div>
+              <div className="ui-card-body ui-muted">Loading conversations...</div>
             ) : conversationsError ? (
-              <div className="px-6 py-6 text-sm text-red-600">{conversationsError}</div>
+              <div className="ui-card-body text-sm font-medium text-red-700">{conversationsError}</div>
             ) : conversations.length === 0 ? (
-              <div className="px-6 py-8 text-sm text-gray-500">No conversations yet.</div>
+              <div className="ui-card-body ui-muted">No conversations yet.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="ui-table">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Phone
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Messages
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Status
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Last Activity
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody>
                     {conversations.map((conv) => (
-                      <tr key={conv.id}>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sm:px-6">
+                      <tr key={conv.id} className="ui-row ui-row-hover">
+                        <td className="ui-td whitespace-nowrap font-medium text-slate-900">
                           {formatPhone(conv.customer_phone)}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                        <td className="ui-td whitespace-nowrap text-slate-500">
                           {formatCount(conv.message_count)}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                        <td className="ui-td whitespace-nowrap">
                           <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getConversationStatusClass(
-                              conv.status
-                            )}`}
+                            className={`ui-badge ${getConversationStatusClass(conv.status)}`}
                           >
                             {formatStatusLabel(conv.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                        <td className="ui-td whitespace-nowrap text-slate-500">
                           {timeAgo(conv.last_message_at || conv.started_at)}
                         </td>
                       </tr>
@@ -464,68 +462,66 @@ export function Dashboard({ orgId }: DashboardProps) {
               </div>
             )}
           </div>
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Deposits</h2>
-              <span className="text-xs text-gray-400">Latest {recentLimit}</span>
+          <div className="ui-card ui-card-solid overflow-hidden">
+            <div className="ui-card-header">
+              <h2 className="ui-h2">Recent Deposits</h2>
+              <span className="ui-muted">Latest {recentLimit}</span>
             </div>
             {depositsLoading ? (
-              <div className="px-6 py-6 text-sm text-gray-500">Loading deposits...</div>
+              <div className="ui-card-body ui-muted">Loading deposits...</div>
             ) : depositsError ? (
-              <div className="px-6 py-6 text-sm text-red-600">{depositsError}</div>
+              <div className="ui-card-body text-sm font-medium text-red-700">{depositsError}</div>
             ) : deposits.length === 0 ? (
-              <div className="px-6 py-8 text-sm text-gray-500">No deposits yet.</div>
+              <div className="ui-card-body ui-muted">No deposits yet.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="ui-table">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Patient
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Service
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Amount
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Status
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:px-6">
+                      <th className="ui-th">
                         Date
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody>
                     {deposits.map((deposit) => (
-                      <tr key={deposit.id}>
-                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <tr key={deposit.id} className="ui-row ui-row-hover">
+                        <td className="ui-td whitespace-nowrap">
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-900">
+                            <span className="text-sm font-semibold text-slate-900">
                               {deposit.lead_name || 'Unknown'}
                             </span>
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-slate-500">
                               {formatPhone(deposit.lead_phone)}
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sm:px-6">
+                        <td className="ui-td whitespace-nowrap font-medium text-slate-900">
                           {deposit.service_interest || '-'}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 sm:px-6">
+                        <td className="ui-td whitespace-nowrap font-semibold text-slate-900">
                           {formatCents(deposit.amount_cents)}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                        <td className="ui-td whitespace-nowrap">
                           <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDepositStatusClass(
-                              deposit.status
-                            )}`}
+                            className={`ui-badge ${getDepositStatusClass(deposit.status)}`}
                           >
                             {formatStatusLabel(deposit.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 sm:px-6">
+                        <td className="ui-td whitespace-nowrap text-slate-500">
                           {timeAgo(deposit.created_at)}
                         </td>
                       </tr>
