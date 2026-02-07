@@ -48,15 +48,15 @@ function MessageBubble({ message }: { message: MessageResponse }) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div
-        className={`max-w-[75%] rounded-lg px-4 py-3 ${
+        className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${
           isUser
-            ? 'bg-indigo-600 text-white rounded-br-sm'
-            : 'bg-gray-100 text-gray-900 rounded-bl-sm'
+            ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-br-md'
+            : 'bg-white/80 backdrop-blur border border-slate-200/70 text-slate-900 rounded-bl-md'
         }`}
       >
         <div className="text-sm whitespace-pre-wrap break-words">{message.content}</div>
         <div
-          className={`text-xs mt-1 ${isUser ? 'text-indigo-200' : 'text-gray-500'}`}
+          className={`text-xs mt-1 ${isUser ? 'text-violet-100/90' : 'text-slate-500'}`}
           title={message.error_reason || undefined}
         >
           {formatTime(message.timestamp)}
@@ -128,23 +128,23 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-10">
-        <div className="max-w-3xl mx-auto px-4">
+      <div className="ui-page">
+        <div className="mx-auto max-w-3xl px-4 space-y-4">
           <button
             onClick={onBack}
-            className="mb-4 text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back to conversations
+            <span aria-hidden="true">&larr;</span> Back to conversations
           </button>
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error}
           </div>
         </div>
@@ -157,33 +157,29 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50">
+    <div className="flex-1 flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+      <div className="border-b border-slate-200/70 bg-white/70 backdrop-blur px-4 py-4">
+        <div className="ui-container max-w-3xl flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="ui-link font-semibold flex items-center gap-2"
             >
-              <span>&larr;</span> Back
+              <span aria-hidden="true">&larr;</span> Back
             </button>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">
                 {formatPhone(conversation.customer_phone)}
               </h1>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-500">
                 Started {formatDate(conversation.started_at)} &bull;{' '}
                 {conversation.metadata.total_messages} messages
               </p>
             </div>
           </div>
           <span
-            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-              conversation.status === 'active'
-                ? 'bg-green-100 text-green-800'
-                : 'bg-gray-100 text-gray-800'
-            }`}
+            className={`ui-badge ${conversation.status === 'active' ? 'ui-badge-success' : 'ui-badge-muted'}`}
           >
             {conversation.status}
           </span>
@@ -192,9 +188,9 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-6">
-        <div className="max-w-3xl mx-auto px-4">
+        <div className="ui-container max-w-3xl">
           {conversation.messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">No messages found</div>
+            <div className="text-center text-slate-500 py-10">No messages found</div>
           ) : (
             <>
               {conversation.messages.map((msg, index) => (
@@ -207,15 +203,15 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
       </div>
 
       {/* Footer */}
-      <div className="bg-white border-t border-gray-200 px-4 py-4">
-        <div className="max-w-3xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="border-t border-slate-200/70 bg-white/70 backdrop-blur px-4 py-4">
+        <div className="ui-container max-w-3xl flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back to conversations
+            <span aria-hidden="true">&larr;</span> Back to conversations
           </button>
-          <p className="text-xs text-gray-400 sm:text-right">
+          <p className="text-xs text-slate-400 sm:text-right">
             Source: {conversation.metadata.source} &bull; Times shown in ET &bull; Auto-refreshes every 10 seconds
           </p>
         </div>

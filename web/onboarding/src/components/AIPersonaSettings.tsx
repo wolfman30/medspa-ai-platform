@@ -103,23 +103,23 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
 
   if (!persona) {
     return (
-      <div className="min-h-screen bg-gray-50 py-10">
-        <div className="max-w-2xl mx-auto px-4">
+      <div className="ui-page">
+        <div className="ui-container max-w-2xl space-y-4">
           <button
             onClick={onBack}
-            className="mb-4 text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error || 'Failed to load AI persona settings'}
           </div>
         </div>
@@ -128,42 +128,42 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-2xl mx-auto px-4">
+    <div className="ui-page">
+      <div className="ui-container max-w-2xl">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="ui-link font-semibold flex items-center gap-2"
             >
-              <span>&larr;</span> Back
+              <span aria-hidden="true">&larr;</span> Back
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">AI Assistant Persona</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI Assistant Persona</h1>
           </div>
           {saving && (
-            <span className="text-sm text-gray-500">Saving...</span>
+            <span className="text-sm text-slate-500">Saving...</span>
           )}
         </div>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md text-green-700">
+          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800">
             {success}
           </div>
         )}
 
         {/* Provider Info */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Provider Information</h2>
+        <div className="ui-card ui-card-solid p-6 mb-6">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Provider Information</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="ui-label mb-2">
                 Provider Name
               </label>
               <input
@@ -172,24 +172,24 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
                 value={persona.provider_name || ''}
                 onChange={(e) => handleTextChange('provider_name', e.target.value)}
                 onBlur={() => handleTextBlur('provider_name')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                className="ui-input"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="ui-help">
                 The name of the primary provider (used when identifying the AI as their assistant)
               </p>
             </div>
 
             <label className="flex items-center justify-between pt-2">
               <div>
-                <span className="font-medium text-gray-700">Solo Operator</span>
-                <p className="text-sm text-gray-500">
+                <span className="font-semibold text-slate-800">Solo Operator</span>
+                <p className="ui-muted mt-1">
                   Enable if this clinic is run by a single provider with no front desk staff
                 </p>
               </div>
               <button
                 onClick={() => handleToggle('is_solo_operator')}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  persona.is_solo_operator ? 'bg-indigo-600' : 'bg-gray-200'
+                  persona.is_solo_operator ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
                 }`}
               >
                 <span
@@ -203,16 +203,16 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
         </div>
 
         {/* Communication Tone */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Communication Tone</h2>
+        <div className="ui-card ui-card-solid p-6 mb-6">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Communication Tone</h2>
           <div className="space-y-3">
             {TONE_OPTIONS.map((option) => (
               <label
                 key={option.value}
-                className={`flex items-start p-3 rounded-lg border cursor-pointer transition-colors ${
+                className={`flex items-start p-4 rounded-2xl border cursor-pointer transition-colors ${
                   persona.tone === option.value
-                    ? 'border-indigo-600 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-violet-300 bg-violet-50/50'
+                    : 'border-slate-200/80 bg-white/60 hover:border-slate-300'
                 }`}
               >
                 <input
@@ -221,11 +221,11 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
                   value={option.value}
                   checked={persona.tone === option.value}
                   onChange={() => handleToneChange(option.value)}
-                  className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                  className="mt-0.5 h-4 w-4 text-violet-600 focus:ring-violet-500 border-slate-300"
                 />
                 <div className="ml-3">
-                  <span className="block font-medium text-gray-900">{option.label}</span>
-                  <span className="block text-sm text-gray-500">{option.description}</span>
+                  <span className="block font-semibold text-slate-900">{option.label}</span>
+                  <span className="block text-sm text-slate-500">{option.description}</span>
                 </div>
               </label>
             ))}
@@ -233,11 +233,11 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
         </div>
 
         {/* Custom Messages */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Custom Messages</h2>
+        <div className="ui-card ui-card-solid p-6 mb-6">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-4">Custom Messages</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="ui-label mb-2">
                 Business Hours Greeting
               </label>
               <textarea
@@ -246,15 +246,15 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
                 value={persona.custom_greeting || ''}
                 onChange={(e) => handleTextChange('custom_greeting', e.target.value)}
                 onBlur={() => handleTextBlur('custom_greeting')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                className="ui-textarea"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="ui-help">
                 Greeting used during business hours when the provider is working
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="ui-label mb-2">
                 After Hours Greeting
               </label>
               <textarea
@@ -263,15 +263,15 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
                 value={persona.after_hours_greeting || ''}
                 onChange={(e) => handleTextChange('after_hours_greeting', e.target.value)}
                 onBlur={() => handleTextBlur('after_hours_greeting')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                className="ui-textarea"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="ui-help">
                 Greeting used outside business hours (evenings, weekends, holidays)
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="ui-label mb-2">
                 Busy Message
               </label>
               <textarea
@@ -280,9 +280,9 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
                 value={persona.busy_message || ''}
                 onChange={(e) => handleTextChange('busy_message', e.target.value)}
                 onBlur={() => handleTextBlur('busy_message')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                className="ui-textarea"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="ui-help">
                 Explains why the provider can't answer (used during business hours)
               </p>
             </div>
@@ -290,9 +290,9 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
         </div>
 
         {/* Special Services */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-2">Special Medical Services</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className="ui-card ui-card-solid p-6 mb-6">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-2">Special Medical Services</h2>
+          <p className="ui-muted mb-4">
             Non-cosmetic medical treatments that require special handling (e.g., hyperhidrosis, migraines)
           </p>
 
@@ -304,12 +304,12 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
               value={newService}
               onChange={(e) => setNewService(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addSpecialService()}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="ui-input flex-1"
             />
             <button
               onClick={addSpecialService}
               disabled={!newService.trim()}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              className="ui-btn ui-btn-primary px-4"
             >
               Add
             </button>
@@ -318,17 +318,17 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
           {/* Services list */}
           <div className="space-y-2">
             {(!persona.special_services || persona.special_services.length === 0) ? (
-              <p className="text-sm text-gray-400 italic">No special services configured</p>
+              <p className="text-sm text-slate-500 italic">No special services configured</p>
             ) : (
               persona.special_services.map((service) => (
                 <div
                   key={service}
-                  className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-md"
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl border border-slate-200/70 bg-white/70"
                 >
-                  <span className="text-sm font-medium text-gray-700">{service}</span>
+                  <span className="text-sm font-semibold text-slate-700">{service}</span>
                   <button
                     onClick={() => removeSpecialService(service)}
-                    className="text-red-600 hover:text-red-800 text-sm"
+                    className="text-red-700 hover:text-red-800 text-sm font-semibold"
                   >
                     Remove
                   </button>
@@ -338,16 +338,16 @@ export function AIPersonaSettings({ orgId, onBack }: AIPersonaSettingsProps) {
           </div>
         </div>
 
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-xs text-slate-400 text-center">
           Changes are saved automatically
         </p>
 
         <div className="mt-8">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
         </div>
       </div>

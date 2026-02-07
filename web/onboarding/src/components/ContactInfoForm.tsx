@@ -132,25 +132,25 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Contact Info</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Contact Info</h2>
+        <p className="ui-muted mt-1">
           Choose who should receive payment notifications and lead alerts.
         </p>
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
           {error}
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 p-4">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Notification Events</h3>
+      <div className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-5">
+        <h3 className="text-sm font-semibold text-slate-900 mb-3">Notification Events</h3>
         <div className="space-y-3">
           <label className="flex items-center justify-between">
             <div>
-              <span className="text-sm font-medium text-gray-700">Deposit Paid</span>
-              <p className="text-xs text-gray-500">
+              <span className="text-sm font-semibold text-slate-800">Deposit Paid</span>
+              <p className="text-xs text-slate-500">
                 Send the patient name, service, and requested times.
               </p>
             </div>
@@ -158,7 +158,7 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
               type="button"
               onClick={() => setNotifyOnPayment((value) => !value)}
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                notifyOnPayment ? 'bg-indigo-600' : 'bg-gray-200'
+                notifyOnPayment ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
               }`}
             >
               <span
@@ -171,8 +171,8 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
 
           <label className="flex items-center justify-between">
             <div>
-              <span className="text-sm font-medium text-gray-700">New Lead</span>
-              <p className="text-xs text-gray-500">
+              <span className="text-sm font-semibold text-slate-800">New Lead</span>
+              <p className="text-xs text-slate-500">
                 Notify staff when a new lead submits the form.
               </p>
             </div>
@@ -180,7 +180,7 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
               type="button"
               onClick={() => setNotifyOnNewLead((value) => !value)}
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                notifyOnNewLead ? 'bg-indigo-600' : 'bg-gray-200'
+                notifyOnNewLead ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
               }`}
             >
               <span
@@ -193,14 +193,14 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-5">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-900">Email Recipients</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Email Recipients</h3>
           <button
             type="button"
             onClick={() => setEmailEnabled((value) => !value)}
             className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              emailEnabled ? 'bg-indigo-600' : 'bg-gray-200'
+              emailEnabled ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
             }`}
           >
             <span
@@ -219,28 +219,28 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="owner@clinic.com"
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                className="ui-input flex-1"
               />
               <button
                 type="button"
                 onClick={addEmail}
                 disabled={!newEmail.trim()}
-                className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="ui-btn ui-btn-primary px-4"
               >
                 Add
               </button>
             </div>
             {emailRecipients.length === 0 ? (
-              <p className="text-xs text-gray-500">No email recipients added yet.</p>
+              <p className="text-xs text-slate-500">No email recipients added yet.</p>
             ) : (
               <div className="space-y-2">
                 {emailRecipients.map((email) => (
-                  <div key={email} className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm">
-                    <span className="text-gray-700">{email}</span>
+                  <div key={email} className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm">
+                    <span className="text-slate-700">{email}</span>
                     <button
                       type="button"
                       onClick={() => removeEmail(email)}
-                      className="text-xs text-red-600 hover:text-red-700"
+                      className="text-xs font-semibold text-red-700 hover:text-red-800"
                     >
                       Remove
                     </button>
@@ -252,14 +252,14 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
         )}
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-5">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-900">SMS Recipients</h3>
+          <h3 className="text-sm font-semibold text-slate-900">SMS Recipients</h3>
           <button
             type="button"
             onClick={() => setSmsEnabled((value) => !value)}
             className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              smsEnabled ? 'bg-indigo-600' : 'bg-gray-200'
+              smsEnabled ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
             }`}
           >
             <span
@@ -278,28 +278,28 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
                 placeholder="(555) 123-4567"
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                className="ui-input flex-1"
               />
               <button
                 type="button"
                 onClick={addPhone}
                 disabled={!newPhone.trim()}
-                className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="ui-btn ui-btn-primary px-4"
               >
                 Add
               </button>
             </div>
             {smsRecipients.length === 0 ? (
-              <p className="text-xs text-gray-500">No SMS recipients added yet.</p>
+              <p className="text-xs text-slate-500">No SMS recipients added yet.</p>
             ) : (
               <div className="space-y-2">
                 {smsRecipients.map((phone) => (
-                  <div key={phone} className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm">
-                    <span className="text-gray-700">{formatPhone(phone)}</span>
+                  <div key={phone} className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm">
+                    <span className="text-slate-700">{formatPhone(phone)}</span>
                     <button
                       type="button"
                       onClick={() => removePhone(phone)}
-                      className="text-xs text-red-600 hover:text-red-700"
+                      className="text-xs font-semibold text-red-700 hover:text-red-800"
                     >
                       Remove
                     </button>
@@ -315,13 +315,13 @@ export function ContactInfoForm({ defaultValues, onSubmit, onBack }: Props) {
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          className="ui-btn ui-btn-ghost"
         >
           Back
         </button>
         <button
           type="submit"
-          className="rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="ui-btn ui-btn-primary"
         >
           Complete Setup
         </button>

@@ -53,78 +53,78 @@ export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-2xl mx-auto px-4">
+    <div className="ui-page">
+      <div className="ui-container max-w-2xl">
         {/* Header */}
         <div className="mb-6 flex items-center gap-4">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Settings</h1>
         </div>
 
         {/* Settings Menu */}
         <div className="space-y-4">
           <button
             onClick={() => setSection('notifications')}
-            className="w-full bg-white rounded-lg shadow p-6 text-left hover:shadow-md transition-shadow"
+            className="w-full ui-card ui-card-solid p-6 text-left transition-shadow hover:shadow-lg"
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-medium text-gray-900">Notification Settings</h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">Notification Settings</h2>
+                <p className="ui-muted mt-1">
                   Configure how and when you receive notifications about payments and leads
                 </p>
               </div>
-              <span className="text-indigo-600 text-xl">&rarr;</span>
+              <span className="text-slate-400 text-xl" aria-hidden="true">&rarr;</span>
             </div>
           </button>
 
           <button
             onClick={() => setSection('ai-persona')}
-            className="w-full bg-white rounded-lg shadow p-6 text-left hover:shadow-md transition-shadow"
+            className="w-full ui-card ui-card-solid p-6 text-left transition-shadow hover:shadow-lg"
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-medium text-gray-900">AI Assistant Persona</h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">AI Assistant Persona</h2>
+                <p className="ui-muted mt-1">
                   Customize how your AI assistant communicates with patients
                 </p>
               </div>
-              <span className="text-indigo-600 text-xl">&rarr;</span>
+              <span className="text-slate-400 text-xl" aria-hidden="true">&rarr;</span>
             </div>
           </button>
 
           <button
             onClick={() => setSection('knowledge')}
-            className="w-full bg-white rounded-lg shadow p-6 text-left hover:shadow-md transition-shadow"
+            className="w-full ui-card ui-card-solid p-6 text-left transition-shadow hover:shadow-lg"
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-medium text-gray-900">Clinic Knowledge</h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">Clinic Knowledge</h2>
+                <p className="ui-muted mt-1">
                   Review and update the knowledge the AI uses for your clinic
                 </p>
               </div>
-              <span className="text-indigo-600 text-xl">&rarr;</span>
+              <span className="text-slate-400 text-xl" aria-hidden="true">&rarr;</span>
             </div>
           </button>
 
           <button
             onClick={() => setSection('booking')}
-            className="w-full bg-white rounded-lg shadow p-6 text-left hover:shadow-md transition-shadow"
+            className="w-full ui-card ui-card-solid p-6 text-left transition-shadow hover:shadow-lg"
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-medium text-gray-900">Booking Configuration</h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">Booking Configuration</h2>
+                <p className="ui-muted mt-1">
                   Choose your booking platform and configure how the AI schedules appointments
                 </p>
               </div>
-              <span className="text-indigo-600 text-xl">&rarr;</span>
+              <span className="text-slate-400 text-xl" aria-hidden="true">&rarr;</span>
             </div>
           </button>
         </div>
@@ -132,9 +132,9 @@ export function SettingsPage({ orgId, scope, onBack }: SettingsPageProps) {
         <div className="mt-8">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
         </div>
       </div>

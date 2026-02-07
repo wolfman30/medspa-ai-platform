@@ -84,79 +84,81 @@ function ClinicSetupPrompt({ email, onComplete, onLogout }: ClinicSetupPromptPro
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Set up your clinic
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Welcome! Let's set up your clinic profile to get started.
+    <div className="ui-page flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="ui-card ui-card-solid p-8">
+          <div className="flex items-center gap-3">
+            <div className="ui-brandmark" aria-hidden="true" />
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                Set up your clinic
+              </h2>
+              <p className="ui-muted mt-1">
+                Signed in as <span className="font-medium text-slate-700">{email}</span>
+              </p>
+            </div>
+          </div>
+
+          <p className="ui-muted mt-4">
+            Welcome. Add the clinic basics so we can finish provisioning your portal.
           </p>
-          <p className="mt-1 text-center text-xs text-gray-500">
-            Signed in as {email}
-          </p>
+
+          <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800">{error}</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="clinicName" className="ui-label">Clinic name</label>
+                <input
+                  id="clinicName"
+                  name="clinicName"
+                  type="text"
+                  required
+                  className="ui-input mt-2"
+                  placeholder="Your MedSpa Name"
+                  value={clinicName}
+                  onChange={(e) => setClinicName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="clinicPhone" className="ui-label">Business phone (optional)</label>
+                <input
+                  id="clinicPhone"
+                  name="clinicPhone"
+                  type="tel"
+                  className="ui-input mt-2"
+                  placeholder="+1 (555) 123-4567"
+                  value={clinicPhone}
+                  onChange={(e) => setClinicPhone(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={loading || !clinicName.trim()}
+                className="ui-btn ui-btn-primary w-full py-3"
+              >
+                {loading ? 'Creating...' : 'Complete Setup'}
+              </button>
+            </div>
+
+            <div className="text-center">
+              <button
+                type="button"
+                className="ui-link text-sm font-semibold"
+                onClick={onLogout}
+              >
+                Sign out and use a different account
+              </button>
+            </div>
+          </form>
         </div>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="clinicName" className="block text-sm font-medium text-gray-700">
-                Clinic Name
-              </label>
-              <input
-                id="clinicName"
-                name="clinicName"
-                type="text"
-                required
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="Your MedSpa Name"
-                value={clinicName}
-                onChange={(e) => setClinicName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="clinicPhone" className="block text-sm font-medium text-gray-700">
-                Business Phone (optional)
-              </label>
-              <input
-                id="clinicPhone"
-                name="clinicPhone"
-                type="tel"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="+1 (555) 123-4567"
-                value={clinicPhone}
-                onChange={(e) => setClinicPhone(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading || !clinicName.trim()}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Creating...' : 'Complete Setup'}
-            </button>
-          </div>
-
-          <div className="text-center">
-            <button
-              type="button"
-              className="text-sm text-gray-500 hover:text-gray-700"
-              onClick={onLogout}
-            >
-              Sign out and use a different account
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );
@@ -268,8 +270,8 @@ function AuthenticatedApp() {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
@@ -297,8 +299,8 @@ function AuthenticatedApp() {
   // Wait for org lookup to complete for non-admin users
   if (authEnabled && isAuthenticated && !isAdmin && !orgLookupDone) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
@@ -317,73 +319,78 @@ function AuthenticatedApp() {
   // Show onboarding wizard or dashboard (with optional user header if authenticated)
   return (
     <div>
-      {/* Admin header with org selector */}
-      {authEnabled && user && isAdmin && (
-        <OrgSelector
-          currentOrgId={adminOrgId}
-          onOrgChange={handleAdminOrgChange}
-          orgs={adminOrgs}
-          loading={adminOrgsLoading}
-        />
-      )}
       {authEnabled && user && (
-        <div className="bg-indigo-600 text-white px-3 py-2 sm:px-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
-            <div className="flex justify-between items-center">
-              <span className="text-xs sm:text-sm truncate max-w-[200px] sm:max-w-none">
-                {isAdmin ? '(Admin) ' : ''}{user.email}
-              </span>
-              <button
-                onClick={logout}
-                className="text-xs sm:text-sm underline hover:no-underline sm:hidden ml-2 whitespace-nowrap"
-              >
-                Sign out
-              </button>
+        <header className="ui-topbar">
+          <div className="ui-topbar-accent" aria-hidden="true" />
+          <div className="ui-container py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="ui-brandmark" aria-hidden="true" />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold tracking-tight text-slate-900">
+                  Medspa Concierge
+                </div>
+                <div className="text-xs text-slate-500 truncate">
+                  {isAdmin ? 'Admin' : 'Portal'} &middot; {user.email}
+                </div>
+              </div>
             </div>
+
+            {isAdmin && (
+              <OrgSelector
+                currentOrgId={adminOrgId}
+                onOrgChange={handleAdminOrgChange}
+                orgs={adminOrgs}
+                loading={adminOrgsLoading}
+              />
+            )}
+
             {(isAdmin || (canAccessPortal && orgId)) && (
-              <nav className="flex flex-wrap gap-1 sm:gap-2">
+              <nav className="flex flex-wrap gap-2">
                 {!isAdmin && (
                   <button
                     onClick={() => setView('dashboard')}
-                    className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'dashboard' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                    aria-current={view === 'dashboard' ? 'page' : undefined}
+                    className={view === 'dashboard' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
                   >
                     Dashboard
                   </button>
                 )}
                 <button
                   onClick={() => { setView('conversations'); setSelectedConversationId(null); }}
-                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'conversations' || view === 'conversation-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  aria-current={view === 'conversations' || view === 'conversation-detail' ? 'page' : undefined}
+                  className={view === 'conversations' || view === 'conversation-detail' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
                 >
                   Conversations
                 </button>
                 <button
                   onClick={() => { setView('deposits'); setSelectedDepositId(null); }}
-                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'deposits' || view === 'deposit-detail' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  aria-current={view === 'deposits' || view === 'deposit-detail' ? 'page' : undefined}
+                  className={view === 'deposits' || view === 'deposit-detail' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
                 >
                   Deposits
                 </button>
                 <button
                   onClick={() => setView('settings')}
-                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'settings' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  aria-current={view === 'settings' ? 'page' : undefined}
+                  className={view === 'settings' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
                 >
                   Settings
                 </button>
                 <button
                   onClick={() => setView('knowledge')}
-                  className={`text-xs sm:text-sm px-2 py-1 rounded ${view === 'knowledge' ? 'bg-indigo-500' : 'hover:bg-indigo-500'}`}
+                  aria-current={view === 'knowledge' ? 'page' : undefined}
+                  className={view === 'knowledge' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
                 >
                   Knowledge
                 </button>
               </nav>
             )}
-            <button
-              onClick={logout}
-              className="hidden sm:block text-sm underline hover:no-underline whitespace-nowrap"
-            >
+
+            <button onClick={logout} className="ui-btn ui-btn-ghost">
               Sign out
             </button>
           </div>
-        </div>
+        </header>
       )}
       {/* Admin view - direct access to conversations and deposits */}
       {isAdmin && orgId ? (
@@ -428,8 +435,8 @@ function AuthenticatedApp() {
           />
         )
       ) : showStatusLoading ? (
-        <div className="min-h-screen flex items-center justify-center">
-          <span className="text-sm text-gray-600">Checking onboarding status...</span>
+        <div className="ui-page flex items-center justify-center">
+          <span className="text-sm text-slate-600">Checking onboarding status...</span>
         </div>
       ) : canAccessPortal && orgId ? (
         view === 'conversation-detail' && selectedConversationId ? (
@@ -513,44 +520,40 @@ function OrgSelector({ currentOrgId, onOrgChange, orgs, loading }: OrgSelectorPr
   };
 
   return (
-    <div className="bg-gray-800 text-white px-3 py-2 sm:px-4 sm:py-3">
-      <div className="max-w-6xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:flex-wrap">
-        <span className="text-sm font-medium">Admin View</span>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">Org:</label>
-          <select
-            value={currentOrgId}
-            onChange={(e) => onOrgChange(e.target.value)}
-            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 flex-1 sm:flex-none"
-            disabled={loading}
-          >
-            {loading && <option value="">Loading...</option>}
-            {orgList.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.name}
-              </option>
-            ))}
-            {!orgList.find((o) => o.id === currentOrgId) && currentOrgId && (
-              <option value={currentOrgId}>{currentOrgId}</option>
-            )}
-          </select>
-        </div>
-        <form onSubmit={handleCustomSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Enter org ID..."
-            value={customOrgId}
-            onChange={(e) => setCustomOrgId(e.target.value)}
-            className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 flex-1 sm:w-64"
-          />
-          <button
-            type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded whitespace-nowrap"
-          >
-            Go
-          </button>
-        </form>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex items-center gap-2">
+        <span className="ui-kicker">Org</span>
+        <select
+          value={currentOrgId}
+          onChange={(e) => onOrgChange(e.target.value)}
+          className="ui-select sm:w-72"
+          disabled={loading}
+          aria-label="Select organization"
+        >
+          {loading && <option value="">Loading...</option>}
+          {orgList.map((org) => (
+            <option key={org.id} value={org.id}>
+              {org.name}
+            </option>
+          ))}
+          {!orgList.find((o) => o.id === currentOrgId) && currentOrgId && (
+            <option value={currentOrgId}>{currentOrgId}</option>
+          )}
+        </select>
       </div>
+      <form onSubmit={handleCustomSubmit} className="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Enter org ID..."
+          value={customOrgId}
+          onChange={(e) => setCustomOrgId(e.target.value)}
+          className="ui-input sm:w-72"
+          aria-label="Enter organization ID"
+        />
+        <button type="submit" className="ui-btn ui-btn-primary whitespace-nowrap">
+          Go
+        </button>
+      </form>
     </div>
   );
 }
@@ -572,8 +575,17 @@ function ConversationsPreview() {
 
   if (selectedId) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <OrgSelector currentOrgId={orgId} onOrgChange={handleOrgChange} />
+      <div className="ui-page">
+        <div className="ui-topbar">
+          <div className="ui-topbar-accent" aria-hidden="true" />
+          <div className="ui-container py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="ui-brandmark" aria-hidden="true" />
+              <div className="text-sm font-semibold tracking-tight text-slate-900">Conversations Preview</div>
+            </div>
+            <OrgSelector currentOrgId={orgId} onOrgChange={handleOrgChange} />
+          </div>
+        </div>
         <ConversationDetail
           orgId={orgId}
           conversationId={selectedId}
@@ -584,8 +596,17 @@ function ConversationsPreview() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <OrgSelector currentOrgId={orgId} onOrgChange={handleOrgChange} />
+    <div className="ui-page">
+      <div className="ui-topbar">
+        <div className="ui-topbar-accent" aria-hidden="true" />
+        <div className="ui-container py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="ui-brandmark" aria-hidden="true" />
+            <div className="text-sm font-semibold tracking-tight text-slate-900">Conversations Preview</div>
+          </div>
+          <OrgSelector currentOrgId={orgId} onOrgChange={handleOrgChange} />
+        </div>
+      </div>
       <ConversationList
         orgId={orgId}
         onSelect={setSelectedId}
@@ -601,9 +622,9 @@ function App() {
 
   if (preview === 'campaign') {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow p-6">
+      <div className="ui-page">
+        <div className="mx-auto max-w-2xl px-4">
+          <div className="ui-card ui-card-solid p-6">
             <CampaignRegistration
               orgId="preview-org"
               brandId="preview-brand-id"

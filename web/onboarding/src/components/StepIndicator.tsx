@@ -21,10 +21,10 @@ export function StepIndicator({ steps, currentStep }: Props) {
               <div
                 className={`relative flex h-8 w-8 items-center justify-center rounded-full ${
                   index < currentStep
-                    ? 'bg-indigo-600'
+                    ? 'bg-gradient-to-br from-violet-600 to-indigo-600'
                     : index === currentStep
-                    ? 'border-2 border-indigo-600 bg-white'
-                    : 'border-2 border-gray-300 bg-white'
+                    ? 'border-2 border-violet-500 bg-white'
+                    : 'border-2 border-slate-200 bg-white'
                 }`}
               >
                 {index < currentStep ? (
@@ -42,7 +42,7 @@ export function StepIndicator({ steps, currentStep }: Props) {
                 ) : (
                   <span
                     className={`text-sm font-medium ${
-                      index === currentStep ? 'text-indigo-600' : 'text-gray-500'
+                      index === currentStep ? 'text-violet-700' : 'text-slate-400'
                     }`}
                   >
                     {index + 1}
@@ -52,12 +52,12 @@ export function StepIndicator({ steps, currentStep }: Props) {
               {index !== steps.length - 1 && (
                 <div
                   className={`absolute top-4 left-8 -ml-px h-0.5 w-full sm:w-20 ${
-                    index < currentStep ? 'bg-indigo-600' : 'bg-gray-300'
+                    index < currentStep ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-slate-200'
                   }`}
                 />
               )}
             </div>
-            <span className="mt-2 block text-xs font-medium text-gray-600 sm:text-sm">
+            <span className="mt-2 block text-xs font-semibold text-slate-600 sm:text-sm">
               {step.name}
             </span>
           </li>

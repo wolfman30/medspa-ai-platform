@@ -69,8 +69,8 @@ export function BusinessHoursForm({ defaultValues, onSubmit, onBack }: Props) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Business Hours</h2>
-        <p className="mt-1 text-sm text-gray-600">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Business Hours</h2>
+        <p className="ui-muted mt-1">
           Confirm when your clinic is open so the AI can set the right expectations.
         </p>
       </div>
@@ -84,31 +84,31 @@ export function BusinessHoursForm({ defaultValues, onSubmit, onBack }: Props) {
             | undefined;
 
           return (
-            <div key={key} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center">
+            <div key={key} className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/40 p-5 sm:flex-row sm:items-center">
               <div className="sm:w-32">
-                <span className="text-sm font-medium text-gray-900">{label}</span>
+                <span className="text-sm font-semibold text-slate-900">{label}</span>
               </div>
               <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   type="time"
                   {...register(`${key}.open`)}
                   disabled={isClosed}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 sm:w-40"
+                  className="ui-input w-full sm:w-40 disabled:bg-slate-100"
                 />
-                <span className="text-sm text-gray-500">to</span>
+                <span className="text-sm text-slate-500">to</span>
                 <input
                   type="time"
                   {...register(`${key}.close`)}
                   disabled={isClosed}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 sm:w-40"
+                  className="ui-input w-full sm:w-40 disabled:bg-slate-100"
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-600">
+              <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" {...register(`${key}.closed`)} />
                 Closed
               </label>
               {(dayErrors?.open || dayErrors?.close) && (
-                <p className="text-sm text-red-600">
+                <p className="text-sm font-medium text-red-700">
                   {dayErrors?.open?.message || dayErrors?.close?.message}
                 </p>
               )}
@@ -121,14 +121,14 @@ export function BusinessHoursForm({ defaultValues, onSubmit, onBack }: Props) {
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          className="ui-btn ui-btn-ghost"
         >
           Back
         </button>
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          className="ui-btn ui-btn-primary"
         >
           {isSubmitting ? 'Saving...' : 'Continue'}
         </button>

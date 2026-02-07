@@ -71,57 +71,57 @@ export function BookingSettings({ orgId, onBack }: BookingSettingsProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-2xl mx-auto px-4">
+    <div className="ui-page">
+      <div className="ui-container max-w-2xl">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="ui-link font-semibold flex items-center gap-2"
             >
-              <span>&larr;</span> Back
+              <span aria-hidden="true">&larr;</span> Back
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">Booking Configuration</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Booking Configuration</h1>
           </div>
           {saving && (
-            <span className="text-sm text-gray-500">Saving...</span>
+            <span className="text-sm text-slate-500">Saving...</span>
           )}
         </div>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md text-green-700">
+          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800">
             {success}
           </div>
         )}
 
         {/* Booking Platform */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-2">Booking Platform</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className="ui-card ui-card-solid p-6 mb-6">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-2">Booking Platform</h2>
+          <p className="ui-muted mb-4">
             Choose how the AI books appointments for your clinic
           </p>
           <div className="space-y-3">
             {PLATFORM_OPTIONS.map((option) => (
               <label
                 key={option.value}
-                className={`flex items-start p-3 rounded-lg border cursor-pointer transition-colors ${
+                className={`flex items-start p-4 rounded-2xl border cursor-pointer transition-colors ${
                   platform === option.value
-                    ? 'border-indigo-600 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-violet-300 bg-violet-50/50'
+                    : 'border-slate-200/80 bg-white/60 hover:border-slate-300'
                 }`}
               >
                 <input
@@ -130,11 +130,11 @@ export function BookingSettings({ orgId, onBack }: BookingSettingsProps) {
                   value={option.value}
                   checked={platform === option.value}
                   onChange={() => handlePlatformChange(option.value)}
-                  className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                  className="mt-0.5 h-4 w-4 text-violet-600 focus:ring-violet-500 border-slate-300"
                 />
                 <div className="ml-3">
-                  <span className="block font-medium text-gray-900">{option.label}</span>
-                  <span className="block text-sm text-gray-500">{option.description}</span>
+                  <span className="block font-semibold text-slate-900">{option.label}</span>
+                  <span className="block text-sm text-slate-500">{option.description}</span>
                 </div>
               </label>
             ))}
@@ -143,9 +143,9 @@ export function BookingSettings({ orgId, onBack }: BookingSettingsProps) {
 
         {/* Booking URL (shown for Moxie) */}
         {platform === 'moxie' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-2">Moxie Booking URL</h2>
-            <p className="text-sm text-gray-500 mb-4">
+          <div className="ui-card ui-card-solid p-6 mb-6">
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900 mb-2">Moxie Booking URL</h2>
+            <p className="ui-muted mb-4">
               Your Moxie booking page URL. The AI will check this page for real-time availability.
             </p>
             <input
@@ -154,24 +154,24 @@ export function BookingSettings({ orgId, onBack }: BookingSettingsProps) {
               value={bookingUrl}
               onChange={(e) => setBookingUrl(e.target.value)}
               onBlur={handleUrlBlur}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="ui-input"
             />
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="ui-help mt-2">
               Usually looks like: https://app.joinmoxie.com/booking/your-clinic-name
             </p>
           </div>
         )}
 
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-xs text-slate-400 text-center">
           Changes are saved automatically
         </p>
 
         <div className="mt-8">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> Back
           </button>
         </div>
       </div>

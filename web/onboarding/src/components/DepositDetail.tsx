@@ -43,21 +43,21 @@ function getStatusColor(status: string): string {
   switch (status.toLowerCase()) {
     case 'succeeded':
     case 'completed':
-      return 'bg-green-100 text-green-800';
+      return 'ui-badge-success';
     case 'pending':
-      return 'bg-yellow-100 text-yellow-800';
+      return 'ui-badge-warning';
     case 'failed':
     case 'refunded':
-      return 'bg-red-100 text-red-800';
+      return 'ui-badge-danger';
     default:
-      return 'bg-gray-100 text-gray-800';
+      return 'ui-badge-muted';
   }
 }
 
 function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <h3 className="text-sm font-medium text-gray-500 mb-3">{title}</h3>
+    <div className="ui-card ui-card-solid p-5">
+      <h3 className="ui-kicker mb-3">{title}</h3>
       {children}
     </div>
   );
@@ -65,9 +65,9 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-gray-900">{value || '-'}</span>
+    <div className="flex justify-between gap-4 py-2 border-b border-slate-100 last:border-0">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm font-semibold text-slate-900">{value || '-'}</span>
     </div>
   );
 }
@@ -107,23 +107,23 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="ui-page flex items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-10">
-        <div className="max-w-3xl mx-auto px-4">
+      <div className="ui-page">
+        <div className="ui-container max-w-3xl space-y-4">
           <button
             onClick={onBack}
-            className="mb-4 text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back to deposits
+            <span aria-hidden="true">&larr;</span> Back to deposits
           </button>
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800">
             {error}
           </div>
         </div>
@@ -136,33 +136,31 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-3xl mx-auto px-4">
+    <div className="ui-page">
+      <div className="ui-container max-w-3xl">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="ui-link font-semibold flex items-center gap-2"
             >
-              <span>&larr;</span> Back
+              <span aria-hidden="true">&larr;</span> Back
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">Deposit Details</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Deposit Details</h1>
           </div>
           <span
-            className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(
-              deposit.status
-            )}`}
+            className={`ui-badge ${getStatusColor(deposit.status)}`}
           >
             {deposit.status}
           </span>
         </div>
 
         {/* Amount Hero */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6 text-center">
-          <p className="text-sm text-gray-500 mb-1">Deposit Amount</p>
-          <p className="text-4xl font-bold text-green-600">{formatCents(deposit.amount_cents)}</p>
-          <p className="text-sm text-gray-500 mt-2">{formatDate(deposit.created_at)}</p>
+        <div className="ui-card ui-card-solid p-8 mb-6 text-center">
+          <p className="ui-kicker mb-2">Deposit Amount</p>
+          <p className="text-4xl font-semibold tracking-tight text-emerald-700">{formatCents(deposit.amount_cents)}</p>
+          <p className="ui-muted mt-2">{formatDate(deposit.created_at)}</p>
         </div>
 
         {/* Info Cards Grid */}
@@ -177,11 +175,7 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
               value={
                 deposit.patient_type && (
                   <span
-                    className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-                      deposit.patient_type === 'new'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
+                    className={`ui-badge ${deposit.patient_type === 'new' ? 'bg-indigo-100 text-indigo-900' : 'ui-badge-muted'}`}
                   >
                     {deposit.patient_type}
                   </span>
@@ -197,8 +191,8 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
             <InfoRow label="Preferred Times" value={deposit.preferred_times} />
             {deposit.scheduling_notes && (
               <div className="mt-2 pt-2 border-t border-gray-100">
-                <p className="text-sm text-gray-500 mb-1">Scheduling Notes</p>
-                <p className="text-sm text-gray-700">{deposit.scheduling_notes}</p>
+                <p className="ui-kicker mb-1">Scheduling Notes</p>
+                <p className="text-sm text-slate-700">{deposit.scheduling_notes}</p>
               </div>
             )}
           </InfoCard>
@@ -225,21 +219,21 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
             {deposit.conversation_id && onViewConversation && (
               <button
                 onClick={() => onViewConversation(deposit.conversation_id!)}
-                className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 mb-2"
+                className="ui-btn ui-btn-primary w-full py-3 mb-2"
               >
                 View Conversation
               </button>
             )}
             <a
               href={`tel:${deposit.lead_phone}`}
-              className="block w-full py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 text-center"
+              className="ui-btn ui-btn-dark w-full py-3 text-center"
             >
               Call Patient
             </a>
             {deposit.lead_email && (
               <a
                 href={`mailto:${deposit.lead_email}`}
-                className="block w-full py-2 px-4 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-center mt-2"
+                className="ui-btn ui-btn-ghost w-full py-3 text-center mt-2"
               >
                 Email Patient
               </a>
@@ -248,7 +242,7 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
         </div>
 
         {/* IDs (for debugging) */}
-        <div className="text-xs text-gray-400 mt-6">
+        <div className="text-xs text-slate-400 mt-6">
           <p>Deposit ID: {deposit.id}</p>
           {deposit.lead_id && <p>Lead ID: {deposit.lead_id}</p>}
           {deposit.booking_intent_id && <p>Booking Intent ID: {deposit.booking_intent_id}</p>}
@@ -258,9 +252,9 @@ export function DepositDetail({ orgId, depositId, onBack, onViewConversation, sc
         <div className="mt-8">
           <button
             onClick={onBack}
-            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="ui-link font-semibold flex items-center gap-2"
           >
-            <span>&larr;</span> Back to deposits
+            <span aria-hidden="true">&larr;</span> Back to deposits
           </button>
         </div>
       </div>
