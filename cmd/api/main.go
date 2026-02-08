@@ -58,6 +58,14 @@ func main() {
 		"env", cfg.Env,
 		"port", cfg.Port,
 	)
+	// Validate SMS provider configuration at startup
+	if issues := cfg.SMSProviderIssues(); len(issues) > 0 {
+		for _, issue := range issues {
+			logger.Error("SMS PROVIDER MISCONFIGURATION", "issue", issue)
+		}
+		logger.Error("voice-to-SMS acknowledgements will NOT work — check AWS Secrets Manager")
+	}
+
 	logger.Debug("telnyx config loaded",
 		"has_api_key", cfg.TelnyxAPIKey != "",
 		"has_profile_id", cfg.TelnyxMessagingProfileID != "",
