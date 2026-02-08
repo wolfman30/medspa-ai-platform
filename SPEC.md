@@ -46,17 +46,17 @@ The AI collects these 5 pieces of information before the booking flow can begin.
 | # | Qualification | How Collected | Example | Purpose |
 |---|--------------|---------------|---------|---------|
 | 1 | **Full name** (first + last) | AI asks | "Sammie Wallens" | Booking form, personalization |
-| 2 | **Email** | AI asks | "sammie@email.com" | Moxie booking form, operator follow-up |
-| 3 | **Service** | AI asks or infers from conversation | "Botox", "Lip Filler" | Determine what to book |
-| 4 | **Patient type** (new/existing) | AI asks | "new patient" | Operator context in notifications |
+| 2 | **Service** | AI asks or infers from conversation | "Botox", "Lip Filler" | Determine what to book |
+| 3 | **Patient type** (new/existing) | AI asks | "new patient" | Operator context in notifications |
+| 4 | **Email** | AI asks | "sammie@email.com" | Moxie booking form, operator follow-up |
 | 5 | **Time preferences** | AI asks | "Mondays after 4pm" | Filter available slots |
 
-**Collection priority order:**
-1. Name (ask early to personalize)
-2. Service (what they want)
-3. Email (needed for booking)
-4. Patient type (new or returning)
-5. Time preferences (days + times)
+**Collection priority order (micro-commitment psychology — easy/exciting first, administrative last):**
+1. Name (personalizes the conversation immediately)
+2. Service (matches their intent — this is why they called)
+3. Patient type (natural follow-up: "Have you visited us before?")
+4. Email (by now they're invested, feels reasonable for booking)
+5. Time preferences (days + times — triggers booking flow)
 
 **What happens when all 5 are collected:**
 - **Moxie clinics →** Check availability via browser sidecar → Present matching time slots → Patient picks → Auto-book (Moxie handles payment)
