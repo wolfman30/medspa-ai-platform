@@ -26,61 +26,9 @@ resource "aws_secretsmanager_secret" "app_secrets" {
   }
 }
 
-resource "aws_secretsmanager_secret_version" "app_secrets" {
-  secret_id = aws_secretsmanager_secret.app_secrets.id
-  secret_string = jsonencode({
-    DATABASE_URL     = ""
-    ADMIN_JWT_SECRET = ""
-
-    # Twilio
-    TWILIO_ACCOUNT_SID    = ""
-    TWILIO_AUTH_TOKEN     = ""
-    TWILIO_WEBHOOK_SECRET = ""
-    TWILIO_FROM_NUMBER    = ""
-    TWILIO_ORG_MAP_JSON   = "{}"
-
-    # Telnyx
-    TELNYX_API_KEY              = ""
-    TELNYX_MESSAGING_PROFILE_ID = ""
-    TELNYX_WEBHOOK_SECRET       = ""
-    TELNYX_FROM_NUMBER          = ""
-
-    # Cognito (admin dashboard auth)
-    COGNITO_USER_POOL_ID = ""
-    COGNITO_CLIENT_ID    = ""
-    COGNITO_REGION       = ""
-
-    # Payments
-    PAYMENT_PROVIDER_KEY         = ""
-    SQUARE_ACCESS_TOKEN          = ""
-    SQUARE_LOCATION_ID           = ""
-    SQUARE_BASE_URL              = var.environment == "production" ? "https://connect.squareup.com" : "https://connect.squareupsandbox.com"
-    SQUARE_WEBHOOK_SIGNATURE_KEY = ""
-    SQUARE_SUCCESS_URL           = ""
-    SQUARE_CANCEL_URL            = ""
-    SQUARE_SANDBOX               = var.environment == "production" ? "false" : "true"
-    SQUARE_CLIENT_ID             = ""
-    SQUARE_CLIENT_SECRET         = ""
-    SQUARE_OAUTH_REDIRECT_URI    = ""
-    SQUARE_OAUTH_SUCCESS_URL     = ""
-
-    # Email
-    SENDGRID_API_KEY    = ""
-    SENDGRID_FROM_EMAIL = ""
-    SENDGRID_FROM_NAME  = "MedSpa AI"
-    SES_FROM_EMAIL      = ""
-    SES_FROM_NAME       = "MedSpa AI"
-
-    # Feature flags
-    DISABLE_PAYMENT_COOLDOWN = "false"
-
-    # EMR (Nextech)
-    NEXTECH_BASE_URL      = ""
-    NEXTECH_CLIENT_ID     = ""
-    NEXTECH_CLIENT_SECRET = ""
-  })
-
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
-}
+# IMPORTANT:
+# Terraform manages the *existence* (ARN/tags) of the app secret, but not the
+# secret payload. The payload is updated out-of-band (GitHub Actions refreshes
+# DATABASE_URL after reading the RDS managed secret), and managing a
+# `aws_secretsmanager_secret_version` here causes Terraform to overwrite/roll
+# back the secret during deployments.
