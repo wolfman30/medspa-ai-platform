@@ -311,25 +311,25 @@ export function Dashboard({ orgId }: DashboardProps) {
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           <div className="ui-card ui-card-solid p-6">
-            <p className="ui-kicker">Conversations</p>
+            <p className="ui-kicker ui-gradient-text">Conversations</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatCount(stats.conversations)}
             </p>
           </div>
           <div className="ui-card ui-card-solid p-6">
-            <p className="ui-kicker">Deposits Collected</p>
+            <p className="ui-kicker ui-gradient-text">Deposits Collected</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatCount(stats.successful_deposits)}
             </p>
           </div>
           <div className="ui-card ui-card-solid p-6">
-            <p className="ui-kicker">Total Collected</p>
+            <p className="ui-kicker ui-gradient-text">Total Collected</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatCents(stats.total_collected_cents)}
             </p>
           </div>
           <div className="ui-card ui-card-solid p-6">
-            <p className="ui-kicker">Conversion</p>
+            <p className="ui-kicker ui-gradient-text">Conversion</p>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
               {formatPercent(stats.conversion_pct)}
             </p>
@@ -353,16 +353,16 @@ export function Dashboard({ orgId }: DashboardProps) {
                   <thead>
                     <tr>
                       <th className="ui-th">
-                        Phone
+                        <span className="ui-gradient-text-subtle">Phone</span>
                       </th>
                       <th className="ui-th">
-                        Messages
+                        <span className="ui-gradient-text-subtle">Messages</span>
                       </th>
                       <th className="ui-th">
-                        Status
+                        <span className="ui-gradient-text-subtle">Status</span>
                       </th>
                       <th className="ui-th">
-                        Last Activity
+                        <span className="ui-gradient-text-subtle">Last Activity</span>
                       </th>
                     </tr>
                   </thead>
@@ -409,19 +409,19 @@ export function Dashboard({ orgId }: DashboardProps) {
                   <thead>
                     <tr>
                       <th className="ui-th">
-                        Patient
+                        <span className="ui-gradient-text-subtle">Patient</span>
                       </th>
                       <th className="ui-th">
-                        Service
+                        <span className="ui-gradient-text-subtle">Service</span>
                       </th>
                       <th className="ui-th">
-                        Amount
+                        <span className="ui-gradient-text-subtle">Amount</span>
                       </th>
                       <th className="ui-th">
-                        Status
+                        <span className="ui-gradient-text-subtle">Status</span>
                       </th>
                       <th className="ui-th">
-                        Date
+                        <span className="ui-gradient-text-subtle">Date</span>
                       </th>
                     </tr>
                   </thead>

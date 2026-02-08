@@ -77,7 +77,7 @@
   }
 
   .ui-kicker {
-    @apply text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-slate-500;
+    @apply text-xs font-semibold uppercase tracking-[0.16em] text-slate-500;
   }
 
   .ui-btn {
@@ -204,6 +204,43 @@
   }
 }
 
+@layer components {
+  .ui-gradient-text {
+    color: rgb(79 70 229); /* fallback when clip-text isn't supported */
+  }
+
+  .ui-gradient-text-subtle {
+    color: rgb(100 116 139); /* slate-500 fallback */
+  }
+}
+
+@supports (-webkit-background-clip: text) or (background-clip: text) {
+  @layer components {
+    .ui-gradient-text,
+    .ui-gradient-text-subtle {
+      display: inline-block;
+      background: linear-gradient(
+        130deg,
+        rgb(var(--ui-brand-2)) 0%,
+        rgb(79 70 229) 40%,
+        rgb(124 58 237) 70%,
+        rgb(var(--ui-brand)) 100%
+      );
+      background-size: 240% 240%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      animation: uiHoverGradient 10s ease-in-out infinite;
+    }
+
+    .ui-gradient-text-subtle {
+      filter: saturate(0.9) brightness(0.95);
+      animation-duration: 14s;
+    }
+  }
+}
+
 /* Hover-only animated gradient for topbar nav buttons */
 @layer components {
   .ui-topbar .ui-btn-ghost,
@@ -249,6 +286,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ui-gradient-text,
+  .ui-gradient-text-subtle {
+    animation: none;
+  }
+
   .ui-topbar .ui-btn-ghost:hover::before,
   .ui-topbar .ui-btn-ghost:focus-visible::before,
   .ui-topbar .ui-btn-dark:hover::before,
