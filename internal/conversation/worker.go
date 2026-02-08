@@ -19,6 +19,8 @@ import (
 )
 
 // BrowserBookingClient is the subset of browser.Client used for Moxie booking sessions.
+// Moxie clinics do NOT use Square — the sidecar automates Steps 1-4, then hands off
+// Moxie's Step 5 payment page URL so the patient can enter their card and finalize.
 type BrowserBookingClient interface {
 	StartBookingSession(ctx context.Context, req browser.BookingStartRequest) (*browser.BookingStartResponse, error)
 	GetHandoffURL(ctx context.Context, sessionID string) (*browser.BookingHandoffResponse, error)
@@ -899,8 +901,10 @@ gotHandoff:
 	w.logger.Info("Moxie booking handoff URL received", "session_id", sessionID,
 		"handoff_url", handoffURL[:min(50, len(handoffURL))], "org_id", req.OrgID)
 
-	// Step 4: Send handoff URL to patient via SMS
-	handoffMsg := fmt.Sprintf("Your booking is almost complete! Tap the link below to finish with payment:\n%s", handoffURL)
+	// Step 4: Send Moxie Step 5 URL to patient via SMS.
+	// This link goes directly to Moxie's payment page where the patient
+	// enters their card details and clicks to finalize the booking.
+	handoffMsg := fmt.Sprintf("Your booking is almost complete! Tap the link below to enter your payment info and finalize your appointment:\n%s", handoffURL)
 	if w.messenger != nil {
 		reply := OutboundReply{
 			OrgID:          msg.OrgID,
