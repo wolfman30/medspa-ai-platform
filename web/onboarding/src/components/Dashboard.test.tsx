@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { Dashboard } from './Dashboard';
 import {
   getPortalOverview,
+  getClinicConfig,
   getSquareConnectUrl,
   getSquareStatus,
   listConversations,
@@ -12,6 +13,7 @@ import {
 
 vi.mock('../api/client', () => ({
   getPortalOverview: vi.fn(),
+  getClinicConfig: vi.fn(),
   getSquareConnectUrl: vi.fn(),
   getSquareStatus: vi.fn(),
   listConversations: vi.fn(),
@@ -96,6 +98,7 @@ describe('Dashboard', () => {
   it('shows the loading state initially', async () => {
     const deferred = createDeferred<PortalDashboardOverview>();
     vi.mocked(getPortalOverview).mockReturnValue(deferred.promise);
+    vi.mocked(getClinicConfig).mockResolvedValue({ booking_platform: 'square' } as any);
     vi.mocked(getSquareStatus).mockResolvedValue(sampleSquareStatus);
     vi.mocked(getSquareConnectUrl).mockResolvedValue('https://example.com/connect');
     vi.mocked(listConversations).mockResolvedValue(sampleConversations);
@@ -111,6 +114,7 @@ describe('Dashboard', () => {
 
   it('renders dashboard metrics when data loads', async () => {
     vi.mocked(getPortalOverview).mockResolvedValue(sampleStats);
+    vi.mocked(getClinicConfig).mockResolvedValue({ booking_platform: 'square' } as any);
     vi.mocked(getSquareStatus).mockResolvedValue(sampleSquareStatus);
     vi.mocked(getSquareConnectUrl).mockResolvedValue('https://example.com/connect');
     vi.mocked(listConversations).mockResolvedValue(sampleConversations);
@@ -130,6 +134,7 @@ describe('Dashboard', () => {
 
   it('shows an error message when the request fails', async () => {
     vi.mocked(getPortalOverview).mockRejectedValue(new Error('No data'));
+    vi.mocked(getClinicConfig).mockResolvedValue({ booking_platform: 'square' } as any);
     vi.mocked(getSquareStatus).mockResolvedValue(sampleSquareStatus);
     vi.mocked(getSquareConnectUrl).mockResolvedValue('https://example.com/connect');
     vi.mocked(listConversations).mockResolvedValue(sampleConversations);
