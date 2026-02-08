@@ -91,7 +91,7 @@
   }
 
   .ui-btn-ghost {
-    @apply text-slate-700 bg-white/60 hover:bg-white border border-slate-200/80;
+    @apply text-slate-700 bg-white/75 hover:bg-white border border-slate-300/80;
   }
 
   .ui-btn-danger {
@@ -189,5 +189,70 @@
 
   .ui-link {
     @apply text-violet-700 hover:text-violet-900;
+  }
+}
+
+@keyframes uiHoverGradient {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
+}
+
+/* Hover-only animated gradient for topbar nav buttons */
+@layer components {
+  .ui-topbar .ui-btn-ghost,
+  .ui-topbar .ui-btn-dark {
+    position: relative;
+    z-index: 0; /* create stacking context for the gradient overlay */
+    overflow: hidden;
+    transform: translateZ(0);
+  }
+
+  .ui-topbar .ui-btn-ghost::before,
+  .ui-topbar .ui-btn-dark::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      130deg,
+      rgb(var(--ui-brand-2)) 0%,
+      rgb(79 70 229) 40%,
+      rgb(124 58 237) 70%,
+      rgb(var(--ui-brand)) 100%
+    );
+    background-size: 240% 240%;
+    opacity: 0;
+    transition: opacity 180ms ease;
+    z-index: -1;
+  }
+
+  .ui-topbar .ui-btn-ghost:hover,
+  .ui-topbar .ui-btn-ghost:focus-visible {
+    @apply text-white;
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .ui-topbar .ui-btn-ghost:hover::before,
+  .ui-topbar .ui-btn-ghost:focus-visible::before,
+  .ui-topbar .ui-btn-dark:hover::before,
+  .ui-topbar .ui-btn-dark:focus-visible::before {
+    opacity: 1;
+    animation: uiHoverGradient 4s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-topbar .ui-btn-ghost:hover::before,
+  .ui-topbar .ui-btn-ghost:focus-visible::before,
+  .ui-topbar .ui-btn-dark:hover::before,
+  .ui-topbar .ui-btn-dark:focus-visible::before {
+    animation: none;
   }
 }
