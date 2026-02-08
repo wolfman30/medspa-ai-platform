@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -117,6 +118,66 @@ func TestRouterMessagingWebhookEndpoint(t *testing.T) {
 
 	if ct := rr.Header().Get("Content-Type"); ct != "application/xml" {
 		t.Fatalf("expected XML response, got %s", ct)
+	}
+}
+
+// TestRouterTelnyxVoiceWebhookRegistered verifies that the voice webhook route
+// IS registered when a TelnyxWebhookHandler is provided. This is a regression
+// test: if Telnyx secrets are missing at startup the handler is nil, routes are
+// never registered, and voice webhooks silently return 404.
+func TestRouterTelnyxVoiceWebhookRegistered(t *testing.T) {
+	logger := logging.Default()
+	leadRepo := leads.NewInMemoryRepository()
+	leadsHandler := leads.NewHandler(leadRepo, logger)
+	publisher := &noopPublisher{}
+	resolver := messaging.NewStaticOrgResolver(map[string]string{
+		"+10000000000": "org-test",
+	})
+	messagingHandler := messaging.NewHandler("", publisher, resolver, nil, leadRepo, logger)
+
+	// Create a minimal TelnyxWebhookHandler (simulates having Telnyx config).
+	telnyxHandler := handlers.NewTelnyxWebhookHandler(handlers.TelnyxWebhookConfig{
+		Logger: logger,
+	})
+
+	r := New(&Config{
+		Logger:           logger,
+		LeadsHandler:     leadsHandler,
+		MessagingHandler: messagingHandler,
+		TelnyxWebhooks:   telnyxHandler,
+	})
+
+	for _, route := range []string{
+		"/webhooks/telnyx/voice",
+		"/webhooks/telnyx/messages",
+		"/webhooks/telnyx/hosted",
+	} {
+		req := httptest.NewRequest(http.MethodPost, route, strings.NewReader("{}"))
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		// 503 ("telnyx client not configured") is acceptable — the route IS
+		// registered but the stub handler has no real telnyx client. 404/405
+		// means the route was never mounted, which is the bug we are guarding
+		// against.
+		if rr.Code == http.StatusNotFound || rr.Code == http.StatusMethodNotAllowed {
+			t.Errorf("%s: route not registered (got %d); ensure TelnyxWebhookHandler is created at startup", route, rr.Code)
+		}
+	}
+}
+
+// TestRouterTelnyxVoiceWebhookMissingWithoutHandler documents the behaviour
+// that caused the missed-call SMS outage: when TelnyxWebhooks is nil the voice
+// webhook route is never registered and callers receive a 404.
+func TestRouterTelnyxVoiceWebhookMissingWithoutHandler(t *testing.T) {
+	r := newTestRouter(t) // newTestRouter does NOT set TelnyxWebhooks
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/voice", strings.NewReader("{}"))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound && rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 404/405 when TelnyxWebhooks is nil, got %d", rr.Code)
 	}
 }
 
