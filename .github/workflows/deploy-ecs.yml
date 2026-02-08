@@ -596,9 +596,24 @@ jobs:
           CURRENT="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_SECRET_ID" --query 'SecretString' --output text)"
           UPDATED="$(
             CURRENT="$CURRENT" DB_URL="$DB_URL" python3 - <<'PY'
-          import json, os
+          import json
+          import os
+          import sys
 
+          # Guardrail: never overwrite the whole app secret if it's missing core keys.
+          # If the secret was accidentally wiped, failing the deploy is safer than
+          # persisting an empty payload with only DATABASE_URL set.
           current = json.loads(os.environ["CURRENT"])
+          if not isinstance(current, dict):
+            print("App secret is not a JSON object; refusing to update.", file=sys.stderr)
+            sys.exit(1)
+
+          must_have = ["ADMIN_JWT_SECRET"]
+          missing = [k for k in must_have if not current.get(k)]
+          if missing:
+            print(f"App secret missing required keys: {missing}; refusing to update.", file=sys.stderr)
+            sys.exit(1)
+
           current["DATABASE_URL"] = os.environ["DB_URL"]
           print(json.dumps(current))
           PY
