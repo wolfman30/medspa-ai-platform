@@ -1186,8 +1186,8 @@ func TestBuildSystemPrompt_MoxieInstructions(t *testing.T) {
 	if !strings.Contains(promptMoxie, "SERVICE CLARIFICATION") {
 		t.Errorf("Moxie prompt should contain service clarification instructions")
 	}
-	if !strings.Contains(promptMoxie, "TIME SELECTION BEFORE BOOKING LINK") {
-		t.Errorf("Moxie prompt should explain time selection before booking link")
+	if !strings.Contains(promptMoxie, "TIME SELECTION BEFORE BOOKING") {
+		t.Errorf("Moxie prompt should explain time selection before booking")
 	}
 	if !strings.Contains(promptMoxie, "PHONE VERIFICATION (CONDITIONAL)") {
 		t.Errorf("Moxie prompt should include conditional phone verification instructions")

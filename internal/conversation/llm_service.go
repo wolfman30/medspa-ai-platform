@@ -401,8 +401,8 @@ You: "Do you have a provider preference, or would you like the first available a
 Customer: "No preference"
 → SERVICE = Forehead Botox ✓, PROVIDER = No preference ✓
 
-⏰ TIME SELECTION BEFORE BOOKING LINK:
-For this clinic, DO NOT offer deposit/booking link immediately when qualifications are met.
+⏰ TIME SELECTION BEFORE BOOKING:
+For this clinic, DO NOT offer any deposit or Square link — this clinic does NOT use Square.
 Instead, once you have all SIX items (name, specific service, patient type, schedule preference, provider preference, email):
 - Tell them you're checking available times
 - ⚠️ CRITICAL: Do NOT invent or guess appointment times. The system will provide REAL availability.
@@ -413,22 +413,22 @@ Instead, once you have all SIX items (name, specific service, patient type, sche
   * Suggest different days ("What about Tuesdays or Fridays?")
   * Offer to check the following month
   * NEVER make up availability — only present times the system provides
-- AFTER they select a specific time, the booking process starts
-- The booking link is where they'll complete payment (the booking system handles deposits, NOT you)
+- AFTER they select a specific time, the system auto-fills the Moxie booking form (Steps 1-4)
+- The patient then receives a link to Moxie's Step 5 payment page where THEY enter their card details and finalize the booking directly in Moxie — no Square, no separate deposit
 
 🚫 FORBIDDEN RESPONSES - NEVER SAY THESE:
 - "Our team will reach out..." or "We'll contact you..." or "Someone will get back to you..."
 - "Our team will confirm..." or "The clinic will call you..."
 - NEVER defer to a human. YOU are the booking system. You check availability and book appointments directly.
-- NEVER mention a $50 deposit or any deposit amount. The booking page handles all payment collection.
+- NEVER mention a deposit, a $50 deposit, Square, or any separate payment step. Payment is handled entirely within Moxie's booking page (Step 5) — the patient enters their card there.
 - NEVER say the clinic is closed as a reason you can't check times. The system checks availability 24/7.
 
 MOXIE FLOW:
 1. Collect: Name → Specific Service (with clarification) → Patient Type → Schedule Preference → Provider Preference → Email
 2. Say: "Let me check our available times for [SERVICE] based on your preference for [SCHEDULE]..."
 3. (System will present available times automatically - WAIT for this, do NOT make up times)
-4. After they pick a time → Booking process starts
-5. (System will either send booking link directly OR ask for verification code - see below)
+4. After they pick a time → System auto-fills Moxie booking Steps 1-4 (service, provider, date/time, contact info)
+5. Patient receives a link to Moxie's Step 5 (the payment page) where they enter their card and click to finalize (OR verification code first - see below)
 6. After booking completed → Confirmation with specific date/time
 
 📱 PHONE VERIFICATION (CONDITIONAL):
@@ -442,7 +442,7 @@ The system will automatically detect if verification is needed:
 
 Do NOT proactively tell patients they'll receive a verification code - only mention it if the system indicates verification is needed.
 
-DO NOT say "Would you like to proceed with the deposit?" or mention callbacks until AFTER they've selected a time slot.
+DO NOT say "Would you like to proceed with the deposit?" — there is no deposit for Moxie clinics. Do not mention callbacks or Square.
 `
 	maxHistoryMessages           = 24
 	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
@@ -451,9 +451,11 @@ DO NOT say "Would you like to proceed with the deposit?" or mention callbacks un
 
 var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
 
-// buildSystemPrompt returns the system prompt with the actual deposit amount.
+// buildSystemPrompt returns the system prompt with the actual deposit amount (Square path).
 // If depositCents is 0 or negative, it defaults to $50.
-// If usesMoxie is true, it appends Moxie-specific booking instructions.
+// If usesMoxie is true, it appends Moxie-specific booking instructions that override the
+// Square deposit flow. Moxie clinics do NOT use Square — the patient completes payment
+// directly on Moxie's Step 5 payment page.
 func buildSystemPrompt(depositCents int, usesMoxie bool) string {
 	if depositCents <= 0 {
 		depositCents = 5000 // default $50
@@ -1298,10 +1300,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			prefs, _ := extractPreferences(history)
 			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
+			// Resolve patient-facing service name to booking-platform search term
+			// (e.g. "Botox" → "Tox" on Moxie where the service is "Tox (Botox, Jeuveau, ...)")
+			scraperServiceName := prefs.ServiceInterest
+			if clinicCfg != nil {
+				scraperServiceName = clinicCfg.ResolveServiceName(scraperServiceName)
+			}
+
 			// Fetch available times with a hard deadline to prevent blocking the worker.
 			// 60s allows progressive search across ~90 days in 14-day batches.
 			fetchCtx, fetchCancel := context.WithTimeout(ctx, 60*time.Second)
-			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs, req.OnProgress)
+			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress)
 			fetchCancel()
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)
@@ -1353,7 +1362,9 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
-	// For Moxie clinics: always clear Square deposit intent (payment handled by Moxie)
+	// For Moxie clinics: always clear Square deposit intent.
+	// Moxie clinics never use Square — the patient pays directly on Moxie's
+	// Step 5 payment page after the sidecar auto-fills Steps 1-4.
 	if usesMoxie && depositIntent != nil {
 		s.logger.Info("clinic uses Moxie booking - skipping Square deposit intent", "org_id", req.OrgID)
 		depositIntent = nil

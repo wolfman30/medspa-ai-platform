@@ -8,12 +8,13 @@ The Booking Session Manager handles the "automate then handoff" flow for Moxie b
 2. **Handoff at Step 5** - Give lead the payment page URL
 3. **Monitor for Outcome** - Detect if booking succeeded or failed
 
-## Key Insight: Moxie Handles Payments
+## Key Insight: Moxie Handles Payments (No Square)
 
-When a clinic uses Moxie's booking system with deposits enabled:
-- **Square payment links are NOT needed** - Moxie collects payment
-- **We automate the boring parts** - Lead just enters card and clicks "Book"
-- **We detect the outcome** - Report success/failure to platform
+When a clinic's `booking_platform` is set to `moxie`, **Square is never used**:
+- **No Square checkout links** — all payment happens inside Moxie
+- **We automate Steps 1-4** (service, provider, date/time, contact info) via browser
+- **We hand off at Step 5** — the patient receives a link to Moxie's payment page where they enter their card details and click to finalize the booking
+- **We detect the outcome** — the sidecar monitors the page and reports success/failure back to the platform
 
 ---
 
@@ -304,20 +305,21 @@ class BookingSessionManager {
 ### Conversation Flow Change
 
 ```
-Current flow (with Square):
-1. Qualify lead
-2. Select service & time
-3. Send Square payment link
-4. Wait for payment webhook
-5. Confirm booking
+Square-clinic flow (booking_platform=square):
+1. Qualify lead (5 qualifications)
+2. Select service & time preferences
+3. Send Square checkout link for refundable deposit
+4. Wait for Square payment webhook
+5. Operator manually confirms appointment
 
-New flow (with Moxie):
-1. Qualify lead
-2. Select service & time
-3. START BOOKING SESSION → sidecar automates steps 1-4
-4. Send handoff URL to lead (Step 5 payment page)
-5. Monitor for outcome
-6. Confirm or handle failure
+Moxie-clinic flow (booking_platform=moxie — NO Square involved):
+1. Qualify lead (6 qualifications, adds provider preference)
+2. Select service & time from real Moxie availability
+3. START BOOKING SESSION → sidecar auto-fills Moxie Steps 1-4
+4. Send patient a link to Moxie's Step 5 payment page
+   → Patient enters their card details and clicks to finalize
+5. Sidecar monitors the page for outcome (success/failure/timeout)
+6. Callback notifies platform → send confirmation or failure SMS
 ```
 
 ---
