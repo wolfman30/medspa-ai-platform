@@ -199,3 +199,36 @@ func TestUsesMoxieBooking_NilConfig(t *testing.T) {
 		t.Error("expected nil config to return true for UsesSquarePayment()")
 	}
 }
+
+func TestResolveServiceName(t *testing.T) {
+	cfg := &Config{
+		ServiceAliases: map[string]string{
+			"botox":            "Tox",
+			"wrinkle relaxers": "Tox",
+			"jeuveau":          "Tox",
+		},
+	}
+
+	// Alias hit
+	if got := cfg.ResolveServiceName("Botox"); got != "Tox" {
+		t.Errorf("expected Tox, got %s", got)
+	}
+	// Case-insensitive
+	if got := cfg.ResolveServiceName("BOTOX"); got != "Tox" {
+		t.Errorf("expected Tox, got %s", got)
+	}
+	// No alias → passthrough
+	if got := cfg.ResolveServiceName("filler"); got != "filler" {
+		t.Errorf("expected filler, got %s", got)
+	}
+	// Nil config
+	var nilCfg *Config
+	if got := nilCfg.ResolveServiceName("Botox"); got != "Botox" {
+		t.Errorf("expected Botox, got %s", got)
+	}
+	// Empty aliases
+	cfg2 := &Config{}
+	if got := cfg2.ResolveServiceName("Botox"); got != "Botox" {
+		t.Errorf("expected Botox, got %s", got)
+	}
+}
