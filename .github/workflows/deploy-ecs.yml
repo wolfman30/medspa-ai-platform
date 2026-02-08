@@ -284,7 +284,7 @@ jobs:
             print("App secret is not a JSON object; refusing to update.", file=sys.stderr)
             sys.exit(1)
 
-          must_have = ["ADMIN_JWT_SECRET"]
+          must_have = ["ADMIN_JWT_SECRET", "TELNYX_API_KEY"]
           missing = [k for k in must_have if not current.get(k)]
           if missing:
             print(f"App secret missing required keys: {missing}; refusing to update.", file=sys.stderr)
@@ -608,7 +608,7 @@ jobs:
             print("App secret is not a JSON object; refusing to update.", file=sys.stderr)
             sys.exit(1)
 
-          must_have = ["ADMIN_JWT_SECRET"]
+          must_have = ["ADMIN_JWT_SECRET", "TELNYX_API_KEY"]
           missing = [k for k in must_have if not current.get(k)]
           if missing:
             print(f"App secret missing required keys: {missing}; refusing to update.", file=sys.stderr)
