@@ -123,28 +123,28 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div className="ui-card ui-card-solid p-4">
-              <p className="ui-kicker">Total Collected</p>
+              <p className="ui-kicker ui-gradient-text">Total Collected</p>
               <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-emerald-700">
                 {formatCents(stats.total_amount_cents)}
               </p>
               <p className="ui-help">{stats.total_deposits} deposits</p>
             </div>
             <div className="ui-card ui-card-solid p-4">
-              <p className="ui-kicker">This Week</p>
+              <p className="ui-kicker ui-gradient-text">This Week</p>
               <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-violet-700">
                 {formatCents(stats.week_amount_cents)}
               </p>
               <p className="ui-help">{stats.week_count} deposits</p>
             </div>
             <div className="ui-card ui-card-solid p-4">
-              <p className="ui-kicker">Today</p>
+              <p className="ui-kicker ui-gradient-text">Today</p>
               <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-indigo-700">
                 {formatCents(stats.today_amount_cents)}
               </p>
               <p className="ui-help">{stats.today_count} deposits</p>
             </div>
             <div className="ui-card ui-card-solid p-4">
-              <p className="ui-kicker">Average</p>
+              <p className="ui-kicker ui-gradient-text">Average</p>
               <p className="mt-2 text-lg sm:text-2xl font-semibold tracking-tight text-slate-900">
                 {formatCents(stats.average_amount_cents)}
               </p>
@@ -196,19 +196,19 @@ export function DepositList({ orgId, onSelect, scope = 'admin' }: DepositListPro
               <thead>
                 <tr>
                   <th className="ui-th">
-                    Patient
+                    <span className="ui-gradient-text-subtle">Patient</span>
                   </th>
                   <th className="ui-th">
-                    Service
+                    <span className="ui-gradient-text-subtle">Service</span>
                   </th>
                   <th className="ui-th">
-                    Amount
+                    <span className="ui-gradient-text-subtle">Amount</span>
                   </th>
                   <th className="ui-th">
-                    Status
+                    <span className="ui-gradient-text-subtle">Status</span>
                   </th>
                   <th className="ui-th">
-                    Date
+                    <span className="ui-gradient-text-subtle">Date</span>
                   </th>
                 </tr>
               </thead>

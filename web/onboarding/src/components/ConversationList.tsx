@@ -262,20 +262,20 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
               <thead>
                 <tr>
                   <th className="ui-th">
-                    Phone
+                    <span className="ui-gradient-text-subtle">Phone</span>
                   </th>
                   <th className="ui-th">
-                    Messages
+                    <span className="ui-gradient-text-subtle">Messages</span>
                   </th>
                   <th className="ui-th">
-                    Status
+                    <span className="ui-gradient-text-subtle">Status</span>
                   </th>
                   <th className="ui-th">
-                    Last Activity
+                    <span className="ui-gradient-text-subtle">Last Activity</span>
                   </th>
                   {isAdmin && (
                     <th className="ui-th">
-                      Actions
+                      <span className="ui-gradient-text-subtle">Actions</span>
                     </th>
                   )}
                 </tr>
