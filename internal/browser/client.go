@@ -327,8 +327,9 @@ func (c *Client) StartBookingSession(ctx context.Context, req BookingStartReques
 	return &result, nil
 }
 
-// GetHandoffURL retrieves the payment handoff URL for a booking session.
-// Returns the URL when the sidecar has navigated to the payment step.
+// GetHandoffURL retrieves the Moxie Step 5 payment page URL for a booking session.
+// This is the URL sent to the patient so they can enter their card details and
+// finalize the booking directly in Moxie (no Square checkout link is used).
 func (c *Client) GetHandoffURL(ctx context.Context, sessionID string) (*BookingHandoffResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.baseURL+"/api/v1/booking/"+sessionID+"/handoff-url", nil)

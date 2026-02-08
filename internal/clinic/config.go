@@ -171,8 +171,8 @@ func normalizeServiceKey(service string) string {
 	return strings.ToLower(strings.TrimSpace(service))
 }
 
-// UsesMoxieBooking returns true if the clinic is configured to use Moxie for booking
-// instead of Square payment links.
+// UsesMoxieBooking returns true if the clinic is configured to use Moxie for booking.
+// When true, Square is NOT used — the patient completes payment on Moxie's Step 5 page.
 func (c *Config) UsesMoxieBooking() bool {
 	if c == nil {
 		return false
@@ -181,7 +181,8 @@ func (c *Config) UsesMoxieBooking() bool {
 }
 
 // UsesSquarePayment returns true if the clinic uses Square for deposit collection.
-// This is the default when no booking platform is specified.
+// This is the default when no booking platform is specified. Mutually exclusive
+// with Moxie — a clinic uses one or the other, never both.
 func (c *Config) UsesSquarePayment() bool {
 	if c == nil {
 		return true // Default to Square
