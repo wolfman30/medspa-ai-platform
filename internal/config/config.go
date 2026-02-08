@@ -138,6 +138,28 @@ type Config struct {
 	S3ArchiveKMSKey string // Optional KMS key ID for SSE-KMS encryption
 }
 
+// SMSProviderIssues returns a list of configuration problems that would prevent
+// SMS from working. An empty slice means at least one provider is fully configured.
+// This is intended for startup diagnostics and integration tests — if the returned
+// list is non-empty, voice-to-SMS acknowledgements will silently fail.
+func (c *Config) SMSProviderIssues() []string {
+	var issues []string
+
+	telnyxOK := c.TelnyxAPIKey != "" && c.TelnyxMessagingProfileID != ""
+	twilioOK := c.TwilioAccountSID != "" && c.TwilioAuthToken != ""
+
+	if !telnyxOK && !twilioOK {
+		issues = append(issues, "no SMS provider configured: need TELNYX_API_KEY+TELNYX_MESSAGING_PROFILE_ID or TWILIO_ACCOUNT_SID+TWILIO_AUTH_TOKEN")
+	}
+	if telnyxOK && c.TelnyxFromNumber == "" {
+		issues = append(issues, "TELNYX_FROM_NUMBER is empty — outbound SMS will fail")
+	}
+	if twilioOK && c.TwilioFromNumber == "" && c.TwilioOrgMapJSON == "{}" {
+		issues = append(issues, "TWILIO_FROM_NUMBER is empty and TWILIO_ORG_MAP_JSON has no entries — outbound SMS will fail")
+	}
+	return issues
+}
+
 // Load reads configuration from environment variables
 func Load() *Config {
 	corsAllowedOrigins := []string{}
