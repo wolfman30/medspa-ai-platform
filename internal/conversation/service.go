@@ -90,8 +90,10 @@ type TimeSelectionResponse struct {
 	SMSMessage string          // Pre-formatted SMS message to send
 }
 
-// BookingRequest instructs the worker to start a browser-sidecar booking session.
-// Populated by the LLM service when a Moxie-clinic patient selects a time slot.
+// BookingRequest instructs the worker to start a browser-sidecar booking session
+// for a Moxie clinic. The sidecar auto-fills Steps 1-4 of the Moxie booking form,
+// then the patient receives the Step 5 URL where they enter their card details and
+// finalize the booking directly in Moxie. Square is NOT used for Moxie clinics.
 type BookingRequest struct {
 	BookingURL  string // Moxie booking page URL
 	Date        string // YYYY-MM-DD
