@@ -59,10 +59,10 @@ The AI collects these 5 pieces of information before the booking flow can begin.
 5. Time preferences (days + times — triggers booking flow)
 
 **What happens when all 5 are collected:**
-- **Moxie clinics →** Check availability via browser sidecar → Present matching time slots → Patient picks → Auto-book (Moxie handles payment)
+- **Moxie clinics →** Check availability via browser sidecar → Present matching time slots → Patient picks → Auto-book → **Patient completes payment in Moxie** (Square is not used)
 - **Square clinics →** Offer refundable deposit → Send Square checkout link → Patient pays → Operator manually confirms appointment
 
-**How the system decides which path:** If the clinic has a `bookingUrl` configured (Moxie booking widget URL), use the Moxie auto-booking path. Otherwise, use the Square deposit path.
+**How the system decides which path:** By clinic config `booking_platform` (`moxie` or `square`, default: `square`). When `booking_platform=moxie`, **Square is not used**; payment runs through Moxie's checkout flow.
 
 #### Conversation → Browser Sidecar Integration (Moxie Path)
 
@@ -117,9 +117,9 @@ After presenting available times, the system must detect which slot the patient 
 
 ### Step 3: Book or Collect Deposit
 
-Booking behavior depends on the clinic's platform (determined by whether `bookingUrl` is configured):
+Booking behavior depends on the clinic's `booking_platform` configuration (`moxie` vs `square`):
 
-#### Step 3a: Moxie Clinics — Auto-Booking (No Deposit from Us)
+#### Step 3a: Moxie Clinics — Auto-Booking + Payment in Moxie (No Square)
 
 When all 5 qualifications are met and the patient selects a time slot, the system automates the booking flow via the browser sidecar. **Moxie handles payment directly** — we do not collect a separate deposit.
 
@@ -353,7 +353,7 @@ The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
 - **Cache:** Redis
 - **AI:** Claude via AWS Bedrock
 - **SMS:** Telnyx (primary), Twilio (fallback)
-- **Payments:** Square (OAuth + checkout links)
+- **Payments:** Moxie checkout (when `booking_platform=moxie`) OR Square (OAuth + checkout links, when `booking_platform=square`)
 - **Infrastructure:** AWS ECS/Fargate
 
 ### File Organization
