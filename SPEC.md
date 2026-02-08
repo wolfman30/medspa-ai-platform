@@ -348,7 +348,7 @@ The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
 ## 5. Technical Architecture
 
 ### Tech Stack
-- **Backend:** Go 1.24
+- **Backend:** Go 1.24+ (tested with Go 1.25.3)
 - **Database:** PostgreSQL
 - **Cache:** Redis
 - **AI:** Claude via AWS Bedrock
