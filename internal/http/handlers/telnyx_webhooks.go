@@ -339,6 +339,7 @@ func (h *TelnyxWebhookHandler) HandleVoice(w http.ResponseWriter, r *http.Reques
 	}
 	if err := h.handleVoice(r.Context(), evt); err != nil {
 		if errors.Is(err, errClinicNotFound) {
+			h.logger.Warn("telnyx voice: clinic not found", "error", err, "event_type", evt.EventType)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -899,15 +900,27 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	}
 	from := messaging.NormalizeE164(payload.FromNumber())
 	to := messaging.NormalizeE164(payload.ToNumber())
+	h.logger.Info("voice webhook received",
+		"event_type", evt.EventType,
+		"from_raw", payload.FromNumber(),
+		"to_raw", payload.ToNumber(),
+		"from_e164", from,
+		"to_e164", to,
+		"status", payload.Status,
+		"hangup_cause", payload.HangupCause,
+	)
 	if from == "" || to == "" {
 		return errors.New("missing phone numbers in payload")
 	}
 	if !isTelnyxMissedCall(evt.EventType, payload.Status, payload.HangupCause) {
+		h.logger.Info("voice webhook: not a missed call, skipping", "event_type", evt.EventType, "status", payload.Status)
 		return nil
 	}
+	h.logger.Info("voice webhook: missed call detected, looking up clinic", "to", to)
 	clinicID, err := h.store.LookupClinicByNumber(ctx, to)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			h.logger.Warn("voice webhook: clinic not found for number", "to", to)
 			return fmt.Errorf("%w: %s", errClinicNotFound, to)
 		}
 		return fmt.Errorf("lookup clinic for %s: %w", to, err)
