@@ -93,12 +93,13 @@ jobs:
         cd infra/terraform
         terraform validate
 
-    - name: Verify ECS secrets match Secrets Manager template
+    - name: Verify ECS secrets match required keys manifest
       run: |
         # Extract secret keys referenced in modules.tf (pattern: secret_arn}:KEY_NAME::)
         ECS_KEYS=$(grep -oP 'secret_arn\}:\K[A-Z_]+(?=::)' infra/terraform/modules.tf | sort -u)
-        # Extract keys defined in the Secrets Manager template
-        SM_KEYS=$(grep -oP '^\s+\K[A-Z_]+(?=\s*=)' infra/terraform/modules/secrets/main.tf | sort -u)
+        # Check against the required keys manifest (secrets are managed out-of-band, not by Terraform)
+        MANIFEST="infra/terraform/modules/secrets/required_keys.txt"
+        SM_KEYS=$(grep -v '^#' "$MANIFEST" | grep -v '^\s*$' | sort -u)
         MISSING=""
         for key in $ECS_KEYS; do
           if ! echo "$SM_KEYS" | grep -qx "$key"; then
@@ -106,13 +107,13 @@ jobs:
           fi
         done
         if [ -n "$MISSING" ]; then
-          echo "ERROR: ECS task definition references secret keys missing from Secrets Manager template:"
+          echo "ERROR: ECS task definition references secret keys missing from required_keys.txt:"
           echo "$MISSING" | tr ' ' '\n' | grep .
           echo ""
-          echo "Add these keys to infra/terraform/modules/secrets/main.tf"
+          echo "Add these keys to $MANIFEST"
           exit 1
         fi
-        echo "All ECS secret keys are present in the Secrets Manager template."
+        echo "All ECS secret keys are present in the required keys manifest."
 
   build:
     name: Build
