@@ -121,6 +121,10 @@ type Config struct {
 	Notifications   NotificationPrefs `json:"notifications"`
 	// AIPersona customizes the AI assistant's voice for this clinic
 	AIPersona AIPersona `json:"ai_persona,omitempty"`
+	// ServiceAliases maps common patient-facing names to the actual service name
+	// on the booking platform. For example, {"botox": "Tox", "wrinkle relaxers": "Tox"}.
+	// Keys are normalized (lowercased). Values are the search term used by the scraper.
+	ServiceAliases map[string]string `json:"service_aliases,omitempty"`
 }
 
 // DefaultBookingURL is the default test booking page for development/demo purposes.
@@ -169,6 +173,20 @@ func DefaultConfig(orgID string) *Config {
 
 func normalizeServiceKey(service string) string {
 	return strings.ToLower(strings.TrimSpace(service))
+}
+
+// ResolveServiceName translates a patient-facing service name (e.g. "Botox") into the
+// booking-platform search term using the clinic's ServiceAliases map. If no alias is
+// configured the original name is returned unchanged.
+func (c *Config) ResolveServiceName(service string) string {
+	if c == nil || len(c.ServiceAliases) == 0 {
+		return service
+	}
+	key := normalizeServiceKey(service)
+	if alias, ok := c.ServiceAliases[key]; ok && alias != "" {
+		return alias
+	}
+	return service
 }
 
 // UsesMoxieBooking returns true if the clinic is configured to use Moxie for booking.

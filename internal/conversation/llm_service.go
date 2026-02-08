@@ -1300,10 +1300,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			prefs, _ := extractPreferences(history)
 			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
+			// Resolve patient-facing service name to booking-platform search term
+			// (e.g. "Botox" → "Tox" on Moxie where the service is "Tox (Botox, Jeuveau, ...)")
+			scraperServiceName := prefs.ServiceInterest
+			if clinicCfg != nil {
+				scraperServiceName = clinicCfg.ResolveServiceName(scraperServiceName)
+			}
+
 			// Fetch available times with a hard deadline to prevent blocking the worker.
 			// 60s allows progressive search across ~90 days in 14-day batches.
 			fetchCtx, fetchCancel := context.WithTimeout(ctx, 60*time.Second)
-			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, prefs.ServiceInterest, timePrefs, req.OnProgress)
+			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress)
 			fetchCancel()
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)
