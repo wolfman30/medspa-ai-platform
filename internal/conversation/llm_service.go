@@ -1146,24 +1146,9 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		s.logger.Info("FAQ: no match from classifier or regex, falling through to full LLM")
 	}
 
-	reply, err := s.generateResponse(ctx, history)
-	if err != nil {
-		return nil, err
-	}
-	// Sanitize reply to strip any markdown that slipped through (LLM sometimes ignores instructions)
-	reply = sanitizeSMSResponse(reply)
-	history = append(history, ChatMessage{
-		Role:    ChatRoleAssistant,
-		Content: reply,
-	})
-
-	history = trimHistory(history, maxHistoryMessages)
-	if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
-		span.RecordError(err)
-		return nil, err
-	}
-
-	// Check for time selection state (user may be selecting a time slot)
+	// Load time selection state BEFORE the LLM call so we can:
+	// 1. Inject presented slots into context (prevents LLM from hallucinating times)
+	// 2. Detect if the user is selecting a slot (so LLM can confirm)
 	timeSelectionState, tsErr := s.history.LoadTimeSelectionState(ctx, req.ConversationID)
 	if tsErr != nil {
 		s.logger.Warn("failed to load time selection state", "error", tsErr)
@@ -1202,9 +1187,43 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				s.logger.Warn("failed to clear time selection state", "error", err)
 			}
 
-			// The confirmation message will be returned in the reply
-			// The deposit will be triggered via the deposit intent below
+			// Inject slot selection into history so LLM generates an appropriate confirmation
+			history = append(history, ChatMessage{
+				Role:    ChatRoleSystem,
+				Content: fmt.Sprintf("[SYSTEM] The patient selected time slot #%d: %s for %s. Confirm their selection and proceed with booking.", selectedSlot.Index, selectedSlot.TimeStr, timeSelectionState.Service),
+			})
+		} else {
+			// User sent a message but didn't select a slot — inject the presented slots
+			// so the LLM knows what real times are available and doesn't hallucinate
+			var slotList strings.Builder
+			for _, slot := range timeSelectionState.PresentedSlots {
+				slotList.WriteString(fmt.Sprintf("  %d. %s\n", slot.Index, slot.TimeStr))
+			}
+			history = append(history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: fmt.Sprintf("[SYSTEM] The following REAL appointment times for %s were already presented to the patient:\n%s"+
+					"ONLY reference these times. Do NOT invent, guess, or fabricate any other times. "+
+					"If the patient wants different times, offer to check again with different preferences.",
+					timeSelectionState.Service, slotList.String()),
+			})
 		}
+	}
+
+	reply, err := s.generateResponse(ctx, history)
+	if err != nil {
+		return nil, err
+	}
+	// Sanitize reply to strip any markdown that slipped through (LLM sometimes ignores instructions)
+	reply = sanitizeSMSResponse(reply)
+	history = append(history, ChatMessage{
+		Role:    ChatRoleAssistant,
+		Content: reply,
+	})
+
+	history = trimHistory(history, maxHistoryMessages)
+	if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+		span.RecordError(err)
+		return nil, err
 	}
 
 	var depositIntent *DepositIntent
