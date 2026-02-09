@@ -1307,6 +1307,15 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				scraperServiceName = clinicCfg.ResolveServiceName(scraperServiceName)
 			}
 
+			s.logger.Info("fetching available times",
+				"conversation_id", req.ConversationID,
+				"original_service", prefs.ServiceInterest,
+				"resolved_service", scraperServiceName,
+				"booking_url", bookingURL,
+				"preferred_days", prefs.PreferredDays,
+				"preferred_times", prefs.PreferredTimes,
+			)
+
 			// Fetch available times with a hard deadline to prevent blocking the worker.
 			// 60s allows progressive search across ~90 days in 14-day batches.
 			fetchCtx, fetchCancel := context.WithTimeout(ctx, 60*time.Second)
