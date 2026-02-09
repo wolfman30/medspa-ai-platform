@@ -116,6 +116,10 @@ func parseTimeSlot(dateStr, timeStr string) (time.Time, error) {
 
 	timeStr = strings.TrimSpace(timeStr)
 
+	// Normalize am/pm to uppercase — Go's time.Parse requires "AM"/"PM"
+	timeStr = strings.Replace(timeStr, "am", "AM", 1)
+	timeStr = strings.Replace(timeStr, "pm", "PM", 1)
+
 	for _, format := range formats {
 		t, err := time.Parse(format, timeStr)
 		if err == nil {
