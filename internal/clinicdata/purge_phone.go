@@ -249,6 +249,7 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string, opts ...PurgeOrgOpt
 		patterns := []string{
 			fmt.Sprintf("conversation:sms:%s:*", orgID),
 			fmt.Sprintf("sms_transcript:sms:%s:*", orgID),
+			fmt.Sprintf("time_selection:sms:%s:*", orgID),
 		}
 		for _, pattern := range patterns {
 			keys, err := p.redis.Keys(ctx, pattern).Result()
@@ -325,6 +326,8 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string, opt
 	redisKeyE164 := fmt.Sprintf("conversation:%s", conversationIDE164)
 	smsKeyDigits := fmt.Sprintf("sms_transcript:%s", conversationIDDigits)
 	smsKeyE164 := fmt.Sprintf("sms_transcript:%s", conversationIDE164)
+	tsKeyDigits := fmt.Sprintf("time_selection:%s", conversationIDDigits)
+	tsKeyE164 := fmt.Sprintf("time_selection:%s", conversationIDE164)
 
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
@@ -498,6 +501,10 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string, opt
 		keys = append(keys, smsKeyDigits)
 		if smsKeyE164 != smsKeyDigits {
 			keys = append(keys, smsKeyE164)
+		}
+		keys = append(keys, tsKeyDigits)
+		if tsKeyE164 != tsKeyDigits {
+			keys = append(keys, tsKeyE164)
 		}
 		res := p.redis.Del(ctx, keys...)
 		if err := res.Err(); err != nil {
