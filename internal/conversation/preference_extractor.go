@@ -124,6 +124,13 @@ func extractAfterTime(text string) string {
 		}
 	}
 
+	// Fallback: bare time like "3pm" without "after"/"before" — treat as "after" since
+	// patients saying "3pm" typically mean "3pm or later", not "exactly at 3pm only"
+	bareTimeRE := regexp.MustCompile(`(?:^|\s)(\d{1,2})(?::(\d{2}))?\s*(am|pm)`)
+	if matches := bareTimeRE.FindStringSubmatch(text); len(matches) > 0 {
+		return parse24HourTime(matches)
+	}
+
 	// Common time-of-day phrases
 	if strings.Contains(text, "afternoon") || strings.Contains(text, "afternoons") {
 		return "12:00" // After noon

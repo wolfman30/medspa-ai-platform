@@ -212,7 +212,7 @@ func TestExtractAndSavePreferences(t *testing.T) {
 				{Role: ChatRoleUser, Content: "I prefer Mondays and Wednesdays after 3p"},
 			},
 			expectDays:  "monday, wednesday",
-			expectTimes: "3pm",
+			expectTimes: "after 3pm",
 			expectSaved: true,
 		},
 		{
@@ -230,7 +230,7 @@ func TestExtractAndSavePreferences(t *testing.T) {
 				{Role: ChatRoleUser, Content: "Any time after 2pm on Thursday works"},
 			},
 			expectDays:  "thursday",
-			expectTimes: "2pm",
+			expectTimes: "after 2pm",
 			expectSaved: true,
 		},
 		{

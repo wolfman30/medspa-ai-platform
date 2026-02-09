@@ -2357,14 +2357,16 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 
 	// Extract preferred times - check for specific times like "2pm", "2:30 pm", "around 3pm", "after 3p"
 	// Supports shorthand "3p"/"3a" in addition to full "3pm"/"3am"
-	specificTimeRE := regexp.MustCompile(`(?i)(?:around |about |at |after |before )?(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)\b`)
+	// Preserves "after"/"before" qualifier so time preference filtering works correctly
+	specificTimeRE := regexp.MustCompile(`(?i)(around |about |at |after |before )?(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)\b`)
 	if matches := specificTimeRE.FindAllStringSubmatch(userMessages, -1); len(matches) > 0 {
 		// Extract all specific times mentioned
 		times := []string{}
 		for _, match := range matches {
-			hour := match[1]
-			minutes := match[2]
-			ampm := strings.ToLower(strings.ReplaceAll(match[3], ".", ""))
+			qualifier := strings.TrimSpace(strings.ToLower(match[1]))
+			hour := match[2]
+			minutes := match[3]
+			ampm := strings.ToLower(strings.ReplaceAll(match[4], ".", ""))
 			// Normalize shorthand: "a" → "am", "p" → "pm"
 			if ampm == "a" {
 				ampm = "am"
@@ -2372,8 +2374,12 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 				ampm = "pm"
 			}
 
-			// Format the time nicely
-			timeStr := hour
+			// Format the time nicely, preserving qualifier
+			timeStr := ""
+			if qualifier == "after" || qualifier == "before" {
+				timeStr = qualifier + " "
+			}
+			timeStr += hour
 			if minutes != "" {
 				timeStr += ":" + minutes
 			}
