@@ -21,6 +21,22 @@ func (m *mockBrowserClient) GetAvailability(ctx context.Context, req browser.Ava
 	return m.response, nil
 }
 
+func (m *mockBrowserClient) GetBatchAvailability(ctx context.Context, req browser.BatchAvailabilityRequest) (*browser.BatchAvailabilityResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	// Build batch response from single-date response for each date
+	var results []browser.AvailabilityResponse
+	for _, date := range req.Dates {
+		if m.response != nil {
+			r := *m.response
+			r.Date = date
+			results = append(results, r)
+		}
+	}
+	return &browser.BatchAvailabilityResponse{Success: true, Results: results}, nil
+}
+
 func (m *mockBrowserClient) IsReady(ctx context.Context) bool {
 	return m.ready
 }

@@ -280,6 +280,22 @@ func (m *dateAwareMock) GetAvailability(_ context.Context, req browser.Availabil
 	return resp, nil
 }
 
+func (m *dateAwareMock) GetBatchAvailability(_ context.Context, req browser.BatchAvailabilityRequest) (*browser.BatchAvailabilityResponse, error) {
+	var results []browser.AvailabilityResponse
+	for _, date := range req.Dates {
+		m.callCount.Add(1)
+		resp, ok := m.responses[date]
+		if !ok {
+			results = append(results, browser.AvailabilityResponse{Success: true, Date: date, Slots: nil})
+		} else {
+			r := *resp
+			r.Date = date
+			results = append(results, r)
+		}
+	}
+	return &browser.BatchAvailabilityResponse{Success: true, Results: results}, nil
+}
+
 func (m *dateAwareMock) IsReady(_ context.Context) bool { return true }
 
 // makeSlotResponse builds an AvailabilityResponse with the given times.

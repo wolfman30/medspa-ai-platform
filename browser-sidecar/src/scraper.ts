@@ -1128,6 +1128,123 @@ export class AvailabilityScraper {
     return hours * 60 + minutes;
   }
 
+  /**
+   * Scrape availability for multiple dates in a single browser session.
+   * Does service selection ONCE, then navigates the calendar for each date.
+   * ~2-3s per date instead of ~15-25s.
+   */
+  async scrapeMultipleDates(
+    bookingUrl: string,
+    dates: string[],
+    serviceName?: string,
+    providerName?: string,
+    timeout: number = 30000,
+  ): Promise<Map<string, AvailabilityResponse>> {
+    if (!this.browser) {
+      throw new ScraperError('Browser not initialized', 'NOT_INITIALIZED');
+    }
+
+    const results = new Map<string, AvailabilityResponse>();
+    const startTime = Date.now();
+    let context: BrowserContext | null = null;
+    let page: Page | null = null;
+
+    try {
+      context = await this.browser.newContext({
+        userAgent: this.config.userAgent,
+        viewport: { width: 1920, height: 1080 },
+        locale: 'en-US',
+        timezoneId: 'America/New_York',
+      });
+
+      page = await context.newPage();
+      await this.applyStealthMeasures(page);
+
+      logger.info(`[batch] Navigating to ${bookingUrl} for ${dates.length} dates`);
+
+      const response = await page.goto(bookingUrl, {
+        timeout,
+        waitUntil: 'networkidle',
+      });
+
+      if (!response || !response.ok()) {
+        throw new NavigationError(`Failed to load page: ${response?.status() || 'unknown'}`);
+      }
+
+      await page.waitForLoadState('domcontentloaded');
+      await this.delay(2000);
+
+      const selectors = await this.detectPlatform(page);
+
+      // Do service selection ONCE
+      let detectedProviders: string[] = [];
+      if (selectors.platform === 'moxie') {
+        detectedProviders = await this.handleMoxieServiceSelection(page, serviceName);
+      }
+
+      const setupDuration = Date.now() - startTime;
+      logger.info(`[batch] Setup complete in ${setupDuration}ms, scraping ${dates.length} dates...`);
+
+      // Now iterate through dates — only calendar navigation + slot extraction
+      for (const date of dates) {
+        const dateStart = Date.now();
+        try {
+          await this.navigateToDate(page, date, selectors);
+          const slots = await this.extractTimeSlots(page, selectors);
+
+          const dateDuration = Date.now() - dateStart;
+          logger.info(`[batch] Date ${date}: ${slots.length} slots in ${dateDuration}ms`);
+
+          results.set(date, {
+            success: true,
+            bookingUrl,
+            date,
+            slots,
+            provider: providerName,
+            service: serviceName,
+            providers: detectedProviders.length > 0 ? detectedProviders : undefined,
+            scrapedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          const dateDuration = Date.now() - dateStart;
+          logger.warn(`[batch] Date ${date} failed in ${dateDuration}ms: ${(err as Error).message}`);
+          results.set(date, {
+            success: false,
+            bookingUrl,
+            date,
+            slots: [],
+            scrapedAt: new Date().toISOString(),
+            error: (err as Error).message,
+          });
+        }
+      }
+
+      const totalDuration = Date.now() - startTime;
+      logger.info(`[batch] All ${dates.length} dates scraped in ${totalDuration}ms`);
+
+    } catch (error) {
+      logger.error(`[batch] Session failed: ${(error as Error).message}`);
+      // Fill remaining dates with errors
+      for (const date of dates) {
+        if (!results.has(date)) {
+          results.set(date, {
+            success: false,
+            bookingUrl,
+            date,
+            slots: [],
+            scrapedAt: new Date().toISOString(),
+            error: (error as Error).message,
+          });
+        }
+      }
+    } finally {
+      if (page) await page.close().catch(() => {});
+      if (context) await context.close().catch(() => {});
+    }
+
+    return results;
+  }
+
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }

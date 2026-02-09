@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
@@ -262,52 +261,46 @@ func fetchSlotsForDateRange(
 		return nil, nil
 	}
 
-	// Fetch all qualifying dates in parallel
-	var mu sync.Mutex
-	var results []dateResult
-	var wg sync.WaitGroup
-
-	for _, dateStr := range qualifyingDates {
-		wg.Add(1)
-		go func(d string) {
-			defer wg.Done()
-			resp, err := adapter.client.GetAvailability(ctx, browser.AvailabilityRequest{
-				BookingURL:  bookingURL,
-				Date:        d,
-				ServiceName: serviceName,
-				Timeout:     perDateTimeout,
-			})
-			if err != nil || !resp.Success {
-				return
-			}
-
-			var slots []PresentedSlot
-			for _, slot := range resp.Slots {
-				if !slot.Available {
-					continue
-				}
-				slotTime, err := parseTimeSlot(d, slot.Time)
-				if err != nil {
-					continue
-				}
-				if !matchesTimePreferences(slotTime, prefs) {
-					continue
-				}
-				slots = append(slots, PresentedSlot{
-					DateTime:  slotTime,
-					TimeStr:   formatSlotForDisplay(slotTime),
-					Service:   serviceName,
-					Available: true,
-				})
-			}
-			if len(slots) > 0 {
-				mu.Lock()
-				results = append(results, dateResult{dateStr: d, slots: slots})
-				mu.Unlock()
-			}
-		}(dateStr)
+	// Use batch endpoint: single browser session, service selection once,
+	// then calendar navigation per date (~2-3s/date instead of ~15-25s/date).
+	batchResp, err := adapter.client.GetBatchAvailability(ctx, browser.BatchAvailabilityRequest{
+		BookingURL:  bookingURL,
+		Dates:       qualifyingDates,
+		ServiceName: serviceName,
+		Timeout:     perDateTimeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("batch availability fetch failed: %w", err)
 	}
-	wg.Wait()
+
+	var results []dateResult
+	for _, resp := range batchResp.Results {
+		if !resp.Success {
+			continue
+		}
+		var slots []PresentedSlot
+		for _, slot := range resp.Slots {
+			if !slot.Available {
+				continue
+			}
+			slotTime, err := parseTimeSlot(resp.Date, slot.Time)
+			if err != nil {
+				continue
+			}
+			if !matchesTimePreferences(slotTime, prefs) {
+				continue
+			}
+			slots = append(slots, PresentedSlot{
+				DateTime:  slotTime,
+				TimeStr:   formatSlotForDisplay(slotTime),
+				Service:   serviceName,
+				Available: true,
+			})
+		}
+		if len(slots) > 0 {
+			results = append(results, dateResult{dateStr: resp.Date, slots: slots})
+		}
+	}
 
 	// Sort results by date to maintain chronological order
 	sort.Slice(results, func(i, j int) bool {
