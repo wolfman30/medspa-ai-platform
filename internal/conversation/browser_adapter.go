@@ -14,6 +14,8 @@ import (
 type BrowserAvailabilityProvider interface {
 	// GetAvailability fetches availability for a single date
 	GetAvailability(ctx context.Context, req browser.AvailabilityRequest) (*browser.AvailabilityResponse, error)
+	// GetBatchAvailability fetches availability for multiple dates in a single browser session
+	GetBatchAvailability(ctx context.Context, req browser.BatchAvailabilityRequest) (*browser.BatchAvailabilityResponse, error)
 	// IsReady checks if the sidecar is ready
 	IsReady(ctx context.Context) bool
 }

@@ -194,8 +194,8 @@ func (c *Client) GetBatchAvailability(ctx context.Context, req BatchAvailability
 	if len(req.Dates) == 0 {
 		return nil, fmt.Errorf("browser: dates array is required")
 	}
-	if len(req.Dates) > 7 {
-		return nil, fmt.Errorf("browser: maximum 7 dates per batch request")
+	if len(req.Dates) > 31 {
+		return nil, fmt.Errorf("browser: maximum 31 dates per batch request")
 	}
 	if req.Timeout == 0 {
 		req.Timeout = 30000
