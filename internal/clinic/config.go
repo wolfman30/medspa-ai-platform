@@ -186,6 +186,12 @@ func (c *Config) ResolveServiceName(service string) string {
 	if alias, ok := c.ServiceAliases[key]; ok && alias != "" {
 		return alias
 	}
+	// Try without trailing 's' (handle plurals like "lip fillers" → "lip filler")
+	if strings.HasSuffix(key, "s") {
+		if alias, ok := c.ServiceAliases[strings.TrimSuffix(key, "s")]; ok && alias != "" {
+			return alias
+		}
+	}
 	return service
 }
 

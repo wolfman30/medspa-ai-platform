@@ -2317,6 +2317,8 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		{"dysport", "Dysport"},
 		{"xeomin", "Xeomin"},
 		{"botox", "Botox"},
+		{"lip filler", "lip filler"},
+		{"lip augmentation", "lip filler"},
 		{"filler", "filler"},
 		{"consultation", "consultation"},
 		{"facial", "facial"},
