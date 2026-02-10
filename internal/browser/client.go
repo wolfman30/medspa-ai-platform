@@ -96,7 +96,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 	c := &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 		logger: logging.Default(),
 	}
