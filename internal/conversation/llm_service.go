@@ -1150,7 +1150,24 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// 2. Detect if the user is selecting a slot (so LLM can confirm)
 	timeSelectionState, tsErr := s.history.LoadTimeSelectionState(ctx, req.ConversationID)
 	if tsErr != nil {
-		s.logger.Warn("failed to load time selection state", "error", tsErr)
+		s.logger.Warn("failed to load time selection state", "error", tsErr, "conversation_id", req.ConversationID)
+	} else {
+		s.logger.Info("time selection state loaded",
+			"conversation_id", req.ConversationID,
+			"state_exists", timeSelectionState != nil,
+			"slots_count", func() int {
+				if timeSelectionState != nil {
+					return len(timeSelectionState.PresentedSlots)
+				}
+				return 0
+			}(),
+			"slot_selected", func() bool {
+				if timeSelectionState != nil {
+					return timeSelectionState.SlotSelected
+				}
+				return false
+			}(),
+		)
 	}
 
 	// Handle time selection if user is in that flow
@@ -1366,7 +1383,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					PresentedAt:    time.Now(),
 				}
 				if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, state); err != nil {
-					s.logger.Warn("failed to save time selection state", "error", err)
+					s.logger.Error("CRITICAL: failed to save time selection state — patient will not be able to select a slot",
+						"error", err,
+						"conversation_id", req.ConversationID,
+						"slots", len(result.Slots),
+					)
+				} else {
+					s.logger.Info("time selection state saved successfully",
+						"conversation_id", req.ConversationID,
+						"slots", len(state.PresentedSlots),
+						"service", state.Service,
+					)
 				}
 
 				// Return time selection response
