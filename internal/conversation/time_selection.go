@@ -85,37 +85,43 @@ func FetchAvailableTimesWithFallback(
 	prefs TimePreferences,
 	onProgress func(ctx context.Context, msg string),
 ) (*AvailabilityResult, error) {
-	// Phase 1: Progressive exact-preference search in batchSize-day windows
-	searchedUpTo := 0
-	for startDay := 0; startDay < maxCalendarDays; startDay += batchSize {
+	// Phase 1: Collect all qualifying dates up front, then search in batches of 31
+	// (the max the sidecar accepts). Each batch reuses a single browser session,
+	// so we want as many dates per batch as possible to avoid expensive re-setup.
+	allQualifyingDates := collectQualifyingDates(prefs, 0, maxCalendarDays)
+	searchedUpTo := maxCalendarDays
+
+	// Search in batches of up to 31 dates (sidecar limit)
+	const maxDatesPerBatch = 31
+	for batchStart := 0; batchStart < len(allQualifyingDates); batchStart += maxDatesPerBatch {
 		if ctx.Err() != nil {
 			break
 		}
 
-		// Send progress update BEFORE starting non-first batches
-		if onProgress != nil && startDay > 0 {
+		batchEnd := batchStart + maxDatesPerBatch
+		if batchEnd > len(allQualifyingDates) {
+			batchEnd = len(allQualifyingDates)
+		}
+		batchDates := allQualifyingDates[batchStart:batchEnd]
+
+		// Send progress update before non-first batches
+		if onProgress != nil && batchStart > 0 {
 			onProgress(ctx, fmt.Sprintf(
-				"I've checked the next %s — no availability matching your preferences yet. Searching further out...",
-				humanizeDays(startDay),
+				"I've checked %d dates so far — no availability matching your preferences yet. Searching further out...",
+				batchStart,
 			))
 		}
 
-		endDay := startDay + batchSize
-		if endDay > maxCalendarDays {
-			endDay = maxCalendarDays
-		}
-
-		slots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, prefs, startDay, endDay)
+		slots, err := fetchSlotsForDates(ctx, adapter, bookingURL, serviceName, prefs, batchDates)
 		if err != nil {
 			return nil, err
 		}
-		searchedUpTo = endDay
 
 		if len(slots) > 0 {
 			return &AvailabilityResult{
 				Slots:        slots,
 				ExactMatch:   true,
-				SearchedDays: endDay,
+				SearchedDays: maxCalendarDays,
 			}, nil
 		}
 	}
@@ -125,13 +131,14 @@ func FetchAvailableTimesWithFallback(
 	hasTimePrefs := prefs.AfterTime != "" || prefs.BeforeTime != ""
 
 	if ctx.Err() == nil && hasDayPrefs && hasTimePrefs {
-		// Try two targeted relaxations
+		// Try two targeted relaxations using optimized single-batch approach
 		// 2a: Same time, different days (drop DaysOfWeek, keep time filter)
 		sameTimePrefs := TimePreferences{
 			AfterTime:  prefs.AfterTime,
 			BeforeTime: prefs.BeforeTime,
 		}
-		sameTimeSlots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, sameTimePrefs, 0, relaxedFallbackDays)
+		sameTimeDates := collectQualifyingDates(sameTimePrefs, 0, relaxedFallbackDays)
+		sameTimeSlots, err := fetchSlotsForDates(ctx, adapter, bookingURL, serviceName, sameTimePrefs, sameTimeDates)
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +149,8 @@ func FetchAvailableTimesWithFallback(
 			sameDayPrefs := TimePreferences{
 				DaysOfWeek: prefs.DaysOfWeek,
 			}
-			sameDaySlots, err = fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, sameDayPrefs, 0, relaxedFallbackDays)
+			sameDayDates := collectQualifyingDates(sameDayPrefs, 0, relaxedFallbackDays)
+			sameDaySlots, err = fetchSlotsForDates(ctx, adapter, bookingURL, serviceName, sameDayPrefs, sameDayDates)
 			if err != nil {
 				return nil, err
 			}
@@ -187,7 +195,8 @@ func FetchAvailableTimesWithFallback(
 			AfterTime:  prefs.AfterTime,
 			BeforeTime: prefs.BeforeTime,
 		}
-		slots, err := fetchSlotsForDateRange(ctx, adapter, bookingURL, serviceName, relaxedPrefs, 0, relaxedFallbackDays)
+		relaxedDates := collectQualifyingDates(relaxedPrefs, 0, relaxedFallbackDays)
+		slots, err := fetchSlotsForDates(ctx, adapter, bookingURL, serviceName, relaxedPrefs, relaxedDates)
 		if err != nil {
 			return nil, err
 		}
@@ -214,6 +223,115 @@ func FetchAvailableTimesWithFallback(
 			serviceName, humanizeDays(searchedUpTo),
 		),
 	}, nil
+}
+
+// collectQualifyingDates returns date strings (YYYY-MM-DD) that match the
+// day-of-week preferences within the given day range from today.
+func collectQualifyingDates(prefs TimePreferences, startDay, endDay int) []string {
+	now := time.Now()
+	var dates []string
+	for i := startDay; i < endDay; i++ {
+		date := now.AddDate(0, 0, i)
+		if len(prefs.DaysOfWeek) > 0 {
+			weekday := int(date.Weekday())
+			match := false
+			for _, d := range prefs.DaysOfWeek {
+				if d == weekday {
+					match = true
+					break
+				}
+			}
+			if !match {
+				continue
+			}
+		}
+		dates = append(dates, date.Format("2006-01-02"))
+	}
+	return dates
+}
+
+// fetchSlotsForDates fetches availability for a pre-built list of date strings,
+// sends them in a single batch request, and filters by time preferences.
+func fetchSlotsForDates(
+	ctx context.Context,
+	adapter *BrowserAdapter,
+	bookingURL string,
+	serviceName string,
+	prefs TimePreferences,
+	dates []string,
+) ([]PresentedSlot, error) {
+	if adapter == nil || !adapter.IsConfigured() {
+		return nil, fmt.Errorf("browser adapter not configured")
+	}
+	if bookingURL == "" || len(dates) == 0 {
+		return nil, nil
+	}
+
+	batchResp, err := adapter.client.GetBatchAvailability(ctx, browser.BatchAvailabilityRequest{
+		BookingURL:  bookingURL,
+		Dates:       dates,
+		ServiceName: serviceName,
+		Timeout:     perDateTimeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("batch availability fetch failed: %w", err)
+	}
+
+	var results []dateResult
+	for _, resp := range batchResp.Results {
+		if !resp.Success {
+			continue
+		}
+		var slots []PresentedSlot
+		for _, slot := range resp.Slots {
+			if !slot.Available {
+				continue
+			}
+			slotTime, err := parseTimeSlot(resp.Date, slot.Time)
+			if err != nil {
+				continue
+			}
+			if !matchesTimePreferences(slotTime, prefs) {
+				continue
+			}
+			slots = append(slots, PresentedSlot{
+				DateTime:  slotTime,
+				TimeStr:   formatSlotForDisplay(slotTime),
+				Service:   serviceName,
+				Available: true,
+			})
+		}
+		if len(slots) > 0 {
+			results = append(results, dateResult{dateStr: resp.Date, slots: slots})
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].dateStr < results[j].dateStr
+	})
+
+	var allSlots []PresentedSlot
+	for _, dr := range results {
+		for _, s := range dr.slots {
+			allSlots = append(allSlots, s)
+			if len(allSlots) >= maxSlotsToPresent*2 {
+				break
+			}
+		}
+		if len(allSlots) >= maxSlotsToPresent*2 {
+			break
+		}
+	}
+
+	if len(allSlots) > maxSlotsToPresent {
+		allSlots = allSlots[:maxSlotsToPresent]
+	}
+
+	for i := range allSlots {
+		allSlots[i].Index = i + 1
+	}
+
+	return allSlots, nil
 }
 
 // fetchSlotsForDateRange fetches availability for a range of days in parallel,
