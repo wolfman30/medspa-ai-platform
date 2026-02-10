@@ -506,6 +506,16 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			if err := w.messenger.SendReply(sendCtx, reply); err != nil {
 				w.logger.Warn("failed to send progress SMS", "error", err)
 			}
+			// Save progress messages to transcript so they appear in admin UI
+			if w.transcript != nil {
+				_ = w.transcript.Append(progressCtx, payload.Message.ConversationID, SMSTranscriptMessage{
+					Role:      "assistant",
+					Body:      msg,
+					From:      payload.Message.To,
+					To:        payload.Message.From,
+					Timestamp: time.Now(),
+				})
+			}
 		}
 		w.logger.Info("worker calling ProcessMessage", "job_id", payload.ID, "conversation_id", payload.Message.ConversationID)
 		resp, err = w.processor.ProcessMessage(ctx, payload.Message)
