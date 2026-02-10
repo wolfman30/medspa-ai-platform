@@ -71,13 +71,11 @@ IMPORTANT - USING CLINIC CONTEXT:
 If you see "Relevant clinic context:" in the conversation, USE THAT INFORMATION for clinic-specific pricing, products, and services. The clinic context takes precedence over general descriptions above.
 
 SERVICES WITH MULTIPLE OPTIONS:
-When a service has multiple types or treatment areas, ASK which one they want before proceeding:
-- "Filler" or "dermal filler" → Ask which area: "We offer fillers for lips, cheeks, nasolabial folds, and under-eye. Which area interests you?"
-- If clinic context mentions specific brands (e.g., Juvederm, Restylane), you can mention them
-- "Peel" or "chemical peel" → Ask about intensity if clinic offers multiple types
-Example:
-Customer: "I want to book filler"
-You: "Great choice! We offer dermal fillers for several areas—lips, cheeks, smile lines, and under-eye hollows. Which area are you most interested in?"
+When a service has multiple types or treatment areas, you MAY ask which one — BUT ONLY if you are STILL collecting qualifications and the sub-type is genuinely needed for booking. NEVER ask about treatment areas if you already have the service and are missing other qualifications (email, patient type, schedule). The QUALIFICATION CHECKLIST below takes absolute priority.
+- "Filler" → Ask which area ONLY if you don't have all other qualifications yet: "We offer fillers for lips, cheeks, smile lines, and under-eye. Which area interests you?"
+- "Botox" → Do NOT ask which area (forehead, crow's feet, etc.) — just proceed with "Botox" as the service. The provider will discuss treatment areas at the appointment.
+- "Peel" or "chemical peel" → Ask about type ONLY if the clinic offers multiple types in their knowledge base
+IMPORTANT: If the patient gives multiple qualifications at once (name + service + patient type + schedule), do NOT stop to ask about sub-types. Move to the NEXT MISSING qualification (usually email).
 
 When asked about services, provide helpful general information. Use clinic context for pricing when available.
 Only offer to help schedule a consultation if the customer is NOT already in the booking flow.
@@ -215,6 +213,7 @@ COMMUNICATION STYLE:
 - NEVER use markdown formatting (no **bold**, *italics*, bullets). Plain text only.
 - Be HIPAA-compliant: never diagnose or give personalized medical advice
 - For medical questions (symptoms, dosing): "That's a great question for your provider during your consultation!"
+- NEVER volunteer the medical advice disclaimer unprompted. Only mention it when the patient ACTUALLY asks a medical question (symptoms, dosage, safety, interactions). Saying "I want Botox" is NOT a medical question — it's a booking request.
 - You CAN explain what treatments are and how they work in general terms
 - Don't list multiple brand options unless asked - keep it simple
 - Do not promise to send payment links; the platform sends those automatically
@@ -1342,6 +1341,15 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			fetchCancel()
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)
+				// Even on error, set a time selection response so the pre-scraper LLM reply
+				// (which doesn't know about the scraper attempt) doesn't leak through.
+				// The OnProgress callback may have already sent intermediate messages.
+				timeSelectionResponse = &TimeSelectionResponse{
+					Slots:      nil,
+					Service:    prefs.ServiceInterest,
+					ExactMatch: false,
+					SMSMessage: fmt.Sprintf("I had trouble checking availability for %s right now. Could you try again in a moment?", prefs.ServiceInterest),
+				}
 			} else if len(result.Slots) > 0 {
 				// Save time selection state
 				state := &TimeSelectionState{
