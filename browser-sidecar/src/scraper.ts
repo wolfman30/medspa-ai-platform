@@ -4,6 +4,9 @@ import * as path from 'path';
 import {
   AvailabilityRequest,
   AvailabilityResponse,
+  CalendarSlotsRequest,
+  CalendarSlotsResponse,
+  CalendarSlotResult,
   TimeSlot,
   ScraperConfig,
   BookingPlatformSelectors,
@@ -336,6 +339,268 @@ export class AvailabilityScraper {
       return {
         success: false,
         dates: [],
+        error: (error as Error).message,
+      };
+    } finally {
+      if (page) await page.close().catch(() => {});
+      if (context) await context.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Smart calendar search: opens ONE session, navigates service selection ONCE,
+   * then scans months clicking through available dates and extracting time slots.
+   */
+  async scrapeCalendarSlots(request: CalendarSlotsRequest): Promise<CalendarSlotsResponse> {
+    if (!this.browser) {
+      throw new ScraperError('Browser not initialized', 'NOT_INITIALIZED');
+    }
+
+    const startTime = Date.now();
+    let context: BrowserContext | null = null;
+    let page: Page | null = null;
+    const results: CalendarSlotResult[] = [];
+    let totalDatesScanned = 0;
+    let totalDatesWithSlots = 0;
+    let detectedProviders: string[] = [];
+
+    try {
+      context = await this.browser.newContext({
+        userAgent: this.config.userAgent,
+        viewport: { width: 1920, height: 1080 },
+        locale: 'en-US',
+        timezoneId: 'America/New_York',
+      });
+
+      page = await context.newPage();
+      await this.applyStealthMeasures(page);
+
+      logger.info(`Smart search: navigating to ${request.bookingUrl}`);
+
+      const response = await page.goto(request.bookingUrl, {
+        timeout: request.timeout,
+        waitUntil: 'networkidle',
+      });
+
+      if (!response || !response.ok()) {
+        throw new NavigationError(`Failed to load page: ${response?.status() || 'unknown'}`);
+      }
+
+      await page.waitForLoadState('domcontentloaded');
+      await this.delay(2000);
+
+      const selectors = await this.detectPlatform(page);
+
+      // Handle service selection ONCE
+      if (selectors.platform === 'moxie') {
+        detectedProviders = await this.handleMoxieServiceSelection(page, request.serviceName);
+      }
+
+      // Now on the calendar — scan month by month
+      const maxMonths = request.maxMonths || 3;
+      const maxSlots = request.maxSlots || 6;
+      let collectedSlots = 0;
+
+      for (let monthIdx = 0; monthIdx < maxMonths; monthIdx++) {
+        // Check timeout
+        if (Date.now() - startTime > request.timeout - 5000) {
+          logger.info('Smart search: approaching timeout, stopping');
+          break;
+        }
+
+        // Navigate to next month (skip for first month — we're already on it)
+        if (monthIdx > 0) {
+          const clicked = await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button, [role="button"], [class*="arrow"], [class*="nav"]'));
+            for (const btn of buttons) {
+              const text = btn.textContent?.trim();
+              const label = btn.getAttribute('aria-label')?.toLowerCase() || '';
+              if (text === '>' || text === '›' || text === '→' ||
+                  label.includes('next') || label.includes('forward')) {
+                (btn as HTMLElement).click();
+                return true;
+              }
+            }
+            return false;
+          });
+
+          if (!clicked) {
+            logger.warn('Smart search: could not navigate to next month');
+            break;
+          }
+          await this.delay(1500);
+        }
+
+        // Read the current month/year from calendar header
+        const currentMonth = await page.evaluate(() => {
+          const bodyText = document.body.innerText;
+          const monthMatch = bodyText.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
+          return monthMatch ? { name: monthMatch[1], year: parseInt(monthMatch[2], 10) } : null;
+        });
+
+        if (!currentMonth) {
+          logger.warn('Smart search: could not detect current month');
+          break;
+        }
+
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthNum = monthNames.findIndex(
+          m => m.toLowerCase() === currentMonth.name.toLowerCase()
+        ) + 1; // 1-indexed
+
+        logger.info(`Smart search: scanning ${currentMonth.name} ${currentMonth.year}`);
+
+        // Extract available dates from the calendar DOM
+        const availableDays = await page.evaluate(() => {
+          const available: number[] = [];
+          const gridCells = Array.from(document.querySelectorAll('[role="gridcell"]'));
+
+          for (const cell of gridCells) {
+            const text = cell.textContent?.trim();
+            const dayNum = parseInt(text || '', 10);
+            if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) continue;
+
+            const htmlCell = cell as HTMLElement;
+            const isDisabled = htmlCell.hasAttribute('disabled') ||
+                              htmlCell.getAttribute('aria-disabled') === 'true' ||
+                              htmlCell.classList.contains('disabled');
+            const style = window.getComputedStyle(htmlCell);
+            const opacity = parseFloat(style.opacity);
+            const pointerEvents = style.pointerEvents;
+
+            const button = htmlCell.querySelector('button');
+            let buttonClickable = true;
+            if (button) {
+              buttonClickable = !button.hasAttribute('disabled') &&
+                               button.getAttribute('aria-disabled') !== 'true';
+            }
+
+            const isAvailable = !isDisabled && buttonClickable &&
+                               opacity > 0.5 && pointerEvents !== 'none';
+
+            if (isAvailable) {
+              available.push(dayNum);
+            }
+          }
+
+          return available.sort((a, b) => a - b);
+        });
+
+        logger.info(`Smart search: ${availableDays.length} available days in ${currentMonth.name}`);
+
+        // Filter by requested days of week
+        const filteredDays = availableDays.filter(dayNum => {
+          if (!request.daysOfWeek || request.daysOfWeek.length === 0) return true;
+          const date = new Date(currentMonth.year, monthNum - 1, dayNum);
+          return request.daysOfWeek.includes(date.getDay());
+        });
+
+        logger.info(`Smart search: ${filteredDays.length} days match day-of-week filter`);
+        totalDatesScanned += filteredDays.length;
+
+        // Click each matching day and extract slots
+        for (const dayNum of filteredDays) {
+          if (collectedSlots >= maxSlots) break;
+          if (Date.now() - startTime > request.timeout - 5000) break;
+
+          try {
+            const dayClicked = await this.clickMoxieDay(page, dayNum);
+            if (!dayClicked) continue;
+
+            const slots = await this.extractMoxieTimeSlots(page);
+
+            // Filter by time preferences
+            const filteredSlots = slots.filter(slot => {
+              if (!slot.available) return false;
+              if (!request.afterTime && !request.beforeTime) return true;
+
+              const slotMinutes = this.parseTime(slot.time);
+              if (request.afterTime) {
+                const [ah, am] = request.afterTime.split(':').map(Number);
+                if (slotMinutes < ah * 60 + am) return false;
+              }
+              if (request.beforeTime) {
+                const [bh, bm] = request.beforeTime.split(':').map(Number);
+                if (slotMinutes >= bh * 60 + bm) return false;
+              }
+              return true;
+            });
+
+            if (filteredSlots.length > 0) {
+              const mm = String(monthNum).padStart(2, '0');
+              const dd = String(dayNum).padStart(2, '0');
+              const dateStr = `${currentMonth.year}-${mm}-${dd}`;
+              const date = new Date(currentMonth.year, monthNum - 1, dayNum);
+
+              results.push({
+                date: dateStr,
+                dayOfWeek: date.getDay(),
+                slots: filteredSlots,
+              });
+              totalDatesWithSlots++;
+              collectedSlots += filteredSlots.length;
+              logger.info(`Smart search: ${filteredSlots.length} slots on ${dateStr}`);
+            }
+          } catch (err) {
+            logger.warn(`Smart search: failed to extract day ${dayNum}`, {
+              error: (err as Error).message,
+            });
+          }
+        }
+
+        if (collectedSlots >= maxSlots) {
+          logger.info('Smart search: reached maxSlots, stopping');
+          break;
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      logger.info(`Smart search complete: ${results.length} dates with slots in ${duration}ms`);
+
+      return {
+        success: true,
+        bookingUrl: request.bookingUrl,
+        service: request.serviceName,
+        providers: detectedProviders.length > 0 ? detectedProviders : undefined,
+        results,
+        totalDatesScanned,
+        totalDatesWithSlots,
+        scrapedAt: new Date().toISOString(),
+        durationMs: duration,
+      };
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('Smart search failed', {
+        error: (error as Error).message,
+        duration,
+        resultsCollected: results.length,
+      });
+
+      // Return partial results if we have any
+      if (results.length > 0) {
+        return {
+          success: true,
+          bookingUrl: request.bookingUrl,
+          service: request.serviceName,
+          providers: detectedProviders.length > 0 ? detectedProviders : undefined,
+          results,
+          totalDatesScanned,
+          totalDatesWithSlots,
+          scrapedAt: new Date().toISOString(),
+          durationMs: duration,
+        };
+      }
+
+      return {
+        success: false,
+        bookingUrl: request.bookingUrl,
+        results: [],
+        totalDatesScanned: 0,
+        totalDatesWithSlots: 0,
+        scrapedAt: new Date().toISOString(),
+        durationMs: duration,
         error: (error as Error).message,
       };
     } finally {
@@ -797,21 +1062,23 @@ export class AvailabilityScraper {
     await this.saveDebugScreenshot(page, '08-after-month-nav');
     await this.delay(1000);
 
-    // Click on the target day
+    await this.clickMoxieDay(page, targetDay);
+  }
+
+  /**
+   * Click a specific day on the Moxie calendar using multiple fallback strategies.
+   * Returns true if the click was successful and time slots appeared.
+   */
+  private async clickMoxieDay(page: Page, targetDay: number): Promise<boolean> {
     const dayStr = String(targetDay);
     logger.info(`Looking for day ${targetDay} to click...`);
 
     let clicked = false;
 
     // Strategy 1: Use Playwright's getByRole to find grid cells
-    // Moxie calendar uses button elements with gridcell role for clickable days
     try {
-      logger.info('Strategy 1: Using getByRole gridcell...');
-
-      // Get all gridcell elements (calendar day cells)
       const gridCells = page.getByRole('gridcell');
       const cellCount = await gridCells.count();
-      logger.info(`Found ${cellCount} gridcell elements`);
 
       for (let i = 0; i < cellCount; i++) {
         const cell = gridCells.nth(i);
@@ -820,9 +1087,6 @@ export class AvailabilityScraper {
         if (text?.trim() === dayStr) {
           const box = await cell.boundingBox();
           if (box) {
-            logger.info(`Found day ${targetDay} gridcell at (${box.x.toFixed(0)}, ${box.y.toFixed(0)})`);
-
-            // Click in the center of the cell
             await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
             clicked = true;
             await this.delay(2000);
@@ -836,7 +1100,6 @@ export class AvailabilityScraper {
 
     // Strategy 2: Find buttons containing the day number
     if (!clicked) {
-      logger.info('Strategy 2: Finding buttons with day number...');
       try {
         const buttons = page.locator('button');
         const buttonCount = await buttons.count();
@@ -847,9 +1110,7 @@ export class AvailabilityScraper {
 
           if (text?.trim() === dayStr) {
             const box = await btn.boundingBox();
-            // Make sure it's in the calendar area (right side of page)
             if (box && box.x > 550 && box.width < 100) {
-              logger.info(`Found day ${targetDay} button at (${box.x.toFixed(0)}, ${box.y.toFixed(0)})`);
               await btn.click({ force: true, timeout: 5000 });
               clicked = true;
               await this.delay(2000);
@@ -864,23 +1125,18 @@ export class AvailabilityScraper {
 
     // Strategy 3: Use CSS selector for button with exact text match
     if (!clicked) {
-      logger.info('Strategy 3: Using CSS selector with text match...');
       try {
-        // Find the button element containing this day
         const dayButton = page.locator(`button:has-text("${dayStr}")`).filter({
           has: page.locator(`text=/^${dayStr}$/`)
         });
 
         const count = await dayButton.count();
-        logger.info(`Found ${count} buttons matching day ${targetDay}`);
 
         for (let i = 0; i < count; i++) {
           const btn = dayButton.nth(i);
           const box = await btn.boundingBox();
 
-          // Filter for calendar area
           if (box && box.x > 550) {
-            logger.info(`Clicking button ${i} at (${box.x.toFixed(0)}, ${box.y.toFixed(0)})`);
             await btn.click({ force: true });
             clicked = true;
             await this.delay(2000);
@@ -894,9 +1150,7 @@ export class AvailabilityScraper {
 
     // Strategy 4: Find by inspecting the DOM and clicking parent containers
     if (!clicked) {
-      logger.info('Strategy 4: DOM inspection and parent clicking...');
       const clickResult = await page.evaluate((day) => {
-        // Find elements containing just the day number
         const allElements = Array.from(document.querySelectorAll('button, div[role="button"], span'));
 
         for (const el of allElements) {
@@ -904,9 +1158,7 @@ export class AvailabilityScraper {
           if (text === day) {
             const rect = (el as HTMLElement).getBoundingClientRect();
 
-            // Must be in calendar area (right side, reasonable size)
             if (rect.x > 550 && rect.width < 100 && rect.height < 80) {
-              // Find the nearest clickable ancestor (button or role=gridcell)
               let target = el as HTMLElement;
               let parent = el.parentElement;
 
@@ -921,8 +1173,6 @@ export class AvailabilityScraper {
               }
 
               const targetRect = target.getBoundingClientRect();
-
-              // Fire the full sequence of pointer/mouse events
               const eventInit = {
                 bubbles: true,
                 cancelable: true,
@@ -937,74 +1187,33 @@ export class AvailabilityScraper {
               target.dispatchEvent(new MouseEvent('mouseup', eventInit));
               target.dispatchEvent(new MouseEvent('click', eventInit));
 
-              return {
-                success: true,
-                message: `Dispatched events on ${target.tagName} at (${targetRect.x.toFixed(0)}, ${targetRect.y.toFixed(0)})`,
-                tag: target.tagName,
-                role: target.getAttribute('role')
-              };
+              return { success: true };
             }
           }
         }
 
-        return { success: false, message: 'Could not find day element for ' + day };
+        return { success: false };
       }, dayStr);
 
-      logger.info('Strategy 4 result:', clickResult);
       if (clickResult.success) {
         clicked = true;
         await this.delay(2000);
       }
     }
 
-    // Strategy 5: Last resort - direct coordinates based on Feb 2026 layout
-    if (!clicked) {
-      logger.info('Strategy 5: Direct coordinate click...');
-
-      // Feb 1, 2026 is Sunday. Calendar layout:
-      // Row 0: 1,  2,  3,  4,  5,  6,  7
-      // Row 1: 8,  9,  10, 11, 12, 13, 14
-      // Row 2: 15, 16, 17, 18, 19, 20, 21
-      // Row 3: 22, 23, 24, 25, 26, 27, 28
-
-      const column = (targetDay - 1) % 7;
-      const row = Math.floor((targetDay - 1) / 7);
-
-      // Based on screenshot analysis:
-      // Calendar grid starts around x=610 (first Sunday column)
-      // First data row starts around y=155
-      // Each cell is ~38px wide, ~40px tall
-      const calendarStartX = 610;
-      const calendarStartY = 155;
-      const cellWidth = 38;
-      const cellHeight = 40;
-
-      const clickX = calendarStartX + column * cellWidth + cellWidth / 2;
-      const clickY = calendarStartY + row * cellHeight + cellHeight / 2;
-
-      logger.info(`Calculated: day=${targetDay}, col=${column}, row=${row}, coords=(${clickX}, ${clickY})`);
-
-      try {
-        await page.mouse.click(clickX, clickY);
-        logger.info(`Direct mouse click at (${clickX}, ${clickY})`);
-        clicked = true;
-        await this.delay(2000);
-      } catch (err) {
-        logger.warn('Strategy 5 failed:', (err as Error).message);
-      }
-    }
-
-    await this.saveDebugScreenshot(page, '09-after-day-click');
-
     // Check if time slots appeared
-    const pageText = await page.evaluate(() => document.body.innerText);
-    const hasTimeSlots = /\d{1,2}:\d{2}\s*(am|pm)/i.test(pageText);
-    logger.info(`Time slots visible: ${hasTimeSlots}`);
-
-    if (!hasTimeSlots) {
-      logger.warn(`Day click may not have worked for day ${dayStr}`);
-      await this.saveDebugScreenshot(page, '10-no-time-slots');
+    if (clicked) {
+      const pageText = await page.evaluate(() => document.body.innerText);
+      const hasTimeSlots = /\d{1,2}:\d{2}\s*(am|pm)/i.test(pageText);
+      if (!hasTimeSlots) {
+        logger.warn(`Day click may not have worked for day ${dayStr}`);
+        await this.saveDebugScreenshot(page, `no-time-slots-day-${dayStr}`);
+      }
+      return hasTimeSlots;
     }
+
+    logger.warn(`Could not click day ${targetDay}`);
+    return false;
   }
 
   private async extractTimeSlots(

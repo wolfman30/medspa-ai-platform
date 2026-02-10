@@ -689,10 +689,12 @@ func TestProgressiveSearch_CallsProgressCallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, result.Slots)
 
-	// 90 dates with no day filter → 3 batches of 31/31/28
-	// Progress called before batches 2 and 3 (skip first) → 2 calls
-	assert.GreaterOrEqual(t, len(progressMessages), 1, "should send progress messages between batches")
-	for _, msg := range progressMessages {
+	// First message is the initial "Checking available times..." notification.
+	// Then 90 dates / 31 per batch = 3 batches; progress called before batches 2+3 → 2 more calls.
+	assert.GreaterOrEqual(t, len(progressMessages), 2, "should send initial + progress messages between batches")
+	assert.Contains(t, progressMessages[0], "Checking available times")
+	// Subsequent messages mention no availability
+	for _, msg := range progressMessages[1:] {
 		assert.Contains(t, msg, "no availability")
 	}
 }
@@ -720,8 +722,11 @@ func TestProgressiveSearch_NoCallbackOnFirstBatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result.Slots, 1)
 
-	// Day 20 is in the first batch of 31 dates → found immediately, no progress messages
-	assert.Equal(t, 0, len(progressMessages), "no progress messages when found in first batch")
+	// 1 progress message: the initial "Checking available times..." notification.
+	// Phase 0 fails (mock doesn't implement CalendarSlotsProvider), falls to Phase 1.
+	// Day 20 is in the first batch of 31 dates → found immediately, no between-batch messages.
+	assert.Equal(t, 1, len(progressMessages), "should send initial progress message only")
+	assert.Contains(t, progressMessages[0], "Checking available times")
 }
 
 func TestProgressiveSearch_NilCallbackSafe(t *testing.T) {

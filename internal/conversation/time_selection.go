@@ -47,6 +47,12 @@ const maxCalendarDays = 90
 // relaxedFallbackDays is the window for relaxed-preference fallback searches.
 const relaxedFallbackDays = 28
 
+// CalendarSlotsProvider is an optional capability of the browser client.
+// Used via type assertion so existing mocks/tests don't break.
+type CalendarSlotsProvider interface {
+	GetCalendarSlots(ctx context.Context, req browser.CalendarSlotsRequest) (*browser.CalendarSlotsResponse, error)
+}
+
 // dateResult holds the result of fetching availability for a single date.
 type dateResult struct {
 	dateStr string
@@ -85,6 +91,27 @@ func FetchAvailableTimesWithFallback(
 	prefs TimePreferences,
 	onProgress func(ctx context.Context, msg string),
 ) (*AvailabilityResult, error) {
+	// Send initial progress message
+	if onProgress != nil {
+		onProgress(ctx, fmt.Sprintf(
+			"Checking available times for %s... this may take a moment.",
+			serviceName,
+		))
+	}
+
+	// Phase 0: Try smart calendar search (single-session, scans multiple months)
+	smartSlots, smartErr := fetchCalendarSlots(ctx, adapter, bookingURL, serviceName, prefs)
+	if smartErr == nil && len(smartSlots) > 0 {
+		for i := range smartSlots {
+			smartSlots[i].Index = i + 1
+		}
+		return &AvailabilityResult{
+			Slots:        smartSlots,
+			ExactMatch:   true,
+			SearchedDays: maxCalendarDays,
+		}, nil
+	}
+
 	// Phase 1: Collect all qualifying dates up front, then search in batches of 31
 	// (the max the sidecar accepts). Each batch reuses a single browser session,
 	// so we want as many dates per batch as possible to avoid expensive re-setup.
@@ -248,6 +275,78 @@ func collectQualifyingDates(prefs TimePreferences, startDay, endDay int) []strin
 		dates = append(dates, date.Format("2006-01-02"))
 	}
 	return dates
+}
+
+// fetchCalendarSlots tries the smart single-session calendar search.
+// Returns nil, error if the client doesn't support it (triggers fallback).
+func fetchCalendarSlots(
+	ctx context.Context,
+	adapter *BrowserAdapter,
+	bookingURL string,
+	serviceName string,
+	prefs TimePreferences,
+) ([]PresentedSlot, error) {
+	if adapter == nil || !adapter.IsConfigured() {
+		return nil, fmt.Errorf("browser adapter not configured")
+	}
+
+	provider, ok := adapter.client.(CalendarSlotsProvider)
+	if !ok {
+		return nil, fmt.Errorf("client does not support calendar slots")
+	}
+
+	req := browser.CalendarSlotsRequest{
+		BookingURL:  bookingURL,
+		ServiceName: serviceName,
+		MaxSlots:    maxSlotsToPresent,
+		MaxMonths:   3,
+		Timeout:     120000,
+	}
+	if len(prefs.DaysOfWeek) > 0 {
+		req.DaysOfWeek = prefs.DaysOfWeek
+	}
+	if prefs.AfterTime != "" {
+		req.AfterTime = prefs.AfterTime
+	}
+	if prefs.BeforeTime != "" {
+		req.BeforeTime = prefs.BeforeTime
+	}
+
+	resp, err := provider.GetCalendarSlots(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("calendar slots fetch failed: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("calendar slots failed: %s", resp.Error)
+	}
+
+	var allSlots []PresentedSlot
+	for _, result := range resp.Results {
+		dateStr := result.Date
+		for _, slot := range result.Slots {
+			if !slot.Available {
+				continue
+			}
+			slotTime, err := parseTimeSlot(dateStr, slot.Time)
+			if err != nil {
+				continue
+			}
+			allSlots = append(allSlots, PresentedSlot{
+				DateTime:  slotTime,
+				TimeStr:   formatSlotForDisplay(slotTime),
+				Service:   serviceName,
+				Available: true,
+			})
+			if len(allSlots) >= maxSlotsToPresent {
+				break
+			}
+		}
+		if len(allSlots) >= maxSlotsToPresent {
+			break
+		}
+	}
+
+	return allSlots, nil
 }
 
 // fetchSlotsForDates fetches availability for a pre-built list of date strings,

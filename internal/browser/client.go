@@ -58,6 +58,40 @@ type BatchAvailabilityResponse struct {
 	Error   string                 `json:"error,omitempty"`
 }
 
+// CalendarSlotsRequest is the request for smart calendar search.
+type CalendarSlotsRequest struct {
+	BookingURL   string `json:"bookingUrl"`
+	ServiceName  string `json:"serviceName,omitempty"`
+	ProviderName string `json:"providerName,omitempty"`
+	DaysOfWeek   []int  `json:"daysOfWeek,omitempty"` // 0=Sun..6=Sat
+	AfterTime    string `json:"afterTime,omitempty"`  // "16:00" 24h format
+	BeforeTime   string `json:"beforeTime,omitempty"` // "12:00" 24h format
+	MaxSlots     int    `json:"maxSlots,omitempty"`
+	MaxMonths    int    `json:"maxMonths,omitempty"`
+	Timeout      int    `json:"timeout,omitempty"` // milliseconds
+}
+
+// CalendarSlotResult represents availability for a single date.
+type CalendarSlotResult struct {
+	Date      string     `json:"date"`
+	DayOfWeek int        `json:"dayOfWeek"`
+	Slots     []TimeSlot `json:"slots"`
+}
+
+// CalendarSlotsResponse is the response from the smart calendar search.
+type CalendarSlotsResponse struct {
+	Success             bool                 `json:"success"`
+	BookingURL          string               `json:"bookingUrl"`
+	Service             string               `json:"service,omitempty"`
+	Providers           []string             `json:"providers,omitempty"`
+	Results             []CalendarSlotResult `json:"results"`
+	TotalDatesScanned   int                  `json:"totalDatesScanned"`
+	TotalDatesWithSlots int                  `json:"totalDatesWithSlots"`
+	ScrapedAt           string               `json:"scrapedAt"`
+	DurationMs          int                  `json:"durationMs"`
+	Error               string               `json:"error,omitempty"`
+}
+
 // HealthResponse is the health check response from the sidecar.
 type HealthResponse struct {
 	Status       string `json:"status"` // ok, degraded, error
@@ -223,6 +257,56 @@ func (c *Client) GetBatchAvailability(ctx context.Context, req BatchAvailability
 	var result BatchAvailabilityResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("browser: decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetCalendarSlots performs a smart calendar search: one browser session scans
+// multiple months, clicking through available dates and extracting time slots.
+func (c *Client) GetCalendarSlots(ctx context.Context, req CalendarSlotsRequest) (*CalendarSlotsResponse, error) {
+	if req.MaxSlots == 0 {
+		req.MaxSlots = 6
+	}
+	if req.MaxMonths == 0 {
+		req.MaxMonths = 3
+	}
+	if req.Timeout == 0 {
+		req.Timeout = 120000
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("browser: marshal calendar-slots request: %w", err)
+	}
+
+	c.logger.Debug("fetching calendar slots", "url", req.BookingURL, "maxMonths", req.MaxMonths)
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/api/v1/availability/calendar-slots", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("browser: create calendar-slots request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("browser: calendar-slots request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result CalendarSlotsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("browser: decode calendar-slots response: %w", err)
+	}
+
+	if result.Success {
+		c.logger.Info("calendar slots fetched",
+			"url", req.BookingURL,
+			"datesScanned", result.TotalDatesScanned,
+			"datesWithSlots", result.TotalDatesWithSlots,
+			"durationMs", result.DurationMs,
+		)
 	}
 
 	return &result, nil

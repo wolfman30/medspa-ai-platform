@@ -3,6 +3,7 @@ import { getScraper, closeScraper } from './scraper';
 import { getSessionManager, closeSessionManager } from './booking-session';
 import {
   AvailabilityRequestSchema,
+  CalendarSlotsRequestSchema,
   BookingStartRequestSchema,
   HealthResponse,
   AvailabilityResponse,
@@ -151,6 +152,47 @@ app.post('/api/v1/availability/batch', async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Batch availability request failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+// Smart calendar search: one session scans multiple months
+app.post('/api/v1/availability/calendar-slots', async (req: Request, res: Response) => {
+  try {
+    const validatedRequest = CalendarSlotsRequestSchema.parse(req.body);
+
+    logger.info('Calendar slots request received', {
+      url: validatedRequest.bookingUrl,
+      maxMonths: validatedRequest.maxMonths,
+      maxSlots: validatedRequest.maxSlots,
+    });
+
+    const scraper = await getScraper();
+    const result = await scraper.scrapeCalendarSlots(validatedRequest);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(502).json(result);
+    }
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn('Invalid calendar-slots request', { errors: error.errors });
+      res.status(400).json({
+        success: false,
+        error: 'Invalid request',
+        details: error.errors,
+      });
+      return;
+    }
+
+    logger.error('Calendar slots request failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
 
