@@ -27,6 +27,7 @@ type TimeSelectionState struct {
 	Service        string          // Service being booked
 	BookingURL     string          // Clinic booking URL
 	PresentedAt    time.Time       // When options were presented
+	SlotSelected   bool            // True after patient picks a slot (prevents re-scraping)
 }
 
 // maxSlotsToPresent is the maximum number of slots to show at once

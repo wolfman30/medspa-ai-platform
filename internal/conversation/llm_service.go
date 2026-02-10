@@ -370,7 +370,7 @@ This clinic uses Moxie for online booking. The flow is DIFFERENT from standard c
 This clinic's booking system requires SPECIFIC services, not general categories. If a patient mentions a broad category, ask clarifying questions to narrow down to a bookable service.
 
 WHEN TO ASK CLARIFYING QUESTIONS:
-- "Botox" or "neurotoxin" → Ask which treatment AREA (forehead, crow's feet, frown lines, etc.)
+- "Botox" or "neurotoxin" → Do NOT ask which area (forehead, crow's feet, etc.). Just book "Botox" — the provider will discuss treatment areas at the appointment.
 - "Filler" or "dermal filler" → Ask which AREA (lips, cheeks, smile lines, under-eyes, etc.)
 - "Facial" or "peel" → Ask about their primary GOAL or skin concern
 - Any general category → Ask for specifics so we can match to the clinic's actual services
@@ -1181,9 +1181,11 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				}
 			}
 
-			// Clear the time selection state
-			if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, nil); err != nil {
-				s.logger.Warn("failed to clear time selection state", "error", err)
+			// Mark slot as selected (don't clear to nil — that would re-trigger scraping)
+			timeSelectionState.SlotSelected = true
+			timeSelectionState.PresentedSlots = nil // Clear slots so we don't re-present them
+			if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, timeSelectionState); err != nil {
+				s.logger.Warn("failed to save time selection completion state", "error", err)
 			}
 
 			// Inject slot selection into history so LLM generates an appropriate confirmation
@@ -1289,6 +1291,10 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	browserReady := s.browser != nil && s.browser.IsConfigured()
 	qualificationsMet := ShouldFetchAvailability(history, nil)
 	shouldTriggerTimeSelection := browserReady && timeSelectionState == nil
+	// Don't re-scrape if a slot was already selected (patient is now providing email, etc.)
+	if timeSelectionState != nil && timeSelectionState.SlotSelected {
+		shouldTriggerTimeSelection = false
+	}
 	if usesMoxie {
 		// Moxie clinics: trigger time selection when lead is qualified (deposit flows through Moxie)
 		shouldTriggerTimeSelection = shouldTriggerTimeSelection && qualificationsMet
