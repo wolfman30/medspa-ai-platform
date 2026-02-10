@@ -43,6 +43,43 @@ export interface AvailabilityResponse {
   error?: string;
 }
 
+// ============================================================================
+// CALENDAR SLOTS (Smart Search) TYPES
+// ============================================================================
+
+export const CalendarSlotsRequestSchema = z.object({
+  bookingUrl: z.string().url(),
+  serviceName: z.string().optional(),
+  providerName: z.string().optional(),
+  daysOfWeek: z.array(z.number().min(0).max(6)).optional(), // 0=Sun..6=Sat
+  afterTime: z.string().optional(),   // "16:00" 24h format
+  beforeTime: z.string().optional(),  // "12:00" 24h format
+  maxSlots: z.number().min(1).max(20).default(6),
+  maxMonths: z.number().min(1).max(4).default(3),
+  timeout: z.number().min(10000).max(180000).default(120000),
+});
+
+export type CalendarSlotsRequest = z.infer<typeof CalendarSlotsRequestSchema>;
+
+export interface CalendarSlotResult {
+  date: string;        // "2026-02-15"
+  dayOfWeek: number;   // 0-6
+  slots: TimeSlot[];
+}
+
+export interface CalendarSlotsResponse {
+  success: boolean;
+  bookingUrl: string;
+  service?: string;
+  providers?: string[];
+  results: CalendarSlotResult[];
+  totalDatesScanned: number;
+  totalDatesWithSlots: number;
+  scrapedAt: string;
+  durationMs: number;
+  error?: string;
+}
+
 export interface HealthResponse {
   status: 'ok' | 'degraded' | 'error';
   version: string;
