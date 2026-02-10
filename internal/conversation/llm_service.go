@@ -1335,8 +1335,9 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			)
 
 			// Fetch available times with a hard deadline to prevent blocking the worker.
-			// 60s allows progressive search across ~90 days in 14-day batches.
-			fetchCtx, fetchCancel := context.WithTimeout(ctx, 60*time.Second)
+			// 120s allows single-batch search across all qualifying dates (~26 dates
+			// for Mon/Wed across 90 days: ~20s setup + 26×3s = ~98s).
+			fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
 			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress)
 			fetchCancel()
 			if err != nil {

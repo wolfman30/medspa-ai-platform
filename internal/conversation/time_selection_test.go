@@ -376,7 +376,7 @@ func TestFetchAvailableTimesWithFallback_ExactMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, result.ExactMatch)
-	assert.Equal(t, batchSize, result.SearchedDays) // first batch is 14 days
+	assert.Equal(t, maxCalendarDays, result.SearchedDays) // all qualifying dates searched at once
 	assert.Len(t, result.Slots, 2)
 	assert.Empty(t, result.Message)
 }
@@ -413,7 +413,7 @@ func TestFetchAvailableTimesWithFallback_RelaxedDayOfWeek(t *testing.T) {
 }
 
 func TestFetchAvailableTimesWithFallback_ExtendedSearch(t *testing.T) {
-	// No slots in days 0-13 (first batch), but slots on day 14 (second batch)
+	// Slot on day 14 — all dates searched in batches of 31
 	now := time.Now()
 	day14 := now.AddDate(0, 0, 14).Format("2006-01-02")
 
@@ -428,9 +428,8 @@ func TestFetchAvailableTimesWithFallback_ExtendedSearch(t *testing.T) {
 	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
 	require.NoError(t, err)
 
-	// Should find in second progressive batch [14,28)
 	assert.True(t, result.ExactMatch)
-	assert.Equal(t, batchSize*2, result.SearchedDays) // 28
+	assert.Equal(t, maxCalendarDays, result.SearchedDays)
 	assert.Len(t, result.Slots, 1)
 	assert.Empty(t, result.Message)
 }
@@ -468,7 +467,7 @@ func TestFetchAvailableTimes_EmptyBookingURL(t *testing.T) {
 // === Progressive Search + Adjacent Proposal Tests ===
 
 func TestProgressiveBatch_FirstBatch(t *testing.T) {
-	// Slot on day 3 → found in first batch [0,14)
+	// Slot on day 3 → found in first batch of up to 31 dates
 	now := time.Now()
 	day3 := now.AddDate(0, 0, 3).Format("2006-01-02")
 
@@ -483,13 +482,13 @@ func TestProgressiveBatch_FirstBatch(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, result.ExactMatch)
-	assert.Equal(t, batchSize, result.SearchedDays) // 14 (first batch)
+	assert.Equal(t, maxCalendarDays, result.SearchedDays)
 	assert.Len(t, result.Slots, 1)
 	assert.Empty(t, result.Message)
 }
 
 func TestProgressiveBatch_ThirdBatch(t *testing.T) {
-	// No slots days 0-27, slot on day 35 → found in batch [28,42)
+	// Slot on day 35 → found in second batch (dates 31-61)
 	now := time.Now()
 	day35 := now.AddDate(0, 0, 35).Format("2006-01-02")
 
@@ -504,7 +503,7 @@ func TestProgressiveBatch_ThirdBatch(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, result.ExactMatch)
-	assert.Equal(t, batchSize*3, result.SearchedDays) // 42
+	assert.Equal(t, maxCalendarDays, result.SearchedDays)
 	assert.Len(t, result.Slots, 1)
 }
 
@@ -651,7 +650,7 @@ func TestHumanizeDays(t *testing.T) {
 }
 
 func TestProgressiveSearch_StopsEarly(t *testing.T) {
-	// Slot on day 0 → mock should only be called for first batch (14 dates max)
+	// Slot on day 0 → mock should only be called for first batch (up to 31 dates)
 	now := time.Now()
 	day0 := now.Format("2006-01-02")
 
@@ -666,14 +665,15 @@ func TestProgressiveSearch_StopsEarly(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, result.Slots, 1)
-	// Should have only called the mock for the first batch (14 dates), not all 90
-	assert.LessOrEqual(t, mock.callCount.Load(), int32(batchSize))
+	// With no day filter, 90 dates → 3 batches of 31/31/28.
+	// Slot found in first batch → mock called for 31 dates in the first batch.
+	assert.Equal(t, int32(31), mock.callCount.Load())
 }
 
 // === Progress Callback Tests ===
 
 func TestProgressiveSearch_CallsProgressCallback(t *testing.T) {
-	// No slots at all → should call progress callback after each empty batch (except first)
+	// No slots at all → should call progress callback between batches of 31 dates
 	mock := &dateAwareMock{responses: map[string]*browser.AvailabilityResponse{}}
 	adapter := NewBrowserAdapter(mock, nil)
 
@@ -689,17 +689,16 @@ func TestProgressiveSearch_CallsProgressCallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, result.Slots)
 
-	// 90 days / 14 per batch = 7 batches (rounding up: 0-14, 14-28, ..., 84-90)
-	// Progress called after batches 2-7 (skip first), so ~6 calls
-	assert.GreaterOrEqual(t, len(progressMessages), 4, "should send multiple progress messages")
-	// Each message should mention the search range
+	// 90 dates with no day filter → 3 batches of 31/31/28
+	// Progress called before batches 2 and 3 (skip first) → 2 calls
+	assert.GreaterOrEqual(t, len(progressMessages), 1, "should send progress messages between batches")
 	for _, msg := range progressMessages {
 		assert.Contains(t, msg, "no availability")
 	}
 }
 
 func TestProgressiveSearch_NoCallbackOnFirstBatch(t *testing.T) {
-	// Slot on day 20 (batch 2) → progress callback should fire after batch 1 but NOT before
+	// Slot on day 20 → all dates in first batch (31 dates), found immediately, no progress needed
 	now := time.Now()
 	day20 := now.AddDate(0, 0, 20).Format("2006-01-02")
 	mock := &dateAwareMock{
@@ -721,8 +720,8 @@ func TestProgressiveSearch_NoCallbackOnFirstBatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result.Slots, 1)
 
-	// Only 1 progress message (after batch 1 was empty, before batch 2 found the slot)
-	assert.Equal(t, 1, len(progressMessages), "should send exactly 1 progress message between batches")
+	// Day 20 is in the first batch of 31 dates → found immediately, no progress messages
+	assert.Equal(t, 0, len(progressMessages), "no progress messages when found in first batch")
 }
 
 func TestProgressiveSearch_NilCallbackSafe(t *testing.T) {
