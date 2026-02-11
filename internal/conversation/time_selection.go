@@ -91,12 +91,17 @@ func FetchAvailableTimesWithFallback(
 	serviceName string,
 	prefs TimePreferences,
 	onProgress func(ctx context.Context, msg string),
+	patientFacingServiceName ...string, // optional: display name for progress messages (e.g. "Botox" instead of "Tox")
 ) (*AvailabilityResult, error) {
-	// Send initial progress message
+	// Send initial progress message using patient-facing name
+	displayName := serviceName
+	if len(patientFacingServiceName) > 0 && patientFacingServiceName[0] != "" {
+		displayName = patientFacingServiceName[0]
+	}
 	if onProgress != nil {
 		onProgress(ctx, fmt.Sprintf(
 			"Checking available times for %s... this may take a moment.",
-			serviceName,
+			displayName,
 		))
 	}
 

@@ -1361,7 +1361,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			// 120s allows single-batch search across all qualifying dates (~26 dates
 			// for Mon/Wed across 90 days: ~20s setup + 26×3s = ~98s).
 			fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
-			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress)
+			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
 			fetchCancel()
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)

@@ -104,15 +104,14 @@ export class AvailabilityScraper {
 
         const response = await page.goto(request.bookingUrl, {
           timeout: request.timeout,
-          waitUntil: 'networkidle',
+          waitUntil: 'domcontentloaded',
         });
 
         if (!response || !response.ok()) {
           throw new NavigationError(`Failed to load page: ${response?.status() || 'unknown'}`);
         }
 
-        await page.waitForLoadState('domcontentloaded');
-        await this.delay(2000);
+        await this.delay(3000);
 
         const selectors = await this.detectPlatform(page);
 
@@ -207,7 +206,7 @@ export class AvailabilityScraper {
 
       const response = await page.goto(bookingUrl, {
         timeout,
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
       });
 
       if (!response || !response.ok()) {
@@ -379,7 +378,7 @@ export class AvailabilityScraper {
 
       const response = await page.goto(request.bookingUrl, {
         timeout: request.timeout,
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
       });
 
       if (!response || !response.ok()) {
@@ -1373,7 +1372,7 @@ export class AvailabilityScraper {
 
       const response = await page.goto(bookingUrl, {
         timeout,
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
       });
 
       if (!response || !response.ok()) {
