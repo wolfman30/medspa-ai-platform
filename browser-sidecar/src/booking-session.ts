@@ -632,45 +632,45 @@ export class BookingSessionManager {
       );
     }
 
-    // Wait for time-formatted buttons to appear (e.g. "7:15 PM")
-    try {
-      await page.locator('button:has-text(/\\d{1,2}:\\d{2}\\s*(AM|PM)/i)').first().waitFor({ timeout: 10000 });
-      logger.info('Time slot buttons detected on page');
-    } catch {
-      logger.warn('Timed out waiting for time slot buttons to appear');
-    }
+    // Moxie renders time slots as div/span elements, not buttons.
+    // Use page.evaluate to find and click, matching the scraper's approach.
+    const clicked = await page.evaluate((searchTime: string) => {
+      const normalized = searchTime.toLowerCase().replace(/\s+/g, '');
+      const allElements = Array.from(document.querySelectorAll('button, div, span'));
 
-    // Try each variant with Playwright locators
-    for (const variant of variants) {
-      const timeSlot = page.locator(`button:has-text("${variant}"), [class*="time"]:has-text("${variant}")`).first();
-      if (await timeSlot.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await timeSlot.click();
-        await this.delay(1000);
-        logger.info(`Selected time: ${variant}`);
-        return;
+      for (const el of allElements) {
+        const text = el.textContent?.trim() || '';
+        const timeMatch = text.match(/^(\d{1,2}:\d{2}\s*(am|pm))$/i);
+        if (!timeMatch) continue;
+
+        const elTime = timeMatch[1].toLowerCase().replace(/\s+/g, '');
+        if (elTime !== normalized) continue;
+
+        // Verify it's a visible, positioned element (right side of page, like scraper checks)
+        const rect = (el as HTMLElement).getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          (el as HTMLElement).click();
+          return { success: true, text: timeMatch[1], tag: el.tagName };
+        }
       }
+
+      // Collect what's actually on the page for debugging
+      const found = allElements
+        .map(el => ({ text: el.textContent?.trim() || '', tag: el.tagName }))
+        .filter(e => /\d{1,2}:\d{2}\s*(am|pm)/i.test(e.text))
+        .slice(0, 10);
+
+      return { success: false, found };
+    }, normalizedTime);
+
+    if (clicked.success) {
+      await this.delay(1000);
+      logger.info(`Selected time: ${(clicked as any).text} (${(clicked as any).tag} element)`);
+      return;
     }
 
-    // Fallback: Search all buttons for partial match (normalized)
-    const buttons = await page.$$('button');
-    for (const button of buttons) {
-      const text = await button.textContent();
-      if (text && text.toLowerCase().replace(/\s+/g, '').includes(normalizedTime)) {
-        await button.click();
-        await this.delay(1000);
-        logger.info(`Selected time (fallback): ${text}`);
-        return;
-      }
-    }
-
-    // Log available buttons for debugging
-    const availableButtons = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('button'))
-        .map(b => b.textContent?.trim())
-        .filter(t => t && /\d/.test(t))
-        .slice(0, 20);
-    });
-    logger.error(`Available time buttons: ${JSON.stringify(availableButtons)}`);
+    // Log what time elements were actually found
+    logger.error(`Time slot "${time}" not found. Elements with time patterns: ${JSON.stringify((clicked as any).found)}`);
 
     throw new Error(`Time slot "${time}" not found or unavailable`);
   }
