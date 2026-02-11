@@ -1432,6 +1432,24 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
+	// When time selection takes over, replace the LLM reply in history.
+	// The LLM reply was saved before we knew time selection would trigger.
+	// Without this fix, the stale LLM reply sits in history and confuses the
+	// LLM on the next turn (it doesn't know about the time options that were sent).
+	if timeSelectionResponse != nil && timeSelectionResponse.SMSMessage != "" {
+		// Find and replace the last assistant message (the LLM reply) with
+		// a note that time options were presented instead
+		for i := len(history) - 1; i >= 0; i-- {
+			if history[i].Role == ChatRoleAssistant {
+				history[i].Content = timeSelectionResponse.SMSMessage
+				break
+			}
+		}
+		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+			s.logger.Warn("failed to re-save history after time selection", "error", err)
+		}
+	}
+
 	// For Moxie clinics: always clear Square deposit intent.
 	// Moxie clinics never use Square — the patient pays directly on Moxie's
 	// Step 5 payment page after the sidecar auto-fills Steps 1-4.
@@ -3053,4 +3071,19 @@ func splitName(full string) (string, string) {
 	default:
 		return parts[0], strings.Join(parts[1:], " ")
 	}
+}
+
+// AppendAssistantMessage appends an assistant message to the LLM conversation
+// history. Used by the worker to inject time-selection SMS into history so the
+// LLM knows what was presented when the patient replies.
+func (s *LLMService) AppendAssistantMessage(ctx context.Context, conversationID, message string) error {
+	history, err := s.history.Load(ctx, conversationID)
+	if err != nil {
+		return fmt.Errorf("load history: %w", err)
+	}
+	history = append(history, ChatMessage{
+		Role:    ChatRoleAssistant,
+		Content: message,
+	})
+	return s.history.Save(ctx, conversationID, history)
 }
