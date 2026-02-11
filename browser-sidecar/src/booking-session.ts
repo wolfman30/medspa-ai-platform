@@ -553,7 +553,7 @@ export class BookingSessionManager {
    * Select a specific time slot
    */
   private async selectTimeSlot(page: Page, time: string): Promise<void> {
-    logger.info(`Selecting time slot: ${time}`);
+    logger.info(`Selecting time slot: ${time} (v2 format-variant matching)`);
 
     // Normalize: strip spaces, lowercase for comparison
     // Input could be "7:45pm" or "7:45 PM" — normalize to "7:45pm"
