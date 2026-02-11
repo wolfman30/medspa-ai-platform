@@ -2524,6 +2524,7 @@ func buildNamePatterns() []*regexp.Regexp {
 	return []*regexp.Regexp{
 		regexp.MustCompile(`(?i)my name is\s+(` + name + `)`),
 		regexp.MustCompile(`(?i)i'?m\s+(` + name + `)(?:\s|,|\.|!|$)`),
+		regexp.MustCompile(`(?i)i am\s+(` + name + `)(?:\s|,|\.|!|$)`),
 		regexp.MustCompile(`(?i)this is\s+(` + name + `)`),
 		regexp.MustCompile(`(?i)call me\s+(` + name + `)`),
 		regexp.MustCompile(`(?i)it'?s\s+(` + name + `)(?:\s|,|\.|!|$)`),
