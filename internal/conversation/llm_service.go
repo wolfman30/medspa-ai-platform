@@ -1458,9 +1458,27 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		depositIntent = nil
 	}
 
-	// For Moxie clinics: build a BookingRequest when the patient selects a time slot
+	// For Moxie clinics: build a BookingRequest when we have a selected slot + email.
+	// The slot may have been selected on a PREVIOUS turn (stored on the lead),
+	// with email arriving on this turn.
 	var bookingRequest *BookingRequest
-	if usesMoxie && selectedSlot != nil && clinicCfg != nil && clinicCfg.BookingURL != "" {
+
+	// Check if we have a previously selected slot on the lead (from a prior turn)
+	var previouslySelectedDateTime *time.Time
+	var previouslySelectedService string
+	if usesMoxie && selectedSlot == nil && timeSelectionState != nil && timeSelectionState.SlotSelected && req.LeadID != "" && s.leadsRepo != nil {
+		if lead, err := s.leadsRepo.GetByID(ctx, req.OrgID, req.LeadID); err == nil && lead != nil && lead.SelectedDateTime != nil {
+			previouslySelectedDateTime = lead.SelectedDateTime
+			previouslySelectedService = lead.SelectedService
+			s.logger.Info("found previously selected slot on lead",
+				"lead_id", req.LeadID,
+				"date_time", lead.SelectedDateTime,
+				"service", lead.SelectedService,
+			)
+		}
+	}
+
+	if usesMoxie && (selectedSlot != nil || previouslySelectedDateTime != nil) && clinicCfg != nil && clinicCfg.BookingURL != "" {
 		firstName, lastName := splitName("")
 		phone := req.From
 		email := ""
@@ -1485,9 +1503,20 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			s.logger.Warn("booking blocked: no email for Moxie booking", "lead_id", req.LeadID)
 			// bookingRequest stays nil — AI will ask for email per prompt
 		} else {
-			// Format date and time from the selected slot
-			dateStr := selectedSlot.DateTime.Format("2006-01-02")
-			timeStr := strings.ToLower(selectedSlot.DateTime.Format("3:04pm"))
+			// Format date and time from the selected slot (current turn or previous turn)
+			var slotDateTime time.Time
+			var slotService string
+			if selectedSlot != nil {
+				slotDateTime = selectedSlot.DateTime
+				if timeSelectionState != nil {
+					slotService = timeSelectionState.Service
+				}
+			} else if previouslySelectedDateTime != nil {
+				slotDateTime = *previouslySelectedDateTime
+				slotService = previouslySelectedService
+			}
+			dateStr := slotDateTime.Format("2006-01-02")
+			timeStr := strings.ToLower(slotDateTime.Format("3:04pm"))
 
 			// Build callback URL
 			var callbackURL string
@@ -1500,7 +1529,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				BookingURL:  clinicCfg.BookingURL,
 				Date:        dateStr,
 				Time:        timeStr,
-				Service:     timeSelectionState.Service,
+				Service:     slotService,
 				LeadID:      req.LeadID,
 				OrgID:       req.OrgID,
 				FirstName:   firstName,
