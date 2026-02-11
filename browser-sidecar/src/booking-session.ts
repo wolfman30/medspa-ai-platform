@@ -493,8 +493,13 @@ export class BookingSessionManager {
     // Parse date
     const [year, month, day] = date.split('-').map(Number);
 
-    // Navigate calendar to correct month
+    // Navigate calendar to correct month and click the day
     await this.navigateCalendar(page, year, month - 1, day);
+
+    // Wait for time slots to load after clicking the day
+    // Moxie renders time slots dynamically — they take 2-3s to appear
+    logger.info('Waiting for time slots to load...');
+    await this.delay(3000);
 
     // Click on the time slot
     await this.selectTimeSlot(page, time);
@@ -571,6 +576,14 @@ export class BookingSessionManager {
         `${timePart} ${ampm.toUpperCase()}`, // 7:45 PM
         `${timePart}${ampm.toUpperCase()}`,  // 7:45PM
       );
+    }
+
+    // Wait for time-formatted buttons to appear (e.g. "7:15 PM")
+    try {
+      await page.locator('button:has-text(/\\d{1,2}:\\d{2}\\s*(AM|PM)/i)').first().waitFor({ timeout: 10000 });
+      logger.info('Time slot buttons detected on page');
+    } catch {
+      logger.warn('Timed out waiting for time slot buttons to appear');
     }
 
     // Try each variant with Playwright locators
