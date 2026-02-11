@@ -305,18 +305,20 @@ export class BookingSessionManager {
 
       logger.info(`BookingSession ${sessionId}: Navigating to ${request.bookingUrl}`);
 
-      // Navigate to booking page
+      // Navigate to booking page — use 'domcontentloaded' instead of 'networkidle'
+      // because Moxie's booking page has persistent connections that prevent
+      // networkidle from ever resolving.
       const response = await session.page.goto(request.bookingUrl, {
         timeout: request.timeout,
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
       });
 
       if (!response || !response.ok()) {
         throw new NavigationError(`Failed to load page: ${response?.status() || 'unknown'}`);
       }
 
-      await session.page.waitForLoadState('domcontentloaded');
-      await this.delay(2000);
+      // Wait for the page to be interactive
+      await this.delay(3000);
 
       // Step 1: Select service
       logger.info(`BookingSession ${sessionId}: Step 1 - Selecting service`);
