@@ -497,9 +497,26 @@ export class BookingSessionManager {
     await this.navigateCalendar(page, year, month - 1, day);
 
     // Wait for time slots to load after clicking the day
-    // Moxie renders time slots dynamically — they take 2-3s to appear
+    // Moxie renders time slots dynamically — can take 3-10s to appear
     logger.info('Waiting for time slots to load...');
-    await this.delay(3000);
+    const maxWaitMs = 15000;
+    const pollMs = 1000;
+    let elapsed = 0;
+    let slotsFound = false;
+    while (elapsed < maxWaitMs) {
+      await this.delay(pollMs);
+      elapsed += pollMs;
+      slotsFound = await page.evaluate(() => /\d{1,2}:\d{2}\s*(am|pm)/i.test(document.body.innerText));
+      if (slotsFound) {
+        logger.info(`Time slots detected after ${elapsed}ms`);
+        break;
+      }
+    }
+    if (!slotsFound) {
+      logger.warn(`No time slots detected after ${maxWaitMs}ms — proceeding anyway`);
+    }
+    // Extra settle time for rendering
+    await this.delay(500);
 
     // Click on the time slot
     await this.selectTimeSlot(page, time);

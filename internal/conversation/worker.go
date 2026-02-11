@@ -507,14 +507,19 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 				w.logger.Warn("failed to send progress SMS", "error", err)
 			}
 			// Save progress messages to transcript so they appear in admin UI
+			progressMsg := SMSTranscriptMessage{
+				Role:      "assistant",
+				Body:      msg,
+				From:      payload.Message.To,
+				To:        payload.Message.From,
+				Timestamp: time.Now(),
+			}
 			if w.transcript != nil {
-				_ = w.transcript.Append(progressCtx, payload.Message.ConversationID, SMSTranscriptMessage{
-					Role:      "assistant",
-					Body:      msg,
-					From:      payload.Message.To,
-					To:        payload.Message.From,
-					Timestamp: time.Now(),
-				})
+				_ = w.transcript.Append(progressCtx, payload.Message.ConversationID, progressMsg)
+			}
+			// Also persist to database for admin portal history
+			if w.convStore != nil {
+				_ = w.convStore.AppendMessage(progressCtx, payload.Message.ConversationID, progressMsg)
 			}
 		}
 		w.logger.Info("worker calling ProcessMessage", "job_id", payload.ID, "conversation_id", payload.Message.ConversationID)
@@ -796,15 +801,19 @@ func (w *Worker) handleTimeSelectionResponse(ctx context.Context, msg MessageReq
 			return
 		}
 
-		// Record to transcript
+		// Record to transcript + database
+		timeSelMsg := SMSTranscriptMessage{
+			Role:      "assistant",
+			Body:      tsr.SMSMessage,
+			From:      msg.To,
+			To:        msg.From,
+			Timestamp: time.Now(),
+		}
 		if w.transcript != nil {
-			_ = w.transcript.Append(ctx, msg.ConversationID, SMSTranscriptMessage{
-				Role:      "assistant",
-				Body:      tsr.SMSMessage,
-				From:      msg.To,
-				To:        msg.From,
-				Timestamp: time.Now(),
-			})
+			_ = w.transcript.Append(ctx, msg.ConversationID, timeSelMsg)
+		}
+		if w.convStore != nil {
+			_ = w.convStore.AppendMessage(ctx, msg.ConversationID, timeSelMsg)
 		}
 
 		// CRITICAL: Also save the time options to LLM conversation history.
