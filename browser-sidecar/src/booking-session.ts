@@ -507,51 +507,105 @@ export class BookingSessionManager {
 
   /**
    * Navigate calendar to the target date
+   * Uses the same proven approach as the availability scraper (gridcell + bounding box clicks)
    */
   private async navigateCalendar(page: Page, year: number, month: number, day: number): Promise<void> {
     logger.info(`Navigating calendar to ${year}-${month + 1}-${day}`);
 
-    // Wait for calendar to be visible
-    await page.waitForSelector('[class*="calendar"], [role="grid"]', { timeout: 10000 });
-    await this.delay(1000);
+    // Wait for calendar grid to be visible
+    try {
+      await page.getByRole('grid').first().waitFor({ timeout: 15000 });
+      logger.info('Calendar grid detected');
+    } catch {
+      // Fallback: wait for any calendar-like element
+      await page.waitForSelector('[class*="calendar"], [role="grid"]', { timeout: 10000 });
+    }
+    await this.delay(2000);
 
     // Navigate to correct month using next/prev buttons
+    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december'];
+    const targetMonthName = monthNames[month];
+
     let attempts = 0;
     while (attempts < 12) {
-      const monthText = await page.evaluate(() => {
-        const calendarHeader = document.querySelector(
-          '[class*="calendar"] h2, [class*="calendar"] [class*="month"], [class*="month-year"]'
-        );
-        return calendarHeader?.textContent || '';
-      });
+      // Get all text on page to find month header
+      const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
 
-      const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
-        'july', 'august', 'september', 'october', 'november', 'december'];
-      const targetMonthName = monthNames[month];
-
-      if (monthText.toLowerCase().includes(targetMonthName) && monthText.includes(String(year))) {
-        logger.info(`Found target month: ${monthText}`);
+      if (pageText.includes(targetMonthName) && pageText.includes(String(year))) {
+        logger.info(`Found target month: ${targetMonthName} ${year}`);
         break;
       }
 
       // Click next month button
-      const nextBtn = page.locator('[class*="calendar"] button:has-text(">"), button[aria-label*="next"], button:has-text("›")').first();
-      if (await nextBtn.isVisible({ timeout: 1000 })) {
-        await nextBtn.click();
-        await this.delay(500);
+      try {
+        const nextBtn = page.locator('button[aria-label*="next" i], button:has-text("›"), button:has-text(">")').first();
+        if (await nextBtn.isVisible({ timeout: 1000 })) {
+          await nextBtn.click();
+          await this.delay(1000);
+        }
+      } catch {
+        break;
       }
-
       attempts++;
     }
 
-    // Click on the target day
-    await this.delay(500);
-    const dayButton = page.locator(`[class*="calendar"] button:has-text("${day}"), [role="gridcell"]:has-text("${day}")`).first();
-    if (await dayButton.isVisible({ timeout: 2000 })) {
-      await dayButton.click();
-      await this.delay(1000);
-      logger.info(`Clicked on day ${day}`);
+    // Click on the target day using the scraper's proven approach:
+    // Strategy 1: gridcell role with bounding box click
+    const dayStr = String(day);
+    let clicked = false;
+
+    try {
+      const gridCells = page.getByRole('gridcell');
+      const cellCount = await gridCells.count();
+      logger.info(`Found ${cellCount} grid cells`);
+
+      for (let i = 0; i < cellCount; i++) {
+        const cell = gridCells.nth(i);
+        const text = await cell.textContent();
+        if (text?.trim() === dayStr) {
+          const box = await cell.boundingBox();
+          if (box) {
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+            clicked = true;
+            logger.info(`Clicked on day ${day} via gridcell bounding box`);
+            await this.delay(2000);
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`Gridcell strategy failed: ${(err as Error).message}`);
     }
+
+    // Strategy 2: button with exact text match
+    if (!clicked) {
+      try {
+        const buttons = page.locator('button');
+        const buttonCount = await buttons.count();
+        for (let i = 0; i < buttonCount; i++) {
+          const btn = buttons.nth(i);
+          const text = await btn.textContent();
+          if (text?.trim() === dayStr) {
+            await btn.click({ force: true });
+            clicked = true;
+            logger.info(`Clicked on day ${day} via button`);
+            await this.delay(2000);
+            break;
+          }
+        }
+      } catch (err) {
+        logger.warn(`Button strategy failed: ${(err as Error).message}`);
+      }
+    }
+
+    if (!clicked) {
+      logger.error(`Could not click on day ${day}`);
+    }
+
+    // Verify time slots loaded
+    const hasTimeSlots = await page.evaluate(() => /\d{1,2}:\d{2}\s*(am|pm)/i.test(document.body.innerText));
+    logger.info(`Time slots visible after day click: ${hasTimeSlots}`);
   }
 
   /**
