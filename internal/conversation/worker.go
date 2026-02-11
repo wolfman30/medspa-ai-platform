@@ -891,9 +891,10 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 		}
 	}
 
-	// Step 3: Poll for handoff URL (every 2s, up to 60s)
+	// Step 3: Poll for handoff URL (every 2s, up to 90s)
+	// Booking flow navigates 4 steps (service, provider, date/time, contact) with delays
 	var handoffURL string
-	pollCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	pollCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
 	ticker := time.NewTicker(2 * time.Second)

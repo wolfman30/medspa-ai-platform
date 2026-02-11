@@ -555,20 +555,36 @@ export class BookingSessionManager {
   private async selectTimeSlot(page: Page, time: string): Promise<void> {
     logger.info(`Selecting time slot: ${time}`);
 
-    // Normalize time for matching (e.g., "2:30pm" -> "2:30 PM")
+    // Normalize: strip spaces, lowercase for comparison
+    // Input could be "7:45pm" or "7:45 PM" — normalize to "7:45pm"
     const normalizedTime = time.toLowerCase().replace(/\s+/g, '');
 
-    // Try to find and click the time slot
-    const timeSlot = page.locator(`button:has-text("${time}"), [class*="time"]:has-text("${time}")`).first();
-
-    if (await timeSlot.isVisible({ timeout: 3000 })) {
-      await timeSlot.click();
-      await this.delay(1000);
-      logger.info(`Selected time: ${time}`);
-      return;
+    // Generate multiple format variants for matching:
+    // "7:45pm", "7:45 pm", "7:45 PM", "7:45PM"
+    const match = normalizedTime.match(/^(\d{1,2}:\d{2})(am|pm)$/);
+    const variants: string[] = [time];
+    if (match) {
+      const [, timePart, ampm] = match;
+      variants.push(
+        `${timePart}${ampm}`,           // 7:45pm
+        `${timePart} ${ampm}`,           // 7:45 pm
+        `${timePart} ${ampm.toUpperCase()}`, // 7:45 PM
+        `${timePart}${ampm.toUpperCase()}`,  // 7:45PM
+      );
     }
 
-    // Fallback: Search for partial match
+    // Try each variant with Playwright locators
+    for (const variant of variants) {
+      const timeSlot = page.locator(`button:has-text("${variant}"), [class*="time"]:has-text("${variant}")`).first();
+      if (await timeSlot.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await timeSlot.click();
+        await this.delay(1000);
+        logger.info(`Selected time: ${variant}`);
+        return;
+      }
+    }
+
+    // Fallback: Search all buttons for partial match (normalized)
     const buttons = await page.$$('button');
     for (const button of buttons) {
       const text = await button.textContent();
@@ -579,6 +595,15 @@ export class BookingSessionManager {
         return;
       }
     }
+
+    // Log available buttons for debugging
+    const availableButtons = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('button'))
+        .map(b => b.textContent?.trim())
+        .filter(t => t && /\d/.test(t))
+        .slice(0, 20);
+    });
+    logger.error(`Available time buttons: ${JSON.stringify(availableButtons)}`);
 
     throw new Error(`Time slot "${time}" not found or unavailable`);
   }
@@ -649,8 +674,9 @@ export class BookingSessionManager {
     }
 
     // Wait for payment form or confirmation step
-    await page.waitForLoadState('networkidle');
-    await this.delay(1000);
+    // Note: avoid 'networkidle' — Moxie has persistent connections that prevent it from resolving
+    await page.waitForLoadState('domcontentloaded');
+    await this.delay(2000);
   }
 
   /**
