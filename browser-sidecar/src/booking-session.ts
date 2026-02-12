@@ -328,6 +328,30 @@ export class BookingSessionManager {
       logger.info(`BookingSession ${sessionId}: Step 2 - Selecting provider`);
       await this.selectProvider(session.page, request.provider);
 
+      // Intercept network requests to capture Moxie's internal API calls
+      const moxieApiCalls: Array<{method: string, url: string, postData?: string, status?: number, responseBody?: string}> = [];
+      session.page.on('request', (req) => {
+        const url = req.url();
+        if (url.includes('joinmoxie.com') && !url.includes('.js') && !url.includes('.css') && !url.includes('.png') && !url.includes('.svg') && !url.includes('.woff')) {
+          const entry: any = { method: req.method(), url };
+          if (req.method() === 'POST' || req.method() === 'PUT' || req.method() === 'PATCH') {
+            entry.postData = req.postData()?.substring(0, 2000);
+          }
+          moxieApiCalls.push(entry);
+        }
+      });
+      session.page.on('response', async (res) => {
+        const url = res.url();
+        const entry = moxieApiCalls.find(e => e.url === url && !e.status);
+        if (entry) {
+          entry.status = res.status();
+          try {
+            const body = await res.text();
+            entry.responseBody = body.substring(0, 1000);
+          } catch { /* ignore */ }
+        }
+      });
+
       // Step 3: Select date and time
       logger.info(`BookingSession ${sessionId}: Step 3 - Selecting date and time`);
       await this.selectDateTime(session.page, request.date, request.time);
@@ -337,6 +361,14 @@ export class BookingSessionManager {
       // navigateToPaymentStep handles filling fields at each step and clicking through
       logger.info(`BookingSession ${sessionId}: Navigating through contact/review to payment`);
       await this.navigateToPaymentStep(session.page, request.lead);
+
+      // Log all captured Moxie API calls for reverse engineering
+      logger.info(`Captured ${moxieApiCalls.length} Moxie API calls during booking flow`);
+      for (const call of moxieApiCalls) {
+        if (call.method !== 'GET' || call.url.includes('/api/')) {
+          logger.info(`Moxie API: ${call.method} ${call.url} → ${call.status || '?'}${call.postData ? ` | body: ${call.postData.substring(0, 500)}` : ''}${call.responseBody ? ` | resp: ${call.responseBody.substring(0, 500)}` : ''}`);
+        }
+      }
 
       // Capture handoff URL
       session.handoffUrl = session.page.url();
