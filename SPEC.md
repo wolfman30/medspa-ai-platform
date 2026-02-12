@@ -529,6 +529,12 @@ Real-time voice AI receptionist that answers inbound calls, qualifies patients t
 5. **Speculative pre-fetch** — During qualification flow, pre-generate TTS for the next likely question (e.g., after getting name, pre-generate "And what service are you interested in?").
 6. **Edge-case acceleration** — For single-word/number replies ("3", "yes", "Botox"), skip full LLM call and use pattern matching to select pre-generated responses.
 7. **Sentence-level chunking** — Split LLM output at sentence boundaries, send each sentence to TTS independently. First sentence plays while second generates.
+8. **Natural pacing layer** — Raw ~450ms is too fast; feels robotic. Add human-like pacing:
+   - Simple questions ("What's your name?"): add 150ms padding → ~600ms total (matches natural human turn-taking ~600ms)
+   - Complex responses (availability options): no padding, natural TTS duration handles it
+   - After emotional/empathetic moments: add 300ms pause — feels thoughtful, not instant
+   - After patient says "um" or pauses mid-sentence: wait longer before responding (they're still thinking)
+   - Target perceived response time: **500-800ms** — fast enough to feel attentive, slow enough to feel human
 
 ### Call Flow
 
