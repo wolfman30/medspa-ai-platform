@@ -852,22 +852,29 @@ export class BookingSessionManager {
     for (let i = 0; i < maxClicks; i++) {
       // Check if we're already on the payment step
       const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
-      // Detect the actual payment/checkout step — NOT just "Cherry payment plans" banner
-      // which appears on every Moxie page. Look for card input fields or payment form text.
-      const isPaymentStep = pageText.includes('card number') || 
+      // Detect the actual payment/checkout step via card input elements or 
+      // very specific payment text. "Cherry payment plans" and "payment" appear on 
+      // every Moxie page — those are NOT indicators.
+      const hasCardInput = await page.locator('input[name*="card" i], input[placeholder*="card" i], input[autocomplete*="cc-" i], iframe[title*="card" i], iframe[name*="card" i], [data-testid*="card" i]').count() > 0;
+      const isPaymentStep = hasCardInput ||
+                            pageText.includes('card number') || 
                             pageText.includes('credit card') ||
                             pageText.includes('pay now') ||
                             pageText.includes('complete booking') ||
                             pageText.includes('confirm and pay') ||
-                            pageText.includes('billing') ||
-                            pageText.includes('payment method') ||
-                            pageText.includes('enter your card');
+                            pageText.includes('enter your card') ||
+                            pageText.includes('deposit') ||
+                            pageText.includes('step 5');
       
       if (isPaymentStep) {
-        logger.info(`Reached payment step after ${i} "Next step" clicks`);
+        logger.info(`Reached payment step after ${i} "Next step" clicks (hasCardInput=${hasCardInput})`);
         await this.delay(2000);
         return;
       }
+
+      // Log truncated page text so we can understand each step
+      const truncatedText = pageText.substring(0, 500).replace(/\n+/g, ' ').trim();
+      logger.info(`Page text (step ${i}): "${truncatedText}"`);
 
       // Log current step for debugging
       const stepInfo = await page.evaluate(() => {
