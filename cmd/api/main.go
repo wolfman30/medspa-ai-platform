@@ -39,6 +39,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/notify"
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
@@ -760,6 +761,11 @@ func setupInlineWorker(
 		workerOpts = append(workerOpts, conversation.WithBrowserBookingClient(browserClient))
 		logger.Info("browser booking client wired into inline worker", "url", cfg.BrowserSidecarURL)
 	}
+
+	// Wire direct Moxie GraphQL API client (preferred over browser sidecar)
+	moxieAPIClient := moxieclient.NewClient(logger)
+	workerOpts = append(workerOpts, conversation.WithMoxieClient(moxieAPIClient))
+	logger.Info("Moxie direct API client wired into inline worker")
 
 	worker := conversation.NewWorker(
 		processor,

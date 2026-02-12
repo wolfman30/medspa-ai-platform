@@ -82,6 +82,7 @@ type UpdateConfigRequest struct {
 	Notifications          *NotificationPrefs `json:"notifications,omitempty"`
 	AIPersona              *AIPersona         `json:"ai_persona,omitempty"`
 	ServiceAliases         map[string]string  `json:"service_aliases,omitempty"`
+	MoxieConfig            *MoxieConfig       `json:"moxie_config,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -183,6 +184,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ServiceAliases != nil {
 		cfg.ServiceAliases = req.ServiceAliases
+	}
+	if req.MoxieConfig != nil {
+		cfg.MoxieConfig = req.MoxieConfig
 	}
 
 	// Save updated config

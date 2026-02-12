@@ -125,6 +125,24 @@ type Config struct {
 	// on the booking platform. For example, {"botox": "Tox", "wrinkle relaxers": "Tox"}.
 	// Keys are normalized (lowercased). Values are the search term used by the scraper.
 	ServiceAliases map[string]string `json:"service_aliases,omitempty"`
+
+	// MoxieConfig holds Moxie-specific IDs needed for direct GraphQL API booking.
+	// Only used when BookingPlatform == "moxie".
+	MoxieConfig *MoxieConfig `json:"moxie_config,omitempty"`
+}
+
+// MoxieConfig contains Moxie platform-specific identifiers for direct API integration.
+type MoxieConfig struct {
+	// MedspaID is the Moxie internal ID (e.g., "1264" for Forever 22).
+	MedspaID string `json:"medspa_id"`
+	// MedspaSlug is the URL slug (e.g., "forever-22").
+	MedspaSlug string `json:"medspa_slug"`
+	// ServiceMenuItems maps normalized service names to Moxie serviceMenuItemId.
+	// e.g., {"lip filler": "20425", "tox": "20424"}
+	ServiceMenuItems map[string]string `json:"service_menu_items,omitempty"`
+	// DefaultProviderID is used when patient has no provider preference.
+	// Empty string means "no preference" (Moxie assigns one).
+	DefaultProviderID string `json:"default_provider_id,omitempty"`
 }
 
 // DefaultBookingURL is the default test booking page for development/demo purposes.

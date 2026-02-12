@@ -15,6 +15,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -59,6 +60,7 @@ type Worker struct {
 	transcript       *SMSTranscriptStore
 	convStore        *ConversationStore
 	browserBooking   BrowserBookingClient
+	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	logger           *logging.Logger
 
@@ -83,6 +85,7 @@ type workerConfig struct {
 	transcript       *SMSTranscriptStore
 	convStore        *ConversationStore
 	browserBooking   BrowserBookingClient
+	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 }
 
@@ -242,6 +245,14 @@ func WithBrowserBookingClient(client BrowserBookingClient) WorkerOption {
 	}
 }
 
+// WithMoxieClient wires a direct Moxie GraphQL API client for booking creation.
+// When set, Moxie clinics will use the API directly instead of browser automation.
+func WithMoxieClient(client *moxieclient.Client) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.moxieClient = client
+	}
+}
+
 // WithWorkerLeadsRepo wires a leads repository for booking session updates.
 func WithWorkerLeadsRepo(repo leads.Repository) WorkerOption {
 	return func(cfg *workerConfig) {
@@ -301,6 +312,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		transcript:       cfg.transcript,
 		convStore:        cfg.convStore,
 		browserBooking:   cfg.browserBooking,
+		moxieClient:      cfg.moxieClient,
 		leadsRepo:        cfg.leadsRepo,
 		logger:           logger,
 		cfg:              cfg,
@@ -849,6 +861,187 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 	if req == nil {
 		return
 	}
+
+	// Prefer direct Moxie API when available + clinic has Moxie config
+	if w.moxieClient != nil && w.clinicStore != nil {
+		cfg, _ := w.clinicStore.Get(ctx, req.OrgID)
+		if cfg != nil && cfg.MoxieConfig != nil {
+			w.handleMoxieBookingDirect(ctx, msg, req, cfg)
+			return
+		}
+	}
+
+	// Fallback to browser sidecar
+	if w.browserBooking == nil {
+		w.logger.Warn("booking request received but no booking client configured",
+			"org_id", req.OrgID, "lead_id", req.LeadID)
+		return
+	}
+	w.handleMoxieBookingSidecar(ctx, msg, req)
+}
+
+// handleMoxieBookingDirect creates a Moxie appointment via their GraphQL API.
+// No browser needed — instant booking with confirmation SMS.
+func (w *Worker) handleMoxieBookingDirect(ctx context.Context, msg MessageRequest, req *BookingRequest, cfg *clinic.Config) {
+	mc := cfg.MoxieConfig
+	w.logger.Info("creating Moxie appointment via direct API",
+		"org_id", req.OrgID, "lead_id", req.LeadID,
+		"medspa_id", mc.MedspaID, "service", req.Service)
+
+	// Resolve serviceMenuItemId from service name
+	serviceMenuItemID := ""
+	normalizedService := strings.ToLower(req.Service)
+	if mc.ServiceMenuItems != nil {
+		serviceMenuItemID = mc.ServiceMenuItems[normalizedService]
+		// Try alias resolution
+		if serviceMenuItemID == "" {
+			resolved := cfg.ResolveServiceName(normalizedService)
+			serviceMenuItemID = mc.ServiceMenuItems[strings.ToLower(resolved)]
+		}
+	}
+	if serviceMenuItemID == "" {
+		w.logger.Error("no Moxie serviceMenuItemId for service",
+			"service", req.Service, "org_id", req.OrgID)
+		w.sendBookingFallbackSMS(ctx, msg, "We couldn't find that service in our booking system. Please call the clinic directly to book your appointment.")
+		return
+	}
+
+	// Parse the selected time slot to get start/end times in UTC
+	// req.Date is YYYY-MM-DD, req.Time is e.g. "7:15 PM"
+	startTime, endTime, err := w.parseMoxieTimeSlot(req.Date, req.Time, cfg.Timezone)
+	if err != nil {
+		w.logger.Error("failed to parse time slot for Moxie booking",
+			"error", err, "date", req.Date, "time", req.Time)
+		w.sendBookingFallbackSMS(ctx, msg, "We had trouble with the appointment time. Please try again or call the clinic directly.")
+		return
+	}
+
+	// Determine provider ID
+	providerID := mc.DefaultProviderID
+	if providerID == "" {
+		providerID = "no-preference"
+	}
+
+	// Create the appointment
+	result, err := w.moxieClient.CreateAppointment(ctx, moxieclient.CreateAppointmentRequest{
+		MedspaID:  mc.MedspaID,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Email:     req.Email,
+		Phone:     req.Phone,
+		Note:      "",
+		Services: []moxieclient.ServiceInput{{
+			ServiceMenuItemID: serviceMenuItemID,
+			ProviderID:        providerID,
+			StartTime:         startTime,
+			EndTime:           endTime,
+		}},
+		IsNewClient:              true, // Assume new client for SMS leads
+		NoPreferenceProviderUsed: providerID == "no-preference",
+	})
+	if err != nil {
+		w.logger.Error("Moxie API create appointment failed", "error", err,
+			"org_id", req.OrgID, "lead_id", req.LeadID)
+		w.sendBookingFallbackSMS(ctx, msg, "We're having trouble booking your appointment right now. Please try again in a moment or call the clinic directly.")
+		return
+	}
+
+	if !result.OK {
+		w.logger.Error("Moxie appointment creation returned not OK",
+			"message", result.Message, "org_id", req.OrgID, "lead_id", req.LeadID)
+		w.sendBookingFallbackSMS(ctx, msg, "We're having trouble booking your appointment right now. Please try again in a moment or call the clinic directly.")
+		return
+	}
+
+	w.logger.Info("Moxie appointment created successfully via API",
+		"appointment_id", result.AppointmentID,
+		"org_id", req.OrgID, "lead_id", req.LeadID,
+		"service", req.Service, "date", req.Date, "time", req.Time)
+
+	// Send confirmation SMS
+	confirmMsg := fmt.Sprintf("Your appointment has been booked! 🎉\n\n📋 %s\n📅 %s at %s\n📍 %s\n\nYou'll receive a confirmation from the clinic shortly. See you then!",
+		req.Service, req.Date, req.Time, cfg.Name)
+	if w.messenger != nil {
+		reply := OutboundReply{
+			OrgID:          msg.OrgID,
+			LeadID:         msg.LeadID,
+			ConversationID: msg.ConversationID,
+			To:             msg.From,
+			From:           msg.To,
+			Body:           confirmMsg,
+		}
+		if err := w.messenger.SendReply(ctx, reply); err != nil {
+			w.logger.Error("failed to send booking confirmation SMS", "error", err,
+				"org_id", req.OrgID, "appointment_id", result.AppointmentID)
+		}
+	}
+
+	// Update lead with appointment ID
+	if w.leadsRepo != nil && req.LeadID != "" {
+		now := time.Now()
+		if err := w.leadsRepo.UpdateBookingSession(ctx, req.LeadID, leads.BookingSessionUpdate{
+			SessionID:     result.AppointmentID,
+			Platform:      "moxie",
+			HandoffSentAt: &now,
+		}); err != nil {
+			w.logger.Warn("failed to update lead with appointment ID", "error", err,
+				"lead_id", req.LeadID, "appointment_id", result.AppointmentID)
+		}
+	}
+
+	// Record to transcript + DB
+	w.appendTranscript(ctx, msg.ConversationID, SMSTranscriptMessage{
+		Role:      "assistant",
+		Body:      confirmMsg,
+		Timestamp: time.Now(),
+	})
+	if w.convStore != nil {
+		_ = w.convStore.AppendMessage(ctx, msg.ConversationID, SMSTranscriptMessage{
+			Role:      "assistant",
+			Body:      confirmMsg,
+			Timestamp: time.Now(),
+		})
+	}
+}
+
+// parseMoxieTimeSlot converts date + time string to UTC ISO 8601 start/end times.
+func (w *Worker) parseMoxieTimeSlot(date, timeStr, timezone string) (string, string, error) {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+
+	// Parse "7:15 PM" or "7:15pm" style
+	timeStr = strings.TrimSpace(strings.ToUpper(timeStr))
+	timeStr = strings.Replace(timeStr, ".", "", -1) // remove dots from "P.M."
+
+	// Try common formats
+	var t time.Time
+	for _, fmt := range []string{"3:04 PM", "3:04PM", "15:04"} {
+		t, err = time.Parse(fmt, timeStr)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("parse time %q: %w", timeStr, err)
+	}
+
+	// Parse date
+	d, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return "", "", fmt.Errorf("parse date %q: %w", date, err)
+	}
+
+	// Combine date + time in clinic timezone
+	start := time.Date(d.Year(), d.Month(), d.Day(), t.Hour(), t.Minute(), 0, 0, loc)
+	end := start.Add(45 * time.Minute) // Default 45 min appointment
+
+	return start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339), nil
+}
+
+// handleMoxieBookingSidecar is the legacy browser-based booking flow.
+func (w *Worker) handleMoxieBookingSidecar(ctx context.Context, msg MessageRequest, req *BookingRequest) {
 	if w.browserBooking == nil {
 		w.logger.Warn("booking request received but no browser booking client configured",
 			"org_id", req.OrgID, "lead_id", req.LeadID)
@@ -901,7 +1094,6 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 	}
 
 	// Step 3: Poll for handoff URL (every 2s, up to 90s)
-	// Booking flow navigates 4 steps (service, provider, date/time, contact) with delays
 	var handoffURL string
 	pollCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -934,9 +1126,6 @@ gotHandoff:
 	w.logger.Info("Moxie booking handoff URL received", "session_id", sessionID,
 		"handoff_url", handoffURL[:min(50, len(handoffURL))], "org_id", req.OrgID)
 
-	// Step 4: Send Moxie Step 5 URL to patient via SMS.
-	// This link goes directly to Moxie's payment page where the patient
-	// enters their card details and clicks to finalize the booking.
 	handoffMsg := fmt.Sprintf("Your booking is almost complete! Tap the link below to enter your payment info and finalize your appointment:\n%s", handoffURL)
 	if w.messenger != nil {
 		reply := OutboundReply{
@@ -953,7 +1142,7 @@ gotHandoff:
 		}
 	}
 
-	// Step 5: Update lead with handoff URL
+	// Update lead with handoff URL
 	if w.leadsRepo != nil && req.LeadID != "" {
 		now := time.Now()
 		if err := w.leadsRepo.UpdateBookingSession(ctx, req.LeadID, leads.BookingSessionUpdate{
