@@ -83,7 +83,7 @@ module "ecs_fargate" {
     BEDROCK_EMBEDDING_MODEL_ID   = "amazon.titan-embed-text-v1"
     TELNYX_TRACK_JOBS            = "true"
     PERSIST_CONVERSATION_HISTORY = "true"
-    S3_TRAINING_BUCKET           = module.training_data_s3.bucket_name
+    S3_TRAINING_BUCKET           = "aiwolf-training-data-${var.environment}"
   }
 
   secret_environment_variables = {
