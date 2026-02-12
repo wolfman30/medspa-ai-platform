@@ -58,6 +58,10 @@ type Config struct {
 	// Mock booking pages for testing (dev only)
 	MockBooking *demo.MockBookingHandler
 
+	// Stripe payment handlers
+	StripeWebhook *payments.StripeWebhookHandler
+	StripeConnect *payments.StripeConnectHandler
+
 	// Booking callback handler (browser sidecar → Go API)
 	BookingCallbackHandler *conversation.BookingCallbackHandler
 }
@@ -90,6 +94,13 @@ func New(cfg *Config) http.Handler {
 		})
 		if cfg.SquareWebhook != nil {
 			public.Post("/webhooks/square", cfg.SquareWebhook.Handle)
+		}
+		if cfg.StripeWebhook != nil {
+			public.Post("/webhooks/stripe", cfg.StripeWebhook.Handle)
+		}
+		if cfg.StripeConnect != nil {
+			public.Get("/stripe/connect/authorize", cfg.StripeConnect.HandleAuthorize)
+			public.Get("/stripe/connect/callback", cfg.StripeConnect.HandleCallback)
 		}
 		if cfg.FakePayments != nil {
 			public.Mount("/demo", cfg.FakePayments.Routes())
@@ -139,6 +150,11 @@ func New(cfg *Config) http.Handler {
 					if cfg.SquareOAuth != nil {
 						clinic.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
 						clinic.Get("/square/status", cfg.SquareOAuth.HandleStatus)
+					}
+					// Stripe Connect for onboarding (public)
+					if cfg.StripeConnect != nil {
+						clinic.Get("/stripe/connect", cfg.StripeConnect.HandleAuthorize)
+						clinic.Get("/stripe/status", cfg.StripeConnect.HandleStatus)
 					}
 				})
 			})
@@ -210,6 +226,10 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Post("/square/setup", cfg.SquareOAuth.HandleSandboxSetup)
 					clinicRoutes.Put("/phone", cfg.SquareOAuth.HandleUpdatePhone)
 				}
+				if cfg.StripeConnect != nil {
+					clinicRoutes.Get("/stripe/connect", cfg.StripeConnect.HandleAuthorize)
+					clinicRoutes.Get("/stripe/status", cfg.StripeConnect.HandleStatus)
+				}
 			})
 
 			// Admin dashboard, leads, and conversations routes
@@ -249,6 +269,10 @@ func New(cfg *Config) http.Handler {
 				if cfg.SquareOAuth != nil {
 					r.Get("/square/status", cfg.SquareOAuth.HandleStatus)
 					r.Get("/square/connect", cfg.SquareOAuth.HandleConnect)
+				}
+				if cfg.StripeConnect != nil {
+					r.Get("/stripe/status", cfg.StripeConnect.HandleStatus)
+					r.Get("/stripe/connect", cfg.StripeConnect.HandleAuthorize)
 				}
 				if knowledgeHandler != nil {
 					r.Get("/knowledge", knowledgeHandler.GetKnowledge)

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -176,5 +178,42 @@ func (h *StripeConnectHandler) HandleCallback(w http.ResponseWriter, r *http.Req
 		"status":     "connected",
 		"org_id":     orgID,
 		"account_id": tokenResp.StripeUserID,
+	})
+}
+
+// HandleStatus returns the Stripe Connect status for a clinic.
+// GET /admin/clinics/{orgID}/stripe/status
+func (h *StripeConnectHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgID")
+	if orgID == "" {
+		http.Error(w, "missing orgID", http.StatusBadRequest)
+		return
+	}
+
+	// Check if configSaver also implements StripeStatusGetter (clinic.Store does)
+	type stripeStatusGetter interface {
+		GetStripeAccountID(ctx context.Context, orgID string) (string, error)
+	}
+	if getter, ok := h.configSaver.(stripeStatusGetter); ok {
+		accountID, err := getter.GetStripeAccountID(r.Context(), orgID)
+		if err != nil {
+			h.logger.Error("failed to get stripe status", "error", err, "org_id", orgID)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"org_id":            orgID,
+			"connected":         accountID != "",
+			"stripe_account_id": accountID,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"org_id":    orgID,
+		"connected": false,
+		"message":   "status check not available",
 	})
 }

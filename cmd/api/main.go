@@ -358,6 +358,30 @@ func main() {
 		go deliverer.Start(appCtx)
 	}
 
+	// Initialize Stripe handlers
+	var stripeWebhookHandler *payments.StripeWebhookHandler
+	var stripeConnectHandler *payments.StripeConnectHandler
+	if cfg.StripeWebhookSecret != "" && paymentsRepo != nil && processedStore != nil && outboxStore != nil {
+		var stripeNumberResolver payments.OrgNumberResolver = resolver
+		fallbackFromNumber := strings.TrimSpace(cfg.TelnyxFromNumber)
+		if fallbackFromNumber == "" {
+			fallbackFromNumber = strings.TrimSpace(cfg.TwilioFromNumber)
+		}
+		if fallbackFromNumber != "" {
+			stripeNumberResolver = payments.NewFallbackNumberResolver(stripeNumberResolver, fallbackFromNumber)
+		}
+		stripeWebhookHandler = payments.NewStripeWebhookHandler(cfg.StripeWebhookSecret, paymentsRepo, leadsRepo, processedStore, outboxStore, stripeNumberResolver, logger)
+		logger.Info("stripe webhook handler initialized")
+	}
+	if cfg.StripeConnectClientID != "" && cfg.StripeSecretKey != "" && clinicStore != nil {
+		redirectURI := cfg.StripeConnectRedirect
+		if redirectURI == "" {
+			redirectURI = cfg.PublicBaseURL + "/stripe/connect/callback"
+		}
+		stripeConnectHandler = payments.NewStripeConnectHandler(cfg.StripeConnectClientID, cfg.StripeSecretKey, redirectURI, clinicStore, logger)
+		logger.Info("stripe connect handler initialized", "client_id_set", cfg.StripeConnectClientID != "", "redirect_uri", redirectURI)
+	}
+
 	var telnyxWebhookHandler *handlers.TelnyxWebhookHandler
 	logger.Debug("checking telnyx webhook handler prerequisites",
 		"msgStore", msgStore != nil,
@@ -408,6 +432,8 @@ func main() {
 		FakePayments:           fakePaymentsHandler,
 		SquareWebhook:          squareWebhookHandler,
 		SquareOAuth:            squareOAuthHandler,
+		StripeWebhook:          stripeWebhookHandler,
+		StripeConnect:          stripeConnectHandler,
 		AdminMessaging:         adminMessagingHandler,
 		AdminClinicData:        adminClinicDataHandler,
 		TelnyxWebhooks:         telnyxWebhookHandler,
@@ -600,6 +626,11 @@ func setupInlineWorker(
 		}
 	}
 
+	var clinicStore *clinic.Store
+	if redisClient != nil {
+		clinicStore = clinic.NewStore(redisClient)
+	}
+
 	var depositSender conversation.DepositSender
 	var depositPreloader *conversation.DepositPreloader
 	var convStore *conversation.ConversationStore
@@ -616,8 +647,14 @@ func setupInlineWorker(
 			depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
 			logger.Warn("deposit sender initialized in fake payments mode (ALLOW_FAKE_PAYMENTS=true)")
 		} else {
-			if !hasSquareProvider {
-				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "", "has_oauth", false)
+			hasStripeProvider := cfg.StripeSecretKey != ""
+			if !hasSquareProvider && !hasStripeProvider {
+				logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_stripe_key", cfg.StripeSecretKey != "")
+			} else if !hasSquareProvider && hasStripeProvider {
+				// Stripe-only mode
+				stripeSvc := payments.NewStripeCheckoutService(cfg.StripeSecretKey, cfg.StripeSuccessURL, cfg.StripeCancelURL, logger)
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, stripeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
+				logger.Info("deposit sender initialized (stripe only)")
 			} else {
 				usePaymentLinks := payments.UsePaymentLinks(cfg.SquareCheckoutMode, cfg.SquareSandbox)
 				squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).
@@ -639,18 +676,22 @@ func setupInlineWorker(
 					numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
 					logger.Info("square oauth wired into inline workers", "sandbox", cfg.SquareSandbox)
 				}
-				depositSender = conversation.NewDepositDispatcher(paymentChecker, squareSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
+
+				// Use multi-checkout if Stripe is also configured, otherwise just Square
+				var checkoutSvc payments.CheckoutProvider = squareSvc
+				if cfg.StripeSecretKey != "" && clinicStore != nil {
+					stripeSvc := payments.NewStripeCheckoutService(cfg.StripeSecretKey, cfg.StripeSuccessURL, cfg.StripeCancelURL, logger)
+					checkoutSvc = payments.NewMultiCheckoutService(squareSvc, stripeSvc, clinicStore, logger)
+					logger.Info("multi-checkout service initialized (square + stripe)")
+				}
+
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, checkoutSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
 				depositPreloader = conversation.NewDepositPreloader(squareSvc, 5000, logger) // Default $50 deposit
 				logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "", "preloader", depositPreloader != nil)
 			}
 		}
 	} else {
 		logger.Warn("deposit sender NOT initialized", "has_db", dbPool != nil, "has_outbox", outboxStore != nil, "has_square_token", cfg.SquareAccessToken != "", "has_square_location", cfg.SquareLocationID != "")
-	}
-
-	var clinicStore *clinic.Store
-	if redisClient != nil {
-		clinicStore = clinic.NewStore(redisClient)
 	}
 
 	// Initialize notification service for clinic operator alerts

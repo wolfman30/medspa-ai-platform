@@ -53,6 +53,13 @@ type Config struct {
 	SquareSandbox                   bool
 	SquareCheckoutMode              string
 	SquareCheckoutAllowFallback     bool
+	StripeSecretKey       string
+	StripeWebhookSecret   string
+	StripeConnectClientID string
+	StripeDryRun          bool
+	StripeSuccessURL      string
+	StripeCancelURL       string
+	StripeConnectRedirect string
 	AllowFakePayments               bool
 	DepositAmountCents              int
 	SandboxAutoPurgePhones          string
@@ -227,6 +234,13 @@ func Load() *Config {
 		SquareSandbox:                   getEnvAsBool("SQUARE_SANDBOX", true),
 		SquareCheckoutMode:              getEnv("SQUARE_CHECKOUT_MODE", "auto"),
 		SquareCheckoutAllowFallback:     getEnvAsBool("SQUARE_CHECKOUT_ALLOW_FALLBACK", true),
+		StripeSecretKey:       getEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret:   getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		StripeConnectClientID: getEnv("STRIPE_CONNECT_CLIENT_ID", ""),
+		StripeDryRun:          getEnvAsBool("STRIPE_DRY_RUN", false),
+		StripeSuccessURL:      getEnv("STRIPE_SUCCESS_URL", ""),
+		StripeCancelURL:       getEnv("STRIPE_CANCEL_URL", ""),
+		StripeConnectRedirect: getEnv("STRIPE_CONNECT_REDIRECT_URI", ""),
 		AllowFakePayments:               getEnvAsBool("ALLOW_FAKE_PAYMENTS", false),
 		DepositAmountCents:              getEnvAsInt("DEPOSIT_AMOUNT_CENTS", 5000),
 		SandboxAutoPurgePhones:          getEnv("SANDBOX_AUTO_PURGE_PHONE_DIGITS", ""),

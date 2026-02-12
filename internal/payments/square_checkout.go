@@ -60,6 +60,7 @@ type CheckoutParams struct {
 	CancelURL       string
 	ScheduledFor    *time.Time
 	FromNumber      string
+	StripeAccountID string // Connected Stripe account for Stripe Connect payments
 }
 
 type CheckoutResponse struct {
