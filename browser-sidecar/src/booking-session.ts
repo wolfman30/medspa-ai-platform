@@ -332,13 +332,11 @@ export class BookingSessionManager {
       logger.info(`BookingSession ${sessionId}: Step 3 - Selecting date and time`);
       await this.selectDateTime(session.page, request.date, request.time);
 
-      // Step 4: Fill contact details
-      logger.info(`BookingSession ${sessionId}: Step 4 - Filling contact details`);
-      await this.fillContactDetails(session.page, request.lead);
-
-      // Navigate to Step 5 (payment page)
-      logger.info(`BookingSession ${sessionId}: Navigating to Step 5 (payment)`);
-      await this.navigateToPaymentStep(session.page);
+      // Steps 4-6: Fill contact details and navigate through to payment
+      // Moxie Step 3 = phone entry, Step 4 = name/email (new clients), Step 5 = review, Step 6 = payment
+      // navigateToPaymentStep handles filling fields at each step and clicking through
+      logger.info(`BookingSession ${sessionId}: Navigating through contact/review to payment`);
+      await this.navigateToPaymentStep(session.page, request.lead);
 
       // Capture handoff URL
       session.handoffUrl = session.page.url();
@@ -722,96 +720,70 @@ export class BookingSessionManager {
    * Step 4: Fill contact details
    * Moxie's "Your information" step has: first name, last name, email, phone
    */
-  private async fillContactDetails(page: Page, lead: LeadInfo): Promise<void> {
-    logger.info('Filling contact details');
+  /**
+   * Fill any visible contact fields on the current page.
+   * Moxie shows fields progressively — phone first (Step 3 "Enter account details"),
+   * then name/email after phone lookup (Step 4 for new clients).
+   * This method fills whatever is visible and returns what was filled.
+   */
+  private async fillVisibleContactFields(page: Page, lead: LeadInfo): Promise<{phone: boolean, firstName: boolean, lastName: boolean, email: boolean}> {
+    const filled = { phone: false, firstName: false, lastName: false, email: false };
 
-    // Log the current page step for debugging
-    const stepText = await page.evaluate(() => {
-      const stepEl = document.querySelector('[class*="step" i], [class*="header" i] h1, [class*="header" i] h2');
-      return stepEl?.textContent?.trim() || document.title;
+    // Log visible inputs
+    const inputInfo = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('input, textarea')).map(inp => ({
+        tag: inp.tagName,
+        type: (inp as HTMLInputElement).type,
+        name: (inp as HTMLInputElement).name,
+        id: inp.id,
+        placeholder: (inp as HTMLInputElement).placeholder,
+        ariaLabel: inp.getAttribute('aria-label'),
+        visible: (inp as HTMLElement).offsetParent !== null,
+      })).filter(i => i.visible);
     });
-    logger.info(`Current page context: "${stepText}"`);
+    logger.info(`Visible inputs: ${JSON.stringify(inputInfo)}`);
 
-    // Wait for any input to be visible
-    try {
-      await page.waitForSelector('input', { timeout: 10000 });
-    } catch {
-      logger.warn('No inputs found on contact form page — logging page content for debugging');
-      const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 500));
-      logger.info(`Page text: ${bodyText}`);
-      return;
-    }
-    await this.delay(1000);
-
-    // Log all visible inputs for debugging
-    const logInputs = async (label: string) => {
-      const inputInfo = await page.evaluate(() => {
-        return Array.from(document.querySelectorAll('input, textarea')).map(inp => ({
-          tag: inp.tagName,
-          type: (inp as HTMLInputElement).type,
-          name: (inp as HTMLInputElement).name,
-          id: inp.id,
-          placeholder: (inp as HTMLInputElement).placeholder,
-          ariaLabel: inp.getAttribute('aria-label'),
-          visible: (inp as HTMLElement).offsetParent !== null,
-        })).filter(i => i.visible);
-      });
-      logger.info(`${label} — visible inputs: ${JSON.stringify(inputInfo)}`);
-    };
-
-    await logInputs('Before phone entry');
-
-    // Moxie shows phone field first (to look up existing clients).
-    // Fill phone FIRST, then wait for the form to expand with name/email fields.
-    const phoneFilled = await this.fillField(page, lead.phone, [
+    // Fill phone
+    filled.phone = await this.fillField(page, lead.phone, [
       'input[type="tel"]',
       'input[name*="phone" i]',
       'input[placeholder*="phone" i]',
     ], 'phone');
 
-    if (phoneFilled) {
-      // Press Tab or click elsewhere to trigger phone lookup
-      await page.keyboard.press('Tab');
-      await this.delay(3000); // Wait for form to expand after phone entry
-      await logInputs('After phone entry + 3s wait');
-    }
-
-    // Now look for name and email fields that may have appeared
-    // Fill first name — try multiple strategies
-    const firstNameFilled = await this.fillField(page, lead.firstName, [
+    // Fill first name
+    filled.firstName = await this.fillField(page, lead.firstName, [
       'input[name*="first" i]',
       'input[placeholder*="first" i]',
       'input[id*="first" i]',
       'input[aria-label*="first" i]',
-      'input[name*="firstName" i]',
     ], 'first name');
 
     // Fill last name
-    const lastNameFilled = await this.fillField(page, lead.lastName, [
+    filled.lastName = await this.fillField(page, lead.lastName, [
       'input[name*="last" i]',
       'input[placeholder*="last" i]',
       'input[id*="last" i]',
       'input[aria-label*="last" i]',
-      'input[name*="lastName" i]',
     ], 'last name');
 
-    // If neither first nor last name found, try generic text inputs in order
-    if (!firstNameFilled && !lastNameFilled) {
+    // If no named fields, try generic text inputs
+    if (!filled.firstName && !filled.lastName) {
       const textInputs = page.locator('input[type="text"]:visible');
       const count = await textInputs.count();
-      logger.info(`No name fields matched — trying ${count} generic text inputs`);
       if (count >= 1) {
         await textInputs.nth(0).fill(lead.firstName);
-        logger.info(`Filled first text input with first name: ${lead.firstName}`);
+        filled.firstName = true;
+        logger.info(`Filled generic text input 1 with first name: ${lead.firstName}`);
       }
       if (count >= 2) {
         await textInputs.nth(1).fill(lead.lastName);
-        logger.info(`Filled second text input with last name: ${lead.lastName}`);
+        filled.lastName = true;
+        logger.info(`Filled generic text input 2 with last name: ${lead.lastName}`);
       }
     }
 
     // Fill email
-    await this.fillField(page, lead.email, [
+    filled.email = await this.fillField(page, lead.email, [
       'input[type="email"]',
       'input[name*="email" i]',
       'input[placeholder*="email" i]',
@@ -819,7 +791,7 @@ export class BookingSessionManager {
       'input[aria-label*="email" i]',
     ], 'email');
 
-    await this.delay(500);
+    return filled;
   }
 
   /**
@@ -843,83 +815,105 @@ export class BookingSessionManager {
   }
 
   /**
-   * Navigate to Step 5 (payment page) by clicking "Next step" repeatedly
-   * Moxie flow: Service → Schedule → Your Info → Review → Payment
-   * We need to click through until we reach the payment/card step
+   * Navigate from contact details step through to payment page.
+   * 
+   * Moxie's actual flow after time selection:
+   *   Step 3: "Enter account details" — phone number only
+   *   Step 4: "Your information" — first name, last name, email (for new clients)  
+   *   Step 5: Review / Confirm
+   *   Step 6: Payment (card details / deposit)
+   *
+   * At each step: fill any visible contact fields, then click "Next step".
+   * Stop when we detect card input elements or hit max iterations.
    */
-  private async navigateToPaymentStep(page: Page): Promise<void> {
-    const maxClicks = 5; // Safety limit
+  private async navigateToPaymentStep(page: Page, lead: LeadInfo): Promise<void> {
+    const maxClicks = 8; // Safety limit
     for (let i = 0; i < maxClicks; i++) {
-      // Check if we're already on the payment step
-      const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
-      // Detect the actual payment/checkout step via card input elements or 
-      // very specific payment text. "Cherry payment plans" and "payment" appear on 
-      // every Moxie page — those are NOT indicators.
-      const hasCardInput = await page.locator('input[name*="card" i], input[placeholder*="card" i], input[autocomplete*="cc-" i], iframe[title*="card" i], iframe[name*="card" i], [data-testid*="card" i]').count() > 0;
-      const isPaymentStep = hasCardInput ||
-                            pageText.includes('card number') || 
-                            pageText.includes('credit card') ||
-                            pageText.includes('pay now') ||
-                            pageText.includes('complete booking') ||
-                            pageText.includes('confirm and pay') ||
-                            pageText.includes('enter your card') ||
-                            pageText.includes('deposit') ||
-                            pageText.includes('step 5');
+      await this.delay(2000); // Wait for page to settle
       
-      if (isPaymentStep) {
-        logger.info(`Reached payment step after ${i} "Next step" clicks (hasCardInput=${hasCardInput})`);
+      // Check if we're on the payment step via card input elements
+      const hasCardInput = await page.locator(
+        'input[name*="card" i], input[placeholder*="card" i], input[autocomplete*="cc-" i], ' +
+        'iframe[title*="card" i], iframe[name*="card" i], iframe[src*="stripe" i], iframe[src*="square" i], ' +
+        '[data-testid*="card" i], [class*="CardElement" i], [class*="card-element" i]'
+      ).count() > 0;
+      
+      // Also check for very specific payment text (NOT "payment plans" or "deposit" which appear on other pages)
+      const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
+      const hasPaymentText = pageText.includes('card number') || 
+                             pageText.includes('credit card') ||
+                             pageText.includes('pay now') ||
+                             pageText.includes('complete booking') ||
+                             pageText.includes('confirm and pay') ||
+                             pageText.includes('enter your card');
+      
+      if (hasCardInput || hasPaymentText) {
+        logger.info(`Reached payment step after ${i} iterations (hasCardInput=${hasCardInput}, hasPaymentText=${hasPaymentText})`);
         await this.delay(2000);
         return;
       }
 
-      // Log truncated page text so we can understand each step
-      const truncatedText = pageText.substring(0, 500).replace(/\n+/g, ' ').trim();
-      logger.info(`Page text (step ${i}): "${truncatedText}"`);
+      // Extract current step info
+      const stepMatch = pageText.match(/step\s*(\d+)/i);
+      const stepNum = stepMatch ? parseInt(stepMatch[1]) : 0;
+      const truncatedText = pageText.substring(0, 600).replace(/\n+/g, ' ').trim();
+      logger.info(`Navigation iteration ${i}: Step ${stepNum || '?'}, text: "${truncatedText.substring(0, 200)}..."`);
 
-      // Log current step for debugging
-      const stepInfo = await page.evaluate(() => {
-        const text = document.body.innerText;
-        const stepMatch = text.match(/step\s*\d/i);
-        const headings = Array.from(document.querySelectorAll('h1, h2, h3')).map(h => h.textContent?.trim()).filter(Boolean).slice(0, 3);
-        return { step: stepMatch?.[0] || 'unknown', headings };
-      });
-      logger.info(`Step ${i + 1}: ${JSON.stringify(stepInfo)}`);
+      // Fill any visible contact fields at this step
+      const hasInputs = await page.locator('input:visible').count();
+      if (hasInputs > 0) {
+        logger.info(`Found ${hasInputs} visible inputs — attempting to fill contact fields`);
+        const filled = await this.fillVisibleContactFields(page, lead);
+        logger.info(`Filled: phone=${filled.phone}, firstName=${filled.firstName}, lastName=${filled.lastName}, email=${filled.email}`);
+        await this.delay(500);
+      }
 
-      // Try to click "Next step" button
+      // Click "Next step" or equivalent navigation button
       let clicked = false;
+      
+      // Primary: look for "Next step" text
       try {
-        const nextBtn = page.locator('text=/next step/i').first();
-        if (await nextBtn.isVisible({ timeout: 3000 })) {
+        const nextBtn = page.locator('button:has-text("Next step"), a:has-text("Next step")').first();
+        if (await nextBtn.isVisible({ timeout: 2000 })) {
           await nextBtn.click({ force: true });
           clicked = true;
-          logger.info(`Clicked "Next step" (attempt ${i + 1})`);
+          logger.info(`Clicked "Next step" (iteration ${i})`);
         }
-      } catch {
-        // Try fallback
+      } catch { /* try fallback */ }
+
+      // Fallback: "Book appointment", "Confirm", "Continue", "Next", submit button
+      if (!clicked) {
+        const fallbackSelectors = [
+          'button:has-text("Book appointment")',
+          'button:has-text("Confirm")',
+          'button:has-text("Continue")',
+          'button:has-text("Next")',
+          'button:has-text("Proceed")',
+          'button[type="submit"]',
+        ];
+        for (const sel of fallbackSelectors) {
+          try {
+            const btn = page.locator(sel).first();
+            if (await btn.isVisible({ timeout: 1000 })) {
+              await btn.click({ force: true });
+              clicked = true;
+              logger.info(`Clicked "${sel}" (iteration ${i})`);
+              break;
+            }
+          } catch { /* try next */ }
+        }
       }
 
       if (!clicked) {
-        try {
-          // Fallback: any button with next/continue/proceed
-          const fallback = page.locator('button:has-text("Next"), button:has-text("Continue"), button:has-text("Proceed"), button:has-text("Book"), button[type="submit"]').first();
-          if (await fallback.isVisible({ timeout: 2000 })) {
-            await fallback.click({ force: true });
-            clicked = true;
-            logger.info(`Clicked fallback navigation button (attempt ${i + 1})`);
-          }
-        } catch {
-          logger.warn(`No navigation button found on attempt ${i + 1}`);
-        }
-      }
-
-      if (!clicked) {
-        logger.warn(`Cannot advance further — no clickable button found`);
+        logger.warn(`No navigation button found at iteration ${i} — stopping`);
         break;
       }
 
       // Wait for page transition
-      await this.delay(3000);
-      await page.waitForLoadState('domcontentloaded');
+      await this.delay(2000);
+      try {
+        await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+      } catch { /* continue anyway */ }
     }
 
     logger.info('Finished navigation — capturing current page as handoff');
