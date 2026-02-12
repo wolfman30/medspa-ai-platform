@@ -509,18 +509,26 @@ Real-time voice AI receptionist that answers inbound calls, qualifies patients t
 | LLM | Claude 3.5 Haiku via AWS Bedrock | Same as SMS flow, streaming responses |
 | Orchestration | Go service on ECS Fargate | WebSocket handler + audio pipeline |
 
-### Latency Budget (<1.5s round-trip)
+### Latency Budget (~500ms target)
 
-| Stage | Target |
-|-------|--------|
-| Speech endpointing (VAD) | 200ms |
-| STT final result | 50ms |
-| LLM first token | 400ms |
-| TTS first audio byte | 200ms |
-| Network | 100ms |
-| **Total** | **~950ms** |
+| Stage | Baseline | Optimized | How |
+|-------|----------|-----------|-----|
+| Speech endpointing (VAD) | 200ms | 100ms | Aggressive VAD threshold + interim STT results |
+| STT final result | 50ms | 0ms | Use streaming interim results, don't wait for final |
+| LLM first token | 400ms | 200ms | Claude Haiku + minimal system prompt + pre-warmed connection |
+| TTS first audio byte | 200ms | 100ms | ElevenLabs streaming from first sentence fragment |
+| Network | 100ms | 50ms | Co-locate in us-east-1, persistent WebSocket |
+| **Baseline total** | **~950ms** | | |
+| **Optimized total** | | **~450ms** | |
 
-**Key optimization:** LLM→TTS pipelining — stream LLM tokens directly to TTS, start audio playback while LLM is still generating.
+**Key optimizations for ~500ms:**
+1. **LLM→TTS pipelining** — Stream LLM tokens directly to TTS. Start audio playback while LLM is still generating the rest of the sentence. Patient hears the first word within 300ms of LLM start.
+2. **Streaming STT** — Process interim (partial) transcripts immediately. Don't wait for Deepgram's "final" result. Correct course if the final differs from interim.
+3. **Pre-warmed connections** — Keep persistent connections to Deepgram, ElevenLabs, and Bedrock. No cold-start handshake per utterance.
+4. **Aggressive VAD** — Detect end-of-speech in 100ms using energy + silence threshold. For short replies ("yes", "Tuesday"), respond almost instantly.
+5. **Speculative pre-fetch** — During qualification flow, pre-generate TTS for the next likely question (e.g., after getting name, pre-generate "And what service are you interested in?").
+6. **Edge-case acceleration** — For single-word/number replies ("3", "yes", "Botox"), skip full LLM call and use pattern matching to select pre-generated responses.
+7. **Sentence-level chunking** — Split LLM output at sentence boundaries, send each sentence to TTS independently. First sentence plays while second generates.
 
 ### Call Flow
 
