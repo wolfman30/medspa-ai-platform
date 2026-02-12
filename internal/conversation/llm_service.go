@@ -1501,7 +1501,26 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 		if email == "" {
 			s.logger.Warn("booking blocked: no email for Moxie booking", "lead_id", req.LeadID)
-			// bookingRequest stays nil — AI will ask for email per prompt
+			// Override the LLM reply to ask for email — the LLM already generated a reply
+			// assuming the booking would proceed, but we can't book without email.
+			if selectedSlot != nil {
+				// Slot was selected THIS turn — override the reply
+				slotTime := selectedSlot.DateTime
+				reply = fmt.Sprintf("Great choice! I've got %s for %s. To complete your booking, I just need your email address. What's the best email for you?",
+					slotTime.Format("Monday, January 2 at 3:04 PM"), timeSelectionState.Service)
+				// Update the last assistant message in history with the overridden reply
+				for i := len(history) - 1; i >= 0; i-- {
+					if history[i].Role == ChatRoleAssistant {
+						history[i].Content = reply
+						break
+					}
+				}
+				if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+					s.logger.Warn("failed to save history after email request override", "error", err)
+				}
+			}
+			// If previouslySelectedDateTime, the LLM should already be asking for email
+			// based on conversation history context
 		} else {
 			// Format date and time from the selected slot (current turn or previous turn)
 			var slotDateTime time.Time
