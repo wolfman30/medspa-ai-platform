@@ -887,6 +887,7 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 			}
 			resp := &Response{
 				DepositIntent: &DepositIntent{
+					AmountCents:  int32(cfg.DepositAmountForService(req.Service)),
 					Description:  desc,
 					ScheduledFor: scheduledFor,
 				},
@@ -1305,14 +1306,22 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 			if moxieBooked && moxieConfirmMsg != "" {
 				body = moxieConfirmMsg
 			} else {
-				var clinicName, bookingURL, callbackTime string
+				var clinicName, bookingURL, callbackTime, tz string
 				if cfg != nil {
 					clinicName = strings.TrimSpace(cfg.Name)
 					bookingURL = strings.TrimSpace(cfg.BookingURL)
 					callbackTime = cfg.ExpectedCallbackTime(time.Now())
+					tz = cfg.Timezone
 				}
 				if callbackTime == "" {
 					callbackTime = "within 24 hours" // fallback
+				}
+				// Convert scheduled time to clinic timezone for display
+				if evt.ScheduledFor != nil && tz != "" {
+					if loc, lerr := time.LoadLocation(tz); lerr == nil {
+						localTime := evt.ScheduledFor.In(loc)
+						evt.ScheduledFor = &localTime
+					}
 				}
 				body = paymentConfirmationMessage(evt, clinicName, bookingURL, callbackTime)
 			}
