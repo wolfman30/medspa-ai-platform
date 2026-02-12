@@ -1255,19 +1255,33 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		}
 	}
 
+	// For Moxie+Stripe clinics: create the actual appointment on Moxie now that
+	// the deposit has been collected. This is the critical "Step 4b" — without it
+	// the patient pays but never gets booked.
+	cfg := w.clinicConfig(ctx, evt.OrgID)
+	moxieBooked := false
+	var moxieConfirmMsg string
+	if cfg != nil && cfg.UsesStripePayment() && cfg.UsesMoxieBooking() && w.moxieClient != nil && cfg.MoxieConfig != nil {
+		moxieBooked, moxieConfirmMsg = w.createMoxieBookingAfterPayment(ctx, evt, cfg)
+	}
+
 	if evt.LeadPhone != "" && evt.FromNumber != "" {
 		if !w.isOptedOut(ctx, evt.OrgID, evt.LeadPhone) {
-			cfg := w.clinicConfig(ctx, evt.OrgID)
-			var clinicName, bookingURL, callbackTime string
-			if cfg != nil {
-				clinicName = strings.TrimSpace(cfg.Name)
-				bookingURL = strings.TrimSpace(cfg.BookingURL)
-				callbackTime = cfg.ExpectedCallbackTime(time.Now())
+			var body string
+			if moxieBooked && moxieConfirmMsg != "" {
+				body = moxieConfirmMsg
+			} else {
+				var clinicName, bookingURL, callbackTime string
+				if cfg != nil {
+					clinicName = strings.TrimSpace(cfg.Name)
+					bookingURL = strings.TrimSpace(cfg.BookingURL)
+					callbackTime = cfg.ExpectedCallbackTime(time.Now())
+				}
+				if callbackTime == "" {
+					callbackTime = "within 24 hours" // fallback
+				}
+				body = paymentConfirmationMessage(evt, clinicName, bookingURL, callbackTime)
 			}
-			if callbackTime == "" {
-				callbackTime = "within 24 hours" // fallback
-			}
-			body := paymentConfirmationMessage(evt, clinicName, bookingURL, callbackTime)
 
 			if w.messenger == nil {
 				// Transcript is still recorded even when SMS sending is disabled.
@@ -1318,6 +1332,145 @@ func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucc
 		}
 	}
 	return nil
+}
+
+// createMoxieBookingAfterPayment creates a Moxie appointment after Stripe deposit is collected.
+// Returns (booked, confirmationMessage). If booking fails, we still proceed with the
+// generic payment confirmation — the clinic can manually book the patient.
+func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events.PaymentSucceededV1, cfg *clinic.Config) (bool, string) {
+	mc := cfg.MoxieConfig
+	if mc == nil || mc.MedspaID == "" {
+		w.logger.Warn("moxie booking after payment skipped: no moxie config", "org_id", evt.OrgID)
+		return false, ""
+	}
+
+	// Fetch lead to get selected appointment details
+	if w.leadsRepo == nil {
+		w.logger.Warn("moxie booking after payment skipped: no leads repo", "org_id", evt.OrgID)
+		return false, ""
+	}
+	lead, err := w.leadsRepo.GetByID(ctx, evt.OrgID, evt.LeadID)
+	if err != nil {
+		w.logger.Error("moxie booking after payment: lead fetch failed", "error", err,
+			"org_id", evt.OrgID, "lead_id", evt.LeadID)
+		return false, ""
+	}
+
+	// The lead must have a selected appointment (date/time + service)
+	if lead.SelectedDateTime == nil {
+		// Fall back to evt.ScheduledFor if available
+		if evt.ScheduledFor == nil {
+			w.logger.Warn("moxie booking after payment skipped: no selected appointment time",
+				"org_id", evt.OrgID, "lead_id", evt.LeadID)
+			return false, ""
+		}
+		lead.SelectedDateTime = evt.ScheduledFor
+	}
+
+	service := lead.SelectedService
+	if service == "" {
+		service = lead.ServiceInterest
+	}
+	if service == "" {
+		w.logger.Warn("moxie booking after payment skipped: no service selected",
+			"org_id", evt.OrgID, "lead_id", evt.LeadID)
+		return false, ""
+	}
+
+	// Resolve serviceMenuItemId
+	normalizedService := strings.ToLower(service)
+	serviceMenuItemID := ""
+	if mc.ServiceMenuItems != nil {
+		serviceMenuItemID = mc.ServiceMenuItems[normalizedService]
+		if serviceMenuItemID == "" {
+			resolved := cfg.ResolveServiceName(normalizedService)
+			serviceMenuItemID = mc.ServiceMenuItems[strings.ToLower(resolved)]
+		}
+	}
+	if serviceMenuItemID == "" {
+		w.logger.Error("moxie booking after payment: no serviceMenuItemId for service",
+			"service", service, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+		return false, ""
+	}
+
+	// Parse start/end times from the selected datetime
+	loc, locErr := time.LoadLocation(cfg.Timezone)
+	if locErr != nil {
+		loc = time.UTC
+	}
+	localTime := lead.SelectedDateTime.In(loc)
+	startTime := lead.SelectedDateTime.UTC().Format(time.RFC3339)
+	endTime := lead.SelectedDateTime.Add(45 * time.Minute).UTC().Format(time.RFC3339)
+
+	providerID := mc.DefaultProviderID
+	if providerID == "" {
+		providerID = "no-preference"
+	}
+
+	// Split name into first/last
+	firstName, lastName := splitName(lead.Name)
+
+	w.logger.Info("creating Moxie appointment after Stripe payment",
+		"org_id", evt.OrgID, "lead_id", evt.LeadID,
+		"medspa_id", mc.MedspaID, "service", service,
+		"start_time", startTime)
+
+	result, err := w.moxieClient.CreateAppointment(ctx, moxieclient.CreateAppointmentRequest{
+		MedspaID:  mc.MedspaID,
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     lead.Email,
+		Phone:     lead.Phone,
+		Note:      fmt.Sprintf("Deposit collected via Stripe (ref: %s)", evt.ProviderRef),
+		Services: []moxieclient.ServiceInput{{
+			ServiceMenuItemID: serviceMenuItemID,
+			ProviderID:        providerID,
+			StartTime:         startTime,
+			EndTime:           endTime,
+		}},
+		IsNewClient:              lead.PatientType != "existing",
+		NoPreferenceProviderUsed: providerID == "no-preference",
+	})
+	if err != nil {
+		w.logger.Error("Moxie API create appointment after payment failed", "error", err,
+			"org_id", evt.OrgID, "lead_id", evt.LeadID)
+		return false, ""
+	}
+	if !result.OK {
+		w.logger.Error("Moxie appointment creation after payment returned not OK",
+			"message", result.Message, "org_id", evt.OrgID, "lead_id", evt.LeadID)
+		return false, ""
+	}
+
+	w.logger.Info("Moxie appointment created successfully after Stripe payment",
+		"appointment_id", result.AppointmentID,
+		"org_id", evt.OrgID, "lead_id", evt.LeadID,
+		"service", service)
+
+	// Update lead with booking session info
+	now := time.Now()
+	if err := w.leadsRepo.UpdateBookingSession(ctx, evt.LeadID, leads.BookingSessionUpdate{
+		SessionID:  result.AppointmentID,
+		Platform:   "moxie",
+		Outcome:    "success",
+		CompletedAt: &now,
+	}); err != nil {
+		w.logger.Warn("failed to update lead with Moxie appointment after payment",
+			"error", err, "lead_id", evt.LeadID, "appointment_id", result.AppointmentID)
+	}
+
+	// Build Moxie-specific confirmation message with appointment details
+	dateStr := localTime.Format("Monday, January 2")
+	timeStr := localTime.Format("3:04 PM")
+	confirmMsg := fmt.Sprintf(
+		"Payment received and your appointment is booked! 🎉\n\n"+
+			"📋 %s\n"+
+			"📅 %s at %s\n"+
+			"📍 %s\n\n"+
+			"You'll receive a confirmation from the clinic shortly. See you then!",
+		service, dateStr, timeStr, cfg.Name)
+
+	return true, confirmMsg
 }
 
 func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, bookingURL, callbackTime string) string {
