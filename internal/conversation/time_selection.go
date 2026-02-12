@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strconv"
@@ -970,8 +971,12 @@ func FormatTimeSelectionConfirmation(selectedTime time.Time, service string, dep
 func ShouldFetchAvailability(history []ChatMessage, lead interface{}) bool {
 	prefs, ok := extractPreferences(history)
 	if !ok {
+		log.Printf("[DEBUG] ShouldFetchAvailability: extractPreferences returned not ok")
 		return false
 	}
+
+	log.Printf("[DEBUG] ShouldFetchAvailability: name=%q service=%q patientType=%q days=%q times=%q",
+		prefs.Name, prefs.ServiceInterest, prefs.PatientType, prefs.PreferredDays, prefs.PreferredTimes)
 
 	// Must have name
 	if prefs.Name == "" {
