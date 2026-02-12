@@ -720,73 +720,187 @@ export class BookingSessionManager {
 
   /**
    * Step 4: Fill contact details
+   * Moxie's "Your information" step has: first name, last name, email, phone
    */
   private async fillContactDetails(page: Page, lead: LeadInfo): Promise<void> {
     logger.info('Filling contact details');
 
-    // Wait for contact form to be visible
-    await page.waitForSelector('input[type="text"], input[type="email"], input[type="tel"]', { timeout: 10000 });
+    // Log the current page step for debugging
+    const stepText = await page.evaluate(() => {
+      const stepEl = document.querySelector('[class*="step" i], [class*="header" i] h1, [class*="header" i] h2');
+      return stepEl?.textContent?.trim() || document.title;
+    });
+    logger.info(`Current page context: "${stepText}"`);
+
+    // Wait for any input to be visible
+    try {
+      await page.waitForSelector('input', { timeout: 10000 });
+    } catch {
+      logger.warn('No inputs found on contact form page — logging page content for debugging');
+      const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 500));
+      logger.info(`Page text: ${bodyText}`);
+      return;
+    }
     await this.delay(1000);
 
-    // Fill first name
-    const firstNameInput = page.locator('input[name*="first" i], input[placeholder*="first" i], input[id*="first" i]').first();
-    if (await firstNameInput.isVisible({ timeout: 2000 })) {
-      await firstNameInput.fill(lead.firstName);
-      logger.info(`Filled first name: ${lead.firstName}`);
-    }
+    // Log all visible inputs for debugging
+    const inputInfo = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('input')).map(inp => ({
+        type: inp.type,
+        name: inp.name,
+        id: inp.id,
+        placeholder: inp.placeholder,
+        ariaLabel: inp.getAttribute('aria-label'),
+        visible: inp.offsetParent !== null,
+      })).filter(i => i.visible);
+    });
+    logger.info(`Visible inputs: ${JSON.stringify(inputInfo)}`);
+
+    // Fill first name — try multiple strategies
+    const firstNameFilled = await this.fillField(page, lead.firstName, [
+      'input[name*="first" i]',
+      'input[placeholder*="first" i]',
+      'input[id*="first" i]',
+      'input[aria-label*="first" i]',
+      'input[name*="firstName" i]',
+    ], 'first name');
 
     // Fill last name
-    const lastNameInput = page.locator('input[name*="last" i], input[placeholder*="last" i], input[id*="last" i]').first();
-    if (await lastNameInput.isVisible({ timeout: 2000 })) {
-      await lastNameInput.fill(lead.lastName);
-      logger.info(`Filled last name: ${lead.lastName}`);
+    const lastNameFilled = await this.fillField(page, lead.lastName, [
+      'input[name*="last" i]',
+      'input[placeholder*="last" i]',
+      'input[id*="last" i]',
+      'input[aria-label*="last" i]',
+      'input[name*="lastName" i]',
+    ], 'last name');
+
+    // If neither first nor last name found, try generic text inputs in order
+    if (!firstNameFilled && !lastNameFilled) {
+      const textInputs = page.locator('input[type="text"]:visible');
+      const count = await textInputs.count();
+      logger.info(`No name fields matched — trying ${count} generic text inputs`);
+      if (count >= 1) {
+        await textInputs.nth(0).fill(lead.firstName);
+        logger.info(`Filled first text input with first name: ${lead.firstName}`);
+      }
+      if (count >= 2) {
+        await textInputs.nth(1).fill(lead.lastName);
+        logger.info(`Filled second text input with last name: ${lead.lastName}`);
+      }
     }
 
     // Fill email
-    const emailInput = page.locator('input[type="email"], input[name*="email" i], input[placeholder*="email" i]').first();
-    if (await emailInput.isVisible({ timeout: 2000 })) {
-      await emailInput.fill(lead.email);
-      logger.info(`Filled email: ${lead.email}`);
-    }
+    await this.fillField(page, lead.email, [
+      'input[type="email"]',
+      'input[name*="email" i]',
+      'input[placeholder*="email" i]',
+      'input[id*="email" i]',
+      'input[aria-label*="email" i]',
+    ], 'email');
 
     // Fill phone
-    const phoneInput = page.locator('input[type="tel"], input[name*="phone" i], input[placeholder*="phone" i]').first();
-    if (await phoneInput.isVisible({ timeout: 2000 })) {
-      await phoneInput.fill(lead.phone);
-      logger.info(`Filled phone: ${lead.phone}`);
-    }
-
-    // Fill notes (optional)
-    if (lead.notes) {
-      const notesInput = page.locator('textarea, input[name*="note" i], input[placeholder*="note" i]').first();
-      if (await notesInput.isVisible({ timeout: 2000 })) {
-        await notesInput.fill(lead.notes);
-        logger.info(`Filled notes: ${lead.notes}`);
-      }
-    }
+    await this.fillField(page, lead.phone, [
+      'input[type="tel"]',
+      'input[name*="phone" i]',
+      'input[placeholder*="phone" i]',
+      'input[id*="phone" i]',
+      'input[aria-label*="phone" i]',
+    ], 'phone');
 
     await this.delay(500);
   }
 
   /**
-   * Navigate to Step 5 (payment page)
+   * Try multiple selectors to fill a form field. Returns true if filled.
+   */
+  private async fillField(page: Page, value: string, selectors: string[], fieldName: string): Promise<boolean> {
+    for (const selector of selectors) {
+      try {
+        const el = page.locator(selector).first();
+        if (await el.isVisible({ timeout: 1000 })) {
+          await el.fill(value);
+          logger.info(`Filled ${fieldName}: ${value} (via ${selector})`);
+          return true;
+        }
+      } catch {
+        // Try next selector
+      }
+    }
+    logger.warn(`Could not find ${fieldName} field`);
+    return false;
+  }
+
+  /**
+   * Navigate to Step 5 (payment page) by clicking "Next step" repeatedly
+   * Moxie flow: Service → Schedule → Your Info → Review → Payment
+   * We need to click through until we reach the payment/card step
    */
   private async navigateToPaymentStep(page: Page): Promise<void> {
-    // Click "Next" or "Continue" to proceed to payment step
-    const nextButton = page.locator(
-      'button:has-text("Next"), button:has-text("Continue"), button:has-text("Proceed"), button[type="submit"]'
-    ).first();
+    const maxClicks = 5; // Safety limit
+    for (let i = 0; i < maxClicks; i++) {
+      // Check if we're already on the payment step
+      const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
+      const isPaymentStep = pageText.includes('payment') || 
+                            pageText.includes('card number') || 
+                            pageText.includes('credit card') ||
+                            pageText.includes('cherry') ||
+                            pageText.includes('pay now') ||
+                            pageText.includes('complete booking') ||
+                            pageText.includes('confirm and pay');
+      
+      if (isPaymentStep) {
+        logger.info(`Reached payment step after ${i} "Next step" clicks`);
+        await this.delay(2000);
+        return;
+      }
 
-    if (await nextButton.isVisible({ timeout: 5000 })) {
-      await nextButton.click();
+      // Log current step for debugging
+      const stepInfo = await page.evaluate(() => {
+        const text = document.body.innerText;
+        const stepMatch = text.match(/step\s*\d/i);
+        const headings = Array.from(document.querySelectorAll('h1, h2, h3')).map(h => h.textContent?.trim()).filter(Boolean).slice(0, 3);
+        return { step: stepMatch?.[0] || 'unknown', headings };
+      });
+      logger.info(`Step ${i + 1}: ${JSON.stringify(stepInfo)}`);
+
+      // Try to click "Next step" button
+      let clicked = false;
+      try {
+        const nextBtn = page.locator('text=/next step/i').first();
+        if (await nextBtn.isVisible({ timeout: 3000 })) {
+          await nextBtn.click({ force: true });
+          clicked = true;
+          logger.info(`Clicked "Next step" (attempt ${i + 1})`);
+        }
+      } catch {
+        // Try fallback
+      }
+
+      if (!clicked) {
+        try {
+          // Fallback: any button with next/continue/proceed
+          const fallback = page.locator('button:has-text("Next"), button:has-text("Continue"), button:has-text("Proceed"), button:has-text("Book"), button[type="submit"]').first();
+          if (await fallback.isVisible({ timeout: 2000 })) {
+            await fallback.click({ force: true });
+            clicked = true;
+            logger.info(`Clicked fallback navigation button (attempt ${i + 1})`);
+          }
+        } catch {
+          logger.warn(`No navigation button found on attempt ${i + 1}`);
+        }
+      }
+
+      if (!clicked) {
+        logger.warn(`Cannot advance further — no clickable button found`);
+        break;
+      }
+
+      // Wait for page transition
       await this.delay(3000);
-      logger.info('Navigated to payment step');
+      await page.waitForLoadState('domcontentloaded');
     }
 
-    // Wait for payment form or confirmation step
-    // Note: avoid 'networkidle' — Moxie has persistent connections that prevent it from resolving
-    await page.waitForLoadState('domcontentloaded');
-    await this.delay(2000);
+    logger.info('Finished navigation — capturing current page as handoff');
   }
 
   /**
