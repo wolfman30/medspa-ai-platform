@@ -1450,9 +1450,9 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 	// Update lead with booking session info
 	now := time.Now()
 	if err := w.leadsRepo.UpdateBookingSession(ctx, evt.LeadID, leads.BookingSessionUpdate{
-		SessionID:  result.AppointmentID,
-		Platform:   "moxie",
-		Outcome:    "success",
+		SessionID:   result.AppointmentID,
+		Platform:    "moxie",
+		Outcome:     "success",
 		CompletedAt: &now,
 	}); err != nil {
 		w.logger.Warn("failed to update lead with Moxie appointment after payment",
