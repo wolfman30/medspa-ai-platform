@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedSpa Concierge — 24/7 AI Receptionist for Med Spas | AI Wolf Solutions</title>
+<meta name="description" content="Never lose a patient to a missed call again. MedSpa Concierge texts back instantly, qualifies leads, and books appointments — all via SMS, 24/7.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#1a1a2e;--navy-light:#16213e;--gold:#d4a574;--gold-light:#e8c9a0;--white:#ffffff;--gray-50:#f8f9fa;--gray-100:#f0f0f0;--gray-400:#999;--gray-600:#666;--text:#2c2c2c;--radius:12px}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,sans-serif;color:var(--text);line-height:1.6;overflow-x:hidden}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;width:100%;background:rgba(26,26,46,.95);backdrop-filter:blur(10px);z-index:100;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}
+nav .logo{color:var(--gold);font-weight:700;font-size:1.1rem;letter-spacing:.5px}
+nav .logo span{color:var(--white)}
+nav a.cta-sm{background:var(--gold);color:var(--navy);padding:.5rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9rem;transition:background .2s}
+nav a.cta-sm:hover{background:var(--gold-light)}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-light) 100%);color:var(--white);padding:8rem 2rem 5rem;text-align:center;position:relative;overflow:hidden}
+.hero::after{content:'';position:absolute;bottom:-2px;left:0;width:100%;height:80px;background:var(--white);clip-path:ellipse(55% 100% at 50% 100%)}
+.hero h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;max-width:800px;margin:0 auto 1.25rem;line-height:1.15}
+.hero h1 .gold{color:var(--gold)}
+.hero p.sub{font-size:clamp(1rem,2.5vw,1.25rem);opacity:.85;max-width:600px;margin:0 auto 2.5rem;line-height:1.5}
+.hero .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.btn-primary{display:inline-block;background:var(--gold);color:var(--navy);padding:1rem 2.5rem;border-radius:10px;font-size:1.1rem;font-weight:700;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(212,165,116,.4)}
+.btn-outline{display:inline-block;border:2px solid rgba(255,255,255,.3);color:var(--white);padding:1rem 2.5rem;border-radius:10px;font-size:1.1rem;font-weight:600;text-decoration:none;transition:border-color .2s}
+.btn-outline:hover{border-color:var(--gold)}
+.hero .trust{margin-top:2.5rem;font-size:.85rem;opacity:.5}
+
+/* ── SECTIONS ── */
+section{padding:5rem 2rem}
+.container{max-width:1100px;margin:0 auto}
+.section-label{text-transform:uppercase;font-size:.8rem;font-weight:700;letter-spacing:2px;color:var(--gold);margin-bottom:.5rem}
+.section-title{font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:800;color:var(--navy);margin-bottom:1rem}
+.section-sub{color:var(--gray-600);max-width:600px;font-size:1.05rem;margin-bottom:3rem}
+
+/* ── PROBLEM ── */
+.problem{background:var(--gray-50)}
+.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
+.problem-stats{display:flex;flex-direction:column;gap:1.5rem}
+.stat-card{background:var(--white);border-radius:var(--radius);padding:1.5rem;box-shadow:0 2px 20px rgba(0,0,0,.06)}
+.stat-card .num{font-size:2.2rem;font-weight:800;color:var(--navy)}
+.stat-card .num span{color:var(--gold)}
+.stat-card p{color:var(--gray-600);font-size:.95rem;margin-top:.25rem}
+
+/* ── SMS MOCK ── */
+.sms-phone{background:var(--navy);border-radius:28px;padding:1.5rem;max-width:340px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.sms-header{text-align:center;color:var(--white);font-size:.8rem;opacity:.6;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid rgba(255,255,255,.1)}
+.sms-header strong{display:block;font-size:1rem;opacity:1;margin-top:.25rem}
+.bubble{max-width:85%;padding:.75rem 1rem;border-radius:16px;margin-bottom:.6rem;font-size:.9rem;line-height:1.4;clear:both;animation:fadeUp .4s ease both}
+.bubble.ai{background:var(--gold);color:var(--navy);float:left;border-bottom-left-radius:4px}
+.bubble.patient{background:#3a3a5c;color:var(--white);float:right;border-bottom-right-radius:4px;text-align:right}
+.bubble::after{content:'';display:table;clear:both}
+.sms-convo::after{content:'';display:table;clear:both}
+.bubble-time{font-size:.7rem;opacity:.5;margin-top:.2rem}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.bubble:nth-child(2){animation-delay:.1s}
+.bubble:nth-child(3){animation-delay:.2s}
+.bubble:nth-child(4){animation-delay:.3s}
+.bubble:nth-child(5){animation-delay:.4s}
+.bubble:nth-child(6){animation-delay:.5s}
+.bubble:nth-child(7){animation-delay:.6s}
+.bubble:nth-child(8){animation-delay:.7s}
+
+/* ── HOW IT WORKS ── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;counter-reset:step}
+.step{text-align:center;padding:2rem 1.5rem;border-radius:var(--radius);background:var(--white);box-shadow:0 2px 20px rgba(0,0,0,.05);position:relative}
+.step::before{counter-increment:step;content:counter(step);display:flex;align-items:center;justify-content:center;width:48px;height:48px;background:var(--navy);color:var(--gold);font-weight:800;font-size:1.2rem;border-radius:50%;margin:0 auto 1.25rem}
+.step h3{font-size:1.1rem;color:var(--navy);margin-bottom:.5rem}
+.step p{color:var(--gray-600);font-size:.95rem}
+
+/* ── FEATURES ── */
+.features{background:var(--gray-50)}
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem}
+.feat{display:flex;gap:1rem;padding:1.5rem;background:var(--white);border-radius:var(--radius);box-shadow:0 2px 15px rgba(0,0,0,.04)}
+.feat-icon{width:44px;height:44px;min-width:44px;background:linear-gradient(135deg,var(--navy),var(--navy-light));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+.feat h4{font-size:1rem;color:var(--navy);margin-bottom:.25rem}
+.feat p{font-size:.9rem;color:var(--gray-600)}
+
+/* ── PRICING ── */
+.pricing-card{max-width:500px;margin:0 auto;background:var(--white);border:2px solid var(--gold);border-radius:20px;padding:3rem;text-align:center;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.08)}
+.pricing-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--navy);font-weight:700;font-size:.8rem;padding:.4rem 1.25rem;border-radius:20px;white-space:nowrap}
+.pricing-card .price{font-size:3.5rem;font-weight:800;color:var(--navy);margin:1rem 0 .25rem}
+.pricing-card .price sup{font-size:1.5rem;vertical-align:super}
+.pricing-card .per{color:var(--gray-600);margin-bottom:1.5rem}
+.pricing-card ul{list-style:none;text-align:left;margin-bottom:2rem}
+.pricing-card li{padding:.5rem 0;border-bottom:1px solid var(--gray-100);font-size:.95rem;color:var(--gray-600)}
+.pricing-card li::before{content:'✓';color:var(--gold);font-weight:700;margin-right:.75rem}
+.pricing-card .setup{background:var(--navy);color:var(--white);padding:.75rem 1.5rem;border-radius:10px;display:inline-block;margin-bottom:1.5rem;font-size:.9rem}
+.pricing-card .setup s{opacity:.6}
+.pricing-card .setup strong{color:var(--gold)}
+
+/* ── CTA ── */
+.final-cta{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:var(--white);text-align:center;padding:5rem 2rem}
+.final-cta h2{font-size:clamp(1.8rem,4vw,2.5rem);font-weight:800;margin-bottom:1rem}
+.final-cta p{opacity:.8;max-width:550px;margin:0 auto 2rem;font-size:1.1rem}
+
+/* ── FOOTER ── */
+footer{background:var(--navy);color:rgba(255,255,255,.4);text-align:center;padding:2rem;font-size:.85rem}
+footer a{color:var(--gold);text-decoration:none}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .problem-grid{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr;max-width:400px;margin:0 auto}
+  .feat-grid{grid-template-columns:1fr}
+  section{padding:3.5rem 1.5rem}
+  .hero{padding:7rem 1.5rem 4rem}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">MedSpa <span>Concierge</span></div>
+  <a href="https://calendly.com/aiwolfsolutions" class="cta-sm">Book a Demo</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <h1>Every Missed Call Is a <span class="gold">Lost Patient.</span></h1>
+  <p class="sub">MedSpa Concierge texts back instantly, qualifies leads, and books appointments — all via SMS, 24/7. Your competitors are one Google search away. Don't let them win.</p>
+  <div class="cta-row">
+    <a href="https://calendly.com/aiwolfsolutions" class="btn-primary">Book a Demo →</a>
+    <a href="#how" class="btn-outline">See How It Works</a>
+  </div>
+  <p class="trust">Trusted by med spas · No contracts · Cancel anytime</p>
+</section>
+
+<!-- PROBLEM + SMS MOCK -->
+<section class="problem">
+  <div class="container">
+    <div class="problem-grid">
+      <div>
+        <p class="section-label">The Problem</p>
+        <h2 class="section-title">Your Front Desk Can't Answer Every Call.</h2>
+        <p class="section-sub" style="margin-bottom:2rem">While you're with a patient, your phone rings. By the time you call back, they've already booked with someone else.</p>
+        <div class="problem-stats">
+          <div class="stat-card">
+            <div class="num">62<span>%</span></div>
+            <p>of calls to med spas go unanswered during business hours</p>
+          </div>
+          <div class="stat-card">
+            <div class="num"><span>$</span>1,200+</div>
+            <p>average lifetime value of a single med spa patient</p>
+          </div>
+          <div class="stat-card">
+            <div class="num">< <span>90s</span></div>
+            <p>MedSpa Concierge average response time via text</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="sms-phone">
+          <div class="sms-header">Messages<br><strong>MedSpa Concierge</strong></div>
+          <div class="sms-convo">
+            <div class="bubble ai">Hi! Thanks for calling Glow Aesthetics. 😊 We're with a patient right now — how can I help you via text?</div>
+            <div style="clear:both"></div>
+            <div class="bubble patient">Hi! I'm interested in Botox. Do you have anything this week?</div>
+            <div style="clear:both"></div>
+            <div class="bubble ai">Great choice! Are you a new or returning patient?</div>
+            <div style="clear:both"></div>
+            <div class="bubble patient">New patient!</div>
+            <div style="clear:both"></div>
+            <div class="bubble ai">Welcome! 🎉 I have openings Thursday at 2pm or Friday at 10am. Which works better?</div>
+            <div style="clear:both"></div>
+            <div class="bubble patient">Thursday at 2 works!</div>
+            <div style="clear:both"></div>
+            <div class="bubble ai">Perfect! Here's a secure link to confirm with a $50 deposit and you're all set: pay.glowmed.com/book ✨</div>
+            <div style="clear:both"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="container">
+    <p class="section-label">How It Works</p>
+    <h2 class="section-title">Three Steps. Zero Effort.</h2>
+    <p class="section-sub">Set it up once, then let MedSpa Concierge handle the rest.</p>
+    <div class="steps">
+      <div class="step">
+        <h3>Patient Calls, You're Busy</h3>
+        <p>A missed call triggers an instant, personalized text message to the caller within seconds.</p>
+      </div>
+      <div class="step">
+        <h3>AI Qualifies & Finds Times</h3>
+        <p>The AI asks their name, desired service, and whether they're new — then pulls real-time availability from your calendar.</p>
+      </div>
+      <div class="step">
+        <h3>Booked & Paid Automatically</h3>
+        <p>Patient picks a time, pays a deposit via secure Stripe checkout, and gets confirmed — no staff needed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features">
+  <div class="container">
+    <p class="section-label">Features</p>
+    <h2 class="section-title">Everything You Need. Nothing You Don't.</h2>
+    <p class="section-sub">Built specifically for med spas and aesthetic clinics.</p>
+    <div class="feat-grid">
+      <div class="feat">
+        <div class="feat-icon">⚡</div>
+        <div>
+          <h4>Instant Missed-Call Text-Back</h4>
+          <p>24/7 or after-hours only — you choose. Patients hear back in seconds, not hours.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🎯</div>
+        <div>
+          <h4>Smart Lead Qualification</h4>
+          <p>AI gathers name, service interest, and patient status before booking — so you know who's coming.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📅</div>
+        <div>
+          <h4>Real-Time Availability</h4>
+          <p>Syncs with your booking system to offer only open slots. No double-bookings, ever.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">💳</div>
+        <div>
+          <h4>Secure Deposit Collection</h4>
+          <p>Stripe-powered checkout links reduce no-shows and lock in the appointment.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📊</div>
+        <div>
+          <h4>Admin Portal</h4>
+          <p>See every conversation, track conversions, and manage your AI receptionist from one dashboard.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🔌</div>
+        <div>
+          <h4>Works with Moxie</h4>
+          <p>Native integration with Moxie — more platforms coming soon. Your workflow, enhanced.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container" style="text-align:center">
+    <p class="section-label">Pricing</p>
+    <h2 class="section-title" style="margin-left:auto;margin-right:auto">Simple. Transparent. One Plan.</h2>
+    <p class="section-sub" style="margin-left:auto;margin-right:auto">No hidden fees. No per-message charges. No contracts.</p>
+    <div class="pricing-card">
+      <div class="pricing-badge">🐺 Founding Client Offer</div>
+      <div class="price"><sup>$</sup>497</div>
+      <div class="per">per month</div>
+      <div class="setup"><s>$1,500 setup fee</s> → <strong>FREE</strong> for first 10 clients</div>
+      <ul>
+        <li>Unlimited SMS conversations</li>
+        <li>24/7 AI receptionist</li>
+        <li>Real-time booking integration</li>
+        <li>Stripe deposit collection</li>
+        <li>Admin dashboard access</li>
+        <li>Dedicated onboarding support</li>
+        <li>Cancel anytime — no contracts</li>
+      </ul>
+      <a href="https://calendly.com/aiwolfsolutions" class="btn-primary" style="width:100%;text-align:center">Claim Your Founding Spot →</a>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <h2>Stop Losing Patients to Missed Calls.</h2>
+  <p>See MedSpa Concierge in action with a free 15-minute demo. No pressure, no contracts — just results.</p>
+  <a href="https://calendly.com/aiwolfsolutions" class="btn-primary">Book Your Free Demo →</a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>© 2026 <a href="https://aiwolfsolutions.com">AI Wolf Solutions</a>. All rights reserved.</p>
+</footer>
+
+</body>
+</html>
