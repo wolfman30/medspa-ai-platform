@@ -245,9 +245,9 @@ func WithBrowserBookingClient(client BrowserBookingClient) WorkerOption {
 	}
 }
 
-// WithMoxieClient wires a direct Moxie GraphQL API client for booking creation.
+// WithWorkerMoxieClient wires a direct Moxie GraphQL API client for booking creation.
 // When set, Moxie clinics will use the API directly instead of browser automation.
-func WithMoxieClient(client *moxieclient.Client) WorkerOption {
+func WithWorkerMoxieClient(client *moxieclient.Client) WorkerOption {
 	return func(cfg *workerConfig) {
 		cfg.moxieClient = client
 	}
@@ -862,16 +862,10 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 		return
 	}
 
-	// Prefer direct Moxie API when available + clinic has Moxie config
-	if w.moxieClient != nil && w.clinicStore != nil {
-		cfg, _ := w.clinicStore.Get(ctx, req.OrgID)
-		if cfg != nil && cfg.MoxieConfig != nil {
-			w.handleMoxieBookingDirect(ctx, msg, req, cfg)
-			return
-		}
-	}
-
-	// Fallback to browser sidecar
+	// Direct Moxie API booking is disabled — it bypasses the deposit/payment
+	// requirement. Clinics require patients to enter card details on Moxie's
+	// payment page. Use browser sidecar for URL handoff instead.
+	// TODO: Re-enable for clinics that don't require deposits.
 	if w.browserBooking == nil {
 		w.logger.Warn("booking request received but no booking client configured",
 			"org_id", req.OrgID, "lead_id", req.LeadID)

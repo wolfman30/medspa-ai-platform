@@ -17,6 +17,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -561,6 +562,13 @@ func WithBrowserAdapter(browser *BrowserAdapter) LLMOption {
 	}
 }
 
+// WithMoxieClient configures the direct Moxie GraphQL API client for fast availability queries.
+func WithMoxieClient(client *moxieclient.Client) LLMOption {
+	return func(s *LLMService) {
+		s.moxieClient = client
+	}
+}
+
 // WithLeadsRepo configures the leads repository for saving scheduling preferences.
 func WithLeadsRepo(repo leads.Repository) LLMOption {
 	return func(s *LLMService) {
@@ -614,6 +622,7 @@ type LLMService struct {
 	rag            RAGRetriever
 	emr            *EMRAdapter
 	browser        *BrowserAdapter
+	moxieClient    *moxieclient.Client
 	model          string
 	logger         *logging.Logger
 	history        *historyStore
@@ -1357,11 +1366,23 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				"preferred_times", prefs.PreferredTimes,
 			)
 
-			// Fetch available times with a hard deadline to prevent blocking the worker.
-			// 120s allows single-batch search across all qualifying dates (~26 dates
-			// for Mon/Wed across 90 days: ~20s setup + 26×3s = ~98s).
+			// Try Moxie API first (instant, ~1s), fall back to browser scraper (~30-60s)
 			fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
-			result, err := FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+			var result *AvailabilityResult
+			var err error
+
+			if s.moxieClient != nil && clinicCfg != nil && clinicCfg.MoxieConfig != nil {
+				s.logger.Info("fetching availability via Moxie API (fast path)",
+					"conversation_id", req.ConversationID, "service", scraperServiceName)
+				result, err = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, clinicCfg, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+				if err != nil {
+					s.logger.Warn("Moxie API availability failed, falling back to browser scraper",
+						"error", err, "conversation_id", req.ConversationID)
+					result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+				}
+			} else {
+				result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+			}
 			fetchCancel()
 			if err != nil {
 				s.logger.Warn("failed to fetch available times", "error", err)

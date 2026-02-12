@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 )
 
 // PresentedSlot represents a time slot that was presented to the user
@@ -255,6 +257,114 @@ func FetchAvailableTimesWithFallback(
 				"Would you like to try different days or a wider time window?",
 			serviceName, humanizeDays(searchedUpTo),
 		),
+	}, nil
+}
+
+// FetchAvailableTimesFromMoxieAPI fetches available time slots directly from
+// Moxie's GraphQL API. This is much faster than browser scraping (~1s vs 30-60s).
+// Falls back to browser scraper if Moxie API fails or clinic lacks MoxieConfig.
+func FetchAvailableTimesFromMoxieAPI(
+	ctx context.Context,
+	moxie *moxieclient.Client,
+	cfg *clinic.Config,
+	serviceName string,
+	prefs TimePreferences,
+	onProgress func(ctx context.Context, msg string),
+	patientFacingServiceName ...string,
+) (*AvailabilityResult, error) {
+	if moxie == nil || cfg == nil || cfg.MoxieConfig == nil {
+		return nil, fmt.Errorf("moxie API not configured")
+	}
+
+	mc := cfg.MoxieConfig
+	// Resolve service to Moxie serviceMenuItemId
+	normalizedService := strings.ToLower(serviceName)
+	serviceMenuItemID := mc.ServiceMenuItems[normalizedService]
+	if serviceMenuItemID == "" {
+		resolved := cfg.ResolveServiceName(normalizedService)
+		serviceMenuItemID = mc.ServiceMenuItems[strings.ToLower(resolved)]
+	}
+	if serviceMenuItemID == "" {
+		return nil, fmt.Errorf("no serviceMenuItemId for service %q", serviceName)
+	}
+
+	displayName := serviceName
+	if len(patientFacingServiceName) > 0 && patientFacingServiceName[0] != "" {
+		displayName = patientFacingServiceName[0]
+	}
+	if onProgress != nil {
+		onProgress(ctx, fmt.Sprintf("Checking available times for %s... this may take a moment.", displayName))
+	}
+
+	// Search 3 months out in one API call
+	now := time.Now()
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	today := now.In(loc)
+	startDate := today.Format("2006-01-02")
+	endDate := today.AddDate(0, 3, 0).Format("2006-01-02")
+
+	result, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, true)
+	if err != nil {
+		return nil, fmt.Errorf("moxie availability query failed: %w", err)
+	}
+
+	// Convert API response to PresentedSlots, filtering by preferences
+	var allSlots []PresentedSlot
+	for _, dateSlots := range result.Dates {
+		if len(dateSlots.Slots) == 0 {
+			continue
+		}
+		for _, slot := range dateSlots.Slots {
+			slotTime, err := time.Parse(time.RFC3339, slot.Start)
+			if err != nil {
+				// Try alternate format "2006-01-02T15:04:05-07:00"
+				slotTime, err = time.Parse("2006-01-02T15:04:05-07:00", slot.Start)
+				if err != nil {
+					continue
+				}
+			}
+			slotLocal := slotTime.In(loc)
+			if matchesTimePreferences(slotLocal, prefs) {
+				allSlots = append(allSlots, PresentedSlot{
+					DateTime:  slotLocal,
+					TimeStr:   formatSlotForDisplay(slotLocal),
+					Service:   serviceName,
+					Available: true,
+				})
+			}
+		}
+	}
+
+	// Sort by date/time and limit
+	sort.Slice(allSlots, func(i, j int) bool {
+		return allSlots[i].DateTime.Before(allSlots[j].DateTime)
+	})
+
+	if len(allSlots) > maxSlotsToPresent {
+		allSlots = allSlots[:maxSlotsToPresent]
+	}
+
+	// Assign indices
+	for i := range allSlots {
+		allSlots[i].Index = i + 1
+	}
+
+	if len(allSlots) == 0 {
+		return &AvailabilityResult{
+			Slots:        nil,
+			ExactMatch:   false,
+			SearchedDays: maxCalendarDays,
+			Message:      fmt.Sprintf("I searched 3 months of availability for %s but couldn't find times matching your preferences. Would you like to try different days or times?", displayName),
+		}, nil
+	}
+
+	return &AvailabilityResult{
+		Slots:        allSlots,
+		ExactMatch:   true,
+		SearchedDays: maxCalendarDays,
 	}, nil
 }
 

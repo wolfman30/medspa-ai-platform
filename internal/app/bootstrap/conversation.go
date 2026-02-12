@@ -19,6 +19,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/aesthetic"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/nextech"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
+	moxie "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -91,6 +92,11 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		opts = append(opts, conversation.WithBrowserAdapter(browserAdapter))
 		logger.Info("browser sidecar integration enabled", "url", cfg.BrowserSidecarURL)
 	}
+
+	// Configure direct Moxie GraphQL API client for fast availability queries
+	moxieAPIClient := moxie.NewClient(logger)
+	opts = append(opts, conversation.WithMoxieClient(moxieAPIClient))
+	logger.Info("Moxie direct API client enabled for availability queries")
 
 	// Wire in leads repository for preference capture
 	if leadsRepo != nil {
