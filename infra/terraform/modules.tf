@@ -127,6 +127,8 @@ module "ecs_fargate" {
     STRIPE_WEBHOOK_SECRET    = "${module.secrets.secret_arn}:STRIPE_WEBHOOK_SECRET::"
     STRIPE_CONNECT_CLIENT_ID = "${module.secrets.secret_arn}:STRIPE_CONNECT_CLIENT_ID::"
     STRIPE_DRY_RUN           = "${module.secrets.secret_arn}:STRIPE_DRY_RUN::"
+    STRIPE_SUCCESS_URL       = "${module.secrets.secret_arn}:STRIPE_SUCCESS_URL::"
+    STRIPE_CANCEL_URL        = "${module.secrets.secret_arn}:STRIPE_CANCEL_URL::"
 
     NEXTECH_BASE_URL      = "${module.secrets.secret_arn}:NEXTECH_BASE_URL::"
     NEXTECH_CLIENT_ID     = "${module.secrets.secret_arn}:NEXTECH_CLIENT_ID::"
