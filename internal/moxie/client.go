@@ -24,17 +24,33 @@ type Client struct {
 	endpoint   string
 	httpClient *http.Client
 	logger     *logging.Logger
+	dryRun     bool // When true, CreateAppointment logs but doesn't actually create
+}
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithDryRun enables dry-run mode — CreateAppointment will log the request
+// but return a fake success without calling Moxie's API.
+func WithDryRun(dryRun bool) Option {
+	return func(c *Client) {
+		c.dryRun = dryRun
+	}
 }
 
 // NewClient creates a new Moxie API client.
-func NewClient(logger *logging.Logger) *Client {
-	return &Client{
+func NewClient(logger *logging.Logger, opts ...Option) *Client {
+	c := &Client{
 		endpoint: defaultGraphQLEndpoint,
 		httpClient: &http.Client{
 			Timeout: defaultTimeout,
 		},
 		logger: logger,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // TimeSlot represents an available appointment slot from Moxie.
@@ -153,7 +169,23 @@ func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDa
 
 // CreateAppointment creates an appointment directly via Moxie's GraphQL API.
 // For new clients, no authentication is required.
+// In dry-run mode, logs the request and returns a fake success without calling Moxie.
 func (c *Client) CreateAppointment(ctx context.Context, req CreateAppointmentRequest) (*AppointmentResult, error) {
+	if c.dryRun {
+		c.logger.Info("DRY RUN: would create Moxie appointment",
+			"medspa_id", req.MedspaID,
+			"name", req.FirstName+" "+req.LastName,
+			"email", req.Email,
+			"phone", req.Phone,
+			"services", fmt.Sprintf("%+v", req.Services),
+			"is_new_client", req.IsNewClient,
+		)
+		return &AppointmentResult{
+			OK:            true,
+			Message:       "DRY_RUN",
+			AppointmentID: "dry-run-" + fmt.Sprintf("%d", time.Now().UnixMilli()),
+		}, nil
+	}
 	type serviceVar struct {
 		ServiceMenuItemID string `json:"serviceMenuItemId"`
 		ProviderID        string `json:"providerId"`

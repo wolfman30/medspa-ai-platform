@@ -763,9 +763,14 @@ func setupInlineWorker(
 	}
 
 	// Wire direct Moxie GraphQL API client (preferred over browser sidecar)
-	moxieAPIClient := moxieclient.NewClient(logger)
+	moxieDryRun := os.Getenv("MOXIE_DRY_RUN") == "true"
+	moxieAPIClient := moxieclient.NewClient(logger, moxieclient.WithDryRun(moxieDryRun))
 	workerOpts = append(workerOpts, conversation.WithMoxieClient(moxieAPIClient))
-	logger.Info("Moxie direct API client wired into inline worker")
+	if moxieDryRun {
+		logger.Info("Moxie direct API client wired in DRY RUN mode — no real appointments will be created")
+	} else {
+		logger.Info("Moxie direct API client wired into inline worker")
+	}
 
 	worker := conversation.NewWorker(
 		processor,
