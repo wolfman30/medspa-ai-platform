@@ -490,12 +490,126 @@ SQUARE_APP_SECRET=...
 
 ---
 
-## 8. Future Phases (Out of Scope for MVP)
+## 8. Phase II: Voice AI Agent
+
+> **Status:** Architecture complete, implementation planned (4-6 weeks)
+> **Architecture doc:** `research/voice-ai-architecture-2026-02-12.md`
+
+### Overview
+
+Real-time voice AI receptionist that answers inbound calls, qualifies patients through natural conversation, checks Moxie availability, and books appointments — using the same qualification logic as the SMS flow.
+
+### Tech Stack (Voice-Specific)
+
+| Component | Technology | Rationale |
+|-----------|-----------|-----------|
+| Telephony | Telnyx Voice API + WebSocket media streams | Already integrated, cheapest, native WebSocket |
+| Speech-to-Text | Deepgram Nova-3 (streaming) | Lowest latency (~200ms), built-in VAD |
+| Text-to-Speech | ElevenLabs Turbo v2.5 (streaming) | Most natural voice, custom voice per clinic |
+| LLM | Claude 3.5 Haiku via AWS Bedrock | Same as SMS flow, streaming responses |
+| Orchestration | Go service on ECS Fargate | WebSocket handler + audio pipeline |
+
+### Latency Budget (<1.5s round-trip)
+
+| Stage | Target |
+|-------|--------|
+| Speech endpointing (VAD) | 200ms |
+| STT final result | 50ms |
+| LLM first token | 400ms |
+| TTS first audio byte | 200ms |
+| Network | 100ms |
+| **Total** | **~950ms** |
+
+**Key optimization:** LLM→TTS pipelining — stream LLM tokens directly to TTS, start audio playback while LLM is still generating.
+
+### Call Flow
+
+1. Inbound call → Telnyx routes to Voice AI service
+2. WebSocket media stream established (bidirectional audio)
+3. Play greeting: "Hi! Thanks for calling [Clinic]. How can I help?"
+4. Real-time STT converts patient speech to text
+5. LLM processes with same 5-qualification logic (name, service, patient type, email, time)
+6. TTS converts response to speech, streamed back to caller
+7. After all 5 qualifications → check Moxie availability (existing API, ~1s)
+8. Patient selects slot via voice → book via Moxie sidecar
+9. Send Stripe/Moxie payment link via SMS (existing flow)
+10. Voice confirmation + end call
+
+### Interruption Handling
+
+- Deepgram VAD detects speech during TTS playback
+- Immediately cancel TTS audio buffer (stop speaking)
+- Process new STT input as next conversation turn
+- Resume from new context
+
+### Fallback Scenarios
+
+| Scenario | Action |
+|----------|--------|
+| STT failure (10s no transcript) | "Let me text you instead" → SMS flow |
+| LLM timeout (>3s) | Play filler ("One moment...") + retry |
+| TTS failure | Auto-switch to AWS Polly |
+| Full system failure | Route to voicemail, trigger SMS follow-up |
+| Caller silence (15s) | "Are you still there?" → 10s more → SMS handoff |
+
+### Voice-Specific LLM Adaptations
+
+- Short responses (1-2 sentences per turn)
+- Natural fillers ("Sure!", "Great question.")
+- No URLs in speech — "I'll text you a link"
+- Confirm key info back: "So that's Botox on Monday at 4:30?"
+
+### Multi-Language
+
+- **Launch:** English
+- **Fast-follow (2-3 weeks):** Spanish (auto-detect via Deepgram, switch STT/TTS/prompt)
+
+### Cost Per Call
+
+| Component | Cost/min |
+|-----------|----------|
+| Telnyx (inbound + WebSocket) | $0.010 |
+| Deepgram STT | $0.004 |
+| ElevenLabs TTS | $0.030 |
+| Claude Haiku LLM | $0.005 |
+| Recording + storage | $0.002 |
+| **Total** | **$0.051/min** |
+
+Average 3-min call = ~$0.15. Target <$0.15/min all-in: ✅
+
+### Implementation Phases
+
+| Phase | Scope | Timeline |
+|-------|-------|----------|
+| **2a** | Basic voice AI conversation + qualification (MVP) | Weeks 1-3 |
+| **2b** | Real-time availability check + Moxie booking | Week 4 |
+| **2c** | Interruption handling, barge-in, fallbacks, load testing | Weeks 5-6 |
+| **2d** | Spanish, call analytics, quality scoring, multi-location | Post-launch |
+
+### Multi-Location Support
+
+- **Per-clinic voice:** ElevenLabs voice ID per clinic (different persona, accent)
+- **Call routing:** Telnyx DID → clinic mapping. Each location has its own number.
+- **Shared patient DB:** Cross-location patient lookup by phone
+- **Centralized analytics:** Calls, bookings, revenue per location + aggregate
+
+### Database
+
+New `voice_calls` table tracks call sessions, transcripts, recordings, qualification data, costs.
+
+### Deployment
+
+Separate ECS Fargate service (1 vCPU, 2GB RAM). Auto-scales 2-10 instances based on concurrent WebSocket connections (~10 calls/instance).
+
+---
+
+## 9. Future Phases (Out of Scope for Phase I & II)
 
 - **Appointment reminders:** 1 week, 1 day, 3 hours before
-- **Voice AI:** Live call handling with sub-second response
 - **EMR integration:** Direct booking writes to Nextech, Boulevard, etc.
 - **Multi-channel:** Instagram DMs, Google Business Messages, web chat
+- **Outbound voice:** Appointment confirmations, re-engagement calls
+- **Voice analytics:** Sentiment analysis, conversion optimization
 
 ---
 
