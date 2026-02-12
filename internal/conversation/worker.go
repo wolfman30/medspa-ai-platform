@@ -1510,7 +1510,8 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 			"📋 %s\n"+
 			"📅 %s at %s\n"+
 			"📍 %s\n\n"+
-			"You'll receive a confirmation from the clinic shortly. See you then!",
+			"Reminder: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable.\n\n"+
+			"See you then!",
 		service, dateStr, timeStr, cfg.Name)
 
 	return true, confirmMsg
@@ -1527,25 +1528,24 @@ func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, book
 		callbackTime = "within 24 hours"
 	}
 
-	// Build the booking link section if URL is configured
-	// Provides context that booking online is optional and staff will call regardless
-	var bookingSection string
-	if bookingURL != "" {
-		bookingSection = fmt.Sprintf("\n\nWant to lock in your preferred date and time now? You can schedule online here: %s\n\nThis is completely optional - our team will call you either way. The link just helps expedite the process if you'd like to confirm sooner.", bookingURL)
-	}
+	cancellationPolicy := "\n\nReminder: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable."
 
 	if evt.ScheduledFor != nil {
 		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM")
-		if name != "" {
-			return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. A %s team member will call you %s with final details.%s", date, name, callbackTime, bookingSection)
+		service := evt.ServiceName
+		if service == "" {
+			service = "your appointment"
 		}
-		return fmt.Sprintf("Payment received! Your appointment on %s is confirmed. Our team will call %s with final details.%s", date, callbackTime, bookingSection)
+		if name != "" {
+			return fmt.Sprintf("Payment received! Your %s appointment at %s on %s is confirmed.%s", service, name, date, cancellationPolicy)
+		}
+		return fmt.Sprintf("Payment received! Your %s appointment on %s is confirmed.%s", service, date, cancellationPolicy)
 	}
 	amount := float64(evt.AmountCents) / 100
 	if name != "" {
-		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you %s to confirm your appointment.%s", amount, name, callbackTime, bookingSection)
+		return fmt.Sprintf("Payment of $%.2f received - thank you! A %s team member will call you %s to confirm your appointment.%s", amount, name, callbackTime, cancellationPolicy)
 	}
-	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you %s to confirm your appointment.%s", amount, callbackTime, bookingSection)
+	return fmt.Sprintf("Payment of $%.2f received - thank you! Our team will call you %s to confirm your appointment.%s", amount, callbackTime, cancellationPolicy)
 }
 
 func (w *Worker) handlePaymentFailedEvent(ctx context.Context, evt *events.PaymentFailedV1) error {

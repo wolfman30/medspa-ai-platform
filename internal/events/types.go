@@ -38,6 +38,7 @@ type PaymentSucceededV1 struct {
 	LeadName        string     `json:"lead_name,omitempty"`
 	FromNumber      string     `json:"from_number,omitempty"`
 	ScheduledFor    *time.Time `json:"scheduled_for,omitempty"`
+	ServiceName     string     `json:"service_name,omitempty"`
 }
 
 type PaymentFailedV1 struct {

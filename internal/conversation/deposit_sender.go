@@ -187,7 +187,7 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			"from", fromNumber,
 			"payment_id", paymentID,
 		)
-		body := fmt.Sprintf("To secure priority booking, please place a refundable $%.2f deposit: %s\n\nNote: This reserves your priority spot, not a confirmed time. Our team will call to finalize your exact appointment.", float64(intent.AmountCents)/100, link.URL)
+		body := fmt.Sprintf("To complete your booking, please place your $%.2f deposit here: %s\n\nPlease note: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable.", float64(intent.AmountCents)/100, link.URL)
 		conversationID := strings.TrimSpace(resp.ConversationID)
 		if conversationID == "" {
 			conversationID = strings.TrimSpace(msg.ConversationID)

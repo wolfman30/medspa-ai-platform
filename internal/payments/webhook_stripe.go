@@ -177,6 +177,7 @@ func (h *StripeWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		LeadPhone:       lead.Phone,
 		LeadName:        lead.Name,
 		ScheduledFor:    scheduledFor,
+		ServiceName:     leadService(lead),
 	}
 	if fromNumber == "" && h.numbers != nil {
 		fromNumber = h.numbers.DefaultFromNumber(orgID)
@@ -276,4 +277,14 @@ func abs64(n int64) int64 {
 		return -n
 	}
 	return n
+}
+
+func leadService(lead *leads.Lead) string {
+	if lead == nil {
+		return ""
+	}
+	if lead.SelectedService != "" {
+		return lead.SelectedService
+	}
+	return lead.ServiceInterest
 }
