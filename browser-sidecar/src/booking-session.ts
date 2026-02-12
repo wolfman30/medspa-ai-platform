@@ -744,18 +744,39 @@ export class BookingSessionManager {
     await this.delay(1000);
 
     // Log all visible inputs for debugging
-    const inputInfo = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('input')).map(inp => ({
-        type: inp.type,
-        name: inp.name,
-        id: inp.id,
-        placeholder: inp.placeholder,
-        ariaLabel: inp.getAttribute('aria-label'),
-        visible: inp.offsetParent !== null,
-      })).filter(i => i.visible);
-    });
-    logger.info(`Visible inputs: ${JSON.stringify(inputInfo)}`);
+    const logInputs = async (label: string) => {
+      const inputInfo = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('input, textarea')).map(inp => ({
+          tag: inp.tagName,
+          type: (inp as HTMLInputElement).type,
+          name: (inp as HTMLInputElement).name,
+          id: inp.id,
+          placeholder: (inp as HTMLInputElement).placeholder,
+          ariaLabel: inp.getAttribute('aria-label'),
+          visible: inp.offsetParent !== null,
+        })).filter(i => i.visible);
+      });
+      logger.info(`${label} — visible inputs: ${JSON.stringify(inputInfo)}`);
+    };
 
+    await logInputs('Before phone entry');
+
+    // Moxie shows phone field first (to look up existing clients).
+    // Fill phone FIRST, then wait for the form to expand with name/email fields.
+    const phoneFilled = await this.fillField(page, lead.phone, [
+      'input[type="tel"]',
+      'input[name*="phone" i]',
+      'input[placeholder*="phone" i]',
+    ], 'phone');
+
+    if (phoneFilled) {
+      // Press Tab or click elsewhere to trigger phone lookup
+      await page.keyboard.press('Tab');
+      await this.delay(3000); // Wait for form to expand after phone entry
+      await logInputs('After phone entry + 3s wait');
+    }
+
+    // Now look for name and email fields that may have appeared
     // Fill first name — try multiple strategies
     const firstNameFilled = await this.fillField(page, lead.firstName, [
       'input[name*="first" i]',
@@ -798,15 +819,6 @@ export class BookingSessionManager {
       'input[aria-label*="email" i]',
     ], 'email');
 
-    // Fill phone
-    await this.fillField(page, lead.phone, [
-      'input[type="tel"]',
-      'input[name*="phone" i]',
-      'input[placeholder*="phone" i]',
-      'input[id*="phone" i]',
-      'input[aria-label*="phone" i]',
-    ], 'phone');
-
     await this.delay(500);
   }
 
@@ -840,13 +852,16 @@ export class BookingSessionManager {
     for (let i = 0; i < maxClicks; i++) {
       // Check if we're already on the payment step
       const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
-      const isPaymentStep = pageText.includes('payment') || 
-                            pageText.includes('card number') || 
+      // Detect the actual payment/checkout step — NOT just "Cherry payment plans" banner
+      // which appears on every Moxie page. Look for card input fields or payment form text.
+      const isPaymentStep = pageText.includes('card number') || 
                             pageText.includes('credit card') ||
-                            pageText.includes('cherry') ||
                             pageText.includes('pay now') ||
                             pageText.includes('complete booking') ||
-                            pageText.includes('confirm and pay');
+                            pageText.includes('confirm and pay') ||
+                            pageText.includes('billing') ||
+                            pageText.includes('payment method') ||
+                            pageText.includes('enter your card');
       
       if (isPaymentStep) {
         logger.info(`Reached payment step after ${i} "Next step" clicks`);
