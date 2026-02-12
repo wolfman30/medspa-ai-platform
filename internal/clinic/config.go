@@ -121,6 +121,10 @@ type Config struct {
 	Notifications   NotificationPrefs `json:"notifications"`
 	// AIPersona customizes the AI assistant's voice for this clinic
 	AIPersona AIPersona `json:"ai_persona,omitempty"`
+	// StripeAccountID is the connected Stripe account ID for clinics using Stripe Connect.
+	StripeAccountID string `json:"stripe_account_id,omitempty"`
+	// PaymentProvider specifies which payment processor: "square" (default) or "stripe".
+	PaymentProvider string `json:"payment_provider,omitempty"`
 	// ServiceAliases maps common patient-facing names to the actual service name
 	// on the booking platform. For example, {"botox": "Tox", "wrinkle relaxers": "Tox"}.
 	// Keys are normalized (lowercased). Values are the search term used by the scraper.
@@ -220,6 +224,14 @@ func (c *Config) UsesMoxieBooking() bool {
 		return false
 	}
 	return strings.ToLower(c.BookingPlatform) == "moxie"
+}
+
+// UsesStripePayment returns true if the clinic is configured to use Stripe for deposit collection.
+func (c *Config) UsesStripePayment() bool {
+	if c == nil {
+		return false
+	}
+	return strings.ToLower(c.PaymentProvider) == "stripe"
 }
 
 // UsesSquarePayment returns true if the clinic uses Square for deposit collection.
