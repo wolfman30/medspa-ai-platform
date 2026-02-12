@@ -2,6 +2,7 @@ package router
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
+	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -64,6 +66,10 @@ type Config struct {
 
 	// Booking callback handler (browser sidecar → Go API)
 	BookingCallbackHandler *conversation.BookingCallbackHandler
+
+	// Readiness check dependencies
+	RedisClient    *redis.Client
+	HasSMSProvider bool
 }
 
 // New creates a new Chi router with all routes configured
@@ -86,10 +92,13 @@ func New(cfg *Config) http.Handler {
 	// Public endpoints (webhooks, health checks)
 	r.Group(func(public chi.Router) {
 		public.Get("/health", cfg.MessagingHandler.HealthCheck)
+		public.Get("/ready", readinessHandler(cfg))
 		public.Route("/messaging", func(r chi.Router) {
+			r.Use(httpmiddleware.RateLimit(100, 200))
 			r.Post("/twilio/webhook", cfg.MessagingHandler.TwilioWebhook)
 		})
 		public.Route("/webhooks/twilio", func(r chi.Router) {
+			r.Use(httpmiddleware.RateLimit(100, 200))
 			r.Post("/voice", cfg.MessagingHandler.TwilioVoiceWebhook)
 		})
 		if cfg.SquareWebhook != nil {
@@ -311,4 +320,51 @@ func New(cfg *Config) http.Handler {
 	})
 
 	return r
+}
+
+// readinessHandler returns 200 only when critical services are connected.
+func readinessHandler(cfg *Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		checks := map[string]string{}
+		ready := true
+
+		// Database check
+		if cfg.DB != nil {
+			if err := cfg.DB.PingContext(r.Context()); err != nil {
+				checks["database"] = "unhealthy: " + err.Error()
+				ready = false
+			} else {
+				checks["database"] = "ok"
+			}
+		} else {
+			checks["database"] = "not configured"
+		}
+
+		// Redis check
+		if cfg.RedisClient != nil {
+			if err := cfg.RedisClient.Ping(r.Context()).Err(); err != nil {
+				checks["redis"] = "unhealthy: " + err.Error()
+				ready = false
+			} else {
+				checks["redis"] = "ok"
+			}
+		} else {
+			checks["redis"] = "not configured"
+		}
+
+		// SMS provider check
+		if cfg.HasSMSProvider {
+			checks["sms"] = "ok"
+		} else {
+			checks["sms"] = "no provider configured"
+			ready = false
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if !ready {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		resp := map[string]interface{}{"ready": ready, "checks": checks}
+		json.NewEncoder(w).Encode(resp)
+	}
 }

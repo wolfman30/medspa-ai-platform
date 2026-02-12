@@ -456,6 +456,8 @@ func main() {
 		CORSAllowedOrigins:     cfg.CORSAllowedOrigins,
 		MockBooking:            demo.NewMockBookingHandler(),
 		BookingCallbackHandler: bookingCallbackHandler,
+		RedisClient:            redisClient,
+		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 	}
 	r := router.New(routerCfg)
 

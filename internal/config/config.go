@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -179,6 +180,23 @@ func Load() *Config {
 			corsAllowedOrigins = append(corsAllowedOrigins, origin)
 		}
 	}
+	// Always include admin portal domains
+	portalDefaults := []string{
+		"https://portal-dev.aiwolfsolutions.com",
+		"https://portal.aiwolfsolutions.com",
+	}
+	for _, pd := range portalDefaults {
+		found := false
+		for _, o := range corsAllowedOrigins {
+			if o == pd {
+				found = true
+				break
+			}
+		}
+		if !found {
+			corsAllowedOrigins = append(corsAllowedOrigins, pd)
+		}
+	}
 	bedrockModel := strings.TrimSpace(getEnv("BEDROCK_MODEL_ID", ""))
 	supervisorModel := strings.TrimSpace(getEnv("SUPERVISOR_MODEL_ID", ""))
 	if supervisorModel == "" {
@@ -189,7 +207,7 @@ func Load() *Config {
 		supervisorLatency = time.Duration(ms) * time.Millisecond
 	}
 
-	return &Config{
+	c := &Config{
 		Port:                            getEnv("PORT", "8080"),
 		Env:                             getEnv("ENV", "development"),
 		PublicBaseURL:                   getEnv("PUBLIC_BASE_URL", ""),
@@ -325,6 +343,23 @@ func Load() *Config {
 		S3ArchiveBucket: getEnv("S3_ARCHIVE_BUCKET", ""),
 		S3ArchiveKMSKey: getEnv("S3_ARCHIVE_KMS_KEY", ""),
 	}
+
+	// Startup validation warnings
+	env := c.Env
+	if c.OnboardingToken == "" {
+		if env == "production" {
+			log.Println("[ERROR] ONBOARDING_TOKEN is empty in production — onboarding API is unauthenticated!")
+		} else if env == "staging" {
+			log.Println("[WARN] ONBOARDING_TOKEN is empty in staging — onboarding API is unauthenticated")
+		}
+	}
+	if c.StripeSecretKey != "" && c.StripeWebhookSecret == "" {
+		if env == "production" || env == "staging" {
+			log.Println("[WARN] STRIPE_WEBHOOK_SECRET is empty but STRIPE_SECRET_KEY is set — Stripe webhooks are unverified!")
+		}
+	}
+
+	return c
 }
 
 // getEnv retrieves an environment variable or returns a default value
