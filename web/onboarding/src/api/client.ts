@@ -331,6 +331,36 @@ export async function getSquareConnectUrl(orgId: string): Promise<string> {
   return `${API_BASE}/${basePath}/${orgId}/square/connect`;
 }
 
+// ── Stripe Connect ──
+
+export interface StripeStatus {
+  connected: boolean;
+  account_id?: string;
+}
+
+export async function getStripeStatus(
+  orgId: string,
+  scope: ApiScope = 'portal'
+): Promise<StripeStatus> {
+  const path =
+    scope === 'portal'
+      ? `portal/orgs/${orgId}/stripe/status`
+      : `admin/clinics/${orgId}/stripe/status`;
+  const res = await fetch(`${API_BASE}/${path}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export async function getStripeConnectUrl(orgId: string): Promise<string> {
+  const token = await getAccessToken();
+  const basePath = token ? 'admin/clinics' : 'onboarding/clinics';
+  return `${API_BASE}/${basePath}/${orgId}/stripe/connect`;
+}
+
 export async function getClinicConfig(orgId: string): Promise<ClinicConfig> {
   const token = await getAccessToken();
   const basePath = token ? 'admin/clinics' : 'onboarding/clinics';
