@@ -520,6 +520,32 @@ export class BookingSessionManager {
 
     // Click on the time slot
     await this.selectTimeSlot(page, time);
+
+    // Click "Next step" to advance to contact details form
+    await this.delay(1000);
+    try {
+      const nextBtn = page.locator('text=/next step/i').first();
+      if (await nextBtn.isVisible({ timeout: 5000 })) {
+        await nextBtn.click({ force: true });
+        await this.delay(2000);
+        logger.info('Clicked "Next step" after time selection');
+      } else {
+        // Fallback: try any button with "next" text
+        await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          for (const btn of buttons) {
+            if (btn.textContent?.toLowerCase().includes('next')) {
+              (btn as HTMLElement).click();
+              return;
+            }
+          }
+        });
+        await this.delay(2000);
+        logger.info('Clicked "Next" button (fallback) after time selection');
+      }
+    } catch (err) {
+      logger.warn(`No "Next step" button found after time selection: ${(err as Error).message}`);
+    }
   }
 
   /**
