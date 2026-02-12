@@ -753,7 +753,7 @@ export class BookingSessionManager {
           id: inp.id,
           placeholder: (inp as HTMLInputElement).placeholder,
           ariaLabel: inp.getAttribute('aria-label'),
-          visible: inp.offsetParent !== null,
+          visible: (inp as HTMLElement).offsetParent !== null,
         })).filter(i => i.visible);
       });
       logger.info(`${label} — visible inputs: ${JSON.stringify(inputInfo)}`);
