@@ -83,6 +83,8 @@ type UpdateConfigRequest struct {
 	AIPersona              *AIPersona         `json:"ai_persona,omitempty"`
 	ServiceAliases         map[string]string  `json:"service_aliases,omitempty"`
 	MoxieConfig            *MoxieConfig       `json:"moxie_config,omitempty"`
+	PaymentProvider        string             `json:"payment_provider,omitempty"`
+	StripeAccountID        string             `json:"stripe_account_id,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -187,6 +189,12 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MoxieConfig != nil {
 		cfg.MoxieConfig = req.MoxieConfig
+	}
+	if req.PaymentProvider != "" {
+		cfg.PaymentProvider = req.PaymentProvider
+	}
+	if req.StripeAccountID != "" {
+		cfg.StripeAccountID = req.StripeAccountID
 	}
 
 	// Save updated config
