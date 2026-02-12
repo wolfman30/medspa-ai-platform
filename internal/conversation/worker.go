@@ -862,10 +862,44 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 		return
 	}
 
-	// Direct Moxie API booking is disabled — it bypasses the deposit/payment
-	// requirement. Clinics require patients to enter card details on Moxie's
-	// payment page. Use browser sidecar for URL handoff instead.
-	// TODO: Re-enable for clinics that don't require deposits.
+	// Check if clinic uses Stripe for payments — if so, send Stripe Checkout link
+	// instead of Moxie sidecar URL. After payment, handlePaymentEvent will call
+	// createMoxieBookingAfterPayment to book via Moxie API.
+	if w.deposits != nil && w.clinicStore != nil {
+		cfg, err := w.clinicStore.Get(ctx, req.OrgID)
+		if err == nil && cfg != nil && cfg.UsesStripePayment() {
+			w.logger.Info("moxie booking: routing to Stripe Checkout (payment_provider=stripe)",
+				"org_id", req.OrgID, "lead_id", req.LeadID, "service", req.Service)
+			// Parse booking date/time into a time.Time for the deposit intent
+			var scheduledFor *time.Time
+			if req.Date != "" && req.Time != "" {
+				loc, _ := time.LoadLocation(cfg.Timezone)
+				if loc == nil {
+					loc = time.UTC
+				}
+				if parsed, perr := time.ParseInLocation("2006-01-02 3:04pm", req.Date+" "+strings.ToLower(req.Time), loc); perr == nil {
+					scheduledFor = &parsed
+				}
+			}
+			desc := req.Service
+			if scheduledFor != nil {
+				desc = fmt.Sprintf("%s - %s", req.Service, scheduledFor.Format("Mon Jan 2 at 3:04 PM"))
+			}
+			resp := &Response{
+				DepositIntent: &DepositIntent{
+					Description:  desc,
+					ScheduledFor: scheduledFor,
+				},
+			}
+			if err := w.deposits.SendDeposit(ctx, msg, resp); err != nil {
+				w.logger.Error("failed to send Stripe checkout for Moxie booking",
+					"error", err, "org_id", req.OrgID, "lead_id", req.LeadID)
+			}
+			return
+		}
+	}
+
+	// Fallback: use browser sidecar for Moxie checkout URL handoff
 	if w.browserBooking == nil {
 		w.logger.Warn("booking request received but no booking client configured",
 			"org_id", req.OrgID, "lead_id", req.LeadID)
