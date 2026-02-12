@@ -895,18 +895,13 @@ export class BookingSessionManager {
         }
       }
       
-      // Also check for very specific payment text (NOT "payment plans" or "deposit" which appear on other pages)
+      // Only use VISIBLE card input elements as payment detection — no text matching
+      // Text like "complete booking" appears on review pages (not payment)
       const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
-      const hasPaymentText = pageText.includes('card number') || 
-                             pageText.includes('credit card') ||
-                             pageText.includes('pay now') ||
-                             pageText.includes('complete booking') ||
-                             pageText.includes('confirm and pay') ||
-                             pageText.includes('enter your card');
       
-      if (hasCardInput || hasPaymentText) {
+      if (hasCardInput) {
         const paymentPageText = pageText.substring(0, 300).replace(/\n+/g, ' ').trim();
-        logger.info(`Reached payment step after ${i} iterations (hasCardInput=${hasCardInput}, selector=${matchedCardSelector}, hasPaymentText=${hasPaymentText})`);
+        logger.info(`Reached payment step after ${i} iterations (hasCardInput=true, selector=${matchedCardSelector})`);
         logger.info(`Payment page text: "${paymentPageText}"`);
         await this.delay(2000);
         return;
