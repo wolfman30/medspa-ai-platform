@@ -832,11 +832,36 @@ export class BookingSessionManager {
       await this.delay(2000); // Wait for page to settle
       
       // Check if we're on the payment step via card input elements
-      const hasCardInput = await page.locator(
-        'input[name*="card" i], input[placeholder*="card" i], input[autocomplete*="cc-" i], ' +
-        'iframe[title*="card" i], iframe[name*="card" i], iframe[src*="stripe" i], iframe[src*="square" i], ' +
-        '[data-testid*="card" i], [class*="CardElement" i], [class*="card-element" i]'
-      ).count() > 0;
+      // Be very specific — avoid matching hidden iframes or unrelated elements
+      const cardSelectors = [
+        'input[name*="card" i]',
+        'input[placeholder*="card" i]', 
+        'input[autocomplete*="cc-" i]',
+        'iframe[title*="card" i]',
+        'iframe[name*="card" i]',
+        'iframe[src*="stripe" i]',
+        'iframe[src*="square" i]',
+        '[data-testid*="card" i]',
+        '[class*="CardElement" i]',
+        '[class*="card-element" i]',
+      ];
+      let hasCardInput = false;
+      let matchedCardSelector = '';
+      for (const sel of cardSelectors) {
+        const count = await page.locator(sel).count();
+        if (count > 0) {
+          // Verify it's actually visible
+          const isVisible = await page.locator(sel).first().isVisible().catch(() => false);
+          if (isVisible) {
+            hasCardInput = true;
+            matchedCardSelector = sel;
+            logger.info(`Card element detected: ${sel} (count=${count}, visible=true)`);
+            break;
+          } else {
+            logger.info(`Card element found but NOT visible: ${sel} (count=${count})`);
+          }
+        }
+      }
       
       // Also check for very specific payment text (NOT "payment plans" or "deposit" which appear on other pages)
       const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
@@ -848,7 +873,9 @@ export class BookingSessionManager {
                              pageText.includes('enter your card');
       
       if (hasCardInput || hasPaymentText) {
-        logger.info(`Reached payment step after ${i} iterations (hasCardInput=${hasCardInput}, hasPaymentText=${hasPaymentText})`);
+        const paymentPageText = pageText.substring(0, 300).replace(/\n+/g, ' ').trim();
+        logger.info(`Reached payment step after ${i} iterations (hasCardInput=${hasCardInput}, selector=${matchedCardSelector}, hasPaymentText=${hasPaymentText})`);
+        logger.info(`Payment page text: "${paymentPageText}"`);
         await this.delay(2000);
         return;
       }
