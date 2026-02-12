@@ -123,10 +123,10 @@ module "ecs_fargate" {
 
     DISABLE_PAYMENT_COOLDOWN = "${module.secrets.secret_arn}:DISABLE_PAYMENT_COOLDOWN::"
 
-    STRIPE_SECRET_KEY       = "${module.secrets.secret_arn}:STRIPE_SECRET_KEY::"
-    STRIPE_WEBHOOK_SECRET   = "${module.secrets.secret_arn}:STRIPE_WEBHOOK_SECRET::"
+    STRIPE_SECRET_KEY        = "${module.secrets.secret_arn}:STRIPE_SECRET_KEY::"
+    STRIPE_WEBHOOK_SECRET    = "${module.secrets.secret_arn}:STRIPE_WEBHOOK_SECRET::"
     STRIPE_CONNECT_CLIENT_ID = "${module.secrets.secret_arn}:STRIPE_CONNECT_CLIENT_ID::"
-    STRIPE_DRY_RUN          = "${module.secrets.secret_arn}:STRIPE_DRY_RUN::"
+    STRIPE_DRY_RUN           = "${module.secrets.secret_arn}:STRIPE_DRY_RUN::"
 
     NEXTECH_BASE_URL      = "${module.secrets.secret_arn}:NEXTECH_BASE_URL::"
     NEXTECH_CLIENT_ID     = "${module.secrets.secret_arn}:NEXTECH_CLIENT_ID::"
