@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/archive"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -20,18 +21,20 @@ type db interface {
 // This is intended for development/sandbox environments only.
 // If an Archiver is configured, data is archived to S3 before deletion.
 type Purger struct {
-	db       db
-	redis    *redis.Client
-	logger   *logging.Logger
-	archiver *Archiver
+	db               db
+	redis            *redis.Client
+	logger           *logging.Logger
+	archiver         *Archiver
+	trainingArchiver *archive.TrainingArchiver
 }
 
 // PurgerConfig holds configuration for creating a Purger.
 type PurgerConfig struct {
-	DB       db
-	Redis    *redis.Client
-	Logger   *logging.Logger
-	Archiver *Archiver // Optional: if set, archives data before purging
+	DB               db
+	Redis            *redis.Client
+	Logger           *logging.Logger
+	Archiver         *Archiver                 // Optional: if set, archives data before purging
+	TrainingArchiver *archive.TrainingArchiver // Optional: if set, archives classified data for LLM training
 }
 
 func NewPurger(db db, redis *redis.Client, logger *logging.Logger) *Purger {
@@ -46,15 +49,16 @@ func NewPurger(db db, redis *redis.Client, logger *logging.Logger) *Purger {
 }
 
 // NewPurgerWithConfig creates a Purger with full configuration including archiver.
-func NewPurgerWithConfig(cfg PurgerConfig) *Purger {
+func NewPurgerWithConfig(cfg PurgerConfig) *Purger { //nolint:revive
 	if cfg.Logger == nil {
 		cfg.Logger = logging.Default()
 	}
 	return &Purger{
-		db:       cfg.DB,
-		redis:    cfg.Redis,
-		logger:   cfg.Logger,
-		archiver: cfg.Archiver,
+		db:               cfg.DB,
+		redis:            cfg.Redis,
+		logger:           cfg.Logger,
+		archiver:         cfg.Archiver,
+		trainingArchiver: cfg.TrainingArchiver,
 	}
 }
 
@@ -127,6 +131,11 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string, opts ...PurgeOrgOpt
 			"messages", result.MessagesArchived,
 			"s3_key", result.S3Key,
 		)
+	}
+
+	// Training archive for org: archive each conversation for LLM training (non-blocking)
+	if p.trainingArchiver != nil {
+		p.runTrainingArchiveOrg(ctx, orgID)
 	}
 
 	conversationPattern := "sms:" + orgID + ":%"
@@ -318,6 +327,12 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string, opt
 				"s3_key", result.S3Key,
 			)
 		}
+	}
+
+	// Training archive: classify and archive for LLM training (non-blocking)
+	if p.trainingArchiver != nil {
+		convID := fmt.Sprintf("sms:%s:%s", orgID, digits)
+		p.runTrainingArchive(ctx, orgID, e164, convID)
 	}
 
 	conversationIDDigits := fmt.Sprintf("sms:%s:%s", orgID, digits)
@@ -547,4 +562,105 @@ func normalizeUSDigits(digits string) string {
 		return "1" + digits
 	}
 	return digits
+}
+
+// runTrainingArchiveOrg archives all conversations for an org for LLM training.
+func (p *Purger) runTrainingArchiveOrg(ctx context.Context, orgID string) {
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		p.logger.Error("training archive org: begin tx", "error", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	pattern := "sms:" + orgID + ":%"
+	rows, err := tx.Query(ctx, `SELECT DISTINCT conversation_id FROM conversation_messages WHERE conversation_id LIKE $1`, pattern)
+	if err != nil {
+		p.logger.Error("training archive org: query conversations", "error", err)
+		return
+	}
+	defer rows.Close()
+
+	var convIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		convIDs = append(convIDs, id)
+	}
+
+	for _, convID := range convIDs {
+		// Extract phone from conversation ID: sms:orgID:digits
+		parts := strings.Split(convID, ":")
+		phone := ""
+		if len(parts) >= 3 {
+			phone = "+" + parts[2]
+		}
+		p.runTrainingArchive(ctx, orgID, phone, convID)
+	}
+}
+
+// runTrainingArchive fetches conversation messages and archives them for LLM training.
+// Errors are logged but never propagated to avoid blocking the purge.
+func (p *Purger) runTrainingArchive(ctx context.Context, orgID, phone, conversationID string) {
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		p.logger.Error("training archive: begin tx", "error", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `
+		SELECT role, content, created_at
+		FROM conversation_messages
+		WHERE conversation_id = $1
+		ORDER BY created_at ASC
+	`, conversationID)
+	if err != nil {
+		p.logger.Error("training archive: query messages", "error", err, "conversation_id", conversationID)
+		return
+	}
+	defer rows.Close()
+
+	var msgs []archive.Message
+	for rows.Next() {
+		var m archive.Message
+		if err := rows.Scan(&m.Role, &m.Content, &m.Timestamp); err != nil {
+			p.logger.Error("training archive: scan message", "error", err)
+			return
+		}
+		msgs = append(msgs, m)
+	}
+
+	if len(msgs) == 0 {
+		return
+	}
+
+	// Try to get lead context
+	var outcome string
+	var depositPaid bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM payments pa
+			JOIN leads l ON l.id = pa.lead_id
+			WHERE l.org_id = $1 AND regexp_replace(l.phone, '\D', '', 'g') = $2 AND pa.status = 'completed')
+	`, orgID, strings.TrimPrefix(phone, "+")).Scan(&depositPaid)
+	if err != nil {
+		depositPaid = false
+	}
+
+	if depositPaid {
+		outcome = "booking_completed"
+	} else {
+		outcome = "purged"
+	}
+
+	p.trainingArchiver.Archive(ctx, archive.TrainingArchiveInput{
+		ConversationID:   conversationID,
+		OrgID:            orgID,
+		Phone:            phone,
+		Messages:         msgs,
+		Outcome:          outcome,
+		PaymentCompleted: depositPaid,
+	})
 }

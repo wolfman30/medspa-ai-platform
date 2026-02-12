@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/wolfman30/medspa-ai-platform/internal/archive"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -19,18 +20,20 @@ type adminClinicDataDB interface {
 }
 
 type AdminClinicDataConfig struct {
-	DB       adminClinicDataDB
-	Redis    *redis.Client
-	Logger   *logging.Logger
-	Archiver *clinicdata.Archiver // Optional: if set, archives data to S3 before purging
+	DB               adminClinicDataDB
+	Redis            *redis.Client
+	Logger           *logging.Logger
+	Archiver         *clinicdata.Archiver      // Optional: if set, archives data to S3 before purging
+	TrainingArchiver *archive.TrainingArchiver // Optional: if set, archives classified data for LLM training
 }
 
 // AdminClinicDataHandler provides privileged endpoints for dev/demo data maintenance.
 type AdminClinicDataHandler struct {
-	db       adminClinicDataDB
-	redis    *redis.Client
-	logger   *logging.Logger
-	archiver *clinicdata.Archiver
+	db               adminClinicDataDB
+	redis            *redis.Client
+	logger           *logging.Logger
+	archiver         *clinicdata.Archiver
+	trainingArchiver *archive.TrainingArchiver
 }
 
 func NewAdminClinicDataHandler(cfg AdminClinicDataConfig) *AdminClinicDataHandler {
@@ -38,10 +41,11 @@ func NewAdminClinicDataHandler(cfg AdminClinicDataConfig) *AdminClinicDataHandle
 		cfg.Logger = logging.Default()
 	}
 	return &AdminClinicDataHandler{
-		db:       cfg.DB,
-		redis:    cfg.Redis,
-		logger:   cfg.Logger,
-		archiver: cfg.Archiver,
+		db:               cfg.DB,
+		redis:            cfg.Redis,
+		logger:           cfg.Logger,
+		archiver:         cfg.Archiver,
+		trainingArchiver: cfg.TrainingArchiver,
 	}
 }
 
@@ -84,10 +88,11 @@ func (h *AdminClinicDataHandler) PurgeOrg(w http.ResponseWriter, r *http.Request
 	}
 
 	purger := clinicdata.NewPurgerWithConfig(clinicdata.PurgerConfig{
-		DB:       h.db,
-		Redis:    h.redis,
-		Logger:   h.logger,
-		Archiver: h.archiver,
+		DB:               h.db,
+		Redis:            h.redis,
+		Logger:           h.logger,
+		Archiver:         h.archiver,
+		TrainingArchiver: h.trainingArchiver,
 	})
 	result, err := purger.PurgeOrg(r.Context(), orgID)
 	if err != nil {
@@ -157,10 +162,11 @@ func (h *AdminClinicDataHandler) PurgePhone(w http.ResponseWriter, r *http.Reque
 	}
 
 	purger := clinicdata.NewPurgerWithConfig(clinicdata.PurgerConfig{
-		DB:       h.db,
-		Redis:    h.redis,
-		Logger:   h.logger,
-		Archiver: h.archiver,
+		DB:               h.db,
+		Redis:            h.redis,
+		Logger:           h.logger,
+		Archiver:         h.archiver,
+		TrainingArchiver: h.trainingArchiver,
 	})
 	result, err := purger.PurgePhone(r.Context(), orgID, phone)
 	if err != nil {

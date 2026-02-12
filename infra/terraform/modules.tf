@@ -83,6 +83,7 @@ module "ecs_fargate" {
     BEDROCK_EMBEDDING_MODEL_ID   = "amazon.titan-embed-text-v1"
     TELNYX_TRACK_JOBS            = "true"
     PERSIST_CONVERSATION_HISTORY = "true"
+    S3_TRAINING_BUCKET           = module.training_data_s3.bucket_name
   }
 
   secret_environment_variables = {
@@ -160,6 +161,18 @@ module "api_gateway" {
   environment          = var.environment
   lambda_function_name = module.lambda.function_name
   lambda_invoke_arn    = module.lambda.invoke_arn
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_training_data" {
+  role       = module.ecs_fargate.task_role_name
+  policy_arn = module.training_data_s3.policy_arn
+}
+
+module "training_data_s3" {
+  source = "./modules/training_data_s3"
+
+  bucket_name = "aiwolf-training-data-${var.environment}"
+  environment = var.environment
 }
 
 module "onboarding_ui" {

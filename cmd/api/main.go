@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
@@ -25,6 +26,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
+	"github.com/wolfman30/medspa-ai-platform/internal/archive"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
@@ -226,6 +228,24 @@ func main() {
 				logger.Info("S3 archiver enabled for admin purge operations",
 					"bucket", cfg.S3ArchiveBucket,
 					"kms_key", cfg.S3ArchiveKMSKey != "",
+				)
+			}
+		}
+		// Set up training archiver if training bucket is configured
+		if cfg.S3TrainingBucket != "" {
+			awsCfg, awsErr := mainconfig.LoadAWSConfig(appCtx, cfg)
+			if awsErr != nil {
+				logger.Warn("failed to load AWS config for training archiver", "error", awsErr)
+			} else {
+				trainingS3 := s3.NewFromConfig(awsCfg)
+				brClient := bedrockruntime.NewFromConfig(awsCfg)
+
+				trainingStore := archive.NewStore(trainingS3, cfg.S3TrainingBucket, logger.Logger)
+				classifier := archive.NewClassifier(brClient, cfg.ClassifierModelID, logger.Logger)
+				adminCfg.TrainingArchiver = archive.NewTrainingArchiver(trainingStore, classifier, logger.Logger)
+				logger.Info("training archiver enabled for purge operations",
+					"bucket", cfg.S3TrainingBucket,
+					"classifier_model", cfg.ClassifierModelID,
 				)
 			}
 		}

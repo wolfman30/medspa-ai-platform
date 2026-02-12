@@ -62,3 +62,8 @@ output "browser_sidecar_enabled" {
   description = "Whether the browser sidecar is enabled"
   value       = var.enable_browser_sidecar
 }
+
+output "task_role_name" {
+  description = "IAM role name for ECS tasks"
+  value       = aws_iam_role.task.name
+}

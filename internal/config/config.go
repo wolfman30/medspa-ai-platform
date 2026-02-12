@@ -144,6 +144,10 @@ type Config struct {
 	// S3 Archive Configuration (for archiving conversation data before purge)
 	S3ArchiveBucket string // S3 bucket for conversation archives (e.g., "medspa-conversation-archives")
 	S3ArchiveKMSKey string // Optional KMS key ID for SSE-KMS encryption
+
+	// S3 Training Data Configuration (for classified conversation archives)
+	S3TrainingBucket  string // S3 bucket for training data (empty = disabled)
+	ClassifierModelID string // Bedrock model ID for auto-classification (e.g., Haiku)
 }
 
 // SMSProviderIssues returns a list of configuration problems that would prevent
@@ -342,6 +346,9 @@ func Load() *Config {
 		// S3 Archive Configuration
 		S3ArchiveBucket: getEnv("S3_ARCHIVE_BUCKET", ""),
 		S3ArchiveKMSKey: getEnv("S3_ARCHIVE_KMS_KEY", ""),
+
+		S3TrainingBucket:  getEnv("S3_TRAINING_BUCKET", ""),
+		ClassifierModelID: getEnv("CLASSIFIER_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"),
 	}
 
 	// Startup validation warnings
