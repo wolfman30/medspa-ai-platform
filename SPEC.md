@@ -59,40 +59,52 @@ The AI collects these 5 pieces of information before the booking flow can begin.
 5. Time preferences (days + times — triggers booking flow)
 
 **What happens when all 5 are collected:**
-- **Moxie clinics →** Check availability via browser sidecar → Present matching time slots → Patient picks → Auto-book → **Patient completes payment in Moxie** (Square is not used)
+- **Moxie clinics (Stripe Connect) →** Check availability via **Moxie GraphQL API** (~1s) → Present matching time slots → Patient picks → **Stripe Checkout link** sent → Patient pays → **Moxie API books appointment** → Confirmation SMS
 - **Square clinics →** Offer refundable deposit → Send Square checkout link → Patient pays → Operator manually confirms appointment
+- **Stripe clinics (non-Moxie) →** Same Stripe Checkout flow for deposit collection, booking handled by operator or external platform
 
-**How the system decides which path:** By clinic config `booking_platform` (`moxie` or `square`, default: `square`). When `booking_platform=moxie`, **Square is not used**; payment runs through Moxie's checkout flow.
+**How the system decides which path:** By clinic config `booking_platform` (`moxie`, `square`, or `stripe`) and `PaymentProvider` field. When `booking_platform=moxie`, the system uses Moxie's GraphQL API for availability/booking and Stripe Connect for payment. When `booking_platform=square`, Square handles payments. The `MultiCheckoutService` routes to the correct payment provider based on clinic config.
 
-#### Conversation → Browser Sidecar Integration (Moxie Path)
+#### Conversation → Moxie API Integration (Moxie Path)
 
-The AI conversation extracts customer preferences and passes them to the browser sidecar for availability checking:
+The AI conversation extracts customer preferences and queries the Moxie GraphQL API for real-time availability:
 
 | Input from Conversation | Type | Example | Purpose |
 |------------------------|------|---------|---------|
-| `serviceName` | string | `"Ablative Erbium Laser Resurfacing"` | Exact service to book (uses search to find) |
-| `bookingUrl` | string | `"https://app.joinmoxie.com/booking/forever-22"` | Clinic's Moxie booking widget URL |
-| `date` | string (YYYY-MM-DD) | `"2026-02-19"` | Specific date to check availability |
+| `serviceName` | string | `"Ablative Erbium Laser Resurfacing"` | Exact service to book |
+| `medspaId` | string | `"clinic-uuid"` | Clinic's Moxie medspa ID |
+| `startDate` / `endDate` | string (YYYY-MM-DD) | `"2026-02-19"` / `"2026-02-26"` | Date range to check |
 | Customer preferences (optional) | object | See below | Time/day filters |
 
+**Moxie GraphQL API:**
+- **Endpoint:** `https://graphql.joinmoxie.com/v1/graphql`
+- **Query:** `AvailableTimeSlots` — takes `medspaId`, `startDate`, `endDate`, `services` → returns dates with available slots (~1s response time)
+- **Mutation:** `createAppointmentByClient` — takes patient info + service + time → creates appointment (uses `MAIA_BOOKING` flow)
+
 **Customer Preference Filters:**
-```typescript
+```json
 // Example: "I want Mondays or Thursdays, after 4pm"
 {
-  serviceName: "Ablative Erbium Laser Resurfacing",
-  daysOfWeek: [1, 4],  // 0=Sun, 1=Mon, ..., 6=Sat
-  afterTime: "16:00"   // 24-hour format
+  "serviceName": "Ablative Erbium Laser Resurfacing",
+  "daysOfWeek": [1, 4],
+  "afterTime": "16:00"
 }
 ```
 
 **Typical Flow:**
 1. Customer says: "I want laser resurfacing on Mondays or Thursdays after 4pm"
 2. Conversation service extracts: `{ service: "Ablative Erbium Laser Resurfacing", days: [1,4], afterTime: "16:00" }`
-3. Call browser sidecar: `getAvailableDates(url, year, month, timeout, serviceName)`
-4. Filter results using `filterSlots(date, slots, { daysOfWeek: [1,4], afterTime: "16:00" })`
+3. Query Moxie API: `AvailableTimeSlots(medspaId, startDate, endDate, services)` — returns in ~1s
+4. Filter results using customer preferences (days of week, time ranges)
 5. Return ONLY matching times to customer via SMS
 
-**Important:** For availability checking, the browser sidecar operates in **dry-run mode** (checks availability but does NOT book). For booking automation (Step 3a), the sidecar navigates Steps 1-4 of the Moxie flow and hands off at the payment page for the patient to complete.
+**Key files:** `internal/moxie/client.go`, `internal/moxie/availability.go`
+
+##### Legacy Fallback: Browser Sidecar
+
+When a clinic does not have Moxie API credentials configured (`medspaId` not set), the system falls back to the browser sidecar for availability scraping. This is significantly slower (~30-60s vs ~1s) and should be considered a transitional path.
+
+**Key files:** `internal/browser/client.go`, `browser-sidecar/src/scraper.ts`
 
 #### Time Slot Selection (Patient Picks a Time)
 
@@ -119,39 +131,58 @@ After presenting available times, the system must detect which slot the patient 
 
 Booking behavior depends on the clinic's `booking_platform` configuration (`moxie` vs `square`):
 
-#### Step 3a: Moxie Clinics — Auto-Booking + Payment in Moxie (No Square)
+#### Step 3a: Moxie Clinics — Stripe Connect Payment + Moxie API Booking
 
-When all 5 qualifications are met and the patient selects a time slot, the system automates the booking flow via the browser sidecar. **Moxie handles payment directly** — we do not collect a separate deposit.
+When all 5 qualifications are met and the patient selects a time slot, the system collects a deposit via **Stripe Connect** and books the appointment via the **Moxie GraphQL API**. Deposits go directly to the clinic's connected Stripe account.
 
 | Phase | What Happens | Actor |
 |-------|-------------|-------|
-| 1. Start session | Worker sends booking request to sidecar with patient info, service, provider, date/time | Go Worker |
-| 2. Automate Steps 1-4 | Sidecar navigates Moxie booking widget: service → provider → date/time → contact info | Browser Sidecar |
-| 3. Handoff at Step 5 | Sidecar stops at the payment page, returns handoff URL | Browser Sidecar |
-| 4. Send handoff SMS | Worker sends patient the payment page link via SMS | Go Worker |
-| 5. Monitor outcome | Sidecar polls the page every 2s for booking outcome (success, payment failure, timeout) | Browser Sidecar |
-| 6. Callback | Sidecar POSTs outcome to `POST /webhooks/booking/callback` | Browser Sidecar → Go API |
-| 7. Outcome SMS | Callback handler sends confirmation or failure SMS to patient | Go API |
+| 1. Patient selects slot | Patient picks a time from presented options | Patient |
+| 2. Create checkout | System creates Stripe Checkout Session with deposit amount + `transfer_data.destination` for clinic's Stripe account | Go Worker |
+| 3. Send payment link | Stripe Checkout URL sent to patient via SMS (mobile-optimized) | Go Worker |
+| 4. Patient pays | Patient completes payment on Stripe's hosted page | Patient |
+| 5. Webhook fires | Stripe `checkout.session.completed` webhook → emits `PaymentSucceededV1` event | Stripe → Go API |
+| 6. Book appointment | Worker calls Moxie `createAppointmentByClient` mutation to create the appointment | Go Worker |
+| 7. Confirmation SMS | Patient receives appointment confirmation with details | Go Worker |
+| 8. Notify operator | Clinic operator notified via email + SMS with lead details | Go Worker |
 
-**Booking Session States:** `created → navigating → ready_for_handoff → monitoring → completed/failed/abandoned`
+**Stripe Connect Architecture:**
+- Each clinic onboards via Stripe Connect OAuth → receives a connected account ID
+- Checkout sessions use `transfer_data.destination` to route deposits directly to the clinic's Stripe account
+- Platform (MedSpa AI) can optionally take an application fee
+- Metadata includes `org_id`, `lead_id` for tracing
+
+**Checkout Session metadata:**
+```json
+{
+  "org_id": "clinic-uuid",
+  "lead_id": "lead-uuid",
+  "service": "Botox",
+  "appointment_time": "2026-02-19T14:30:00Z"
+}
+```
 
 **Outcome SMS Messages:**
-- `success` → "Your appointment is confirmed! Confirmation #..."
+- `success` → "Your appointment is confirmed! [Date] at [Time] for [Service]. See you then!"
 - `payment_failed` → "Your payment didn't go through. Reply YES to try again."
 - `slot_unavailable` → "That time slot is no longer available. Want me to check other times?"
-- `timeout` → "Your booking session expired. Want to try again?"
+- `session_expired` → "Your payment link has expired. Want me to send a new one?"
 
-**Key files:** `internal/conversation/worker.go` (handleMoxieBooking), `internal/conversation/handler.go` (BookingCallbackHandler), `internal/browser/client.go` (booking session methods)
+**`MOXIE_DRY_RUN` mode:** When enabled, the system skips the actual `createAppointmentByClient` call and logs what would have been booked. Useful for testing the full payment flow without creating real Moxie appointments.
+
+**Key files:** `internal/conversation/worker.go` (handleMoxieBooking), `internal/payments/stripe_checkout.go`, `internal/payments/stripe_webhook.go`, `internal/moxie/client.go` (createAppointmentByClient)
 
 #### Step 3b: Square Clinics — Deposit Collection (No Auto-Booking)
 
-When all 5 qualifications are met and the clinic does NOT have a Moxie booking URL, the system collects a refundable deposit. **The operator manually confirms the appointment** — the system does not auto-book.
+When all 5 qualifications are met and the clinic uses Square (`booking_platform=square`), the system collects a refundable deposit. **The operator manually confirms the appointment** — the system does not auto-book.
 
 | Deposit Eligibility | Per-clinic configuration (admin sets which services require deposits) |
 |--------------------|-----------------------------------------------------------------------|
 | Payment | Square checkout link (PCI-compliant hosted page) |
 | On Success | SMS confirmation sent to patient |
 | Next Step | Operator manually contacts patient to finalize appointment time |
+
+> **Note:** Clinics that don't use Moxie but want Stripe-based payments can set `PaymentProvider=stripe` with `booking_platform=stripe`. The flow is identical to Square (deposit collection, manual booking) but uses Stripe Checkout instead.
 
 **Key files:** `internal/conversation/deposit_sender.go`, `internal/payments/square_checkout.go`
 
@@ -197,69 +228,30 @@ cd browser-sidecar && npm run test:unit
 |------|----------|------|
 | 1 | Missed call OR inbound SMS triggers response within 5 seconds | Webhook → SMS timestamp delta |
 | 2 | AI extracts all 5 qualifications: name, email, service, patient type, time prefs | Lead record has all fields populated |
-| 2 | Check available appointment times from Moxie | Browser sidecar returns time slots |
-| 2 | Navigate Moxie multi-step booking flow | Integration tests verify flow completion |
-| 3 | Moxie booking: sidecar automates Steps 1-4, handoff URL sent | Worker test verifies session start + handoff SMS |
-| 3 | Moxie booking: callback handles outcome (success/failure) | Handler test verifies outcome SMS + lead update |
+| 2 | Check available appointment times from Moxie | Moxie GraphQL API returns time slots (~1s) |
+| 2 | Availability results match patient preferences | Filtered slots match days/times requested |
+| 3 | Moxie booking: Stripe Checkout link sent after slot selection | Worker test verifies checkout session + SMS |
+| 3 | Moxie booking: Stripe webhook triggers Moxie API booking | Handler test verifies appointment creation + confirmation SMS |
 | 3 | Deposit link sent for configured services (Square clinics) | Checkout URL in SMS for deposit-eligible services |
 | 3 | Payment processed and recorded | Square webhook updates payment status |
 | 4 | Patient receives confirmation SMS | Outbox message sent on payment success |
 | 4 | Operator notified | Lead marked qualified with preferences |
 
-### Browser Sidecar TDD Criteria
-
-**Test Coverage Requirements:**
-- ✅ **96 unit tests** passing (types, scraper, server endpoints)
-- ✅ **Public APIs** validated (health check, availability endpoints)
-- ✅ **Edge cases** covered (time parsing, retries, errors)
-- ✅ **Request validation** enforced (date format, timeout bounds, URL validation)
+### Moxie API + Stripe Connect Test Criteria
 
 **Core Booking Flow Tests:**
 
 | Function | Acceptance Criteria | Test Coverage |
 |----------|---------------------|---------------|
-| `scrapeAvailability()` | Extract time slots from booking page | Unit + Integration |
-| `getAvailableDates()` | Return available dates for month | Integration |
-| Time parsing | Handle 12/24-hour, noon, midnight correctly | Unit (42 tests) |
-| Error handling | Graceful failures for unreachable URLs, timeouts | Unit + Integration |
-| API endpoints | `/health`, `/ready`, `/api/v1/availability` validated | Unit (28 tests) |
-| Retry logic | Configurable retries (0, 1, N) with exponential backoff | Unit |
-| Moxie flow | Navigate service selection → provider → calendar → times | Integration |
-
-**Request Validation:**
-```typescript
-// All must return 400 errors
-- Missing bookingUrl
-- Invalid date format (not YYYY-MM-DD)
-- Timeout < 1000ms or > 60000ms
-- Batch request > 7 dates
-- Malformed JSON
-```
-
-**Time Parsing Edge Cases:**
-```typescript
-- 12:00 PM (noon) → 720 minutes ✅
-- 12:00 AM (midnight) → 0 minutes ✅
-- Case insensitive: 9:00am, 9:00AM, 9:00Am ✅
-- Invalid formats → 0 (graceful degradation) ✅
-```
+| `AvailableTimeSlots` query | Returns available slots within ~1s | Unit + Integration |
+| `createAppointmentByClient` | Creates Moxie appointment with correct patient/service/time | Unit + Integration |
+| Stripe Checkout session | Creates session with correct amount, metadata, transfer_data | Unit |
+| Stripe webhook handler | `checkout.session.completed` → triggers Moxie booking | Unit + Integration |
+| `MultiCheckoutService` | Routes to Stripe or Square based on clinic config | Unit |
+| `MOXIE_DRY_RUN` mode | Skips Moxie API call, logs intended booking | Unit |
+| Slot filtering | Customer preference filters (day/time) applied correctly | Unit |
 
 **Slot Filtering (Customer Preferences):**
-
-The browser sidecar includes utilities for filtering time slots based on customer preferences:
-
-```typescript
-// Example: "Mondays through Thursdays after 3pm"
-import { filterSlots, dayNamesToNumbers } from './utils/slot-filter';
-
-const preferences = {
-  daysOfWeek: dayNamesToNumbers(['Monday', 'Tuesday', 'Wednesday', 'Thursday']),
-  afterTime: '15:00', // 3pm in 24-hour format
-};
-
-const filtered = filterSlots(date, slots, preferences);
-// Returns only slots on Mon-Thu after 3pm
-```
 
 | Filter Type | Parameter | Example | Description |
 |-------------|-----------|---------|-------------|
@@ -268,34 +260,44 @@ const filtered = filterSlots(date, slots, preferences);
 | Before time | `beforeTime` | `"17:00"` | Only times before 5pm |
 | Combined | Both | See above | Apply day AND time filters |
 
-**Common Preferences (Pre-configured):**
-- `weekdays`: Monday-Friday only
-- `weekends`: Saturday-Sunday only
-- `businessHours`: 9am-5pm
-- `afterWork`: After 5pm
-- `morningOnly`: Before noon
-- `afternoonOnly`: After noon
+### Payment Providers
 
-**Dry Run Mode:**
+The system supports multiple payment providers, routed by the `MultiCheckoutService` based on clinic configuration:
 
-```typescript
-{
-  "dryRun": true  // Default: only check availability, do NOT book
+#### Stripe Connect (Moxie Clinics — Primary)
+
+- **How it works:** Each clinic onboards via Stripe Connect OAuth, linking their Stripe account. Deposits are collected via Stripe Checkout Sessions with `transfer_data.destination` set to the clinic's connected account ID.
+- **Clinic onboarding:** Admin portal initiates Stripe Connect OAuth → clinic authorizes → connected account ID stored in clinic config.
+- **Checkout flow:** Create session → send link via SMS → patient pays on Stripe's mobile-optimized page → webhook fires → appointment booked.
+- **Key files:** `internal/payments/stripe_checkout.go`, `internal/payments/stripe_webhook.go`
+
+#### Square (Non-Moxie Clinics)
+
+- **How it works:** Existing Square OAuth + checkout link flow. Deposits collected via Square-hosted payment page.
+- **Clinic onboarding:** Square OAuth flow via admin portal.
+- **Key files:** `internal/payments/square_checkout.go`, `internal/payments/handler.go`
+
+#### Routing Logic
+
+```go
+// MultiCheckoutService selects provider based on clinic config
+switch clinic.PaymentProvider {
+case "stripe":  // Moxie clinics
+    return stripeCheckout.CreateSession(...)
+case "square":  // Non-Moxie clinics
+    return squareCheckout.CreateLink(...)
 }
 ```
 
-**IMPORTANT:** The browser sidecar currently **ALWAYS** operates in dry-run mode (availability check only). It does NOT complete bookings. The `dryRun` flag is reserved for future functionality:
+### Legacy/Fallback: Browser Sidecar
 
-- `dryRun: true` (current behavior): Navigate → Select service → Select provider → Extract time slots → STOP
-- `dryRun: false` (future): Complete the above + Fill patient info + Submit booking form
+> **The browser sidecar is retained as a fallback only.** It is used when a clinic does not have Moxie API credentials configured (no `medspaId`). For clinics with Moxie API access, the sidecar is not used.
 
-**Real-World Testing:**
+**When sidecar is used:** Clinic has `bookingUrl` but no `medspaId` — system falls back to browser-based availability scraping (~30-60s vs ~1s for API).
 
-The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
-- URL: `https://app.joinmoxie.com/booking/forever-22`
-- Successfully extracted 12 available dates for February 2026
-- Successfully extracted 6 time slots (9:30am - 1:30pm range)
-- Confirmed NO BOOKING was made (dry-run verification)
+**Test Coverage (96 unit tests):**
+- Availability scraping, time parsing, retry logic, request validation
+- See `browser-sidecar/tests/` for full test suite
 
 ---
 
@@ -340,8 +342,8 @@ The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
 ### PCI (Payment Security)
 | Requirement | Implementation |
 |-------------|----------------|
-| No card storage | Square-hosted checkout only |
-| Webhook verification | Square signature validation |
+| No card storage | Stripe/Square-hosted checkout only |
+| Webhook verification | Stripe signature validation (`stripe-signature` header) + Square signature validation |
 
 ---
 
@@ -353,7 +355,7 @@ The scraper has been tested against the live Forever 22 Med Spa Moxie widget:
 - **Cache:** Redis
 - **AI:** Claude via AWS Bedrock
 - **SMS:** Telnyx (primary), Twilio (fallback)
-- **Payments:** Moxie checkout (when `booking_platform=moxie`) OR Square (OAuth + checkout links, when `booking_platform=square`)
+- **Payments:** Stripe Connect (Moxie clinics) OR Square (OAuth + checkout links)
 - **Infrastructure:** AWS ECS/Fargate
 
 ### File Organization
@@ -367,12 +369,13 @@ cmd/
 internal/
   conversation/        # AI conversation engine (Step 2)
   messaging/           # SMS handling (Step 1)
-  payments/            # Square integration (Step 3)
+  moxie/               # Moxie GraphQL API client (availability + booking)
+  payments/            # Stripe Connect + Square integration (Step 3)
   leads/               # Lead capture
   clinic/              # Per-clinic config
   http/handlers/       # Webhook handlers
   events/              # Outbox for confirmations (Step 4)
-  browser/             # Browser sidecar client (Go) — availability + booking session methods
+  browser/             # Browser sidecar client (Go) — legacy fallback for availability
 browser-sidecar/       # Playwright service (TypeScript/Node.js)
   src/
     scraper.ts         # Availability scraper (Moxie)
@@ -394,26 +397,18 @@ migrations/            # Database migrations
 |----------|---------|
 | `POST /webhooks/telnyx/messages` | Inbound SMS (Step 1, 2) |
 | `POST /webhooks/telnyx/voice` | Missed call trigger (Step 1) |
-| `POST /webhooks/square` | Payment notifications (Step 3) |
+| `POST /webhooks/square` | Square payment notifications (Step 3b) |
+| `POST /webhooks/stripe` | Stripe `checkout.session.completed` → triggers Moxie booking (Step 3a) |
 | `GET /admin/orgs/{orgID}/conversations` | List conversations |
 | `GET /admin/orgs/{orgID}/deposits` | List deposits |
 
-**Browser Sidecar (TypeScript):**
+**Browser Sidecar (TypeScript) — Legacy Fallback:**
 | Endpoint | Purpose | SLA |
 |----------|---------|-----|
 | `GET /health` | Health check + browser status | <100ms |
 | `GET /ready` | K8s readiness probe | <100ms |
-| `POST /api/v1/availability` | Scrape single date availability | <45s |
-| `POST /api/v1/availability/batch` | Scrape 1-7 dates (max) | <5min |
-| `POST /api/v1/booking/start` | Start booking session (automates Steps 1-4) | <90s |
-| `GET /api/v1/booking/:sessionId/handoff-url` | Get payment page URL for patient handoff | <1s |
-| `GET /api/v1/booking/:sessionId/status` | Check session state/outcome | <1s |
-| `DELETE /api/v1/booking/:sessionId` | Cancel active booking session | <5s |
-
-**Booking Callback (Go API):**
-| Endpoint | Purpose |
-|----------|---------|
-| `POST /webhooks/booking/callback` | Receive booking outcome from sidecar |
+| `POST /api/v1/availability` | Scrape single date availability (fallback only) | <45s |
+| `POST /api/v1/availability/batch` | Scrape 1-7 dates (fallback only) | <5min |
 
 ---
 
@@ -486,6 +481,10 @@ TWILIO_ACCOUNT_SID=...
 TWILIO_AUTH_TOKEN=...
 SQUARE_APP_ID=...
 SQUARE_APP_SECRET=...
+STRIPE_SECRET_KEY=...
+STRIPE_WEBHOOK_SECRET=...
+MOXIE_API_URL=https://graphql.joinmoxie.com/v1/graphql
+MOXIE_DRY_RUN=false  # Set to true to skip actual Moxie booking
 ```
 
 ---
@@ -544,9 +543,9 @@ Real-time voice AI receptionist that answers inbound calls, qualifies patients t
 4. Real-time STT converts patient speech to text
 5. LLM processes with same 5-qualification logic (name, service, patient type, email, time)
 6. TTS converts response to speech, streamed back to caller
-7. After all 5 qualifications → check Moxie availability (existing API, ~1s)
-8. Patient selects slot via voice → book via Moxie sidecar
-9. Send Stripe/Moxie payment link via SMS (existing flow)
+7. After all 5 qualifications → check Moxie availability via GraphQL API (~1s)
+8. Patient selects slot via voice → Stripe Checkout link sent via SMS
+9. Patient pays → Moxie API books appointment (existing flow)
 10. Voice confirmation + end call
 
 ### Interruption Handling
