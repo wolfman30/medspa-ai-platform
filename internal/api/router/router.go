@@ -67,6 +67,9 @@ type Config struct {
 	// Booking callback handler (browser sidecar → Go API)
 	BookingCallbackHandler *conversation.BookingCallbackHandler
 
+	// Short payment URL redirect handler
+	PaymentRedirect *payments.RedirectHandler
+
 	// Readiness check dependencies
 	RedisClient    *redis.Client
 	HasSMSProvider bool
@@ -124,6 +127,9 @@ func New(cfg *Config) http.Handler {
 		}
 		if cfg.BookingCallbackHandler != nil {
 			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)
+		}
+		if cfg.PaymentRedirect != nil {
+			public.Get("/pay/{code}", cfg.PaymentRedirect.Handle)
 		}
 		if cfg.MetricsHandler != nil {
 			public.Handle("/metrics", cfg.MetricsHandler)

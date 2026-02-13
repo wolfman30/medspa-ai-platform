@@ -577,8 +577,8 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			// Time selection responses take priority over LLM reply — send only the slots/fallback message
 			if resp != nil && resp.TimeSelectionResponse != nil && resp.TimeSelectionResponse.SMSMessage != "" {
 				w.handleTimeSelectionResponse(ctx, payload.Message, resp)
-			} else if resp != nil && resp.BookingRequest != nil && w.browserBooking != nil {
-				// Booking response: skip LLM reply, go directly to Moxie
+			} else if resp != nil && resp.BookingRequest != nil && (w.browserBooking != nil || w.deposits != nil) {
+				// Booking response: skip LLM reply, go directly to Moxie booking/Stripe checkout
 				w.handleMoxieBooking(ctx, payload.Message, resp.BookingRequest)
 			} else {
 				// Normal path: send LLM reply, then check deposit intent
@@ -1504,7 +1504,8 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 
 	// Build Moxie-specific confirmation message with appointment details
 	dateStr := localTime.Format("Monday, January 2")
-	timeStr := localTime.Format("3:04 PM")
+	tzAbbrev := localTime.Format("MST")
+	timeStr := localTime.Format("3:04 PM") + " " + tzAbbrev
 	confirmMsg := fmt.Sprintf(
 		"Payment received and your appointment is booked! 🎉\n\n"+
 			"📋 %s\n"+
@@ -1531,7 +1532,8 @@ func paymentConfirmationMessage(evt *events.PaymentSucceededV1, clinicName, book
 	cancellationPolicy := "\n\nReminder: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable."
 
 	if evt.ScheduledFor != nil {
-		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM")
+		tzAbbrev := evt.ScheduledFor.Format("MST")
+		date := evt.ScheduledFor.Format("Monday, January 2 at 3:04 PM") + " " + tzAbbrev
 		service := evt.ServiceName
 		if service == "" {
 			service = "your appointment"

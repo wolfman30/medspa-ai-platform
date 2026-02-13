@@ -15,6 +15,11 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+// shortURLSaver stores a checkout URL and returns a short code for redirect.
+type shortURLSaver interface {
+	SaveCheckoutURL(paymentID uuid.UUID, checkoutURL string) string
+}
+
 // depositDispatcher creates a payment intent, generates a checkout link, emits an event, and sends an SMS.
 type depositDispatcher struct {
 	payments   paymentIntentCreator
@@ -26,6 +31,8 @@ type depositDispatcher struct {
 	transcript *SMSTranscriptStore
 	convStore  conversationWriter
 	logger     *logging.Logger
+	apiBaseURL string // Public API base URL for short payment URLs
+	shortURLs  shortURLSaver
 }
 
 type outboxWriter interface {
@@ -49,11 +56,22 @@ type conversationWriter interface {
 }
 
 // NewDepositDispatcher wires a deposit sender with the required dependencies.
-func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, transcript *SMSTranscriptStore, convStore conversationWriter, logger *logging.Logger) DepositSender {
+// DepositOption configures optional depositDispatcher fields.
+type DepositOption func(*depositDispatcher)
+
+// WithShortURLs enables short payment URL generation.
+func WithShortURLs(saver shortURLSaver, apiBaseURL string) DepositOption {
+	return func(d *depositDispatcher) {
+		d.shortURLs = saver
+		d.apiBaseURL = apiBaseURL
+	}
+}
+
+func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLinkCreator, outbox outboxWriter, sms ReplyMessenger, numbers payments.OrgNumberResolver, leadsRepo leads.Repository, transcript *SMSTranscriptStore, convStore conversationWriter, logger *logging.Logger, opts ...DepositOption) DepositSender {
 	if logger == nil {
 		logger = logging.Default()
 	}
-	return &depositDispatcher{
+	d := &depositDispatcher{
 		payments:   paymentsRepo,
 		checkout:   checkout,
 		outbox:     outbox,
@@ -64,6 +82,10 @@ func NewDepositDispatcher(paymentsRepo paymentIntentCreator, checkout paymentLin
 		convStore:  convStore,
 		logger:     logger,
 	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
 }
 
 func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest, resp *Response) error {
@@ -187,7 +209,12 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			"from", fromNumber,
 			"payment_id", paymentID,
 		)
-		body := fmt.Sprintf("To complete your booking, please place your $%.2f deposit here: %s\n\nPlease note: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable.", float64(intent.AmountCents)/100, link.URL)
+		checkoutURL := link.URL
+		if d.shortURLs != nil && d.apiBaseURL != "" {
+			code := d.shortURLs.SaveCheckoutURL(paymentID, link.URL)
+			checkoutURL = fmt.Sprintf("%s/pay/%s", strings.TrimRight(d.apiBaseURL, "/"), code)
+		}
+		body := fmt.Sprintf("To complete your booking, please place your $%.2f deposit here:\n%s", float64(intent.AmountCents)/100, checkoutURL)
 		conversationID := strings.TrimSpace(resp.ConversationID)
 		if conversationID == "" {
 			conversationID = strings.TrimSpace(msg.ConversationID)

@@ -478,6 +478,7 @@ func main() {
 		BookingCallbackHandler: bookingCallbackHandler,
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
+		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
 	}
 	r := router.New(routerCfg)
 
@@ -666,7 +667,7 @@ func setupInlineWorker(
 		// Fake payments mode only when Square isn't configured (for testing when sandbox is broken)
 		if useFakePayments {
 			fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
-			depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
+			depositSender = conversation.NewDepositDispatcher(paymentChecker, fakeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger, conversation.WithShortURLs(paymentChecker, cfg.PublicBaseURL))
 			logger.Warn("deposit sender initialized in fake payments mode (ALLOW_FAKE_PAYMENTS=true)")
 		} else {
 			hasStripeProvider := cfg.StripeSecretKey != ""
@@ -675,7 +676,7 @@ func setupInlineWorker(
 			} else if !hasSquareProvider && hasStripeProvider {
 				// Stripe-only mode
 				stripeSvc := payments.NewStripeCheckoutService(cfg.StripeSecretKey, cfg.StripeSuccessURL, cfg.StripeCancelURL, logger)
-				depositSender = conversation.NewDepositDispatcher(paymentChecker, stripeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, stripeSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger, conversation.WithShortURLs(paymentChecker, cfg.PublicBaseURL))
 				logger.Info("deposit sender initialized (stripe only)")
 			} else {
 				usePaymentLinks := payments.UsePaymentLinks(cfg.SquareCheckoutMode, cfg.SquareSandbox)
@@ -707,7 +708,7 @@ func setupInlineWorker(
 					logger.Info("multi-checkout service initialized (square + stripe)")
 				}
 
-				depositSender = conversation.NewDepositDispatcher(paymentChecker, checkoutSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger)
+				depositSender = conversation.NewDepositDispatcher(paymentChecker, checkoutSvc, outboxStore, messenger, numberResolver, leadsRepo, smsTranscript, convStore, logger, conversation.WithShortURLs(paymentChecker, cfg.PublicBaseURL))
 				depositPreloader = conversation.NewDepositPreloader(squareSvc, 5000, logger) // Default $50 deposit
 				logger.Info("deposit sender initialized", "square_location_id", cfg.SquareLocationID, "has_oauth", cfg.SquareClientID != "", "preloader", depositPreloader != nil)
 			}

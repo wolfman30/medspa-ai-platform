@@ -339,14 +339,13 @@ func FetchAvailableTimesFromMoxieAPI(
 		}
 	}
 
-	// Sort by date/time and limit
+	// Sort by date/time
 	sort.Slice(allSlots, func(i, j int) bool {
 		return allSlots[i].DateTime.Before(allSlots[j].DateTime)
 	})
 
-	if len(allSlots) > maxSlotsToPresent {
-		allSlots = allSlots[:maxSlotsToPresent]
-	}
+	// Spread slots across multiple days (max 2 per day, aim for 3+ days)
+	allSlots = spreadSlotsAcrossDays(allSlots, maxSlotsToPresent, 2)
 
 	// Assign indices
 	for i := range allSlots {
@@ -732,6 +731,49 @@ func humanizeDays(days int) string {
 }
 
 // formatSlotForDisplay formats a time slot for SMS display
+// spreadSlotsAcrossDays picks slots spread across multiple days.
+// maxPerDay limits slots from any single day. total caps the result.
+// Slots must be pre-sorted by time.
+func spreadSlotsAcrossDays(slots []PresentedSlot, total, maxPerDay int) []PresentedSlot {
+	if len(slots) <= total {
+		return slots
+	}
+
+	// Group by date
+	type dayGroup struct {
+		date  string
+		slots []PresentedSlot
+	}
+	var days []dayGroup
+	dayMap := map[string]int{} // date -> index in days
+	for _, s := range slots {
+		d := s.DateTime.Format("2006-01-02")
+		if idx, ok := dayMap[d]; ok {
+			days[idx].slots = append(days[idx].slots, s)
+		} else {
+			dayMap[d] = len(days)
+			days = append(days, dayGroup{date: d, slots: []PresentedSlot{s}})
+		}
+	}
+
+	// Round-robin: pick up to maxPerDay from each day until we have enough
+	var result []PresentedSlot
+	for round := 0; round < maxPerDay && len(result) < total; round++ {
+		for i := range days {
+			if round < len(days[i].slots) && len(result) < total {
+				result = append(result, days[i].slots[round])
+			}
+		}
+	}
+
+	// Sort result by time
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].DateTime.Before(result[j].DateTime)
+	})
+
+	return result
+}
+
 func formatSlotForDisplay(t time.Time) string {
 	// Format: "Mon Feb 10 at 10:00 AM"
 	return t.Format("Mon Jan 2 at 3:04 PM")

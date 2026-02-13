@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,16 @@ import (
 type Repository struct {
 	queries         paymentsql.Querier
 	disableCooldown bool // When true, always returns false from HasOpenDeposit (for testing)
+
+	// In-memory checkout URL cache for short URL redirects.
+	// Keyed by short code (first 8 chars of payment UUID).
+	checkoutURLs   map[string]checkoutURLEntry
+	checkoutURLsMu sync.RWMutex
+}
+
+type checkoutURLEntry struct {
+	url       string
+	expiresAt time.Time
 }
 
 // NewRepository creates a repository backed by pgx.
@@ -31,13 +42,15 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{
 		queries:         paymentsql.New(pool),
 		disableCooldown: disableCooldown,
+		checkoutURLs:    make(map[string]checkoutURLEntry),
 	}
 }
 
 // NewRepositoryWithQuerier allows injecting a mocked sqlc interface for tests.
 func NewRepositoryWithQuerier(q paymentsql.Querier) *Repository {
 	return &Repository{
-		queries: q,
+		queries:      q,
+		checkoutURLs: make(map[string]checkoutURLEntry),
 	}
 }
 
@@ -161,6 +174,40 @@ func toPGUUID(id uuid.UUID) pgtype.UUID {
 		Bytes: [16]byte(id),
 		Valid: true,
 	}
+}
+
+// SaveCheckoutURL stores a checkout URL keyed by a short code for redirect lookups.
+// The short code is the first 8 characters of the payment UUID (no dashes).
+// URLs expire after 24 hours.
+func (r *Repository) SaveCheckoutURL(paymentID uuid.UUID, checkoutURL string) string {
+	code := ShortCodeFromUUID(paymentID)
+	r.checkoutURLsMu.Lock()
+	r.checkoutURLs[code] = checkoutURLEntry{
+		url:       checkoutURL,
+		expiresAt: time.Now().Add(24 * time.Hour),
+	}
+	r.checkoutURLsMu.Unlock()
+	return code
+}
+
+// GetCheckoutURLByShortCode returns the checkout URL for the given short code, or empty string if not found/expired.
+func (r *Repository) GetCheckoutURLByShortCode(_ context.Context, code string) (string, error) {
+	r.checkoutURLsMu.RLock()
+	entry, ok := r.checkoutURLs[code]
+	r.checkoutURLsMu.RUnlock()
+	if !ok || time.Now().After(entry.expiresAt) {
+		return "", nil
+	}
+	return entry.url, nil
+}
+
+// ShortCodeFromUUID returns the first 8 hex chars of a UUID (no dashes) for use as a short code.
+func ShortCodeFromUUID(id uuid.UUID) string {
+	s := strings.ReplaceAll(id.String(), "-", "")
+	if len(s) > 8 {
+		return s[:8]
+	}
+	return s
 }
 
 func toPGNullableTime(t *time.Time) pgtype.Timestamptz {
