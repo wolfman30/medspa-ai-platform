@@ -5,36 +5,30 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	paymentsql "github.com/wolfman30/medspa-ai-platform/internal/payments/sqlc"
 )
+
+const shortURLKeyPrefix = "pay:short:"
+const shortURLTTL = 24 * time.Hour
 
 // Repository persists payment intents and lifecycle transitions.
 type Repository struct {
 	queries         paymentsql.Querier
 	disableCooldown bool // When true, always returns false from HasOpenDeposit (for testing)
-
-	// In-memory checkout URL cache for short URL redirects.
-	// Keyed by short code (first 8 chars of payment UUID).
-	checkoutURLs   map[string]checkoutURLEntry
-	checkoutURLsMu sync.RWMutex
-}
-
-type checkoutURLEntry struct {
-	url       string
-	expiresAt time.Time
+	redis           redis.Cmdable
 }
 
 // NewRepository creates a repository backed by pgx.
 // Set DISABLE_PAYMENT_COOLDOWN=true to bypass the 72-hour cooldown check (for testing).
-func NewRepository(pool *pgxpool.Pool) *Repository {
+func NewRepository(pool *pgxpool.Pool, rdb redis.Cmdable) *Repository {
 	if pool == nil {
 		panic("payments: pgx pool required")
 	}
@@ -42,15 +36,14 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{
 		queries:         paymentsql.New(pool),
 		disableCooldown: disableCooldown,
-		checkoutURLs:    make(map[string]checkoutURLEntry),
+		redis:           rdb,
 	}
 }
 
 // NewRepositoryWithQuerier allows injecting a mocked sqlc interface for tests.
 func NewRepositoryWithQuerier(q paymentsql.Querier) *Repository {
 	return &Repository{
-		queries:      q,
-		checkoutURLs: make(map[string]checkoutURLEntry),
+		queries: q,
 	}
 }
 
@@ -176,29 +169,27 @@ func toPGUUID(id uuid.UUID) pgtype.UUID {
 	}
 }
 
-// SaveCheckoutURL stores a checkout URL keyed by a short code for redirect lookups.
+// SaveCheckoutURL stores a checkout URL keyed by a short code in Redis.
 // The short code is the first 8 characters of the payment UUID (no dashes).
 // URLs expire after 24 hours.
 func (r *Repository) SaveCheckoutURL(paymentID uuid.UUID, checkoutURL string) string {
 	code := ShortCodeFromUUID(paymentID)
-	r.checkoutURLsMu.Lock()
-	r.checkoutURLs[code] = checkoutURLEntry{
-		url:       checkoutURL,
-		expiresAt: time.Now().Add(24 * time.Hour),
+	if r.redis != nil {
+		_ = r.redis.Set(context.Background(), shortURLKeyPrefix+code, checkoutURL, shortURLTTL).Err()
 	}
-	r.checkoutURLsMu.Unlock()
 	return code
 }
 
-// GetCheckoutURLByShortCode returns the checkout URL for the given short code, or empty string if not found/expired.
-func (r *Repository) GetCheckoutURLByShortCode(_ context.Context, code string) (string, error) {
-	r.checkoutURLsMu.RLock()
-	entry, ok := r.checkoutURLs[code]
-	r.checkoutURLsMu.RUnlock()
-	if !ok || time.Now().After(entry.expiresAt) {
+// GetCheckoutURLByShortCode returns the checkout URL for the given short code from Redis.
+func (r *Repository) GetCheckoutURLByShortCode(ctx context.Context, code string) (string, error) {
+	if r.redis == nil {
 		return "", nil
 	}
-	return entry.url, nil
+	val, err := r.redis.Get(ctx, shortURLKeyPrefix+code).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	return val, err
 }
 
 // ShortCodeFromUUID returns the first 8 hex chars of a UUID (no dashes) for use as a short code.

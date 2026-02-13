@@ -185,7 +185,7 @@ func main() {
 	var outboxStore *events.OutboxStore
 	var processedStore *events.ProcessedStore
 	if dbPool != nil {
-		paymentsRepo = payments.NewRepository(dbPool)
+		paymentsRepo = payments.NewRepository(dbPool, redisClient)
 		outboxStore = events.NewOutboxStore(dbPool)
 		processedStore = events.NewProcessedStore(dbPool)
 	}
@@ -626,7 +626,7 @@ func setupInlineWorker(
 	leadsRepo := initializeLeadsRepository(dbPool)
 	var paymentChecker *payments.Repository
 	if dbPool != nil {
-		paymentChecker = payments.NewRepository(dbPool)
+		paymentChecker = payments.NewRepository(dbPool, redisClient)
 	}
 	processor, err := appbootstrap.BuildConversationService(ctx, cfg, leadsRepo, paymentChecker, audit, logger)
 	if err != nil {

@@ -76,7 +76,7 @@ func Run(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) err
 	var paymentChecker *payments.Repository
 	if dbPool != nil {
 		leadsRepo = leads.NewPostgresRepository(dbPool)
-		paymentChecker = payments.NewRepository(dbPool)
+		paymentChecker = payments.NewRepository(dbPool, nil)
 	}
 	msgStore := messaging.NewStore(dbPool)
 
