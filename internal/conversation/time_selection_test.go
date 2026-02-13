@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 )
 
 func TestDetectTimeSelection(t *testing.T) {
@@ -878,6 +879,51 @@ func TestDetectTimeSelection_MoreTimesRequest(t *testing.T) {
 	result = DetectTimeSelection("the 4th one", slots, prefs)
 	require.NotNil(t, result, "'the 4th one' should select slot 4")
 	assert.Equal(t, 4, result.Index)
+}
+
+func TestBuildRefinedTimePreferences_LaterOnSpecificDates(t *testing.T) {
+	// Slots: Mon Mar 2 at 3:00 PM, Wed Mar 4 at 3:00 PM (among others)
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 13, 20, 30, 0, 0, time.Local), TimeStr: "Fri Feb 13 at 8:30 PM"},
+		{Index: 4, DateTime: time.Date(2026, 3, 2, 15, 0, 0, 0, time.Local), TimeStr: "Mon Mar 2 at 3:00 PM"},
+		{Index: 5, DateTime: time.Date(2026, 3, 4, 15, 0, 0, 0, time.Local), TimeStr: "Wed Mar 4 at 3:00 PM"},
+	}
+
+	prefs := leads.SchedulingPreferences{
+		PreferredDays:  "mondays wednesdays",
+		PreferredTimes: "after 3pm",
+	}
+
+	refined := buildRefinedTimePreferences("Any later times on Mar 2 and 4th?", prefs, slots)
+
+	// Should have shifted AfterTime past 3:00 PM (15:00 → 15:01)
+	assert.Equal(t, "15:01", refined.AfterTime, "should shift after-time past the latest shown slot on those dates")
+
+	// Should have days of week for Mon (1) and Wed (3) from the specific dates
+	assert.Contains(t, refined.DaysOfWeek, 1, "should include Monday")
+	assert.Contains(t, refined.DaysOfWeek, 3, "should include Wednesday")
+}
+
+func TestExtractSpecificDates(t *testing.T) {
+	dates := extractSpecificDates("any later times on mar 2 and 4th?")
+	require.Len(t, dates, 2, "should extract 2 dates")
+	assert.Equal(t, time.March, dates[0].Month())
+	assert.Equal(t, 2, dates[0].Day())
+	assert.Equal(t, time.March, dates[1].Month())
+	assert.Equal(t, 4, dates[1].Day())
+}
+
+func TestFilterOutPreviousSlots(t *testing.T) {
+	prev := []PresentedSlot{
+		{DateTime: time.Date(2026, 3, 2, 15, 0, 0, 0, time.UTC)},
+	}
+	newSlots := []PresentedSlot{
+		{DateTime: time.Date(2026, 3, 2, 15, 0, 0, 0, time.UTC)},
+		{DateTime: time.Date(2026, 3, 2, 17, 0, 0, 0, time.UTC)},
+	}
+	filtered := filterOutPreviousSlots(newSlots, prev)
+	assert.Len(t, filtered, 1, "should filter out the duplicate")
+	assert.Equal(t, 17, filtered[0].DateTime.Hour())
 }
 
 func TestDetectTimeSelection_ShorthandTime_3p(t *testing.T) {

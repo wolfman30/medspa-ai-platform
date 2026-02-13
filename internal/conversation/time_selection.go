@@ -12,6 +12,7 @@ import (
 
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 )
 
@@ -833,6 +834,199 @@ func isMoreTimesRequest(message string) bool {
 		}
 	}
 	return false
+}
+
+// buildRefinedTimePreferences adjusts time preferences based on a "more times" request.
+// For example, "any later times on Mar 2 and 4th?" extracts specific dates and adjusts
+// the time filter to find times not already shown.
+func buildRefinedTimePreferences(message string, originalPrefs leads.SchedulingPreferences, previousSlots []PresentedSlot) TimePreferences {
+	msg := strings.ToLower(message)
+	base := ExtractTimePreferences(originalPrefs.PreferredDays + " " + originalPrefs.PreferredTimes)
+
+	// Check if the patient mentioned specific dates — extract month+day references
+	specificDates := extractSpecificDates(msg)
+	if len(specificDates) > 0 {
+		// Convert specific dates to days of week
+		var days []int
+		seen := map[int]bool{}
+		for _, d := range specificDates {
+			wd := int(d.Weekday())
+			if !seen[wd] {
+				days = append(days, wd)
+				seen[wd] = true
+			}
+		}
+		base.DaysOfWeek = days
+	}
+
+	// If patient says "later" or "later times", shift the after-time past the latest
+	// slot already shown on the requested days
+	if strings.Contains(msg, "later") {
+		latestShown := findLatestShownTime(previousSlots, specificDates)
+		if latestShown > 0 {
+			// Set after-time to 1 minute past the latest shown slot
+			newAfter := latestShown + 1
+			h := newAfter / 60
+			m := newAfter % 60
+			base.AfterTime = fmt.Sprintf("%02d:%02d", h, m)
+		}
+	}
+
+	// If patient says "earlier", shift before-time before the earliest shown
+	if strings.Contains(msg, "earlier") {
+		earliestShown := findEarliestShownTime(previousSlots, specificDates)
+		if earliestShown > 0 {
+			newBefore := earliestShown
+			h := newBefore / 60
+			m := newBefore % 60
+			base.BeforeTime = fmt.Sprintf("%02d:%02d", h, m)
+			base.AfterTime = "" // clear after-time when looking for earlier
+		}
+	}
+
+	return base
+}
+
+// extractSpecificDates parses month+day references from a message like "Mar 2 and 4th"
+func extractSpecificDates(msg string) []time.Time {
+	months := map[string]time.Month{
+		"jan": time.January, "january": time.January,
+		"feb": time.February, "february": time.February,
+		"mar": time.March, "march": time.March,
+		"apr": time.April, "april": time.April,
+		"may": time.May,
+		"jun": time.June, "june": time.June,
+		"jul": time.July, "july": time.July,
+		"aug": time.August, "august": time.August,
+		"sep": time.September, "september": time.September,
+		"oct": time.October, "october": time.October,
+		"nov": time.November, "november": time.November,
+		"dec": time.December, "december": time.December,
+	}
+
+	now := time.Now()
+	var dates []time.Time
+
+	// Pattern: "Mar 2 and 4th" or "March 2nd and March 4th"
+	// First find explicit month+day pairs
+	re := regexp.MustCompile(`(?i)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})`)
+	matches := re.FindAllStringSubmatch(msg, -1)
+
+	var lastMonth time.Month
+	for _, m := range matches {
+		monthStr := strings.ToLower(m[1])
+		if mon, ok := months[monthStr]; ok {
+			day, _ := strconv.Atoi(m[2])
+			if day >= 1 && day <= 31 {
+				year := now.Year()
+				d := time.Date(year, mon, day, 0, 0, 0, 0, now.Location())
+				if d.Before(now) {
+					d = d.AddDate(1, 0, 0)
+				}
+				dates = append(dates, d)
+				lastMonth = mon
+			}
+		}
+	}
+
+	// Look for bare numbers after "and" that refer to the same month
+	// e.g., "Mar 2 and 4th" → the "4" refers to March
+	if lastMonth > 0 {
+		bareRe := regexp.MustCompile(`(?:and|&|,)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s|$|\?)`)
+		bareMatches := bareRe.FindAllStringSubmatch(msg, -1)
+		for _, bm := range bareMatches {
+			day, _ := strconv.Atoi(bm[1])
+			if day >= 1 && day <= 31 {
+				// Check this date isn't already captured
+				year := now.Year()
+				d := time.Date(year, lastMonth, day, 0, 0, 0, 0, now.Location())
+				if d.Before(now) {
+					d = d.AddDate(1, 0, 0)
+				}
+				alreadyHave := false
+				for _, existing := range dates {
+					if existing.Equal(d) {
+						alreadyHave = true
+						break
+					}
+				}
+				if !alreadyHave {
+					dates = append(dates, d)
+				}
+			}
+		}
+	}
+
+	return dates
+}
+
+// findLatestShownTime returns the latest time-of-day (in minutes since midnight)
+// from previously shown slots. If specificDates is non-empty, only considers slots on those dates.
+func findLatestShownTime(slots []PresentedSlot, specificDates []time.Time) int {
+	latest := 0
+	for _, slot := range slots {
+		if len(specificDates) > 0 {
+			onDate := false
+			for _, d := range specificDates {
+				if slot.DateTime.Year() == d.Year() && slot.DateTime.Month() == d.Month() && slot.DateTime.Day() == d.Day() {
+					onDate = true
+					break
+				}
+			}
+			if !onDate {
+				continue
+			}
+		}
+		mins := slot.DateTime.Hour()*60 + slot.DateTime.Minute()
+		if mins > latest {
+			latest = mins
+		}
+	}
+	return latest
+}
+
+// findEarliestShownTime returns the earliest time-of-day from previously shown slots.
+func findEarliestShownTime(slots []PresentedSlot, specificDates []time.Time) int {
+	earliest := 24 * 60
+	for _, slot := range slots {
+		if len(specificDates) > 0 {
+			onDate := false
+			for _, d := range specificDates {
+				if slot.DateTime.Year() == d.Year() && slot.DateTime.Month() == d.Month() && slot.DateTime.Day() == d.Day() {
+					onDate = true
+					break
+				}
+			}
+			if !onDate {
+				continue
+			}
+		}
+		mins := slot.DateTime.Hour()*60 + slot.DateTime.Minute()
+		if mins < earliest {
+			earliest = mins
+		}
+	}
+	if earliest == 24*60 {
+		return 0
+	}
+	return earliest
+}
+
+// filterOutPreviousSlots removes slots that were already shown to the patient.
+func filterOutPreviousSlots(newSlots, previousSlots []PresentedSlot) []PresentedSlot {
+	prevSet := make(map[string]bool)
+	for _, s := range previousSlots {
+		key := s.DateTime.Format(time.RFC3339)
+		prevSet[key] = true
+	}
+	var filtered []PresentedSlot
+	for _, s := range newSlots {
+		key := s.DateTime.Format(time.RFC3339)
+		if !prevSet[key] {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
 }
 
 // DetectTimeSelection parses user message to detect time slot selection.

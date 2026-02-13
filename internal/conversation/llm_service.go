@@ -1257,15 +1257,93 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				Content: fmt.Sprintf("[SYSTEM] The patient selected time slot #%d: %s for %s. Confirm their selection and proceed with booking.", selectedSlot.Index, selectedSlot.TimeStr, timeSelectionState.Service),
 			})
 		} else if isMoreTimesRequest(strings.ToLower(rawMessage)) {
-			// Patient wants more/different/later times — clear state so we re-fetch
-			s.logger.Info("patient requesting more times — clearing time selection state for re-fetch",
+			// Patient wants more/different/later times — re-fetch with refined preferences
+			s.logger.Info("patient requesting more times",
 				"conversation_id", req.ConversationID,
 				"message", rawMessage,
 			)
-			// Clear the time selection state entirely so the re-fetch triggers below
-			timeSelectionState = nil
-			if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, nil); err != nil {
-				s.logger.Warn("failed to clear time selection state", "error", err)
+
+			// Try to re-fetch with the patient's refined request
+			moreTimesHandled := false
+			if (s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil) ||
+				(s.browser != nil && s.browser.IsConfigured()) {
+
+				prefs, _ := extractPreferences(history)
+				service := timeSelectionState.Service
+				scraperServiceName := service
+				if cfg != nil {
+					scraperServiceName = cfg.ResolveServiceName(scraperServiceName)
+				}
+
+				// Build refined time preferences from the patient's "more times" message
+				refinedPrefs := buildRefinedTimePreferences(rawMessage, prefs, timeSelectionState.PresentedSlots)
+
+				s.logger.Info("re-fetching availability with refined preferences",
+					"conversation_id", req.ConversationID,
+					"original_after", ExtractTimePreferences(prefs.PreferredDays+" "+prefs.PreferredTimes).AfterTime,
+					"refined_after", refinedPrefs.AfterTime,
+					"refined_days", refinedPrefs.DaysOfWeek,
+					"excluded_times", len(timeSelectionState.PresentedSlots),
+				)
+
+				fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
+				var result *AvailabilityResult
+				var fetchErr error
+
+				if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
+					result, fetchErr = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, cfg,
+						scraperServiceName, refinedPrefs, req.OnProgress, service)
+				} else if cfg != nil {
+					result, fetchErr = FetchAvailableTimesWithFallback(fetchCtx, s.browser,
+						cfg.BookingURL, scraperServiceName, refinedPrefs, req.OnProgress, service)
+				}
+				fetchCancel()
+
+				if fetchErr == nil && result != nil {
+					// Filter out slots that were already presented
+					newSlots := filterOutPreviousSlots(result.Slots, timeSelectionState.PresentedSlots)
+
+					if len(newSlots) > 0 {
+						// Re-index
+						for i := range newSlots {
+							newSlots[i].Index = i + 1
+						}
+						// Save new time selection state
+						state := &TimeSelectionState{
+							PresentedSlots: newSlots,
+							Service:        service,
+							BookingURL:     timeSelectionState.BookingURL,
+							PresentedAt:    time.Now(),
+						}
+						if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, state); err != nil {
+							s.logger.Error("failed to save refined time selection state", "error", err)
+						}
+						timeSelectionResponse = &TimeSelectionResponse{
+							Slots:      newSlots,
+							Service:    service,
+							ExactMatch: true,
+							SMSMessage: FormatTimeSlotsForSMS(newSlots, service, true),
+						}
+						moreTimesHandled = true
+					} else {
+						// No new slots — tell the patient
+						timeSelectionResponse = &TimeSelectionResponse{
+							Slots:      nil,
+							Service:    service,
+							ExactMatch: false,
+							SMSMessage: fmt.Sprintf("Those are the latest available times on those days for %s. Would you like to try different days, or would one of the times I showed work for you?", service),
+						}
+						moreTimesHandled = true
+					}
+				}
+			}
+
+			if !moreTimesHandled {
+				// Fallback: clear state so the normal re-fetch triggers below
+				timeSelectionState = nil
+				if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, nil); err != nil {
+					s.logger.Warn("failed to clear time selection state", "error", err)
+				}
 			}
 		} else {
 			// User sent a message but didn't select a slot — inject the presented slots
