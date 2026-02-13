@@ -846,6 +846,40 @@ func TestDetectTimeSelection_BareHour_IndexTakesPriority(t *testing.T) {
 	assert.Equal(t, 3, result.Index)
 }
 
+func TestDetectTimeSelection_MoreTimesRequest(t *testing.T) {
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 13, 20, 30, 0, 0, time.Local), TimeStr: "Fri Feb 13 at 8:30 PM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 19, 18, 45, 0, 0, time.Local), TimeStr: "Thu Feb 19 at 6:45 PM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 24, 18, 0, 0, 0, time.Local), TimeStr: "Tue Feb 24 at 6:00 PM"},
+		{Index: 4, DateTime: time.Date(2026, 2, 26, 20, 15, 0, 0, time.Local), TimeStr: "Thu Feb 26 at 8:15 PM"},
+		{Index: 5, DateTime: time.Date(2026, 3, 2, 15, 0, 0, 0, time.Local), TimeStr: "Mon Mar 2 at 3:00 PM"},
+		{Index: 6, DateTime: time.Date(2026, 3, 4, 15, 0, 0, 0, time.Local), TimeStr: "Wed Mar 4 at 3:00 PM"},
+	}
+	prefs := TimePreferences{}
+
+	// "Any later times on Mar 2 and 4th?" should NOT select slot 4 — it's asking for more times
+	result := DetectTimeSelection("Any later times on Mar 2 and 4th?", slots, prefs)
+	assert.Nil(t, result, "should not match — patient is asking for more times, not selecting slot 4")
+
+	// "more times on Monday" should also not match
+	result = DetectTimeSelection("Do you have more times on Monday?", slots, prefs)
+	assert.Nil(t, result, "should not match — asking for more times")
+
+	// "any other options?" should not match
+	result = DetectTimeSelection("any other options?", slots, prefs)
+	assert.Nil(t, result, "should not match — asking for other options")
+
+	// But "4" by itself SHOULD still select slot 4
+	result = DetectTimeSelection("4", slots, prefs)
+	require.NotNil(t, result, "'4' should select slot 4")
+	assert.Equal(t, 4, result.Index)
+
+	// And "the 4th one" without date context should still work
+	result = DetectTimeSelection("the 4th one", slots, prefs)
+	require.NotNil(t, result, "'the 4th one' should select slot 4")
+	assert.Equal(t, 4, result.Index)
+}
+
 func TestDetectTimeSelection_ShorthandTime_3p(t *testing.T) {
 	// Patient says "3p" → should match 3:00 PM or 3:30 PM slot
 	slots := []PresentedSlot{

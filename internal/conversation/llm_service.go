@@ -1253,6 +1253,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				Role:    ChatRoleSystem,
 				Content: fmt.Sprintf("[SYSTEM] The patient selected time slot #%d: %s for %s. Confirm their selection and proceed with booking.", selectedSlot.Index, selectedSlot.TimeStr, timeSelectionState.Service),
 			})
+		} else if isMoreTimesRequest(strings.ToLower(rawMessage)) {
+			// Patient wants more/different/later times — clear state so we re-fetch
+			s.logger.Info("patient requesting more times — clearing time selection state for re-fetch",
+				"conversation_id", req.ConversationID,
+				"message", rawMessage,
+			)
+			// Clear the time selection state entirely so the re-fetch triggers below
+			timeSelectionState = nil
+			if err := s.history.SaveTimeSelectionState(ctx, req.ConversationID, nil); err != nil {
+				s.logger.Warn("failed to clear time selection state", "error", err)
+			}
 		} else {
 			// User sent a message but didn't select a slot — inject the presented slots
 			// so the LLM knows what real times are available and doesn't hallucinate
@@ -1349,8 +1360,9 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// For Moxie: trigger when qualifications are met (no deposit intent needed)
 	// For Square: trigger when deposit intent exists AND qualifications are met
 	browserReady := s.browser != nil && s.browser.IsConfigured()
+	moxieAPIReady := s.moxieClient != nil && clinicCfg != nil && clinicCfg.MoxieConfig != nil
 	qualificationsMet := ShouldFetchAvailabilityWithConfig(history, nil, clinicCfg)
-	shouldTriggerTimeSelection := browserReady && timeSelectionState == nil
+	shouldTriggerTimeSelection := (browserReady || moxieAPIReady) && timeSelectionState == nil
 	// Don't re-scrape if a slot was already selected (patient is now providing email, etc.)
 	if timeSelectionState != nil && timeSelectionState.SlotSelected {
 		shouldTriggerTimeSelection = false

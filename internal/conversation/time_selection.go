@@ -816,12 +816,36 @@ var ordinalMap = map[string]int{
 	"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5, "6th": 6,
 }
 
+// isMoreTimesRequest returns true if the message is asking for more/different/later
+// times rather than selecting a slot. E.g. "any later times on Mar 2 and 4th?"
+func isMoreTimesRequest(message string) bool {
+	morePatterns := []string{
+		"more times", "more options", "other times", "other options",
+		"different times", "different options", "later times", "earlier times",
+		"any times", "any other", "anything else", "what else",
+		"more availability", "other availability",
+		"check again", "look again", "search again",
+		"any later", "any earlier", "anything later", "anything earlier",
+	}
+	for _, pat := range morePatterns {
+		if strings.Contains(message, pat) {
+			return true
+		}
+	}
+	return false
+}
+
 // DetectTimeSelection parses user message to detect time slot selection.
 // prefs is used to disambiguate bare hours (e.g., "6" when both 6am and 6pm exist).
 // Returns the selected slot or nil if not a selection.
 func DetectTimeSelection(message string, presentedSlots []PresentedSlot, prefs TimePreferences) *PresentedSlot {
 	message = strings.TrimSpace(strings.ToLower(message))
 	if message == "" || len(presentedSlots) == 0 {
+		return nil
+	}
+
+	// Bail early if this looks like a request for more/different times
+	if isMoreTimesRequest(message) {
 		return nil
 	}
 
@@ -834,9 +858,14 @@ func DetectTimeSelection(message string, presentedSlots []PresentedSlot, prefs T
 	}
 
 	// Priority 2: Ordinal words ("the first one", "second", "3rd")
-	for word, num := range ordinalMap {
-		if strings.Contains(message, word) && num >= 1 && num <= len(presentedSlots) {
-			return &presentedSlots[num-1]
+	// Only match ordinals that appear as standalone selection (not as part of dates like "Mar 4th")
+	dateContextRE := regexp.MustCompile(`(?i)(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d`)
+	hasDateContext := dateContextRE.MatchString(message)
+	if !hasDateContext {
+		for word, num := range ordinalMap {
+			if strings.Contains(message, word) && num >= 1 && num <= len(presentedSlots) {
+				return &presentedSlots[num-1]
+			}
 		}
 	}
 
