@@ -474,7 +474,7 @@ func buildSystemPrompt(depositCents int, usesMoxie bool, cfg ...*clinic.Config) 
 				idToName[id] = name
 			}
 			var providerInfo strings.Builder
-			providerInfo.WriteString("\n\n📋 SERVICE PROVIDER INFO:\n")
+			providerInfo.WriteString("\n\n📋 SERVICE PROVIDER INFO — IMPORTANT:\n")
 			hasMulti := false
 			for itemID, count := range mc.ServiceProviderCount {
 				svcName := idToName[itemID]
@@ -483,9 +483,7 @@ func buildSystemPrompt(depositCents int, usesMoxie bool, cfg ...*clinic.Config) 
 				}
 				if count > 1 {
 					hasMulti = true
-					providerInfo.WriteString(fmt.Sprintf("- %s: %d providers (ASK for preference)\n", strings.Title(svcName), count))
-				} else {
-					providerInfo.WriteString(fmt.Sprintf("- %s: 1 provider (do NOT ask for preference)\n", strings.Title(svcName)))
+					providerInfo.WriteString(fmt.Sprintf("- %s: %d providers\n", strings.Title(svcName), count))
 				}
 			}
 			if hasMulti && len(mc.ProviderNames) > 0 {
@@ -496,6 +494,11 @@ func buildSystemPrompt(depositCents int, usesMoxie bool, cfg ...*clinic.Config) 
 				}
 				providerInfo.WriteString(strings.Join(names, ", "))
 				providerInfo.WriteString("\n")
+				providerInfo.WriteString("\n🚨 PROVIDER PREFERENCE RULE:\n")
+				providerInfo.WriteString("For services with MULTIPLE providers listed above, you MUST ask the patient:\n")
+				providerInfo.WriteString("\"Do you have a preferred provider? We have [names]. Or no preference is totally fine!\"\n")
+				providerInfo.WriteString("Ask this BEFORE asking for email. Do NOT skip this step.\n")
+				providerInfo.WriteString("For services with only 1 provider (not listed above), do NOT ask.\n")
 			}
 			prompt += providerInfo.String()
 		}
