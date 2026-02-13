@@ -493,6 +493,8 @@ MOXIE_DRY_RUN=false  # Set to true to skip actual Moxie booking
 
 > **Status:** Architecture complete, implementation planned (4-6 weeks)
 > **Architecture doc:** `research/voice-ai-architecture-2026-02-12.md`
+>
+> ⚠️ **Competitive urgency (Feb 2026):** ConvoCore and others are shipping voice-first AI receptionists targeting med spas NOW. Our SMS-first approach with Moxie booking + Stripe deposit collection remains differentiated (nobody else does qualification → payment → auto-booking in one SMS flow), but Phase II voice AI should be accelerated where possible. The longer we wait, the harder it becomes to differentiate on voice alone.
 
 ### Overview
 
@@ -623,6 +625,8 @@ Separate ECS Fargate service (1 vCPU, 2GB RAM). Auto-scales 2-10 instances based
 - **Multi-channel:** Instagram DMs, Google Business Messages, web chat
 - **Outbound voice:** Appointment confirmations, re-engagement calls
 - **Voice analytics:** Sentiment analysis, conversion optimization
+- **AI Care Standard™ compliance:** Launched Feb 11, 2026 — first operational standard for AI communicating directly with patients. Initially aimed at health systems, but expected to trickle down to all patient-facing AI. Enterprise prospects and PE acquirers will ask about compliance certifications. Evaluate requirements and pursue certification as we scale beyond single clinics.
+- **AI search visibility integration:** Partner with platforms like Birdeye to help clinics appear in AI-generated search results (ChatGPT, Gemini, Perplexity). Natural upsell alongside the receptionist product as AI search increasingly drives how patients find med spas.
 
 ---
 
