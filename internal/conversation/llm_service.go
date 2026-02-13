@@ -1488,7 +1488,14 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	var previouslySelectedService string
 	if usesMoxie && selectedSlot == nil && timeSelectionState != nil && timeSelectionState.SlotSelected && req.LeadID != "" && s.leadsRepo != nil {
 		if lead, err := s.leadsRepo.GetByID(ctx, req.OrgID, req.LeadID); err == nil && lead != nil && lead.SelectedDateTime != nil {
-			previouslySelectedDateTime = lead.SelectedDateTime
+			// Convert from UTC (as stored in DB) to clinic timezone for correct formatting
+			dt := *lead.SelectedDateTime
+			if clinicCfg != nil && clinicCfg.Timezone != "" {
+				if loc, lerr := time.LoadLocation(clinicCfg.Timezone); lerr == nil {
+					dt = dt.In(loc)
+				}
+			}
+			previouslySelectedDateTime = &dt
 			previouslySelectedService = lead.SelectedService
 			s.logger.Info("found previously selected slot on lead",
 				"lead_id", req.LeadID,
