@@ -377,16 +377,12 @@ WHEN TO ASK CLARIFYING QUESTIONS:
 - "Facial" or "peel" → Just book "facial" or "peel". Do NOT ask about skin concerns or goals.
 - The provider will discuss all treatment specifics at the appointment.
 
-👩‍⚕️ PROVIDER PREFERENCE - MANDATORY STEP:
-⚠️ You MUST ask about provider preference BEFORE checking availability. Do NOT skip this step.
-
-Forever 22 Med Spa has TWO providers:
-• Brandi Sesock - Owner and lead injector at Forever 22 Med Spa
-• Gale Tesar - Registered Nurse with 30 years of RN experience, Certified Nurse Injector, passionate about personalized care
-- You MUST ask: "Do you have a preference between Brandi or Gale, or would you like the first available appointment?"
-- "No preference" or "whoever is available first" = valid answers
-- If the patient asks about either provider, share the details above
-- Do NOT proceed to check availability until you have their provider preference answer
+👩‍⚕️ PROVIDER PREFERENCE:
+Some services have multiple providers. The system will tell you which services need provider preference.
+- If a service has MULTIPLE providers, you MUST ask about provider preference BEFORE checking availability.
+- If a service has only ONE provider, do NOT ask — just proceed.
+- "No preference" or "whoever is available first" = valid answers.
+- The "Relevant clinic context" section below will list providers per service when available.
 
 USE CLINIC CONTEXT:
 If you see "Relevant clinic context:" with a services and/or providers list, use that to:
@@ -394,15 +390,15 @@ If you see "Relevant clinic context:" with a services and/or providers list, use
 - Know which providers offer which services
 - Know if a service is single-provider only (don't ask preference) or multi-provider (ask preference)
 
-EXAMPLE CLARIFICATION:
+EXAMPLE (multi-provider service):
 Customer: "I want Botox"
-You: "Great choice! Do you have a provider preference between Brandi or Gale, or would you like the first available appointment?"
+You: "Great choice! Do you have a provider preference, or would you like the first available appointment?"
 Customer: "No preference"
 → SERVICE = Botox ✓, PROVIDER = No preference ✓
 
 ⏰ TIME SELECTION BEFORE BOOKING:
 For this clinic, DO NOT offer any deposit or Square link — this clinic does NOT use Square.
-Instead, once you have all SIX items (name, specific service, patient type, schedule preference, provider preference, email):
+Instead, once you have all required items (name, specific service, patient type, schedule preference, and provider preference IF the service has multiple providers):
 - Tell them you're checking available times
 - ⚠️ CRITICAL: Do NOT invent or guess appointment times. The system will provide REAL availability.
 - If the system hasn't provided times yet, say "Let me check what's available..." and WAIT
@@ -455,7 +451,7 @@ var llmTracer = otel.Tracer("medspa.internal.conversation.llm")
 // If usesMoxie is true, it appends Moxie-specific booking instructions that override the
 // Square deposit flow. Moxie clinics do NOT use Square — the patient completes payment
 // directly on Moxie's Step 5 payment page.
-func buildSystemPrompt(depositCents int, usesMoxie bool) string {
+func buildSystemPrompt(depositCents int, usesMoxie bool, cfg ...*clinic.Config) string {
 	if depositCents <= 0 {
 		depositCents = 5000 // default $50
 	}
@@ -466,6 +462,43 @@ func buildSystemPrompt(depositCents int, usesMoxie bool) string {
 	// Append Moxie-specific instructions if clinic uses Moxie booking
 	if usesMoxie {
 		prompt += moxieSystemPromptAddendum
+	}
+
+	// Append per-service provider info if available
+	if len(cfg) > 0 && cfg[0] != nil && cfg[0].MoxieConfig != nil {
+		mc := cfg[0].MoxieConfig
+		if mc.ServiceProviderCount != nil && mc.ProviderNames != nil && mc.ServiceMenuItems != nil {
+			// Build a reverse map: serviceMenuItemId → service name
+			idToName := make(map[string]string)
+			for name, id := range mc.ServiceMenuItems {
+				idToName[id] = name
+			}
+			var providerInfo strings.Builder
+			providerInfo.WriteString("\n\n📋 SERVICE PROVIDER INFO:\n")
+			hasMulti := false
+			for itemID, count := range mc.ServiceProviderCount {
+				svcName := idToName[itemID]
+				if svcName == "" {
+					continue
+				}
+				if count > 1 {
+					hasMulti = true
+					providerInfo.WriteString(fmt.Sprintf("- %s: %d providers (ASK for preference)\n", strings.Title(svcName), count))
+				} else {
+					providerInfo.WriteString(fmt.Sprintf("- %s: 1 provider (do NOT ask for preference)\n", strings.Title(svcName)))
+				}
+			}
+			if hasMulti && len(mc.ProviderNames) > 0 {
+				providerInfo.WriteString("Available providers: ")
+				names := make([]string, 0, len(mc.ProviderNames))
+				for _, name := range mc.ProviderNames {
+					names = append(names, name)
+				}
+				providerInfo.WriteString(strings.Join(names, ", "))
+				providerInfo.WriteString("\n")
+			}
+			prompt += providerInfo.String()
+		}
 	}
 
 	return prompt
@@ -715,15 +748,17 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	// Get clinic-configured deposit amount and booking platform for system prompt customization
 	depositCents := s.deposit.DefaultAmountCents
 	var usesMoxie bool
+	var startCfg *clinic.Config
 	if s.clinicStore != nil && req.OrgID != "" {
 		if cfg, err := s.clinicStore.Get(ctx, req.OrgID); err == nil && cfg != nil {
+			startCfg = cfg
 			if cfg.DepositAmountCents > 0 {
 				depositCents = int32(cfg.DepositAmountCents)
 			}
 			usesMoxie = cfg.UsesMoxieBooking()
 		}
 	}
-	systemPrompt := buildSystemPrompt(int(depositCents), usesMoxie)
+	systemPrompt := buildSystemPrompt(int(depositCents), usesMoxie, startCfg)
 
 	if req.Silent {
 		history := []ChatMessage{
@@ -1314,7 +1349,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// For Moxie: trigger when qualifications are met (no deposit intent needed)
 	// For Square: trigger when deposit intent exists AND qualifications are met
 	browserReady := s.browser != nil && s.browser.IsConfigured()
-	qualificationsMet := ShouldFetchAvailability(history, nil)
+	qualificationsMet := ShouldFetchAvailabilityWithConfig(history, nil, clinicCfg)
 	shouldTriggerTimeSelection := browserReady && timeSelectionState == nil
 	// Don't re-scrape if a slot was already selected (patient is now providing email, etc.)
 	if timeSelectionState != nil && timeSelectionState.SlotSelected {
@@ -2550,7 +2585,68 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		}
 	}
 
+	// Extract provider preference
+	noPreferencePatterns := []string{
+		"no preference", "no provider preference", "don't care", "doesn't matter",
+		"either is fine", "either one", "anyone", "any provider", "whoever",
+		"whoever is available", "no pref", "don't have a preference",
+	}
+	for _, pat := range noPreferencePatterns {
+		if strings.Contains(userMessages, pat) {
+			prefs.ProviderPreference = "no preference"
+			hasPreferences = true
+			break
+		}
+	}
+	// Also check if the assistant asked about provider and user replied to it
+	if prefs.ProviderPreference == "" {
+		prefs.ProviderPreference = providerPreferenceFromReply(history)
+	}
+
 	return prefs, hasPreferences
+}
+
+// providerPreferenceFromReply checks if the assistant asked about provider preference
+// and the user replied with a name or "no preference".
+func providerPreferenceFromReply(history []ChatMessage) string {
+	providerQuestionPatterns := []string{
+		"provider preference", "preferred provider", "specific provider",
+		"particular provider", "who would you like", "do you have a preference for a provider",
+	}
+	for i := len(history) - 1; i >= 1; i-- {
+		msg := history[i]
+		if msg.Role != ChatRoleUser {
+			continue
+		}
+		// Check if the previous assistant message asked about providers
+		for j := i - 1; j >= 0; j-- {
+			if history[j].Role == ChatRoleAssistant {
+				assistantMsg := strings.ToLower(history[j].Content)
+				askedAboutProvider := false
+				for _, pat := range providerQuestionPatterns {
+					if strings.Contains(assistantMsg, pat) {
+						askedAboutProvider = true
+						break
+					}
+				}
+				if askedAboutProvider {
+					reply := strings.ToLower(strings.TrimSpace(msg.Content))
+					if reply == "no" || reply == "nope" || strings.Contains(reply, "no preference") ||
+						strings.Contains(reply, "doesn't matter") || strings.Contains(reply, "don't care") ||
+						strings.Contains(reply, "either") || strings.Contains(reply, "anyone") ||
+						strings.Contains(reply, "whoever") {
+						return "no preference"
+					}
+					// Assume the reply is a provider name
+					if len(reply) > 1 && len(reply) < 50 {
+						return msg.Content // preserve original casing
+					}
+				}
+				break
+			}
+		}
+	}
+	return ""
 }
 
 const nameWordPattern = `[\p{L}][\p{L}\p{M}'-]*`

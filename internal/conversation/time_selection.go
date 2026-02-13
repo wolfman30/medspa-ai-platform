@@ -1011,14 +1011,21 @@ func FormatTimeSelectionConfirmation(selectedTime time.Time, service string, dep
 // Returns true if we have: name, service, time preferences, and patient type.
 // Note: Email is NOT required here - for Moxie clinics, email is collected on the booking page.
 func ShouldFetchAvailability(history []ChatMessage, lead interface{}) bool {
+	return ShouldFetchAvailabilityWithConfig(history, lead, nil)
+}
+
+// ShouldFetchAvailabilityWithConfig checks whether all required qualifications are met
+// to trigger an availability fetch. When cfg is non-nil and the service has multiple
+// providers, provider preference is also required.
+func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, cfg *clinic.Config) bool {
 	prefs, ok := extractPreferences(history)
 	if !ok {
 		log.Printf("[DEBUG] ShouldFetchAvailability: extractPreferences returned not ok")
 		return false
 	}
 
-	log.Printf("[DEBUG] ShouldFetchAvailability: name=%q service=%q patientType=%q days=%q times=%q",
-		prefs.Name, prefs.ServiceInterest, prefs.PatientType, prefs.PreferredDays, prefs.PreferredTimes)
+	log.Printf("[DEBUG] ShouldFetchAvailability: name=%q service=%q patientType=%q days=%q times=%q providerPref=%q",
+		prefs.Name, prefs.ServiceInterest, prefs.PatientType, prefs.PreferredDays, prefs.PreferredTimes, prefs.ProviderPreference)
 
 	// Must have name
 	if prefs.Name == "" {
@@ -1037,6 +1044,12 @@ func ShouldFetchAvailability(history []ChatMessage, lead interface{}) bool {
 
 	// Must have some scheduling preferences (days or times)
 	if prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
+		return false
+	}
+
+	// If the service has multiple providers, must have provider preference
+	if cfg != nil && cfg.ServiceNeedsProviderPreference(prefs.ServiceInterest) && prefs.ProviderPreference == "" {
+		log.Printf("[DEBUG] ShouldFetchAvailability: service %q needs provider preference (multiple providers)", prefs.ServiceInterest)
 		return false
 	}
 

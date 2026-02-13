@@ -11,13 +11,14 @@ import (
 
 // SchedulingPreferences captures the customer's availability preferences from conversation
 type SchedulingPreferences struct {
-	Name            string // Patient's name (extracted from conversation)
-	ServiceInterest string // e.g., "Botox", "Filler", "Consultation"
-	PatientType     string // "new" or "existing"
-	PastServices    string // Services patient received before (for existing patients)
-	PreferredDays   string // e.g., "weekdays", "weekends", "any"
-	PreferredTimes  string // e.g., "morning", "afternoon", "evening"
-	Notes           string // free-form notes from conversation
+	Name               string // Patient's name (extracted from conversation)
+	ServiceInterest    string // e.g., "Botox", "Filler", "Consultation"
+	PatientType        string // "new" or "existing"
+	PastServices       string // Services patient received before (for existing patients)
+	PreferredDays      string // e.g., "weekdays", "weekends", "any"
+	PreferredTimes     string // e.g., "morning", "afternoon", "evening"
+	ProviderPreference string // e.g., "Brandi Sesock", "no preference", "" (not yet asked)
+	Notes              string // free-form notes from conversation
 }
 
 // SelectedAppointment captures the specific time slot selected by the lead

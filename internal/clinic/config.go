@@ -147,6 +147,29 @@ type MoxieConfig struct {
 	// DefaultProviderID is used when patient has no provider preference.
 	// Empty string means "no preference" (Moxie assigns one).
 	DefaultProviderID string `json:"default_provider_id,omitempty"`
+	// ServiceProviderCount maps service menu item IDs to the number of eligible providers.
+	// When a service has >1 provider, the system asks for provider preference before booking.
+	// e.g., {"18430": 2, "18427": 1}
+	ServiceProviderCount map[string]int `json:"service_provider_count,omitempty"`
+	// ProviderNames maps provider IDs to display names (e.g., {"33150": "Brandi Sesock"}).
+	ProviderNames map[string]string `json:"provider_names,omitempty"`
+}
+
+// ServiceNeedsProviderPreference returns true if the given service (by normalized name)
+// has more than one eligible provider.
+func (c *Config) ServiceNeedsProviderPreference(serviceName string) bool {
+	if c.MoxieConfig == nil || c.MoxieConfig.ServiceProviderCount == nil || c.MoxieConfig.ServiceMenuItems == nil {
+		return false
+	}
+	resolved := c.ResolveServiceName(serviceName)
+	itemID := c.MoxieConfig.ServiceMenuItems[strings.ToLower(resolved)]
+	if itemID == "" {
+		itemID = c.MoxieConfig.ServiceMenuItems[strings.ToLower(serviceName)]
+	}
+	if itemID == "" {
+		return false
+	}
+	return c.MoxieConfig.ServiceProviderCount[itemID] > 1
 }
 
 // DefaultBookingURL is the default test booking page for development/demo purposes.
