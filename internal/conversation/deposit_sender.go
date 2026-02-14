@@ -214,7 +214,17 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 			code := d.shortURLs.SaveCheckoutURL(paymentID, link.URL)
 			checkoutURL = fmt.Sprintf("%s/pay/%s", strings.TrimRight(d.apiBaseURL, "/"), code)
 		}
-		body := fmt.Sprintf("To complete your booking, please place your $%.2f deposit here:\n%s", float64(intent.AmountCents)/100, checkoutURL)
+		// Build the deposit SMS — include booking policies before the link for informed consent
+		var body string
+		if len(intent.BookingPolicies) > 0 {
+			body = "Before you pay, please note:\n"
+			for _, policy := range intent.BookingPolicies {
+				body += "• " + policy + "\n"
+			}
+			body += fmt.Sprintf("\nTo complete your booking, please place your $%.2f deposit here:\n%s", float64(intent.AmountCents)/100, checkoutURL)
+		} else {
+			body = fmt.Sprintf("To complete your booking, please place your $%.2f deposit here:\n%s", float64(intent.AmountCents)/100, checkoutURL)
+		}
 		conversationID := strings.TrimSpace(resp.ConversationID)
 		if conversationID == "" {
 			conversationID = strings.TrimSpace(msg.ConversationID)

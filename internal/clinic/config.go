@@ -130,6 +130,11 @@ type Config struct {
 	// Keys are normalized (lowercased). Values are the search term used by the scraper.
 	ServiceAliases map[string]string `json:"service_aliases,omitempty"`
 
+	// BookingPolicies are shown to the patient BEFORE the payment link so they
+	// give informed consent (e.g., 24-hour cancellation, no-show fee).
+	// Each string is sent as a separate line in the pre-payment SMS.
+	BookingPolicies []string `json:"booking_policies,omitempty"`
+
 	// MoxieConfig holds Moxie-specific IDs needed for direct GraphQL API booking.
 	// Only used when BookingPlatform == "moxie".
 	MoxieConfig *MoxieConfig `json:"moxie_config,omitempty"`

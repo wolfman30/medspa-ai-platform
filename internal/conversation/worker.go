@@ -903,9 +903,10 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 			}
 			resp := &Response{
 				DepositIntent: &DepositIntent{
-					AmountCents:  int32(cfg.DepositAmountForService(req.Service)),
-					Description:  desc,
-					ScheduledFor: scheduledFor,
+					AmountCents:     int32(cfg.DepositAmountForService(req.Service)),
+					Description:     desc,
+					ScheduledFor:    scheduledFor,
+					BookingPolicies: cfg.BookingPolicies,
 				},
 			}
 			if err := w.deposits.SendDeposit(ctx, msg, resp); err != nil {

@@ -75,6 +75,9 @@ type DepositIntent struct {
 	CancelURL    string
 	Description  string
 	ScheduledFor *time.Time
+	// BookingPolicies are sent to the patient BEFORE the payment link (informed consent).
+	// E.g., "24-hour cancellation policy", "no-show fee", etc.
+	BookingPolicies []string
 	// Preloaded checkout info (set by deposit preloader for parallel generation)
 	PreloadedURL       string // Pre-generated Square checkout URL
 	PreloadedPaymentID string // Pre-generated payment ID to use for intent (UUID string)

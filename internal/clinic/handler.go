@@ -85,6 +85,7 @@ type UpdateConfigRequest struct {
 	MoxieConfig            *MoxieConfig       `json:"moxie_config,omitempty"`
 	PaymentProvider        string             `json:"payment_provider,omitempty"`
 	StripeAccountID        string             `json:"stripe_account_id,omitempty"`
+	BookingPolicies        []string           `json:"booking_policies,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -195,6 +196,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.StripeAccountID != "" {
 		cfg.StripeAccountID = req.StripeAccountID
+	}
+	if req.BookingPolicies != nil {
+		cfg.BookingPolicies = req.BookingPolicies
 	}
 
 	// Save updated config
