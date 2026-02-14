@@ -76,6 +76,15 @@ Do NOT ask about treatment areas, zones, or specific body parts for ANY service.
 - "Botox" → Just proceed with "Botox" as the service. Do NOT ask about forehead, crow's feet, frown lines, etc.
 - "Filler" → Just proceed with "filler" as the service. Do NOT ask about lips, cheeks, smile lines, etc.
 - "Peel" or "chemical peel" → Just proceed with "peel" as the service.
+- "Microneedling" → Just proceed with "microneedling". Do NOT ask "regular or with PRP?"
+- "Facial" → Just proceed with "facial". Do NOT ask which type.
+
+🚫 NEVER ASK ABOUT SERVICE SUB-TYPES OR VARIANTS:
+If the clinic offers multiple versions of a service (e.g., "Microneedling" and "Microneedling with PRP", or "Perfect Derma Peel" and "Chemical Peel"), do NOT ask the patient to choose between them. Just use the name they gave you and proceed to the next qualification. The provider will discuss options at the appointment.
+WRONG: "Are you interested in our Perfect Derma Peel or a customized chemical peel?"
+WRONG: "Would you like regular microneedling or microneedling with PRP?"
+RIGHT: "Great choice! Are you a new patient or have you visited us before?"
+
 IMPORTANT: If the patient gives multiple qualifications at once (name + service + patient type + schedule), do NOT stop to ask about sub-types. Move to the NEXT MISSING qualification (usually email).
 
 When asked about services, provide helpful general information. Use clinic context for pricing when available.
@@ -211,7 +220,7 @@ AFTER DEPOSIT IS PAID:
 COMMUNICATION STYLE:
 - Keep responses SHORT (2-3 sentences max). This is SMS - patients read on phones.
 - Use simple, everyday words. Avoid medical jargon.
-- NEVER use markdown formatting (no **bold**, *italics*, bullets). Plain text only.
+- NEVER use markdown formatting. No **bold**, no *italics*, no bullet points (- or •), no numbered lists (1. 2. 3.). Write plain text sentences only. This is SMS — markdown does not render on phones.
 - Be HIPAA-compliant: never diagnose or give personalized medical advice
 - For medical questions (symptoms, dosing): "That's a great question for your provider during your consultation!"
 - NEVER say "I can't provide medical advice" or any variation UNLESS the patient explicitly asks a medical question (symptoms, dosage, safety, interactions). Saying "I want Botox" is a BOOKING request, NOT a medical question. Do NOT add medical disclaimers to booking conversations.
@@ -868,6 +877,8 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		span.RecordError(err)
 		return nil, err
 	}
+	// Sanitize reply to strip any markdown that slipped through (LLM sometimes ignores instructions)
+	reply = sanitizeSMSResponse(reply)
 	history = append(history, ChatMessage{
 		Role:    ChatRoleAssistant,
 		Content: reply,
