@@ -390,12 +390,12 @@ jobs:
       - name: Wait for service to stabilize
         run: sleep 30
 
-      - name: Run E2E smoke test
+      - name: Run E2E smoke test (happy-path)
         env:
           API_BASE_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
           ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
         run: |
-          go run scripts/e2e/run_e2e.go
+          go run scripts/e2e/run_e2e.go happy-path
 
   deploy_production:
     name: Deploy production (gated)
