@@ -696,11 +696,11 @@ func matchesTimePreferences(slotTime time.Time, prefs TimePreferences) bool {
 		}
 	}
 
-	// Check AfterTime
+	// Check AfterTime — "after 3pm" means strictly after, not at 3:00 PM
 	if prefs.AfterTime != "" {
 		afterMinutes := parseTimeToMinutes(prefs.AfterTime)
 		slotMinutes := slotTime.Hour()*60 + slotTime.Minute()
-		if slotMinutes < afterMinutes {
+		if slotMinutes <= afterMinutes {
 			return false
 		}
 	}

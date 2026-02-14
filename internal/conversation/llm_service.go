@@ -359,13 +359,15 @@ IGNORE the standard deposit rule above. Follow ONLY the Moxie flow below.
 🔷 MOXIE BOOKING CLINIC - SPECIAL INSTRUCTIONS:
 This clinic uses Moxie for online booking. The flow is DIFFERENT from standard clinics:
 
-📋 QUALIFICATION CHECKLIST FOR MOXIE - You need SIX things:
+📋 QUALIFICATION CHECKLIST FOR MOXIE (⚠️ OVERRIDES the standard 5-item checklist above) - You need SIX things IN THIS EXACT ORDER:
 1. NAME - The patient's full name (first + last)
 2. SERVICE - What SPECIFIC treatment are they interested in? (see below for clarification)
 3. PATIENT TYPE - Are they a new or existing/returning patient?
 4. SCHEDULE - Day AND time preferences (weekdays/weekends + morning/afternoon/evening)
 5. PROVIDER PREFERENCE - Which provider do they want, or no preference? (see below)
 6. EMAIL - The patient's email address (needed for booking confirmation)
+
+⚠️ CRITICAL ORDER: Ask for items IN ORDER. Do NOT ask for EMAIL (#6) before PROVIDER PREFERENCE (#5). Do NOT skip ahead. If you have 1-4, ask for #5 next. Only ask for #6 after #5 is collected.
 
 🎯 SERVICE CLARIFICATION - IMPORTANT:
 This clinic's booking system uses internal service names (like "Tox" for Botox). ALWAYS use the patient's original name for the service in your responses. If they say "Botox", call it "Botox" — NEVER say "Tox", "Dermal Filler", or other internal names to the patient.
@@ -1507,6 +1509,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				depositIntent.AmountCents = int32(amount)
 			}
 		}
+	}
+
+	// GUARD: For Moxie clinics, NEVER send a deposit without time selection first.
+	// The correct flow is: qualify → present slots → patient picks → THEN deposit.
+	// If the deposit classifier fires before time selection, suppress it.
+	if depositIntent != nil && usesMoxie && (timeSelectionState == nil || !timeSelectionState.SlotSelected) {
+		s.logger.Warn("deposit intent suppressed: Moxie clinic requires time selection before deposit",
+			"conversation_id", req.ConversationID,
+			"slot_selected", timeSelectionState != nil && timeSelectionState.SlotSelected,
+		)
+		depositIntent = nil
 	}
 
 	// Check if we should trigger time selection flow

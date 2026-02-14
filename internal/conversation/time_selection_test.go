@@ -371,14 +371,15 @@ func TestFetchAvailableTimesWithFallback_ExactMatch(t *testing.T) {
 		},
 	}
 	adapter := NewBrowserAdapter(mock, nil)
-	prefs := TimePreferences{AfterTime: "15:00"} // after 3pm
+	prefs := TimePreferences{AfterTime: "15:00"} // after 3pm (strictly after — 3:00 PM excluded)
 
 	result, err := FetchAvailableTimesWithFallback(context.Background(), adapter, "https://example.com/book", "Botox", prefs, nil)
 	require.NoError(t, err)
 
 	assert.True(t, result.ExactMatch)
 	assert.Equal(t, maxCalendarDays, result.SearchedDays) // all qualifying dates searched at once
-	assert.Len(t, result.Slots, 2)
+	assert.Len(t, result.Slots, 1, "3:00 PM should be excluded; 'after 3pm' means strictly after")
+	assert.Equal(t, 16, result.Slots[0].DateTime.Hour(), "only 4:00 PM slot should remain")
 	assert.Empty(t, result.Message)
 }
 
