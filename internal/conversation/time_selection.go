@@ -681,6 +681,21 @@ func FetchAlternativeTimes(
 
 // matchesTimePreferences checks if a slot time matches user preferences
 func matchesTimePreferences(slotTime time.Time, prefs TimePreferences) bool {
+	// Check DaysOfWeek
+	if len(prefs.DaysOfWeek) > 0 {
+		weekday := int(slotTime.Weekday())
+		match := false
+		for _, d := range prefs.DaysOfWeek {
+			if d == weekday {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return false
+		}
+	}
+
 	// Check AfterTime
 	if prefs.AfterTime != "" {
 		afterMinutes := parseTimeToMinutes(prefs.AfterTime)

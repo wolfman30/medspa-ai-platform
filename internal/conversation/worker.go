@@ -573,6 +573,22 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 				w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
 			}
 		}
+		// Handle time selection for StartConversation (first message had all qualifications)
+		if payload.Kind == jobTypeStart && resp != nil && resp.TimeSelectionResponse != nil && resp.TimeSelectionResponse.SMSMessage != "" {
+			// Send the LLM reply first, then the time selection SMS
+			w.sendReply(ctx, payload, resp)
+			// Build a MessageRequest-like struct for handleTimeSelectionResponse
+			startMsg := MessageRequest{
+				OrgID:          payload.Start.OrgID,
+				LeadID:         payload.Start.LeadID,
+				ConversationID: resp.ConversationID,
+				From:           payload.Start.From,
+				To:             payload.Start.To,
+				Channel:        payload.Start.Channel,
+			}
+			w.handleTimeSelectionResponse(ctx, startMsg, resp)
+		}
+
 		if payload.Kind == jobTypeMessage {
 			// Time selection responses take priority over LLM reply — send only the slots/fallback message
 			if resp != nil && resp.TimeSelectionResponse != nil && resp.TimeSelectionResponse.SMSMessage != "" {

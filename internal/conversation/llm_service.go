@@ -368,7 +368,7 @@ This clinic uses Moxie for online booking. The flow is DIFFERENT from standard c
 6. EMAIL - The patient's email address (needed for booking confirmation)
 
 🎯 SERVICE CLARIFICATION - IMPORTANT:
-This clinic's booking system requires SPECIFIC services, not general categories. If a patient mentions a broad category, ask clarifying questions to narrow down to a bookable service.
+This clinic's booking system uses internal service names (like "Tox" for Botox). ALWAYS use the patient's original name for the service in your responses. If they say "Botox", call it "Botox" — NEVER say "Tox", "Dermal Filler", or other internal names to the patient.
 
 WHEN TO ASK CLARIFYING QUESTIONS:
 - Do NOT ask about treatment areas, zones, or specific body parts for ANY service. The service name alone is sufficient for booking.
@@ -889,11 +889,83 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		}
 	}
 
-	return &Response{
+	resp := &Response{
 		ConversationID: conversationID,
 		Message:        reply,
 		Timestamp:      time.Now().UTC(),
-	}, nil
+	}
+
+	// Check if all qualifications are met on the first message — if so, trigger
+	// time selection immediately instead of requiring a second message.
+	moxieAPIReady := s.moxieClient != nil && startCfg != nil && startCfg.MoxieConfig != nil
+	browserReady := s.browser != nil && s.browser.IsConfigured()
+	if (moxieAPIReady || browserReady) && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
+		prefs, _ := extractPreferences(history)
+		timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
+		scraperServiceName := prefs.ServiceInterest
+		if startCfg != nil {
+			scraperServiceName = startCfg.ResolveServiceName(scraperServiceName)
+		}
+
+		s.logger.Info("StartConversation: all qualifications met, fetching availability",
+			"conversation_id", conversationID,
+			"service", prefs.ServiceInterest,
+			"resolved_service", scraperServiceName,
+		)
+
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
+		var result *AvailabilityResult
+		var fetchErr error
+
+		if moxieAPIReady {
+			result, fetchErr = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, startCfg,
+				scraperServiceName, timePrefs, nil, prefs.ServiceInterest)
+		} else {
+			result, fetchErr = FetchAvailableTimesWithFallback(fetchCtx, s.browser,
+				startCfg.BookingURL, scraperServiceName, timePrefs, nil, prefs.ServiceInterest)
+		}
+		fetchCancel()
+
+		if fetchErr != nil {
+			s.logger.Warn("StartConversation: availability fetch failed", "error", fetchErr)
+		} else if len(result.Slots) > 0 {
+			state := &TimeSelectionState{
+				PresentedSlots: result.Slots,
+				Service:        prefs.ServiceInterest,
+				BookingURL:     startCfg.BookingURL,
+				PresentedAt:    time.Now(),
+			}
+			if err := s.history.SaveTimeSelectionState(ctx, conversationID, state); err != nil {
+				s.logger.Error("StartConversation: failed to save time selection state", "error", err)
+			}
+			resp.TimeSelectionResponse = &TimeSelectionResponse{
+				Slots:      result.Slots,
+				Service:    prefs.ServiceInterest,
+				ExactMatch: result.ExactMatch,
+				SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
+			}
+
+			// Replace the LLM reply in history with what we're actually sending
+			for i := len(history) - 1; i >= 0; i-- {
+				if history[i].Role == ChatRoleAssistant {
+					history[i].Content = resp.TimeSelectionResponse.SMSMessage
+					break
+				}
+			}
+			if saveErr := s.history.Save(ctx, conversationID, history); saveErr != nil {
+				s.logger.Warn("StartConversation: failed to re-save history after time selection", "error", saveErr)
+			}
+		} else if result.Message != "" {
+			resp.TimeSelectionResponse = &TimeSelectionResponse{
+				Slots:      nil,
+				Service:    prefs.ServiceInterest,
+				ExactMatch: false,
+				SMSMessage: result.Message,
+			}
+		}
+	}
+
+	return resp, nil
 }
 
 // ProcessMessage continues an existing conversation with Redis-backed context.
