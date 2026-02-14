@@ -51,10 +51,10 @@ regression:
 clear-test-deposit:
 	./scripts/clear-test-deposit.sh $(TEST_PHONE)
 
-# Run full E2E test (requires API running)
+# Run full E2E test against dev API (requires ADMIN_JWT_SECRET and API_BASE_URL env vars)
 e2e:
-	./scripts/run-e2e-test.sh
+	ADMIN_JWT_SECRET=$(ADMIN_JWT_SECRET) API_BASE_URL=$(API_BASE_URL) go run scripts/e2e/run_e2e.go
 
-# Run E2E test with shorter wait times
-e2e-quick:
-	./scripts/run-e2e-test.sh --quick
+# Run E2E test with default dev settings
+e2e-dev:
+	ADMIN_JWT_SECRET=REDACTED_JWT_SECRET API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/run_e2e.go
