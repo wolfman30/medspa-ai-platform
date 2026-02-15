@@ -1447,6 +1447,34 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
+	// Deterministic guardrail: if service needs provider preference and we don't have it,
+	// inject a system message forcing the LLM to ask about it before email.
+	if cfg != nil && cfg.UsesMoxieBooking() {
+		prefs, _ := extractPreferences(history)
+		if prefs.ServiceInterest != "" && prefs.ProviderPreference == "" {
+			resolvedService := cfg.ResolveServiceName(prefs.ServiceInterest)
+			if cfg.ServiceNeedsProviderPreference(resolvedService) {
+				providerNames := make([]string, 0)
+				if cfg.MoxieConfig != nil {
+					for _, name := range cfg.MoxieConfig.ProviderNames {
+						providerNames = append(providerNames, name)
+					}
+				}
+				var providerList string
+				if len(providerNames) > 0 {
+					providerList = fmt.Sprintf(" Available providers: %s.", strings.Join(providerNames, ", "))
+				}
+				history = append(history, ChatMessage{
+					Role: ChatRoleSystem,
+					Content: fmt.Sprintf("[SYSTEM GUARDRAIL] The patient wants %s which has multiple providers.%s "+
+						"You MUST ask about provider preference NOW. Do NOT ask for email yet. "+
+						"Ask: 'Do you have a provider preference, or would you like the first available appointment?'",
+						prefs.ServiceInterest, providerList),
+				})
+			}
+		}
+	}
+
 	reply, err := s.generateResponse(ctx, history)
 	if err != nil {
 		return nil, err
