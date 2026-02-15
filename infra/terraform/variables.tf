@@ -190,3 +190,9 @@ variable "enable_nat_gateway" {
   type        = bool
   default     = true
 }
+
+variable "assign_public_ip" {
+  description = "Assign public IPs to ECS Fargate tasks. Enable when using public subnets without NAT."
+  type        = bool
+  default     = false
+}
