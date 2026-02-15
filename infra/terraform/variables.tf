@@ -184,3 +184,9 @@ variable "enable_browser_sidecar" {
   type        = bool
   default     = false
 }
+
+variable "enable_nat_gateway" {
+  description = "Create NAT gateway for private subnet internet access. Disable when ECS uses public subnets to save ~$32/mo."
+  type        = bool
+  default     = true
+}

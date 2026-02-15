@@ -7,6 +7,7 @@ module "vpc" {
   vpc_cidr           = var.vpc_cidr
   availability_zones = var.availability_zones
   single_nat_gateway = var.environment != "production"
+  enable_nat_gateway = var.enable_nat_gateway
 }
 
 module "rds" {

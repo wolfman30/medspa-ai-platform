@@ -18,3 +18,9 @@ variable "single_nat_gateway" {
   type        = bool
   default     = false
 }
+
+variable "enable_nat_gateway" {
+  description = "Create NAT gateway(s) for private subnet internet access. Disable when ECS uses public subnets."
+  type        = bool
+  default     = true
+}
