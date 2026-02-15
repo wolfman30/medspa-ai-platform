@@ -479,6 +479,12 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
+		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
+			conversation.NewStructuredKnowledgeStore(redisClient),
+			clinicStore,
+			knowledgeRepo,
+			logger,
+		),
 	}
 	r := router.New(routerCfg)
 
