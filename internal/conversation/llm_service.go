@@ -2664,37 +2664,104 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		pattern string
 		name    string
 	}{
+		// Filler dissolve (most specific filler variant first)
 		{"filler dissolve", "filler dissolve"},
 		{"dissolve filler", "filler dissolve"},
 		{"dissolve", "filler dissolve"},
 		{"hylenex", "filler dissolve"},
+		// Specific filler types
+		{"mini lip filler", "mini lip filler"},
+		{"mini lip", "mini lip filler"},
+		{"half syringe lip", "mini lip filler"},
 		{"dermal filler", "dermal filler"},
 		{"lip filler", "lip filler"},
 		{"lip injection", "lip filler"},
+		{"lip augmentation", "lip filler"},
 		{"cheek filler", "cheek filler"},
+		{"jawline filler", "jawline filler"},
+		{"chin filler", "chin filler"},
 		{"under eye filler", "under eye filler"},
 		{"tear trough", "tear trough filler"},
+		{"radiesse", "radiesse"},
+		{"skinvive", "skinvive"},
+		// Peels
 		{"perfect derma peel", "Perfect Derma Peel"},
 		{"chemical peel", "chemical peel"},
 		{"vi peel", "VI Peel"},
+		// Weight loss
+		{"weight loss consultation", "weight loss consultation"},
 		{"semaglutide", "semaglutide"},
 		{"weight loss", "weight loss"},
 		{"tirzepatide", "tirzepatide"},
+		{"ozempic", "weight loss"},
+		{"wegovy", "weight loss"},
+		{"mounjaro", "weight loss"},
+		{"glp-1", "weight loss"},
+		// Tixel
+		{"tixel full face and neck", "tixel - full face & neck"},
+		{"tixel face and neck", "tixel - full face & neck"},
+		{"tixel full face", "tixel - full face"},
+		{"tixel face", "tixel - full face"},
+		{"tixel decollete", "tixel - decollete"},
+		{"tixel chest", "tixel - decollete"},
+		{"tixel neck", "tixel - neck"},
+		{"tixel eye", "tixel - around the eyes"},
+		{"tixel mouth", "tixel - around the mouth"},
+		{"tixel arm", "tixel - upper arms"},
+		{"tixel hand", "tixel - hands"},
+		{"tixel", "tixel"},
+		// Laser hair removal
+		{"laser hair removal", "laser hair removal"},
+		{"hair removal", "laser hair removal"},
+		// IPL / photofacial
+		{"ipl face", "ipl - full face"},
+		{"ipl neck", "ipl - neck"},
+		{"ipl chest", "ipl - chest"},
+		{"photofacial", "ipl"},
+		{"ipl", "ipl"},
+		// Tattoo removal
+		{"tattoo removal", "tattoo removal"},
+		{"tattoo", "tattoo removal"},
+		// Vascular / spider veins
+		{"vascular lesion", "vascular lesion removal"},
+		{"spider vein", "vascular lesion removal"},
+		// Erbium laser resurfacing
+		{"ablative erbium", "ablative erbium laser resurfacing"},
+		{"fractional erbium", "fractional erbium laser resurfacing"},
+		{"erbium", "erbium laser resurfacing"},
+		{"laser resurfacing", "laser resurfacing"},
+		// Under eye
+		{"under eye treatment", "pbf under eye treatment"},
+		{"pbf under eye", "pbf under eye treatment"},
+		// Threads
 		{"pdo thread", "PDO threads"},
 		{"thread lift", "thread lift"},
+		// Microneedling
+		{"microneedling with prp", "microneedling with prp"},
 		{"microneedling", "microneedling"},
 		{"prp", "PRP"},
 		{"vampire facial", "PRP facial"},
+		// Other treatments
 		{"hydrafacial", "HydraFacial"},
+		{"salmon dna facial", "salmon dna facial"},
+		{"salmon facial", "salmon dna facial"},
 		{"laser treatment", "laser treatment"},
 		{"laser hair", "laser hair removal"},
-		{"ipl", "IPL"},
+		// Neurotoxins
 		{"jeuveau", "Jeuveau"},
 		{"dysport", "Dysport"},
 		{"xeomin", "Xeomin"},
 		{"botox", "Botox"},
-		{"lip filler", "lip filler"},
-		{"lip augmentation", "lip filler"},
+		// Kybella
+		{"kybella", "kybella"},
+		{"double chin", "kybella"},
+		// Wellness
+		{"b12 shot", "b12 shot"},
+		{"b12", "b12 shot"},
+		{"vitamin injection", "b12 shot"},
+		{"nad+", "nad+"},
+		{"nad", "nad+"},
+		// Generic catch-alls (last)
 		{"filler", "filler"},
 		{"consultation", "consultation"},
 		{"facial", "facial"},
