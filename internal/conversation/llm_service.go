@@ -2664,6 +2664,10 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		pattern string
 		name    string
 	}{
+		{"filler dissolve", "filler dissolve"},
+		{"dissolve filler", "filler dissolve"},
+		{"dissolve", "filler dissolve"},
+		{"hylenex", "filler dissolve"},
 		{"dermal filler", "dermal filler"},
 		{"lip filler", "lip filler"},
 		{"lip injection", "lip filler"},
