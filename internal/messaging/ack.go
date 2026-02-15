@@ -24,18 +24,19 @@ const PCIGuardrailMessage = "For your security, please do not send credit card d
 // SmsAckMessageFirst is the ack for the first inbound SMS in a conversation.
 const SmsAckMessageFirstBase = "Got it - give me a moment to help you."
 
-const firstAckMedicalNote = "I can't provide medical advice over text."
-
-// SmsAckMessageFirst includes the medical advice note on the very first ack.
-const SmsAckMessageFirst = SmsAckMessageFirstBase + " " + firstAckMedicalNote
+// SmsAckMessageFirst is kept for backward compatibility (e.g. IsSmsAckMessage).
+const SmsAckMessageFirst = SmsAckMessageFirstBase
 
 // smsAckMessagesFirst are varied acks for the first inbound message.
-var smsAckMessagesFirst = buildFirstAckMessages([]string{
+// NOTE: Medical advice disclaimer removed — it was off-putting on booking
+// requests like "I want Botox." The missed-call ack (InstantAckMessage)
+// still includes it naturally. The LLM handles medical deflection when needed.
+var smsAckMessagesFirst = []string{
 	SmsAckMessageFirstBase,
 	"Thanks for reaching out - one moment while I check.",
 	"Thanks! Give me a second to look that up.",
 	"Got it! Let me check on that.",
-})
+}
 
 // smsAckMessagesFollowUp are varied acks for follow-up messages to feel more human.
 var smsAckMessagesFollowUp = []string{
@@ -53,25 +54,6 @@ func GetSmsAckMessage(isFirstMessage bool) string {
 		return smsAckMessagesFirst[rand.Intn(len(smsAckMessagesFirst))]
 	}
 	return smsAckMessagesFollowUp[rand.Intn(len(smsAckMessagesFollowUp))]
-}
-
-func buildFirstAckMessages(base []string) []string {
-	messages := make([]string, 0, len(base))
-	for _, msg := range base {
-		messages = append(messages, addMedicalNote(msg))
-	}
-	return messages
-}
-
-func addMedicalNote(message string) string {
-	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
-		return trimmed
-	}
-	if strings.Contains(strings.ToLower(trimmed), "medical advice") {
-		return trimmed
-	}
-	return trimmed + " " + firstAckMedicalNote
 }
 
 // IsSmsAckMessage reports whether a message matches any configured ack response.

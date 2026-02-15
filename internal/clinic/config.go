@@ -329,7 +329,15 @@ func (b *BusinessHours) GetHoursForDay(weekday time.Weekday) *DayHours {
 	}
 }
 
+// HasAnyHours returns true if at least one day has business hours configured.
+func (b *BusinessHours) HasAnyHours() bool {
+	return b.Sunday != nil || b.Monday != nil || b.Tuesday != nil ||
+		b.Wednesday != nil || b.Thursday != nil || b.Friday != nil || b.Saturday != nil
+}
+
 // IsOpenAt checks if the clinic is open at the given time.
+// If no business hours are configured, the clinic is treated as always open
+// (e.g., "by appointment only" clinics with no set hours).
 func (c *Config) IsOpenAt(t time.Time) bool {
 	loc, err := time.LoadLocation(c.Timezone)
 	if err != nil {
@@ -339,7 +347,9 @@ func (c *Config) IsOpenAt(t time.Time) bool {
 
 	hours := c.BusinessHours.GetHoursForDay(localTime.Weekday())
 	if hours == nil {
-		return false
+		// No hours configured for this day — if NO hours are configured at all,
+		// assume always open (appointment-only clinic). Otherwise, closed today.
+		return !c.BusinessHours.HasAnyHours()
 	}
 
 	openTime, err := time.Parse("15:04", hours.Open)

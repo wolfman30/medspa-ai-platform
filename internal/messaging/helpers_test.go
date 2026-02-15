@@ -25,8 +25,10 @@ func TestGetSmsAckMessage(t *testing.T) {
 	if !containsString(smsAckMessagesFirst, first) {
 		t.Fatalf("unexpected first ack %q", first)
 	}
-	if !strings.Contains(strings.ToLower(first), "medical advice") {
-		t.Fatalf("expected medical advice note in first ack, got %q", first)
+	// Medical advice note removed from first ack — booking requests like
+	// "I want Botox" shouldn't start with "I can't provide medical advice."
+	if strings.Contains(strings.ToLower(first), "medical advice") {
+		t.Fatalf("first ack should NOT contain medical advice note, got %q", first)
 	}
 	follow := GetSmsAckMessage(false)
 	if !containsString(smsAckMessagesFollowUp, follow) {
