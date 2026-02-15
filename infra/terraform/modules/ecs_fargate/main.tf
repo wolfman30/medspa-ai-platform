@@ -545,7 +545,7 @@ resource "aws_ecs_service" "api" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = var.assign_public_ip ? var.public_subnet_ids : var.private_subnet_ids
     security_groups  = [aws_security_group.tasks.id]
     assign_public_ip = var.assign_public_ip
   }
@@ -612,7 +612,7 @@ resource "aws_ecs_service" "api_rolling" {
   deployment_maximum_percent         = var.deployment_maximum_percent
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = var.assign_public_ip ? var.public_subnet_ids : var.private_subnet_ids
     security_groups  = [aws_security_group.tasks.id]
     assign_public_ip = var.assign_public_ip
   }

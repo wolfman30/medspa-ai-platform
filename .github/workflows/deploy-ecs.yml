@@ -152,7 +152,8 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=true"
+            -var="enable_browser_sidecar=true" \
+            -var="assign_public_ip=true"
 
       - name: Login to ECR
         run: |
@@ -223,7 +224,8 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=true"
+            -var="enable_browser_sidecar=true" \
+            -var="assign_public_ip=true"
 
       - name: Read UI outputs
         id: ui
