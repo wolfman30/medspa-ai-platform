@@ -64,6 +64,9 @@ type Config struct {
 	StripeWebhook *payments.StripeWebhookHandler
 	StripeConnect *payments.StripeConnectHandler
 
+	// Structured knowledge handler
+	StructuredKnowledgeHandler *handlers.StructuredKnowledgeHandler
+
 	// Booking callback handler (browser sidecar → Go API)
 	BookingCallbackHandler *conversation.BookingCallbackHandler
 
@@ -216,6 +219,11 @@ func New(cfg *Config) http.Handler {
 					clinicRoutes.Get("/knowledge", knowledgeHandler.GetKnowledge)
 					clinicRoutes.Put("/knowledge", knowledgeHandler.PutKnowledge)
 				}
+				if cfg.StructuredKnowledgeHandler != nil {
+					clinicRoutes.Get("/knowledge/structured", cfg.StructuredKnowledgeHandler.GetStructuredKnowledge)
+					clinicRoutes.Put("/knowledge/structured", cfg.StructuredKnowledgeHandler.PutStructuredKnowledge)
+					clinicRoutes.Post("/knowledge/sync-moxie", cfg.StructuredKnowledgeHandler.SyncMoxie)
+				}
 				if cfg.ClinicStatsHandler != nil {
 					clinicRoutes.Get("/stats", cfg.ClinicStatsHandler.GetStats)
 				}
@@ -293,6 +301,11 @@ func New(cfg *Config) http.Handler {
 					r.Get("/knowledge", knowledgeHandler.GetKnowledge)
 					r.Put("/knowledge", knowledgeHandler.PutKnowledge)
 					r.Get("/knowledge/page", knowledgeHandler.KnowledgePage)
+				}
+				if cfg.StructuredKnowledgeHandler != nil {
+					r.Get("/knowledge/structured", cfg.StructuredKnowledgeHandler.GetStructuredKnowledge)
+					r.Put("/knowledge/structured", cfg.StructuredKnowledgeHandler.PutStructuredKnowledge)
+					r.Post("/knowledge/sync-moxie", cfg.StructuredKnowledgeHandler.SyncMoxie)
 				}
 			})
 		})

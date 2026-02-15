@@ -796,6 +796,65 @@ export async function listOrgs(): Promise<ListOrgsResponse> {
   return res.json();
 }
 
+// Structured Knowledge API
+
+import type { StructuredKnowledge } from '../types/knowledge';
+
+export async function getStructuredKnowledge(
+  orgId: string,
+  scope: ApiScope
+): Promise<StructuredKnowledge | null> {
+  const path =
+    scope === 'portal'
+      ? `portal/orgs/${orgId}/knowledge/structured`
+      : `admin/clinics/${orgId}/knowledge/structured`;
+  const res = await fetch(`${API_BASE}/${path}`, {
+    headers: await getHeaders(),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export async function updateStructuredKnowledge(
+  orgId: string,
+  scope: ApiScope,
+  data: StructuredKnowledge
+): Promise<void> {
+  const path =
+    scope === 'portal'
+      ? `portal/orgs/${orgId}/knowledge/structured`
+      : `admin/clinics/${orgId}/knowledge/structured`;
+  const res = await fetch(`${API_BASE}/${path}`, {
+    method: 'PUT',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+}
+
+export async function syncMoxieKnowledge(
+  orgId: string,
+  scope: ApiScope
+): Promise<StructuredKnowledge> {
+  const path =
+    scope === 'portal'
+      ? `portal/orgs/${orgId}/knowledge/sync-moxie`
+      : `admin/clinics/${orgId}/knowledge/sync-moxie`;
+  const res = await fetch(`${API_BASE}/${path}`, {
+    method: 'POST',
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
 // Patient Data Management API
 
 /**
