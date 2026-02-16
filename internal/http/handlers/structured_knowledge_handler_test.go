@@ -7,46 +7,61 @@ import (
 func TestParseMoxieBookingJSON(t *testing.T) {
 	fixture := []byte(`{
 		"pageProps": {
-			"medspa": {"id": 1264, "name": "Forever 22 Med Spa"},
-			"service_categories": [
-				{
-					"name": "Wrinkle Relaxers",
-					"items": [
-						{
-							"id": 18430,
-							"name": "Tox (Botox, Jeuveau)",
-							"description": "Soften fine lines",
-							"duration_minutes": 30,
-							"price": "$12/unit",
-							"price_type": "variable",
-							"providers": [
-								{"id": 33950, "name": "Brandi Sesock"},
-								{"id": 38627, "name": "Gale Tesar"}
-							]
-						}
-					]
-				},
-				{
-					"name": "Fillers",
-					"items": [
-						{
-							"id": 20425,
-							"name": "Lip Filler",
-							"description": "Full lips",
-							"duration_minutes": 45,
-							"price": "$650",
-							"price_type": "fixed",
-							"providers": [
-								{"id": 33950, "name": "Brandi Sesock"}
-							]
-						}
-					]
-				}
-			],
-			"providers": [
-				{"id": 33950, "name": "Brandi Sesock", "title": "Nurse Practitioner", "bio": "Expert injector"},
-				{"id": 38627, "name": "Gale Tesar", "title": "RN", "bio": "Aesthetic nurse"}
-			]
+			"medspaInfo": {
+				"id": "1264",
+				"name": "Forever 22 Med Spa",
+				"userMedspas": [
+					{
+						"id": "33950",
+						"user": {"id": "u1", "firstName": "Brandi", "lastName": "Sesock"}
+					},
+					{
+						"id": "38627",
+						"user": {"id": "u2", "firstName": "Gale", "lastName": "Tesar"}
+					}
+				],
+				"serviceCategories": [
+					{
+						"name": "Wrinkle Relaxers",
+						"medspaServiceMenuItems": [
+							{
+								"id": "18430",
+								"name": "Tox (Botox, Jeuveau)",
+								"description": "Soften fine lines",
+								"durationInMinutes": 30,
+								"price": "12.00",
+								"isVariablePricing": true,
+								"isAddon": false,
+								"serviceMenuAdditionalPublicInfo": {
+									"eligibleProvidersDetails": [
+										{"userMedspa": {"id": "33950", "user": {"id": "u1", "firstName": "Brandi", "lastName": "Sesock"}}, "customDuration": 0},
+										{"userMedspa": {"id": "38627", "user": {"id": "u2", "firstName": "Gale", "lastName": "Tesar"}}, "customDuration": 0}
+									]
+								}
+							}
+						]
+					},
+					{
+						"name": "Fillers",
+						"medspaServiceMenuItems": [
+							{
+								"id": "20425",
+								"name": "Lip Filler",
+								"description": "Full lips",
+								"durationInMinutes": 45,
+								"price": "650.00",
+								"isVariablePricing": false,
+								"isAddon": false,
+								"serviceMenuAdditionalPublicInfo": {
+									"eligibleProvidersDetails": [
+										{"userMedspa": {"id": "33950", "user": {"id": "u1", "firstName": "Brandi", "lastName": "Sesock"}}, "customDuration": 0}
+									]
+								}
+							}
+						]
+					}
+				]
+			}
 		}
 	}`)
 
@@ -79,6 +94,9 @@ func TestParseMoxieBookingJSON(t *testing.T) {
 	if tox.Order != 1 {
 		t.Errorf("order = %d", tox.Order)
 	}
+	if tox.PriceType != "variable" {
+		t.Errorf("price type = %q", tox.PriceType)
+	}
 
 	lip := sk.Sections.Services.Items[1]
 	if lip.Name != "Lip Filler" {
@@ -86,6 +104,9 @@ func TestParseMoxieBookingJSON(t *testing.T) {
 	}
 	if lip.Order != 2 {
 		t.Errorf("order = %d", lip.Order)
+	}
+	if lip.Price != "$650.00" {
+		t.Errorf("price = %q", lip.Price)
 	}
 
 	// Providers
@@ -95,13 +116,10 @@ func TestParseMoxieBookingJSON(t *testing.T) {
 	if sk.Sections.Providers.Items[0].Name != "Brandi Sesock" {
 		t.Errorf("provider name = %q", sk.Sections.Providers.Items[0].Name)
 	}
-	if sk.Sections.Providers.Items[0].Title != "Nurse Practitioner" {
-		t.Errorf("provider title = %q", sk.Sections.Providers.Items[0].Title)
-	}
 }
 
 func TestParseMoxieBookingJSON_Empty(t *testing.T) {
-	fixture := []byte(`{"pageProps": {"medspa": {"id": 1}, "service_categories": [], "providers": []}}`)
+	fixture := []byte(`{"pageProps": {"medspaInfo": {"id": "1", "name": "Test", "userMedspas": [], "serviceCategories": []}}}`)
 	sk, err := parseMoxieBookingJSON(fixture, "org-empty")
 	if err != nil {
 		t.Fatal(err)
