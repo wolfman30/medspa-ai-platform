@@ -329,7 +329,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | B3 | **Single-message qualification** | Provide all 5 in one message. Verify availability triggers immediately (no unnecessary follow-up questions). | ✅ |
 | B4 | **Service extraction — common names** | "Botox", "lip filler", "chemical peel", "microneedling", "laser hair removal". Verify each resolves to correct Moxie service. | ✅ |
 | B5 | **Service extraction — slang/synonyms** | "Tox", "lip injections", "get my 11s fixed", "wrinkle treatment". Verify alias resolution. | ✅ |
-| B6 | **Service extraction — new services** | "Tixel", "IPL", "tattoo removal", "B12 shot", "NAD+", "salmon DNA facial". Verify all 46 Forever 22 services recognized. | 🔲 |
+| B6 | **Service extraction — new services** | "Tixel", "IPL", "tattoo removal", "B12 shot", "NAD+", "salmon DNA facial". Verify all 46 Forever 22 services recognized. | ✅ |
 | B7 | **No service sub-type questions** | Say "microneedling". Verify AI does NOT ask "microneedling or microneedling with PRP?" Just book the base service. | ✅ |
 | B8 | **No Botox area questions** | Say "Botox". Verify AI does NOT ask "forehead, crow's feet, or 11s?" | ✅ |
 | B9 | **Email validation** | Provide "not-an-email". Verify AI asks again. Provide valid email. Verify accepted. | 🔲 |
@@ -393,11 +393,11 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | E9 | **No unsolicited medical disclaimers** | Verify AI doesn't randomly add "I can't provide medical advice" unprompted. | ✅ |
 | E10 | **Warm, professional tone** | Read through a full conversation. Verify tone is friendly, not robotic or overly clinical. | 🔲 |
 | E11 | **Weight loss / GLP-1 handling** | "I want Ozempic" / "Semaglutide" / "Mounjaro". Verify appropriate handling (consultation booking or rejection if not offered). | ✅ |
-| E12 | **Off-topic messages** | "What's the weather?" / "Tell me a joke." Verify AI redirects to booking. | 🔲 |
-| E13 | **Profanity/abuse** | Send abusive message. Verify AI stays professional, doesn't engage. | 🔲 |
+| E12 | **Off-topic messages** | "What's the weather?" / "Tell me a joke." Verify AI redirects to booking. | ✅ |
+| E13 | **Profanity/abuse** | Send abusive message. Verify AI stays professional, doesn't engage. | ✅ |
 | E14 | **Non-English messages** | Send message in Spanish. Verify AI responds helpfully (ideally in Spanish or directs to call). | 🔲 |
 | E15 | **Very long messages** | Send a 500+ word message. Verify no crash, AI extracts relevant info. | 🔲 |
-| E16 | **Empty/blank messages** | Send whitespace-only message. Verify no crash, graceful handling. | 🔲 |
+| E16 | **Empty/blank messages** | Send whitespace-only message. Verify no crash, graceful handling. | ✅ |
 
 ---
 
@@ -405,9 +405,9 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 
 | # | Scenario | How to Test | Status |
 |---|----------|-------------|--------|
-| F1 | **STOP → immediate opt-out** | Reply "STOP". Verify no further messages sent. | 🔲 |
-| F2 | **HELP → clinic info** | Reply "HELP". Verify clinic contact info returned. | 🔲 |
-| F3 | **START → re-enable** | After STOP, reply "START". Verify messaging resumes. | 🔲 |
+| F1 | **STOP → immediate opt-out** | Reply "STOP". Verify no further messages sent. | ✅ |
+| F2 | **HELP → clinic info** | Reply "HELP". Verify clinic contact info returned. | ✅ |
+| F3 | **START → re-enable** | After STOP, reply "START". Verify messaging resumes. | ✅ |
 | F4 | **No duplicate messages** | Complete a flow. Verify no duplicate SMS sent at any step. | ✅ |
 | F5 | **Rate limiting** | Send 20 messages rapidly. Verify system handles gracefully (no 429 crash, messages processed). | 🔲 |
 
@@ -482,16 +482,16 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | Category | Total | Passing | Failing | Untested |
 |----------|-------|---------|---------|----------|
 | A. Lead Engagement | 6 | 2 | 0 | 4 |
-| B. AI Qualification | 16 | 10 | 2 | 4 |
+| B. AI Qualification | 16 | 11 | 2 | 3 |
 | C. Availability & Time Selection | 9 | 7 | 0 | 2 |
 | D. Payment & Booking | 12 | 9 | 0 | 3 |
-| E. Conversation Quality | 16 | 9 | 0 | 7 |
-| F. TCPA/SMS Compliance | 5 | 1 | 0 | 4 |
+| E. Conversation Quality | 16 | 12 | 0 | 4 |
+| F. TCPA/SMS Compliance | 5 | 4 | 0 | 1 |
 | G. Admin Portal | 10 | 3 | 0 | 7 |
 | H. Infrastructure | 11 | 8 | 0 | 3 |
 | I. Edge Cases | 7 | 0 | 0 | 7 |
 | J. Operator Experience | 8 | 0 | 0 | 8 |
-| **TOTAL** | **100** | **49** | **2** | **49** |
+| **TOTAL** | **100** | **56** | **2** | **42** |
 
 **Blocking for operator testing:** All A, B, C, D, E (1-9), F (1-3), G (1-3, 5-6), J (1-3) must pass.
 
