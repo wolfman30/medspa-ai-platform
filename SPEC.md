@@ -316,7 +316,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | A3 | **After-hours greeting** | Send SMS outside business hours. Verify after-hours greeting (if after_hours_only=true). | 🔲 |
 | A4 | **Business-hours greeting** | Send SMS during business hours. Verify business-hours greeting variant. | 🔲 |
 | A5 | **Duplicate webhook rejection** | Send same Telnyx webhook payload twice. Verify only one SMS response (idempotency). | ✅ |
-| A6 | **Invalid/spam phone number** | Send from obviously invalid number. Verify no crash, graceful handling. | 🔲 |
+| A6 | **Invalid/spam phone number** | Send from obviously invalid number. Verify no crash, graceful handling. | ✅ |
 
 ---
 
