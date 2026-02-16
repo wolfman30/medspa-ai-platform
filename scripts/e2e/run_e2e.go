@@ -1009,6 +1009,182 @@ func scenarioAbuse(t *T) {
 	t.check("offers help or redirect", containsAny(resp, "help", "assist", "appointment", "sorry", "understand"))
 }
 
+// 24. Email validation — bad email then good email (B9)
+func scenarioEmailValidation(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	// Provide everything except email to get to email-ask stage
+	if err := sendSMS("Hi, I'm Jamie Lee, new patient, interested in Botox, Mondays after 3pm, no provider preference"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	msgs, err := waitForReply(1, 30)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("asks for email", containsAny(resp, "email"))
+
+	// Send invalid email
+	if err := sendSMS("not-an-email"); err != nil {
+		t.fatalf("send bad email: %v", err)
+		return
+	}
+	msgs2, err := waitForReply(2, 25)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp2 := lastRealAssistantMessage(msgs2)
+	t.check("re-asks for valid email", containsAny(resp2, "email", "valid", "address"))
+
+	// Send valid email
+	if err := sendSMS("jamie@test.com"); err != nil {
+		t.fatalf("send good email: %v", err)
+		return
+	}
+	_, err = waitForStatus("awaiting_time_selection", 30)
+	if err != nil {
+		// Even if it doesn't reach awaiting_time_selection, check for slot response
+		conv, _ := getConversation()
+		msgs3 := getMessages(conv)
+		allText := allRealAssistantMessages(msgs3)
+		t.check("valid email accepted (slots or next step)", containsAny(allText, "Reply with the number", "available", "slot"))
+		return
+	}
+	t.check("valid email accepted (reached time selection)", true)
+}
+
+// 25. Combined day+time filter (B13)
+func scenarioCombinedFilter(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	if err := sendSMS("Hi, I'm Sam Park, new, Botox, no provider preference, sam@test.com, Tuesday mornings before 11am"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+
+	conv, err := waitForStatus("awaiting_time_selection", maxWaitSecs)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+
+	msgs := getMessages(conv)
+	slotsMsg := ""
+	for _, m := range msgs {
+		c, _ := m["content"].(string)
+		if strings.Contains(c, "Reply with the number") {
+			slotsMsg = c
+		}
+	}
+
+	if slotsMsg == "" {
+		t.fatalf("no slot message found")
+		return
+	}
+
+	// Should only have Tuesday
+	t.check("only Tuesday slots", func() bool {
+		for _, day := range []string{"Mon ", "Wed ", "Thu ", "Fri ", "Sat ", "Sun "} {
+			if strings.Contains(slotsMsg, day) {
+				return false
+			}
+		}
+		return true
+	}())
+
+	// Should only have morning times (before 11am) — no PM unless it's 10:xx
+	t.check("no afternoon slots", !containsAny(slotsMsg, "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM", "11:00 AM", "11:30 AM"))
+}
+
+// 26. No time preference — slots spread across days (B14)
+func scenarioNoTimePreference(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	if err := sendSMS("Hi, I'm Alex Kim, new, chemical peel, no provider preference, alex@test.com, anytime works"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+
+	conv, err := waitForStatus("awaiting_time_selection", maxWaitSecs)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+
+	msgs := getMessages(conv)
+	slotsMsg := ""
+	for _, m := range msgs {
+		c, _ := m["content"].(string)
+		if strings.Contains(c, "Reply with the number") {
+			slotsMsg = c
+		}
+	}
+
+	if slotsMsg == "" {
+		t.fatalf("no slot message found")
+		return
+	}
+
+	// Count unique days
+	dayCount := 0
+	for _, day := range []string{"Mon ", "Tue ", "Wed ", "Thu ", "Fri ", "Sat ", "Sun "} {
+		if strings.Contains(slotsMsg, day) {
+			dayCount++
+		}
+	}
+	t.check("slots spread across multiple days (>=2)", dayCount >= 2)
+}
+
+// 27. Invalid/spam phone number (A6)
+func scenarioInvalidPhone(t *T) {
+	// Send from an obviously invalid number — verify no crash
+	ts := time.Now().UnixNano()
+	payload := map[string]interface{}{
+		"data": map[string]interface{}{
+			"id":         fmt.Sprintf("e2e-%d", ts),
+			"event_type": "message.received",
+			"payload": map[string]interface{}{
+				"id":        fmt.Sprintf("msg-%d", ts),
+				"from":      map[string]string{"phone_number": "+10000000000"},
+				"to":        []map[string]string{{"phone_number": clinicPhone}},
+				"text":      "hello",
+				"direction": "inbound",
+				"type":      "SMS",
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	resp, err := http.Post(apiBase+"/webhooks/telnyx/messages", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	t.check("no crash on invalid phone (2xx response)", resp.StatusCode >= 200 && resp.StatusCode < 300)
+
+	// Also verify the health endpoint still works after
+	time.Sleep(3 * time.Second)
+	healthResp, err := http.Get(apiBase + "/ready")
+	if err != nil {
+		t.fatalf("health check: %v", err)
+		return
+	}
+	defer healthResp.Body.Close()
+	t.check("server still healthy after invalid phone", healthResp.StatusCode == 200)
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -1046,6 +1222,10 @@ func main() {
 		{"off-topic", scenarioOffTopic},
 		{"new-services", scenarioNewServices},
 		{"abuse-handling", scenarioAbuse},
+		{"email-validation", scenarioEmailValidation},
+		{"combined-filter", scenarioCombinedFilter},
+		{"no-time-preference", scenarioNoTimePreference},
+		{"invalid-phone", scenarioInvalidPhone},
 	}
 
 	// Filter by name if argument provided
