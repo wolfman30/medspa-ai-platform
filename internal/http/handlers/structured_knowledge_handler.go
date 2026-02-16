@@ -250,8 +250,8 @@ func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredK
 	var raw struct {
 		PageProps struct {
 			MedspaInfo struct {
-				ID         string `json:"id"`
-				Name       string `json:"name"`
+				ID          string `json:"id"`
+				Name        string `json:"name"`
 				UserMedspas []struct {
 					ID   string `json:"id"`
 					User struct {
@@ -261,15 +261,15 @@ func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredK
 					} `json:"user"`
 				} `json:"userMedspas"`
 				ServiceCategories []struct {
-					Name                    string `json:"name"`
+					Name                   string `json:"name"`
 					MedspaServiceMenuItems []struct {
-						ID                 string `json:"id"`
-						Name               string `json:"name"`
-						Price              string `json:"price"`
-						Description        string `json:"description"`
-						DurationInMinutes  int    `json:"durationInMinutes"`
-						IsVariablePricing  bool   `json:"isVariablePricing"`
-						IsAddon            bool   `json:"isAddon"`
+						ID                              string `json:"id"`
+						Name                            string `json:"name"`
+						Price                           string `json:"price"`
+						Description                     string `json:"description"`
+						DurationInMinutes               int    `json:"durationInMinutes"`
+						IsVariablePricing               bool   `json:"isVariablePricing"`
+						IsAddon                         bool   `json:"isAddon"`
 						ServiceMenuAdditionalPublicInfo struct {
 							EligibleProvidersDetails []struct {
 								UserMedspa struct {
@@ -370,9 +370,9 @@ func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredK
 	for i, um := range raw.PageProps.MedspaInfo.UserMedspas {
 		name := strings.TrimSpace(um.User.FirstName + " " + um.User.LastName)
 		pi := conversation.ProviderItem{
-			ID:    um.ID,
-			Name:  name,
-			Order: i + 1,
+			ID:          um.ID,
+			Name:        name,
+			Order:       i + 1,
 			Specialties: []string{},
 		}
 		sk.Sections.Providers.Items = append(sk.Sections.Providers.Items, pi)
