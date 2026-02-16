@@ -1447,11 +1447,26 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
-	// Deterministic guardrail: if service needs provider preference and we don't have it,
-	// inject a system message forcing the LLM to ask about it before email.
+	// Deterministic guardrail: enforce Moxie qualification order (schedule before provider before email).
 	if cfg != nil && cfg.UsesMoxieBooking() {
 		prefs, _ := extractPreferences(history)
-		if prefs.ServiceInterest != "" && prefs.ProviderPreference == "" {
+
+		// Schedule guardrail: if we have name + service + patient type but no schedule,
+		// force the LLM to ask about schedule before anything else.
+		if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType != "" &&
+			prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
+			history = append(history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: "[SYSTEM GUARDRAIL] You have the patient's name, service, and patient type. " +
+					"Next in the Moxie checklist is SCHEDULE (#4). " +
+					"You MUST ask about their preferred days and times NOW. Do NOT ask for email or provider preference yet. " +
+					"Ask something like: 'What days and times work best for you?'",
+			})
+		}
+
+		// Provider preference guardrail: if service needs it and we don't have it.
+		if prefs.ServiceInterest != "" && prefs.ProviderPreference == "" &&
+			(prefs.PreferredDays != "" || prefs.PreferredTimes != "") {
 			resolvedService := cfg.ResolveServiceName(prefs.ServiceInterest)
 			if cfg.ServiceNeedsProviderPreference(resolvedService) {
 				providerNames := make([]string, 0)
