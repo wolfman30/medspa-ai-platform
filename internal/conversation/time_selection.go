@@ -1262,6 +1262,11 @@ func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, 
 		return false
 	}
 
+	// Merge with saved lead preferences from system context messages.
+	// This handles the case where early user messages got trimmed from history
+	// but the lead's saved preferences are injected as system context.
+	mergeLeadContextIntoPrefs(&prefs, history)
+
 	log.Printf("[DEBUG] ShouldFetchAvailability: name=%q service=%q patientType=%q days=%q times=%q providerPref=%q",
 		prefs.Name, prefs.ServiceInterest, prefs.PatientType, prefs.PreferredDays, prefs.PreferredTimes, prefs.ProviderPreference)
 
@@ -1293,4 +1298,49 @@ func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, 
 
 	// Email is collected on the Moxie booking page, not via SMS
 	return true
+}
+
+// mergeLeadContextIntoPrefs fills in missing preferences from system context messages
+// that contain saved lead data (e.g., "- Name: Andrea Jones", "- Service: lip filler").
+// This handles history trimming: even when early user messages are gone, the lead's
+// saved preferences are re-injected by appendContext on every turn.
+func mergeLeadContextIntoPrefs(prefs *leads.SchedulingPreferences, history []ChatMessage) {
+	for _, msg := range history {
+		if msg.Role != ChatRoleSystem {
+			continue
+		}
+		if !strings.Contains(msg.Content, "scheduling preferences") && !strings.Contains(msg.Content, "patient preferences") {
+			continue
+		}
+		lines := strings.Split(msg.Content, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "- ") {
+				continue
+			}
+			parts := strings.SplitN(line[2:], ": ", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(strings.ToLower(parts[0]))
+			val := strings.TrimSpace(parts[1])
+			if val == "" {
+				continue
+			}
+			switch {
+			case (key == "name" || key == "name (first only)") && prefs.Name == "":
+				prefs.Name = val
+			case key == "service" && prefs.ServiceInterest == "":
+				prefs.ServiceInterest = val
+			case key == "patient type" && prefs.PatientType == "":
+				prefs.PatientType = val
+			case key == "preferred days" && prefs.PreferredDays == "":
+				prefs.PreferredDays = val
+			case key == "preferred times" && prefs.PreferredTimes == "":
+				prefs.PreferredTimes = val
+			case key == "provider preference" && prefs.ProviderPreference == "":
+				prefs.ProviderPreference = val
+			}
+		}
+	}
 }

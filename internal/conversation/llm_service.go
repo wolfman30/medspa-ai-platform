@@ -473,7 +473,7 @@ Do NOT proactively tell patients they'll receive a verification code - only ment
 
 DO NOT say "Would you like to proceed with the deposit?" — there is no deposit for Moxie clinics. Do not mention callbacks or Square.
 `
-	maxHistoryMessages           = 24
+	maxHistoryMessages           = 40
 	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 	medicalAdviceDeflectionReply = "I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 )
