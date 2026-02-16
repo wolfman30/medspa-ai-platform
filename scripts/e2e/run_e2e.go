@@ -829,6 +829,186 @@ func scenarioSMSBrevity(t *T) {
 	t.check("no markdown formatting", !containsAny(resp, "**", "* ", "- "))
 }
 
+// 17. TCPA: STOP opt-out
+func scenarioStopOptOut(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	// First send a normal message to establish conversation
+	if err := sendSMS("Hi, I'm interested in Botox"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	_, err := waitForReply(1, 25)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+
+	// Now send STOP
+	if err := sendSMS("STOP"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	msgs, err := waitForReply(2, 15)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("stop ack contains opt-out confirmation", containsAny(resp, "opted out", "opt out", "unsubscribe", "STOP"))
+}
+
+// 18. TCPA: HELP info
+func scenarioHelpInfo(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	if err := sendSMS("HELP"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	msgs, err := waitForReply(1, 15)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("help ack contains info or contact", containsAny(resp, "STOP", "opt out", "contact", "help", "support"))
+}
+
+// 19. TCPA: START re-subscribe after STOP
+func scenarioStartResubscribe(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	// Send STOP first
+	if err := sendSMS("STOP"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	_, _ = waitForReply(1, 15)
+
+	// Now send START
+	if err := sendSMS("START"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	msgs, err := waitForReply(2, 15)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("start ack confirms re-subscribe", containsAny(resp, "opted back", "re-subscribe", "subscribed", "opted in", "STOP"))
+}
+
+// 20. Empty/blank message handling
+func scenarioEmptyMessage(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	if err := sendSMS("   "); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	// Should either get a response or gracefully ignore — not crash
+	msgs, err := waitForReply(1, 15)
+	if err != nil {
+		// No reply is acceptable for blank messages
+		t.check("no crash on empty message", true)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("response to blank is helpful or greeting", len(resp) > 0)
+}
+
+// 21. Off-topic message redirect
+func scenarioOffTopic(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	if err := sendSMS("What's the weather like today?"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	msgs, err := waitForReply(1, 25)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("redirects to booking/services", containsAny(resp, "appointment", "book", "service", "treatment", "help", "schedule", "looking for"))
+}
+
+// 22. New service categories (Tixel, IPL, laser, etc.)
+func scenarioNewServices(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	services := []struct {
+		input   string
+		expects []string
+	}{
+		{"I want a tixel treatment", []string{"tixel", "Tixel"}},
+		{"Interested in laser hair removal", []string{"laser", "hair removal", "Laser"}},
+		{"Do you do IPL?", []string{"IPL", "ipl", "photofacial", "yes", "offer"}},
+		{"I want a tattoo removed", []string{"tattoo", "Tattoo", "removal"}},
+		{"Do you have B12 shots?", []string{"B12", "b12", "yes", "offer", "shot"}},
+	}
+
+	for _, svc := range services {
+		if err := setup(); err != nil {
+			t.fatalf("purge: %v", err)
+			return
+		}
+		if err := sendSMS(svc.input); err != nil {
+			t.fatalf("send: %v", err)
+			return
+		}
+		msgs, err := waitForReply(1, 25)
+		if err != nil {
+			t.fatalf("%v", err)
+			return
+		}
+		resp := lastRealAssistantMessage(msgs)
+		t.check(fmt.Sprintf("recognizes %q", svc.input), containsAny(resp, svc.expects...))
+	}
+}
+
+// 23. Profanity/abuse handling
+func scenarioAbuse(t *T) {
+	if err := setup(); err != nil {
+		t.fatalf("purge: %v", err)
+		return
+	}
+
+	if err := sendSMS("This is f***ing stupid, your service sucks"); err != nil {
+		t.fatalf("send: %v", err)
+		return
+	}
+	msgs, err := waitForReply(1, 25)
+	if err != nil {
+		t.fatalf("%v", err)
+		return
+	}
+	resp := lastRealAssistantMessage(msgs)
+	t.check("stays professional", !containsAny(resp, "f***", "stupid", "suck"))
+	t.check("offers help or redirect", containsAny(resp, "help", "assist", "appointment", "sorry", "understand"))
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -859,6 +1039,13 @@ func main() {
 		{"treatment-recommendation", scenarioTreatmentRecommendation},
 		{"no-area-question", scenarioNoAreaQuestion},
 		{"sms-brevity", scenarioSMSBrevity},
+		{"stop-opt-out", scenarioStopOptOut},
+		{"help-info", scenarioHelpInfo},
+		{"start-resubscribe", scenarioStartResubscribe},
+		{"empty-message", scenarioEmptyMessage},
+		{"off-topic", scenarioOffTopic},
+		{"new-services", scenarioNewServices},
+		{"abuse-handling", scenarioAbuse},
 	}
 
 	// Filter by name if argument provided
