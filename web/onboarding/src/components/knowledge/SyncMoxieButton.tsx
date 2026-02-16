@@ -65,8 +65,8 @@ export function SyncMoxieButton({ orgId, scope, onSync }: SyncMoxieButtonProps) 
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl">
             <h3 className="text-lg font-semibold text-slate-900 mb-3">Sync Preview</h3>
             <p className="text-sm text-slate-600 mb-4">
-              Found <strong>{preview.sections.services.items.length}</strong> services and{' '}
-              <strong>{preview.sections.providers.items.length}</strong> providers from Moxie.
+              Found <strong>{(preview.sections.services.items || []).length}</strong> services and{' '}
+              <strong>{(preview.sections.providers.items || []).length}</strong> providers from Moxie.
               This will replace your current services and providers. Continue?
             </p>
             <div className="flex gap-3 justify-end">

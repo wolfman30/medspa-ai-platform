@@ -249,31 +249,43 @@ func extractMoxieBuildID(slug string) (string, error) {
 func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredKnowledge, error) {
 	var raw struct {
 		PageProps struct {
-			Medspa struct {
-				ID   int    `json:"id"`
-				Name string `json:"name"`
-			} `json:"medspa"`
-			ServiceCategories []struct {
-				Name  string `json:"name"`
-				Items []struct {
-					ID              int    `json:"id"`
-					Name            string `json:"name"`
-					Description     string `json:"description"`
-					DurationMinutes int    `json:"duration_minutes"`
-					Price           string `json:"price"`
-					PriceType       string `json:"price_type"`
-					Providers       []struct {
-						ID   int    `json:"id"`
-						Name string `json:"name"`
-					} `json:"providers"`
-				} `json:"items"`
-			} `json:"service_categories"`
-			Providers []struct {
-				ID    int    `json:"id"`
-				Name  string `json:"name"`
-				Title string `json:"title"`
-				Bio   string `json:"bio"`
-			} `json:"providers"`
+			MedspaInfo struct {
+				ID         string `json:"id"`
+				Name       string `json:"name"`
+				UserMedspas []struct {
+					ID   string `json:"id"`
+					User struct {
+						ID        string `json:"id"`
+						FirstName string `json:"firstName"`
+						LastName  string `json:"lastName"`
+					} `json:"user"`
+				} `json:"userMedspas"`
+				ServiceCategories []struct {
+					Name                    string `json:"name"`
+					MedspaServiceMenuItems []struct {
+						ID                 string `json:"id"`
+						Name               string `json:"name"`
+						Price              string `json:"price"`
+						Description        string `json:"description"`
+						DurationInMinutes  int    `json:"durationInMinutes"`
+						IsVariablePricing  bool   `json:"isVariablePricing"`
+						IsAddon            bool   `json:"isAddon"`
+						ServiceMenuAdditionalPublicInfo struct {
+							EligibleProvidersDetails []struct {
+								UserMedspa struct {
+									ID   string `json:"id"`
+									User struct {
+										ID        string `json:"id"`
+										FirstName string `json:"firstName"`
+										LastName  string `json:"lastName"`
+									} `json:"user"`
+								} `json:"userMedspa"`
+								CustomDuration int `json:"customDuration"`
+							} `json:"eligibleProvidersDetails"`
+						} `json:"serviceMenuAdditionalPublicInfo"`
+					} `json:"medspaServiceMenuItems"`
+				} `json:"serviceCategories"`
+			} `json:"medspaInfo"`
 		} `json:"pageProps"`
 	}
 
@@ -286,23 +298,67 @@ func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredK
 		UpdatedAt: time.Now().UTC(),
 	}
 
+	// Initialize slices to avoid null in JSON
+	sk.Sections.Services.Items = []conversation.ServiceItem{}
+	sk.Sections.Providers.Items = []conversation.ProviderItem{}
+	sk.Sections.Policies.BookingPolicies = []string{}
+
+	// Build provider map from userMedspas
+	providerMap := map[string]string{} // userMedspaID -> "FirstName LastName"
+	for _, um := range raw.PageProps.MedspaInfo.UserMedspas {
+		name := strings.TrimSpace(um.User.FirstName + " " + um.User.LastName)
+		providerMap[um.ID] = name
+	}
+
 	order := 1
-	for _, cat := range raw.PageProps.ServiceCategories {
-		for _, item := range cat.Items {
+	for _, cat := range raw.PageProps.MedspaInfo.ServiceCategories {
+		if len(cat.MedspaServiceMenuItems) == 0 {
+			continue
+		}
+		for _, item := range cat.MedspaServiceMenuItems {
 			var providerIDs []string
-			for _, p := range item.Providers {
-				providerIDs = append(providerIDs, fmt.Sprintf("%d", p.ID))
+			for _, ep := range item.ServiceMenuAdditionalPublicInfo.EligibleProvidersDetails {
+				providerIDs = append(providerIDs, ep.UserMedspa.ID)
 			}
+			if providerIDs == nil {
+				providerIDs = []string{}
+			}
+
+			priceType := "fixed"
+			if item.IsVariablePricing {
+				priceType = "variable"
+			} else if item.Price == "0.00" {
+				priceType = "free"
+			}
+
+			priceDisplay := "$" + item.Price
+			if priceType == "variable" {
+				priceDisplay = "Variable pricing"
+			} else if priceType == "free" {
+				priceDisplay = "Free"
+			}
+
+			duration := item.DurationInMinutes
+			// Use custom duration from first provider if available
+			if len(item.ServiceMenuAdditionalPublicInfo.EligibleProvidersDetails) > 0 {
+				cd := item.ServiceMenuAdditionalPublicInfo.EligibleProvidersDetails[0].CustomDuration
+				if cd > 0 {
+					duration = cd
+				}
+			}
+
 			si := conversation.ServiceItem{
-				ID:              fmt.Sprintf("%d", item.ID),
-				Name:            item.Name,
+				ID:              item.ID,
+				Name:            strings.TrimSpace(item.Name),
 				Category:        cat.Name,
-				Price:           item.Price,
-				PriceType:       item.PriceType,
-				DurationMinutes: item.DurationMinutes,
-				Description:     item.Description,
+				Price:           priceDisplay,
+				PriceType:       priceType,
+				DurationMinutes: duration,
+				Description:     strings.TrimSpace(item.Description),
 				ProviderIDs:     providerIDs,
-				BookingID:       fmt.Sprintf("%d", item.ID),
+				BookingID:       item.ID,
+				Aliases:         []string{},
+				IsAddon:         item.IsAddon,
 				Order:           order,
 			}
 			sk.Sections.Services.Items = append(sk.Sections.Services.Items, si)
@@ -310,13 +366,14 @@ func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredK
 		}
 	}
 
-	for i, p := range raw.PageProps.Providers {
+	// Build providers from the userMedspas list
+	for i, um := range raw.PageProps.MedspaInfo.UserMedspas {
+		name := strings.TrimSpace(um.User.FirstName + " " + um.User.LastName)
 		pi := conversation.ProviderItem{
-			ID:    fmt.Sprintf("%d", p.ID),
-			Name:  p.Name,
-			Title: p.Title,
-			Bio:   p.Bio,
+			ID:    um.ID,
+			Name:  name,
 			Order: i + 1,
+			Specialties: []string{},
 		}
 		sk.Sections.Providers.Items = append(sk.Sections.Providers.Items, pi)
 	}

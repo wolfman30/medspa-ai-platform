@@ -102,8 +102,8 @@ export function KnowledgeSettings({ orgId, scope, onBack }: KnowledgeSettingsPro
   const handleMoxieSync = (synced: StructuredKnowledge) => {
     setSections((prev) => ({
       ...prev,
-      services: synced.sections.services,
-      providers: synced.sections.providers,
+      services: { items: synced.sections?.services?.items || [] },
+      providers: { items: synced.sections?.providers?.items || [] },
     }));
     setEditing(true);
     setSuccess(null);
