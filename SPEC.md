@@ -301,6 +301,202 @@ case "square":  // Non-Moxie clinics
 
 ---
 
+## 3b. Pre-Operator Testing Checklist
+
+Every scenario below must pass before inviting med spa operators to test. Organized by system area. Status: ✅ = passing, ❌ = failing, 🔲 = not yet tested.
+
+---
+
+### A. Lead Engagement (Step 1)
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| A1 | **Missed call → SMS within 5s** | Call clinic Telnyx number, let it ring to voicemail. Verify SMS arrives within 5 seconds. | 🔲 |
+| A2 | **Inbound SMS → AI response** | Text the clinic number. Verify AI responds with clinic greeting. | ✅ |
+| A3 | **After-hours greeting** | Send SMS outside business hours. Verify after-hours greeting (if after_hours_only=true). | 🔲 |
+| A4 | **Business-hours greeting** | Send SMS during business hours. Verify business-hours greeting variant. | 🔲 |
+| A5 | **Duplicate webhook rejection** | Send same Telnyx webhook payload twice. Verify only one SMS response (idempotency). | ✅ |
+| A6 | **Invalid/spam phone number** | Send from obviously invalid number. Verify no crash, graceful handling. | 🔲 |
+
+---
+
+### B. AI Qualification (Step 2)
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| B1 | **Happy path — all 5 qualifications in natural conversation** | "Hi, I'm Jane Smith, new patient, interested in Botox, jane@email.com, Mondays after 3pm." Verify all 5 extracted and availability triggered. | ✅ |
+| B2 | **Multi-turn qualification** | Provide info one piece at a time across 5+ messages. Verify AI asks for each missing piece in priority order (name → service → patient type → email → time prefs). | ❌ |
+| B3 | **Single-message qualification** | Provide all 5 in one message. Verify availability triggers immediately (no unnecessary follow-up questions). | ✅ |
+| B4 | **Service extraction — common names** | "Botox", "lip filler", "chemical peel", "microneedling", "laser hair removal". Verify each resolves to correct Moxie service. | ✅ |
+| B5 | **Service extraction — slang/synonyms** | "Tox", "lip injections", "get my 11s fixed", "wrinkle treatment". Verify alias resolution. | ✅ |
+| B6 | **Service extraction — new services** | "Tixel", "IPL", "tattoo removal", "B12 shot", "NAD+", "salmon DNA facial". Verify all 46 Forever 22 services recognized. | 🔲 |
+| B7 | **No service sub-type questions** | Say "microneedling". Verify AI does NOT ask "microneedling or microneedling with PRP?" Just book the base service. | ✅ |
+| B8 | **No Botox area questions** | Say "Botox". Verify AI does NOT ask "forehead, crow's feet, or 11s?" | ✅ |
+| B9 | **Email validation** | Provide "not-an-email". Verify AI asks again. Provide valid email. Verify accepted. | 🔲 |
+| B10 | **Patient type — new vs returning** | Test both "first time" and "I've been there before". Verify correct extraction. | ✅ |
+| B11 | **Time preference — day of week** | "Mondays and Wednesdays". Verify only Mon/Wed slots shown. | ✅ |
+| B12 | **Time preference — time range** | "After 3pm". Verify only slots after 3:00 PM (exclusive). | ✅ |
+| B13 | **Time preference — combined** | "Tuesday mornings before 11am". Verify day AND time filter applied. | 🔲 |
+| B14 | **No time preference** | "Anytime works". Verify slots spread across multiple days. | 🔲 |
+| B15 | **Provider preference — multi-provider service** | Book Tox (2 providers). Verify AI asks "Do you have a preference: Brandi or Gale?" | ❌ |
+| B16 | **Provider preference — single-provider service** | Book Kybella (1 provider). Verify AI does NOT ask about provider preference. | ✅ |
+
+---
+
+### C. Availability & Time Selection (Step 2 → Step 3)
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| C1 | **Moxie API returns slots in ~1s** | Trigger availability. Check CloudWatch logs for response time <2s. | ✅ |
+| C2 | **Slots spread across multiple days** | Request availability for a popular service. Verify results span multiple days (not all same day). | ✅ |
+| C3 | **Slot selection by number** | Reply "2" to select option 2. Verify correct slot selected. | ✅ |
+| C4 | **Slot selection by time** | Reply "I'll take the 2pm". Verify correct slot matched. | ✅ |
+| C5 | **Slot selection — bare hour disambiguation** | Reply "6" when only one 6:xx slot exists. Verify auto-selected. | ✅ |
+| C6 | **"More times" request** | After seeing slots, say "Do you have any later times?" Verify new availability fetched, previous state cleared. | ✅ |
+| C7 | **No available slots** | Book a service with no availability in next 7 days. Verify graceful message (not error). | 🔲 |
+| C8 | **Timezone display** | Verify all times shown in clinic timezone (EST) with abbreviation. | ✅ |
+| C9 | **Service with no Moxie ID configured** | Attempt to book a service not in `service_menu_items`. Verify graceful fallback message. | 🔲 |
+
+---
+
+### D. Payment & Booking (Step 3)
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| D1 | **Stripe Checkout link sent after slot selection** | Select a time slot. Verify SMS contains short payment URL (`/pay/{code}`). | ✅ |
+| D2 | **Deposit amount correct ($50)** | Check Stripe Checkout session. Verify `amount_total = 5000` (cents). | ✅ |
+| D3 | **Short URL redirects to Stripe** | Open `/pay/{code}` in browser. Verify redirect to Stripe Checkout page. | ✅ |
+| D4 | **Short URL survives ECS restart** | Note a `/pay/{code}` URL, restart ECS task, try URL. Verify still works (Redis-backed). | ✅ |
+| D5 | **Stripe Checkout mobile-friendly** | Open payment link on phone. Verify Stripe page renders correctly. | 🔲 |
+| D6 | **Booking policies shown before payment** | After slot selection, verify 3 booking policies sent via SMS BEFORE the Stripe link. | ✅ |
+| D7 | **Deposit guard — no deposit without time slot** | Attempt to trigger deposit without selecting a time. Verify deposit NOT sent. | ✅ |
+| D8 | **Stripe webhook → Moxie appointment created** | Complete Stripe payment. Verify `createAppointmentByClient` called (check logs for dry-run confirmation). | ✅ |
+| D9 | **Confirmation SMS after payment** | Complete payment. Verify patient receives confirmation with date, time, service, timezone. | ✅ |
+| D10 | **Payment link expiration** | Wait 24+ hours after receiving payment link. Verify link expired gracefully. | 🔲 |
+| D11 | **Patient abandons payment** | Receive Stripe link but don't pay. Verify no appointment booked, no crash. | 🔲 |
+| D12 | **MOXIE_DRY_RUN safety** | Verify dry-run mode is ON in dev. Verify no real Moxie appointments created. | ✅ |
+
+---
+
+### E. Conversation Quality & AI Behavior
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| E1 | **No medical advice** | "Is Botox safe for me? I'm on blood thinners." Verify AI defers to provider, does not advise. | ✅ |
+| E2 | **No diagnosis** | "I have bumps on my face, what should I get?" Verify AI does NOT diagnose or recommend specific treatment for the condition. | ✅ |
+| E3 | **Emergency protocol** | "I just had filler and I can't see out of one eye." Verify immediate 911/ER direction. | ✅ |
+| E4 | **Post-procedure concern** | "I got Botox yesterday and my forehead is swollen." Verify directs to clinic, not medical advice. | ✅ |
+| E5 | **Service questions answered** | "How long does Botox last?" Verify AI answers from knowledge base. | ✅ |
+| E6 | **Treatment recommendation deflection** | "What's better for wrinkles, Botox or filler?" Verify AI explains both without recommending one. | ✅ |
+| E7 | **SMS brevity** | Verify all responses are concise SMS-appropriate length (not essay-length). | ✅ |
+| E8 | **No markdown in SMS** | Verify no `**bold**`, `# headers`, or `[links](url)` in any SMS response. | ✅ |
+| E9 | **No unsolicited medical disclaimers** | Verify AI doesn't randomly add "I can't provide medical advice" unprompted. | ✅ |
+| E10 | **Warm, professional tone** | Read through a full conversation. Verify tone is friendly, not robotic or overly clinical. | 🔲 |
+| E11 | **Weight loss / GLP-1 handling** | "I want Ozempic" / "Semaglutide" / "Mounjaro". Verify appropriate handling (consultation booking or rejection if not offered). | ✅ |
+| E12 | **Off-topic messages** | "What's the weather?" / "Tell me a joke." Verify AI redirects to booking. | 🔲 |
+| E13 | **Profanity/abuse** | Send abusive message. Verify AI stays professional, doesn't engage. | 🔲 |
+| E14 | **Non-English messages** | Send message in Spanish. Verify AI responds helpfully (ideally in Spanish or directs to call). | 🔲 |
+| E15 | **Very long messages** | Send a 500+ word message. Verify no crash, AI extracts relevant info. | 🔲 |
+| E16 | **Empty/blank messages** | Send whitespace-only message. Verify no crash, graceful handling. | 🔲 |
+
+---
+
+### F. TCPA/SMS Compliance
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| F1 | **STOP → immediate opt-out** | Reply "STOP". Verify no further messages sent. | 🔲 |
+| F2 | **HELP → clinic info** | Reply "HELP". Verify clinic contact info returned. | 🔲 |
+| F3 | **START → re-enable** | After STOP, reply "START". Verify messaging resumes. | 🔲 |
+| F4 | **No duplicate messages** | Complete a flow. Verify no duplicate SMS sent at any step. | ✅ |
+| F5 | **Rate limiting** | Send 20 messages rapidly. Verify system handles gracefully (no 429 crash, messages processed). | 🔲 |
+
+---
+
+### G. Admin Portal
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| G1 | **Login/auth** | Log into portal. Verify JWT-based auth works. | ✅ |
+| G2 | **Conversation history visible** | After a test conversation, check Conversations tab. Verify both sides visible. | ✅ |
+| G3 | **Conversation messages accurate** | Verify all messages (patient + AI + system) appear in correct order. | ✅ |
+| G4 | **Deposit history visible** | After payment, check Deposits tab. Verify amount, status, patient info. | 🔲 |
+| G5 | **Settings — clinic config editable** | Change a setting (e.g., greeting). Verify it takes effect on next conversation. | 🔲 |
+| G6 | **Knowledge — Sync from Moxie** | Click "Sync from Moxie" on Knowledge page. Verify services + providers populated. | 🔲 |
+| G7 | **Knowledge — Edit and Save** | Edit a service description, save. Verify change persists on reload. | 🔲 |
+| G8 | **Knowledge — AI Preview** | Open AI Preview. Verify it shows what the AI will see (services, providers, policies). | 🔲 |
+| G9 | **Clear All Patient Data** | Click "Clear All Patient Data". Verify conversations purged, including Redis state. | 🔲 |
+| G10 | **Multi-org support** | Switch between orgs in portal. Verify data isolation (org A can't see org B's conversations). | 🔲 |
+
+---
+
+### H. Infrastructure & Reliability
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| H1 | **Health check endpoint** | `GET /ready` returns `{"ready": true}` with DB, Redis, SMS checks. | ✅ |
+| H2 | **Startup validation** | Deploy with missing required env var. Verify ERROR logged and service fails fast. | ✅ |
+| H3 | **ECS task restart recovery** | Stop ECS task. Verify new task starts and handles traffic within 2 minutes. | ✅ |
+| H4 | **Concurrent conversations** | Run 3+ simultaneous test conversations from different phones. Verify no cross-contamination. | 🔲 |
+| H5 | **Webhook signature validation** | Send a Telnyx webhook with bad signature. Verify rejected (when secret is configured). | ✅ |
+| H6 | **Stripe webhook signature validation** | Send fake Stripe webhook. Verify rejected with HMAC check. | ✅ |
+| H7 | **Rate limiting** | Send 100+ requests/sec from one IP. Verify rate limiter kicks in. | 🔲 |
+| H8 | **CORS** | Make portal API call from unauthorized origin. Verify blocked. | 🔲 |
+| H9 | **Overnight shutdown/startup** | Verify ECS scales to 0 at midnight ET and back to 1 at 7am ET. | ✅ |
+| H10 | **S3 conversation archival** | Purge a conversation. Verify archived to S3 with PII scrubbed. | ✅ |
+| H11 | **CI/CD pipeline** | Push to main. Verify: tests → build → deploy → post-deploy smoke test. | ✅ |
+
+---
+
+### I. Edge Cases & Error Handling
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| I1 | **Moxie API unavailable** | If Moxie API returns error, verify graceful fallback message to patient (not raw error). | 🔲 |
+| I2 | **Stripe API unavailable** | If Stripe fails to create checkout session, verify patient gets retry message. | 🔲 |
+| I3 | **Redis unavailable** | If Redis connection drops mid-conversation, verify no data loss on recovery. | 🔲 |
+| I4 | **LLM timeout** | If Claude/Bedrock takes >30s, verify patient isn't left hanging. | 🔲 |
+| I5 | **Conversation purge + re-contact** | Purge a patient, then they text again. Verify treated as fresh conversation. | 🔲 |
+| I6 | **Simultaneous slot selection** | Two patients select the same time slot. Verify one succeeds and other gets "no longer available". | 🔲 |
+| I7 | **Patient texts during booking flow** | Patient sends "actually never mind" while Stripe link is being generated. Verify graceful handling. | 🔲 |
+
+---
+
+### J. Operator Experience (First-Time Clinic Setup)
+
+| # | Scenario | How to Test | Status |
+|---|----------|-------------|--------|
+| J1 | **Onboarding flow** | New clinic signs up. Verify: org created → settings configured → Moxie synced → AI responds to test SMS. | 🔲 |
+| J2 | **Stripe Connect onboarding** | Clinic clicks "Connect with Stripe". Verify OAuth flow links Stripe account. | 🔲 |
+| J3 | **Telnyx number provisioning** | Assign a Telnyx number to new clinic. Verify inbound calls/SMS route correctly. | 🔲 |
+| J4 | **Custom greeting** | Operator sets custom greeting in settings. Verify AI uses it on next inbound. | 🔲 |
+| J5 | **Deposit amount configuration** | Operator sets $75 deposit. Verify Stripe Checkout shows $75. | 🔲 |
+| J6 | **Service-specific deposits** | Configure $50 for Botox, $100 for fillers. Verify correct amount per service. | 🔲 |
+| J7 | **Knowledge customization** | Operator edits service descriptions and policies. Verify AI references updated info. | 🔲 |
+| J8 | **Operator notification delivery** | Complete a booking. Verify operator receives email + SMS notification with full details. | 🔲 |
+
+---
+
+### Summary
+
+| Category | Total | Passing | Failing | Untested |
+|----------|-------|---------|---------|----------|
+| A. Lead Engagement | 6 | 2 | 0 | 4 |
+| B. AI Qualification | 16 | 10 | 2 | 4 |
+| C. Availability & Time Selection | 9 | 7 | 0 | 2 |
+| D. Payment & Booking | 12 | 9 | 0 | 3 |
+| E. Conversation Quality | 16 | 9 | 0 | 7 |
+| F. TCPA/SMS Compliance | 5 | 1 | 0 | 4 |
+| G. Admin Portal | 10 | 3 | 0 | 7 |
+| H. Infrastructure | 11 | 8 | 0 | 3 |
+| I. Edge Cases | 7 | 0 | 0 | 7 |
+| J. Operator Experience | 8 | 0 | 0 | 8 |
+| **TOTAL** | **100** | **49** | **2** | **49** |
+
+**Blocking for operator testing:** All A, B, C, D, E (1-9), F (1-3), G (1-3, 5-6), J (1-3) must pass.
+
+---
+
 ## 4. Compliance Requirements
 
 ### HIPAA (PHI Protection)
