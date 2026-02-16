@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -2663,19 +2662,10 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	// Match patterns: "new patient", "first time", "I'm new", "I am new", standalone ", new," or ", new " in comma-separated lists
 	newPatientRE := regexp.MustCompile(`(?i)\bnew patient\b|first time|\bi'm new\b|\bi am new\b|\bnever been\b|,\s*new\s*[,.]|\bnew here\b`)
 	returningPatientRE := regexp.MustCompile(`(?i)\breturning\b|\bexisting patient\b|\bi've been\b|\bi have been\b|\bbeen there\b|\bbeen before\b|,\s*returning\s*[,.]|,\s*existing\s*[,.]`)
-	newMatch := newPatientRE.FindString(userMessages)
-	retMatch := returningPatientRE.FindString(userMessages)
-	log.Printf("[DEBUG] extractPreferences: patientType check — newMatch=%q retMatch=%q userMsgLen=%d userMsgSnippet=%q",
-		newMatch, retMatch, len(userMessages), func() string {
-			if len(userMessages) > 200 {
-				return userMessages[:200]
-			}
-			return userMessages
-		}())
-	if newMatch != "" {
+	if newPatientRE.MatchString(userMessages) {
 		prefs.PatientType = "new"
 		hasPreferences = true
-	} else if retMatch != "" {
+	} else if returningPatientRE.MatchString(userMessages) {
 		prefs.PatientType = "existing"
 		hasPreferences = true
 	}
