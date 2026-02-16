@@ -872,6 +872,55 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		Content: formatIntroMessage(safeReq, conversationID),
 	})
 
+	// Apply qualification ordering guardrails (same as ProcessMessage).
+	if startCfg != nil && startCfg.UsesMoxieBooking() {
+		prefs, _ := extractPreferences(history)
+
+		if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType == "" {
+			history = append(history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: "[SYSTEM GUARDRAIL] You have the patient's name and service interest. " +
+					"Next in the checklist is PATIENT TYPE (#3). " +
+					"You MUST ask if they are a new or returning patient NOW. Do NOT ask about schedule, email, or provider yet. " +
+					"Ask something like: 'Have you visited us before, or would this be your first time?'",
+			})
+		}
+
+		if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType != "" &&
+			prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
+			history = append(history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: "[SYSTEM GUARDRAIL] You have the patient's name, service, and patient type. " +
+					"Next in the Moxie checklist is SCHEDULE (#4). " +
+					"You MUST ask about their preferred days and times NOW. Do NOT ask for email or provider preference yet.",
+			})
+		}
+
+		if prefs.ServiceInterest != "" && prefs.ProviderPreference == "" &&
+			(prefs.PreferredDays != "" || prefs.PreferredTimes != "") {
+			resolvedService := startCfg.ResolveServiceName(prefs.ServiceInterest)
+			if startCfg.ServiceNeedsProviderPreference(resolvedService) {
+				providerNames := make([]string, 0)
+				if startCfg.MoxieConfig != nil {
+					for _, name := range startCfg.MoxieConfig.ProviderNames {
+						providerNames = append(providerNames, name)
+					}
+				}
+				var providerList string
+				if len(providerNames) > 0 {
+					providerList = fmt.Sprintf(" Available providers: %s.", strings.Join(providerNames, ", "))
+				}
+				history = append(history, ChatMessage{
+					Role: ChatRoleSystem,
+					Content: fmt.Sprintf("[SYSTEM GUARDRAIL] The patient wants %s which has multiple providers.%s "+
+						"You MUST ask about provider preference NOW. Do NOT ask for email yet. "+
+						"Ask: 'Do you have a provider preference, or would you like the first available appointment?'",
+						prefs.ServiceInterest, providerList),
+				})
+			}
+		}
+	}
+
 	reply, err := s.generateResponse(ctx, history)
 	if err != nil {
 		span.RecordError(err)
@@ -1447,9 +1496,22 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
-	// Deterministic guardrail: enforce Moxie qualification order (schedule before provider before email).
+	// Deterministic guardrails: enforce Moxie qualification order.
+	// Order: name → service → patient type → schedule → provider → email
 	if cfg != nil && cfg.UsesMoxieBooking() {
 		prefs, _ := extractPreferences(history)
+
+		// Patient type guardrail: if we have name + service but no patient type,
+		// force the LLM to ask about patient type before schedule/email.
+		if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType == "" {
+			history = append(history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: "[SYSTEM GUARDRAIL] You have the patient's name and service interest. " +
+					"Next in the checklist is PATIENT TYPE (#3). " +
+					"You MUST ask if they are a new or returning patient NOW. Do NOT ask about schedule, email, or provider yet. " +
+					"Ask something like: 'Have you visited us before, or would this be your first time?'",
+			})
+		}
 
 		// Schedule guardrail: if we have name + service + patient type but no schedule,
 		// force the LLM to ask about schedule before anything else.
