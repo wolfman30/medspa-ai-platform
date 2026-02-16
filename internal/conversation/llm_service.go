@@ -2659,10 +2659,13 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	}
 
 	// Extract patient type.
-	if strings.Contains(userMessages, "new patient") || strings.Contains(userMessages, "first time") || strings.Contains(userMessages, "i'm new") || strings.Contains(userMessages, "i am new") {
+	// Match patterns: "new patient", "first time", "I'm new", "I am new", standalone ", new," or ", new " in comma-separated lists
+	newPatientRE := regexp.MustCompile(`(?i)\bnew patient\b|first time|\bi'm new\b|\bi am new\b|\bnever been\b|,\s*new\s*[,.]|\bnew here\b`)
+	returningPatientRE := regexp.MustCompile(`(?i)\breturning\b|\bexisting patient\b|\bi've been\b|\bi have been\b|\bbeen there\b|\bbeen before\b|,\s*returning\s*[,.]|,\s*existing\s*[,.]`)
+	if newPatientRE.MatchString(userMessages) {
 		prefs.PatientType = "new"
 		hasPreferences = true
-	} else if strings.Contains(userMessages, "returning") || strings.Contains(userMessages, "existing patient") || strings.Contains(userMessages, "i've been") || strings.Contains(userMessages, "i have been") {
+	} else if returningPatientRE.MatchString(userMessages) {
 		prefs.PatientType = "existing"
 		hasPreferences = true
 	}
