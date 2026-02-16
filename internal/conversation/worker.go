@@ -684,6 +684,30 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		}
 	}
 
+	// Output guard: scan reply for sensitive data leaks before sending.
+	leakResult := ScanOutputForLeaks(resp.Message)
+	if leakResult.Leaked {
+		w.logger.Warn("output guard: sensitive data leak detected",
+			"conversation_id", resp.ConversationID,
+			"org_id", msg.OrgID,
+			"reasons", leakResult.Reasons,
+		)
+		if leakResult.Sanitized == "" {
+			// Can't salvage — use generic fallback
+			resp = &Response{
+				ConversationID: resp.ConversationID,
+				Message:        defaultSupervisorFallback,
+				Timestamp:      time.Now().UTC(),
+			}
+		} else {
+			resp = &Response{
+				ConversationID: resp.ConversationID,
+				Message:        leakResult.Sanitized,
+				Timestamp:      resp.Timestamp,
+			}
+		}
+	}
+
 	conversationID := strings.TrimSpace(resp.ConversationID)
 	if conversationID == "" {
 		conversationID = strings.TrimSpace(msg.ConversationID)

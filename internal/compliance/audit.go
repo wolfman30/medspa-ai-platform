@@ -29,6 +29,8 @@ const (
 	EventKnowledgeRead AuditEventType = "compliance.knowledge_read"
 	// EventKnowledgeUpdated is logged when clinic knowledge is updated.
 	EventKnowledgeUpdated AuditEventType = "compliance.knowledge_updated"
+	// EventPromptInjection is logged when a prompt injection attempt is detected.
+	EventPromptInjection AuditEventType = "security.prompt_injection"
 )
 
 // AuditEvent represents an immutable compliance audit record.
@@ -57,6 +59,9 @@ type AuditDetails struct {
 	// For disclaimer sent
 	DisclaimerLevel string `json:"disclaimer_level,omitempty"`
 	DisclaimerText  string `json:"disclaimer_text,omitempty"`
+
+	// For prompt injection detected
+	InjectionReasons []string `json:"injection_reasons,omitempty"`
 
 	// For supervisor review
 	SupervisorMode     string `json:"supervisor_mode,omitempty"`
@@ -141,6 +146,23 @@ func (s *AuditService) LogPHIDetected(ctx context.Context, orgID, conversationID
 		ConversationID: conversationID,
 		LeadID:         leadID,
 		UserMessage:    "[REDACTED]", // Don't store PHI in audit log
+		Details:        detailsJSON,
+	})
+}
+
+// LogPromptInjection logs when a prompt injection attempt is detected and blocked.
+func (s *AuditService) LogPromptInjection(ctx context.Context, orgID, conversationID, leadID string, reasons []string) error {
+	details := AuditDetails{
+		InjectionReasons: reasons,
+	}
+	detailsJSON, _ := json.Marshal(details)
+
+	return s.LogEvent(ctx, AuditEvent{
+		EventType:      EventPromptInjection,
+		OrgID:          orgID,
+		ConversationID: conversationID,
+		LeadID:         leadID,
+		UserMessage:    "[BLOCKED]", // Don't store injection payload
 		Details:        detailsJSON,
 	})
 }
