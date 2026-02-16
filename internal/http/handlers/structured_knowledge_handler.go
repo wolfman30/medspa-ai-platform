@@ -216,7 +216,10 @@ func (h *StructuredKnowledgeHandler) SyncMoxie(w http.ResponseWriter, r *http.Re
 	_ = json.NewEncoder(w).Encode(sk)
 }
 
-var buildIDRegex = regexp.MustCompile(`/_next/data/([^/]+)/`)
+var (
+	buildIDURLRegex  = regexp.MustCompile(`/_next/data/([^/]+)/`)
+	buildIDJSONRegex = regexp.MustCompile(`"buildId"\s*:\s*"([^"]+)"`)
+)
 
 func extractMoxieBuildID(slug string) (string, error) {
 	pageURL := fmt.Sprintf("https://app.joinmoxie.com/booking/%s", slug)
@@ -231,11 +234,15 @@ func extractMoxieBuildID(slug string) (string, error) {
 		return "", fmt.Errorf("read booking page: %w", err)
 	}
 
-	matches := buildIDRegex.FindSubmatch(body)
-	if len(matches) < 2 {
-		return "", fmt.Errorf("buildId not found in page HTML")
+	// Try URL pattern first: /_next/data/{buildId}/
+	if matches := buildIDURLRegex.FindSubmatch(body); len(matches) >= 2 {
+		return string(matches[1]), nil
 	}
-	return string(matches[1]), nil
+	// Fallback: __NEXT_DATA__ JSON blob contains "buildId":"xxx"
+	if matches := buildIDJSONRegex.FindSubmatch(body); len(matches) >= 2 {
+		return string(matches[1]), nil
+	}
+	return "", fmt.Errorf("buildId not found in page HTML")
 }
 
 // parseMoxieBookingJSON parses the Moxie Next.js data JSON into StructuredKnowledge.
