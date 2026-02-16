@@ -533,20 +533,25 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		})
 		h.sendAutoReply(context.Background(), to, from, messaging.PCIGuardrailMessage)
 	} else {
-		ack := messaging.GetSmsAckMessage(isFirstInbound)
-		ackKind := "ack"
-		if h.demoMode && isFirstInbound && h.firstContactAck != "" {
-			ack = h.firstContactAck
-			ackKind = "first_contact_ack"
+		// Only send an instant ack for the very first contact (missed call flow).
+		// Follow-up messages get the LLM reply directly (~2-3s) without a filler ack,
+		// which halves SMS costs and feels more natural.
+		if isFirstInbound {
+			ack := messaging.GetSmsAckMessage(true)
+			ackKind := "ack"
+			if h.demoMode && h.firstContactAck != "" {
+				ack = h.firstContactAck
+				ackKind = "first_contact_ack"
+			}
+			h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+				Role: "assistant",
+				From: to,
+				To:   from,
+				Body: ack,
+				Kind: ackKind,
+			})
+			h.sendAutoReply(context.Background(), to, from, ack)
 		}
-		h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
-			Role: "assistant",
-			From: to,
-			To:   from,
-			Body: ack,
-			Kind: ackKind,
-		})
-		h.sendAutoReply(context.Background(), to, from, ack)
 		h.dispatchConversation(context.Background(), evt, payload, clinicID, conversationID, panRedacted)
 	}
 	if h.processed != nil && dedupeID != "" {

@@ -168,7 +168,10 @@ func (h *Handler) TwilioWebhook(w http.ResponseWriter, r *http.Request) {
 		Kind: "inbound",
 	})
 	h.linkLead(ctx, conversationID, leadID)
-	h.sendSMSAck(from, to, orgID, leadID, conversationID, webhook.MessageSid, isNewLead)
+	// Only send instant ack for first contact — follow-ups get LLM reply directly (~2-3s).
+	if isNewLead {
+		h.sendSMSAck(from, to, orgID, leadID, conversationID, webhook.MessageSid, true)
+	}
 
 	msgReq := conversation.MessageRequest{
 		OrgID:          orgID,
