@@ -325,7 +325,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | # | Scenario | How to Test | Status |
 |---|----------|-------------|--------|
 | B1 | **Happy path — all 5 qualifications in natural conversation** | "Hi, I'm Jane Smith, new patient, interested in Botox, jane@email.com, Mondays after 3pm." Verify all 5 extracted and availability triggered. | ✅ |
-| B2 | **Multi-turn qualification** | Provide info one piece at a time across 5+ messages. Verify AI asks for each missing piece in priority order (name → service → patient type → email → time prefs). | ❌ |
+| B2 | **Multi-turn qualification** | Provide info one piece at a time across 5+ messages. Verify AI asks for each missing piece in priority order (name → service → patient type → email → time prefs). | ✅ |
 | B3 | **Single-message qualification** | Provide all 5 in one message. Verify availability triggers immediately (no unnecessary follow-up questions). | ✅ |
 | B4 | **Service extraction — common names** | "Botox", "lip filler", "chemical peel", "microneedling", "laser hair removal". Verify each resolves to correct Moxie service. | ✅ |
 | B5 | **Service extraction — slang/synonyms** | "Tox", "lip injections", "get my 11s fixed", "wrinkle treatment". Verify alias resolution. | ✅ |
@@ -338,7 +338,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | B12 | **Time preference — time range** | "After 3pm". Verify only slots after 3:00 PM (exclusive). | ✅ |
 | B13 | **Time preference — combined** | "Tuesday mornings before 11am". Verify day AND time filter applied. | 🔲 |
 | B14 | **No time preference** | "Anytime works". Verify slots spread across multiple days. | 🔲 |
-| B15 | **Provider preference — multi-provider service** | Book Tox (2 providers). Verify AI asks "Do you have a preference: Brandi or Gale?" | ❌ |
+| B15 | **Provider preference — multi-provider service** | Book Tox (2 providers). Verify AI asks "Do you have a preference: Brandi or Gale?" | ✅ |
 | B16 | **Provider preference — single-provider service** | Book Kybella (1 provider). Verify AI does NOT ask about provider preference. | ✅ |
 
 ---
@@ -482,7 +482,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | Category | Total | Passing | Failing | Untested |
 |----------|-------|---------|---------|----------|
 | A. Lead Engagement | 6 | 2 | 0 | 4 |
-| B. AI Qualification | 16 | 11 | 2 | 3 |
+| B. AI Qualification | 16 | 13 | 0 | 3 |
 | C. Availability & Time Selection | 9 | 7 | 0 | 2 |
 | D. Payment & Booking | 12 | 9 | 0 | 3 |
 | E. Conversation Quality | 16 | 12 | 0 | 4 |
@@ -491,7 +491,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | H. Infrastructure | 11 | 8 | 0 | 3 |
 | I. Edge Cases | 7 | 0 | 0 | 7 |
 | J. Operator Experience | 8 | 0 | 0 | 8 |
-| **TOTAL** | **100** | **56** | **2** | **42** |
+| **TOTAL** | **100** | **58** | **0** | **42** |
 
 **Blocking for operator testing:** All A, B, C, D, E (1-9), F (1-3), G (1-3, 5-6), J (1-3) must pass.
 
