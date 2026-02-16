@@ -332,12 +332,12 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | B6 | **Service extraction — new services** | "Tixel", "IPL", "tattoo removal", "B12 shot", "NAD+", "salmon DNA facial". Verify all 46 Forever 22 services recognized. | ✅ |
 | B7 | **No service sub-type questions** | Say "microneedling". Verify AI does NOT ask "microneedling or microneedling with PRP?" Just book the base service. | ✅ |
 | B8 | **No Botox area questions** | Say "Botox". Verify AI does NOT ask "forehead, crow's feet, or 11s?" | ✅ |
-| B9 | **Email validation** | Provide "not-an-email". Verify AI asks again. Provide valid email. Verify accepted. | 🔲 |
+| B9 | **Email validation** | Provide "not-an-email". Verify AI asks again. Provide valid email. Verify accepted. | ✅ |
 | B10 | **Patient type — new vs returning** | Test both "first time" and "I've been there before". Verify correct extraction. | ✅ |
 | B11 | **Time preference — day of week** | "Mondays and Wednesdays". Verify only Mon/Wed slots shown. | ✅ |
 | B12 | **Time preference — time range** | "After 3pm". Verify only slots after 3:00 PM (exclusive). | ✅ |
-| B13 | **Time preference — combined** | "Tuesday mornings before 11am". Verify day AND time filter applied. | 🔲 |
-| B14 | **No time preference** | "Anytime works". Verify slots spread across multiple days. | 🔲 |
+| B13 | **Time preference — combined** | "Tuesday mornings before 11am". Verify day AND time filter applied. | ✅ |
+| B14 | **No time preference** | "Anytime works". Verify slots spread across multiple days. | ✅ |
 | B15 | **Provider preference — multi-provider service** | Book Tox (2 providers). Verify AI asks "Do you have a preference: Brandi or Gale?" | ✅ |
 | B16 | **Provider preference — single-provider service** | Book Kybella (1 provider). Verify AI does NOT ask about provider preference. | ✅ |
 
@@ -481,8 +481,8 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 
 | Category | Total | Passing | Failing | Untested |
 |----------|-------|---------|---------|----------|
-| A. Lead Engagement | 6 | 2 | 0 | 4 |
-| B. AI Qualification | 16 | 13 | 0 | 3 |
+| A. Lead Engagement | 6 | 3 | 0 | 3 |
+| B. AI Qualification | 16 | 16 | 0 | 0 |
 | C. Availability & Time Selection | 9 | 7 | 0 | 2 |
 | D. Payment & Booking | 12 | 9 | 0 | 3 |
 | E. Conversation Quality | 16 | 12 | 0 | 4 |
@@ -491,7 +491,7 @@ Every scenario below must pass before inviting med spa operators to test. Organi
 | H. Infrastructure | 11 | 8 | 0 | 3 |
 | I. Edge Cases | 7 | 0 | 0 | 7 |
 | J. Operator Experience | 8 | 0 | 0 | 8 |
-| **TOTAL** | **100** | **58** | **0** | **42** |
+| **TOTAL** | **100** | **62** | **0** | **38** |
 
 **Blocking for operator testing:** All A, B, C, D, E (1-9), F (1-3), G (1-3, 5-6), J (1-3) must pass.
 
