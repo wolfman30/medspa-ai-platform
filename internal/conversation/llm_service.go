@@ -3064,7 +3064,59 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		prefs.ProviderPreference = providerPreferenceFromReply(history)
 	}
 
+	// Last resort: check if any known provider first names appear in user messages.
+	// This handles single-message flows like "lip filler, Brandi, Thursdays"
+	// and multi-turn flows where ack messages break the reply-context chain.
+	if prefs.ProviderPreference == "" {
+		prefs.ProviderPreference = matchProviderNameInText(userMessages, history)
+	}
+
 	return prefs, hasPreferences
+}
+
+// matchProviderNameInText scans user messages for known provider names from the
+// conversation's system prompt (which lists available providers).
+func matchProviderNameInText(userMessages string, history []ChatMessage) string {
+	// Extract provider names from system messages that mention them
+	var providerNames []string
+	for _, msg := range history {
+		if msg.Role == ChatRoleSystem || msg.Role == ChatRoleAssistant {
+			lower := strings.ToLower(msg.Content)
+			// Look for provider listing patterns like "We have Brandi Sesock and Gale Tesar"
+			// or "Available providers: Brandi Sesock, Gale Tesar"
+			if strings.Contains(lower, "provider") || strings.Contains(lower, "brandi") || strings.Contains(lower, "gale") {
+				// Extract names from "We have X and Y" or "Available providers: X, Y"
+				for _, pattern := range []string{"we have ", "available providers: ", "providers: "} {
+					idx := strings.Index(lower, pattern)
+					if idx >= 0 {
+						segment := msg.Content[idx+len(pattern):]
+						// Split on " and " or ", "
+						segment = strings.ReplaceAll(segment, " and ", ", ")
+						// Take until end of sentence
+						if dotIdx := strings.IndexAny(segment, ".!?\n"); dotIdx >= 0 {
+							segment = segment[:dotIdx]
+						}
+						parts := strings.Split(segment, ", ")
+						for _, p := range parts {
+							name := strings.TrimSpace(p)
+							if name != "" {
+								providerNames = append(providerNames, name)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Check if any provider's first name appears in user messages
+	for _, fullName := range providerNames {
+		firstName := strings.ToLower(strings.Fields(fullName)[0])
+		if len(firstName) > 2 && strings.Contains(userMessages, firstName) {
+			return fullName // Return the full provider name
+		}
+	}
+	return ""
 }
 
 // providerPreferenceFromReply checks if the assistant asked about provider preference
