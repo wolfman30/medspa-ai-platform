@@ -1837,39 +1837,51 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				variants := clinicCfg.GetServiceVariants(prefs.ServiceInterest)
 				if len(variants) > 0 {
 					// Check if the patient already specified a variant in recent messages
-					variantResolved := false
-					msgLower := strings.ToLower(rawMessage)
-					for _, v := range variants {
-						vLower := strings.ToLower(v)
-						// Check if any variant-specific keyword is in the message
-						if strings.Contains(vLower, "in person") && (strings.Contains(msgLower, "in person") || strings.Contains(msgLower, "in-person")) {
-							variantResolved = true
-							break
-						}
-						if strings.Contains(vLower, "virtual") && (strings.Contains(msgLower, "virtual") || strings.Contains(msgLower, "telehealth") || strings.Contains(msgLower, "online") || strings.Contains(msgLower, "video")) {
-							variantResolved = true
-							break
+					resolvedVariant := "" // will be set to the specific variant name
+					// Define keyword groups for each variant type
+					inPersonKeywords := []string{"in person", "in-person", "come in", "office", "clinic"}
+					virtualKeywords := []string{"virtual", "telehealth", "online", "video", "zoom", "remote"}
+
+					// Check current message and recent history for variant keywords
+					messagesToCheck := []string{strings.ToLower(rawMessage)}
+					for i := len(history) - 1; i >= 0 && i >= len(history)-6; i-- {
+						if history[i].Role == ChatRoleUser {
+							messagesToCheck = append(messagesToCheck, strings.ToLower(history[i].Content))
 						}
 					}
-					// Also check full conversation history for variant selection
-					if !variantResolved {
-						for i := len(history) - 1; i >= 0 && i >= len(history)-6; i-- {
-							if history[i].Role == ChatRoleUser {
-								hLower := strings.ToLower(history[i].Content)
-								if strings.Contains(hLower, "in person") || strings.Contains(hLower, "in-person") ||
-									strings.Contains(hLower, "virtual") || strings.Contains(hLower, "telehealth") ||
-									strings.Contains(hLower, "online") || strings.Contains(hLower, "video") {
-									variantResolved = true
-									break
+
+					for _, msg := range messagesToCheck {
+						if resolvedVariant != "" {
+							break
+						}
+						for _, v := range variants {
+							vLower := strings.ToLower(v)
+							if strings.Contains(vLower, "in person") {
+								for _, kw := range inPersonKeywords {
+									if strings.Contains(msg, kw) {
+										resolvedVariant = v
+										break
+									}
 								}
+							}
+							if strings.Contains(vLower, "virtual") {
+								for _, kw := range virtualKeywords {
+									if strings.Contains(msg, kw) {
+										resolvedVariant = v
+										break
+									}
+								}
+							}
+							if resolvedVariant != "" {
+								break
 							}
 						}
 					}
-					if !variantResolved {
+
+					if resolvedVariant == "" {
 						// Build clarifying question
 						variantNames := make([]string, len(variants))
 						for i, v := range variants {
-							// Extract the variant qualifier (e.g. "In Person" from "Weight Loss Consultation - In Person")
 							parts := strings.SplitN(v, " - ", 2)
 							if len(parts) == 2 {
 								variantNames[i] = parts[1]
@@ -1887,7 +1899,6 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 							"variants", variants,
 						)
 
-						// Replace the LLM reply with our clarifying question
 						for i := len(history) - 1; i >= 0; i-- {
 							if history[i].Role == ChatRoleAssistant {
 								history[i].Content = clarifyMsg
@@ -1903,6 +1914,14 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 							Timestamp:      time.Now().UTC(),
 						}, nil
 					}
+
+					// Patient specified a variant — use the resolved variant name for availability
+					s.logger.Info("service variant resolved",
+						"conversation_id", req.ConversationID,
+						"original_service", prefs.ServiceInterest,
+						"resolved_variant", resolvedVariant,
+					)
+					prefs.ServiceInterest = resolvedVariant
 				}
 			}
 
