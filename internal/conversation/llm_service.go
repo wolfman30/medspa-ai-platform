@@ -1434,28 +1434,58 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// NEW SERVICE DETECTION: If the patient just booked one service (SlotSelected=true)
 	// and is now asking about a DIFFERENT service, reset the time selection state so
 	// the availability flow triggers fresh for the new service.
-	if timeSelectionState != nil && timeSelectionState.SlotSelected && cfg != nil {
-		newService := detectServiceKey(rawMessage, cfg)
-		if newService != "" {
-			oldService := strings.ToLower(timeSelectionState.Service)
-			resolvedNew := strings.ToLower(cfg.ResolveServiceName(newService))
-			resolvedOld := strings.ToLower(cfg.ResolveServiceName(oldService))
-			if resolvedNew != resolvedOld {
-				s.logger.Info("new service detected after previous booking — resetting time selection state",
-					"conversation_id", req.ConversationID,
-					"old_service", timeSelectionState.Service,
-					"new_service", newService,
-				)
-				// Clear time selection state so availability triggers for the new service
-				if err := s.history.ClearTimeSelectionState(ctx, req.ConversationID); err != nil {
-					s.logger.Warn("failed to clear time selection state for new service", "error", err)
-				}
-				timeSelectionState = nil
-				// Clear previously selected datetime/service on the lead
-				if req.LeadID != "" && s.leadsRepo != nil {
-					if uerr := s.leadsRepo.ClearSelectedAppointment(ctx, req.LeadID); uerr != nil {
-						s.logger.Warn("failed to clear selected appointment for new service", "error", uerr)
+	if timeSelectionState != nil && timeSelectionState.SlotSelected {
+		// Check if the current message mentions a service different from the booked one.
+		// Use extractPreferences on the full history (which now includes the new message)
+		// to see if service interest has shifted.
+		bookedService := strings.ToLower(strings.TrimSpace(timeSelectionState.Service))
+		// Also try detectServiceKey for exact config matches
+		newServiceExact := ""
+		if cfg != nil {
+			newServiceExact = detectServiceKey(rawMessage, cfg)
+		}
+		// Check if the raw message mentions wanting/booking something (broad intent)
+		msgLower := strings.ToLower(rawMessage)
+		mentionsNewService := false
+		if newServiceExact != "" {
+			resolvedNew := strings.ToLower(newServiceExact)
+			resolvedOld := bookedService
+			if cfg != nil {
+				resolvedNew = strings.ToLower(cfg.ResolveServiceName(newServiceExact))
+				resolvedOld = strings.ToLower(cfg.ResolveServiceName(bookedService))
+			}
+			mentionsNewService = resolvedNew != resolvedOld
+		}
+		// Broader detection: if the message says "I want X too", "also book X", "book X",
+		// where X doesn't match the previously booked service name
+		if !mentionsNewService {
+			newServicePatterns := []string{
+				`(?i)(?:i\s+(?:also\s+)?want|(?:also|can\s+i)\s+(?:book|get|schedule)|book\s+(?:me\s+)?(?:for\s+)?|i.+?too$)`,
+			}
+			for _, pat := range newServicePatterns {
+				if re, err := regexp.Compile(pat); err == nil && re.MatchString(msgLower) {
+					// The message has booking intent — check if it mentions a different service
+					// by seeing if the booked service name is NOT in the message
+					if !strings.Contains(msgLower, bookedService) {
+						mentionsNewService = true
 					}
+					break
+				}
+			}
+		}
+		if mentionsNewService {
+			s.logger.Info("new service detected after previous booking — resetting time selection state",
+				"conversation_id", req.ConversationID,
+				"old_service", timeSelectionState.Service,
+				"message", rawMessage,
+			)
+			if err := s.history.ClearTimeSelectionState(ctx, req.ConversationID); err != nil {
+				s.logger.Warn("failed to clear time selection state for new service", "error", err)
+			}
+			timeSelectionState = nil
+			if req.LeadID != "" && s.leadsRepo != nil {
+				if uerr := s.leadsRepo.ClearSelectedAppointment(ctx, req.LeadID); uerr != nil {
+					s.logger.Warn("failed to clear selected appointment for new service", "error", uerr)
 				}
 			}
 		}
