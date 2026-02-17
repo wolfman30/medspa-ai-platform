@@ -1951,9 +1951,27 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					"conversation_id", req.ConversationID, "service", scraperServiceName)
 				result, err = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, clinicCfg, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
 				if err != nil {
-					s.logger.Warn("Moxie API availability failed, falling back to browser scraper",
-						"error", err, "conversation_id", req.ConversationID)
-					result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+					// Check if this is a "service not found" error vs a transient API error.
+					// Don't waste 2+ minutes on the browser scraper if the service simply doesn't exist.
+					errMsg := err.Error()
+					if strings.Contains(errMsg, "no serviceMenuItemId") {
+						s.logger.Warn("Moxie API: service not found — skipping browser scraper fallback",
+							"error", err, "conversation_id", req.ConversationID, "service", scraperServiceName)
+						// Return a clear message instead of falling back to the slow scraper
+						result = &AvailabilityResult{
+							Slots:      nil,
+							ExactMatch: false,
+							Message: fmt.Sprintf(
+								"I'm sorry, but %s doesn't appear to be a service currently offered at this clinic. "+
+									"Would you like to see what services are available, or is there something else I can help with?",
+								prefs.ServiceInterest),
+						}
+						err = nil
+					} else {
+						s.logger.Warn("Moxie API availability failed, falling back to browser scraper",
+							"error", err, "conversation_id", req.ConversationID)
+						result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+					}
 				}
 			} else {
 				result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
