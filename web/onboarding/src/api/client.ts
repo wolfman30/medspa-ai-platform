@@ -201,6 +201,8 @@ export interface ClinicConfig {
 
 export async function createClinic(data: {
   name: string;
+  legalName?: string;
+  ein?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -217,6 +219,8 @@ export async function createClinic(data: {
     headers: buildHeaders(token),
     body: JSON.stringify({
       name: data.name,
+      legal_name: data.legalName,
+      ein: data.ein,
       email: data.email,
       phone: data.phone,
       address: data.address,
@@ -531,6 +535,93 @@ export async function createCampaign(data: CreateCampaignRequest): Promise<Campa
     throw new Error(await readErrorMessage(res));
   }
   return res.json();
+}
+
+// LOA / Hosted Number API
+
+export interface CheckEligibilityResponse {
+  eligible: boolean;
+  phone_type?: string;
+  reason?: string;
+}
+
+export async function checkHostedEligibility(phoneNumber: string): Promise<CheckEligibilityResponse> {
+  const res = await fetch(`${API_BASE}/admin/messaging/hosted/eligibility`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify({ phone_number: phoneNumber }),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export interface StartHostedOrderRequest {
+  clinic_id: string;
+  phone_number: string;
+  billing_number?: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone?: string;
+}
+
+export interface HostedOrderResponse {
+  id: string;
+  status: string;
+  phone_number: string;
+}
+
+export async function startHostedOrder(data: StartHostedOrderRequest): Promise<HostedOrderResponse> {
+  const res = await fetch(`${API_BASE}/admin/messaging/hosted/orders`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
+export async function uploadLOADocument(orderId: string, file: File): Promise<void> {
+  const token = await getAccessToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('document_type', 'letter_of_authorization');
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (ONBOARDING_TOKEN) headers['X-Onboarding-Token'] = ONBOARDING_TOKEN;
+
+  const res = await fetch(`${API_BASE}/admin/messaging/hosted/orders/${orderId}/documents`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+}
+
+export async function uploadPhoneBill(orderId: string, file: File): Promise<void> {
+  const token = await getAccessToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('document_type', 'phone_bill');
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (ONBOARDING_TOKEN) headers['X-Onboarding-Token'] = ONBOARDING_TOKEN;
+
+  const res = await fetch(`${API_BASE}/admin/messaging/hosted/orders/${orderId}/documents`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
 }
 
 // Conversation Viewer API

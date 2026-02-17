@@ -90,15 +90,30 @@ type AIPersona struct {
 
 // Config holds clinic-specific configuration.
 type Config struct {
-	OrgID                  string        `json:"org_id"`
-	Name                   string        `json:"name"`
-	Email                  string        `json:"email,omitempty"`
-	Phone                  string        `json:"phone,omitempty"`
-	Address                string        `json:"address,omitempty"`
-	City                   string        `json:"city,omitempty"`
-	State                  string        `json:"state,omitempty"`
-	ZipCode                string        `json:"zip_code,omitempty"`
-	WebsiteURL             string        `json:"website_url,omitempty"`
+	OrgID string `json:"org_id"`
+	Name  string `json:"name"`
+	// LegalName is the business name exactly as it appears on IRS filings.
+	// Required for 10DLC brand registration. May differ from the DBA/display Name.
+	LegalName string `json:"legal_name,omitempty"`
+	// EIN is the Employer Identification Number for 10DLC registration.
+	EIN        string `json:"ein,omitempty"`
+	Email      string `json:"email,omitempty"`
+	Phone      string `json:"phone,omitempty"`
+	Address    string `json:"address,omitempty"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"state,omitempty"`
+	ZipCode    string `json:"zip_code,omitempty"`
+	WebsiteURL string `json:"website_url,omitempty"`
+	// SMSPhoneNumber is the clinic's phone number used for SMS (may differ from main phone).
+	SMSPhoneNumber string `json:"sms_phone_number,omitempty"`
+	// SMSPhoneType is "landline", "voip", or "cell" — determines LOA eligibility.
+	SMSPhoneType string `json:"sms_phone_type,omitempty"`
+	// LOAStatus tracks the Letter of Authorization status: "not_started", "pending", "approved", "rejected".
+	LOAStatus string `json:"loa_status,omitempty"`
+	// LOAOrderID is the Telnyx hosted messaging order ID for LOA tracking.
+	LOAOrderID string `json:"loa_order_id,omitempty"`
+	// TenDLCStatus tracks overall 10DLC registration: "not_started", "brand_pending", "campaign_pending", "active", "rejected".
+	TenDLCStatus           string        `json:"ten_dlc_status,omitempty"`
 	Timezone               string        `json:"timezone"` // e.g., "America/New_York"
 	ClinicInfoConfirmed    bool          `json:"clinic_info_confirmed"`
 	BusinessHoursConfirmed bool          `json:"business_hours_confirmed"`

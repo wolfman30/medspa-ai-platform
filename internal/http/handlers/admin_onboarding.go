@@ -52,6 +52,8 @@ func NewAdminOnboardingHandler(cfg AdminOnboardingConfig) *AdminOnboardingHandle
 // CreateClinicRequest is the request body for creating a new clinic.
 type CreateClinicRequest struct {
 	Name       string `json:"name"`
+	LegalName  string `json:"legal_name,omitempty"`
+	EIN        string `json:"ein,omitempty"`
 	Email      string `json:"email,omitempty"`
 	Phone      string `json:"phone,omitempty"`
 	Address    string `json:"address,omitempty"`
@@ -113,6 +115,12 @@ func (h *AdminOnboardingHandler) CreateClinic(w http.ResponseWriter, r *http.Req
 	}
 	if req.WebsiteURL != "" {
 		cfg.WebsiteURL = strings.TrimSpace(req.WebsiteURL)
+	}
+	if req.LegalName != "" {
+		cfg.LegalName = strings.TrimSpace(req.LegalName)
+	}
+	if req.EIN != "" {
+		cfg.EIN = strings.TrimSpace(req.EIN)
 	}
 	cfg.ClinicInfoConfirmed = true
 

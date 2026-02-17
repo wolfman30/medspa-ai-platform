@@ -5,5 +5,6 @@ export { ServicesForm } from './ServicesForm';
 export { PaymentSetup } from './PaymentSetup';
 export { ContactInfoForm } from './ContactInfoForm';
 export { SMSSetup } from './SMSSetup';
+export { LOASetup } from './LOASetup';
 export { CampaignRegistration } from './CampaignRegistration';
 export { OnboardingWizard } from './OnboardingWizard';

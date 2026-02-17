@@ -5,6 +5,8 @@ import { BusinessHoursForm, type BusinessHoursFormData } from './BusinessHoursFo
 import { ServicesForm } from './ServicesForm';
 import { PaymentSetup } from './PaymentSetup';
 import { ContactInfoForm, type ContactInfoFormData } from './ContactInfoForm';
+import { LOASetup } from './LOASetup';
+import { CampaignRegistration } from './CampaignRegistration';
 import {
   createClinic,
   getClinicConfig,
@@ -25,6 +27,8 @@ const STEPS = [
   { id: 'services', name: 'Services' },
   { id: 'payments', name: 'Payments' },
   { id: 'contact', name: 'Contact Info' },
+  { id: 'sms', name: 'SMS Setup' },
+  { id: 'campaign', name: '10DLC' },
 ];
 
 interface OnboardingState {
@@ -539,6 +543,29 @@ export function OnboardingWizard({ orgId: orgIdProp, onComplete }: OnboardingWiz
               defaultValues={state.contactInfo || undefined}
               onSubmit={handleContactSubmit}
               onBack={goBack}
+            />
+          )}
+
+          {state.currentStep === 5 && state.orgId && (
+            <LOASetup
+              orgId={state.orgId}
+              clinicName={state.clinicInfo?.name || ''}
+              contactName={state.clinicInfo?.name || ''}
+              contactEmail={state.contactInfo?.emailRecipients?.[0] || state.clinicInfo?.email || ''}
+              contactPhone={state.clinicInfo?.phone || ''}
+              onBack={goBack}
+              onComplete={goNext}
+            />
+          )}
+
+          {state.currentStep === 6 && state.orgId && (
+            <CampaignRegistration
+              orgId={state.orgId}
+              onBack={goBack}
+              onComplete={() => {
+                // Final step complete
+                if (onComplete) onComplete();
+              }}
             />
           )}
         </div>

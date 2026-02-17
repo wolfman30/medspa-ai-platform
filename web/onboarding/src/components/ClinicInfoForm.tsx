@@ -5,6 +5,8 @@ import { z } from 'zod';
 
 const clinicSchema = z.object({
   name: z.string().min(2, 'Clinic name is required'),
+  legalName: z.string().optional(),
+  ein: z.string().optional(),
   website: z.string().optional(),
   email: z.string().email('Valid email required'),
   phone: z.string().min(10, 'Phone number required'),
@@ -100,6 +102,40 @@ export function ClinicInfoForm({ defaultValues, onSubmit, onBack, onPrefill }: P
           />
           {errors.name && (
             <p className="mt-2 text-sm font-medium text-red-700">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="sm:col-span-2">
+          <label htmlFor="legalName" className="ui-label">
+            Legal Business Name
+            <span className="ml-1 text-xs font-normal text-gray-500">(as it appears on IRS filings — needed for SMS registration)</span>
+          </label>
+          <input
+            type="text"
+            id="legalName"
+            {...register('legalName')}
+            className="ui-input mt-2"
+            placeholder="Same as clinic name if identical"
+          />
+          {errors.legalName && (
+            <p className="mt-2 text-sm font-medium text-red-700">{errors.legalName.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="ein" className="ui-label">
+            EIN (Employer Identification Number)
+            <span className="ml-1 text-xs font-normal text-gray-500">(needed for SMS registration)</span>
+          </label>
+          <input
+            type="text"
+            id="ein"
+            {...register('ein')}
+            className="ui-input mt-2"
+            placeholder="XX-XXXXXXX"
+          />
+          {errors.ein && (
+            <p className="mt-2 text-sm font-medium text-red-700">{errors.ein.message}</p>
           )}
         </div>
 
