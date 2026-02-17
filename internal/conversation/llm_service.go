@@ -3792,6 +3792,18 @@ func isCommonWord(word string) bool {
 		"botox": true, "filler": true, "facial": true, "laser": true,
 		"consultation": true, "treatment": true, "service": true,
 		"existing": true, "returning": true, "patient": true, "calling": true, "texting": true,
+		"in": true, "on": true, "at": true, "to": true, "of": true, "is": true, "it": true,
+		"an": true, "as": true, "be": true, "by": true, "do": true, "if": true, "or": true,
+		"so": true, "up": true, "we": true, "me": true, "my": true, "he": true,
+		"weight": true, "loss": true, "skin": true, "body": true, "face": true, "lip": true,
+		"hair": true, "nail": true, "peel": true, "tox": true,
+		"about": true, "with": true, "from": true, "this": true, "that": true, "what": true,
+		"when": true, "your": true, "some": true, "been": true, "were": true, "them": true,
+		"then": true, "than": true, "also": true, "very": true, "more": true, "much": true,
+		"here": true, "there": true, "where": true, "which": true, "their": true,
+		"would": true, "could": true, "should": true, "will": true,
+		"inquiring": true, "writing": true, "reaching": true, "contacting": true,
+		"wondering": true, "asking": true, "checking": true, "getting": true,
 	}
 	return common[strings.ToLower(word)]
 }
