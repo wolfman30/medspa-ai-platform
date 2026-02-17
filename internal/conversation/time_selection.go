@@ -1290,10 +1290,16 @@ func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, 
 		return false
 	}
 
-	// If the service has multiple providers, must have provider preference
-	if cfg != nil && cfg.ServiceNeedsProviderPreference(prefs.ServiceInterest) && prefs.ProviderPreference == "" {
-		log.Printf("[DEBUG] ShouldFetchAvailability: service %q needs provider preference (multiple providers)", prefs.ServiceInterest)
-		return false
+	// If the service has multiple providers, must have provider preference.
+	// BUT: skip this check if the service has variants (in-person/virtual) —
+	// the variant question will be asked first during availability fetch,
+	// and the resolved variant may only have 1 provider.
+	if cfg != nil && prefs.ProviderPreference == "" {
+		hasVariants := len(cfg.GetServiceVariants(prefs.ServiceInterest)) > 0
+		if !hasVariants && cfg.ServiceNeedsProviderPreference(prefs.ServiceInterest) {
+			log.Printf("[DEBUG] ShouldFetchAvailability: service %q needs provider preference (multiple providers)", prefs.ServiceInterest)
+			return false
+		}
 	}
 
 	// Email is collected on the Moxie booking page, not via SMS
