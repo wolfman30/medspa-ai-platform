@@ -130,6 +130,13 @@ type Config struct {
 	// Keys are normalized (lowercased). Values are the search term used by the scraper.
 	ServiceAliases map[string]string `json:"service_aliases,omitempty"`
 
+	// ServiceVariants maps a generic service name to its delivery variants.
+	// When a patient requests a service that has variants (e.g. "weight loss"
+	// has "in-person" and "virtual"), the AI asks which they prefer before
+	// fetching availability. Keys are normalized (lowercased).
+	// Example: {"weight loss": ["Weight Loss Consultation - In Person", "Weight Loss Consultation - Virtual"]}
+	ServiceVariants map[string][]string `json:"service_variants,omitempty"`
+
 	// BookingPolicies are shown to the patient BEFORE the payment link so they
 	// give informed consent (e.g., 24-hour cancellation, no-show fee).
 	// Each string is sent as a separate line in the pre-payment SMS.
@@ -243,6 +250,20 @@ func (c *Config) ResolveServiceName(service string) string {
 		}
 	}
 	return service
+}
+
+// GetServiceVariants returns the delivery variants for a service, if any.
+// For example, "weight loss" might return ["Weight Loss Consultation - In Person", "Weight Loss Consultation - Virtual"].
+// Returns nil if the service has no variants configured.
+func (c *Config) GetServiceVariants(service string) []string {
+	if c == nil || len(c.ServiceVariants) == 0 {
+		return nil
+	}
+	key := normalizeServiceKey(service)
+	if variants, ok := c.ServiceVariants[key]; ok && len(variants) > 1 {
+		return variants
+	}
+	return nil
 }
 
 // UsesMoxieBooking returns true if the clinic is configured to use Moxie for booking.

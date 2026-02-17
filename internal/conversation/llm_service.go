@@ -1831,6 +1831,81 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			prefs, _ := extractPreferences(history)
 			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
+			// SERVICE VARIANT CHECK: If the service has delivery variants (e.g. in-person vs virtual),
+			// ask the patient which they prefer before fetching availability.
+			if clinicCfg != nil {
+				variants := clinicCfg.GetServiceVariants(prefs.ServiceInterest)
+				if len(variants) > 0 {
+					// Check if the patient already specified a variant in recent messages
+					variantResolved := false
+					msgLower := strings.ToLower(rawMessage)
+					for _, v := range variants {
+						vLower := strings.ToLower(v)
+						// Check if any variant-specific keyword is in the message
+						if strings.Contains(vLower, "in person") && (strings.Contains(msgLower, "in person") || strings.Contains(msgLower, "in-person")) {
+							variantResolved = true
+							break
+						}
+						if strings.Contains(vLower, "virtual") && (strings.Contains(msgLower, "virtual") || strings.Contains(msgLower, "telehealth") || strings.Contains(msgLower, "online") || strings.Contains(msgLower, "video")) {
+							variantResolved = true
+							break
+						}
+					}
+					// Also check full conversation history for variant selection
+					if !variantResolved {
+						for i := len(history) - 1; i >= 0 && i >= len(history)-6; i-- {
+							if history[i].Role == ChatRoleUser {
+								hLower := strings.ToLower(history[i].Content)
+								if strings.Contains(hLower, "in person") || strings.Contains(hLower, "in-person") ||
+									strings.Contains(hLower, "virtual") || strings.Contains(hLower, "telehealth") ||
+									strings.Contains(hLower, "online") || strings.Contains(hLower, "video") {
+									variantResolved = true
+									break
+								}
+							}
+						}
+					}
+					if !variantResolved {
+						// Build clarifying question
+						variantNames := make([]string, len(variants))
+						for i, v := range variants {
+							// Extract the variant qualifier (e.g. "In Person" from "Weight Loss Consultation - In Person")
+							parts := strings.SplitN(v, " - ", 2)
+							if len(parts) == 2 {
+								variantNames[i] = parts[1]
+							} else {
+								variantNames[i] = v
+							}
+						}
+						clarifyMsg := fmt.Sprintf("Would you prefer an %s or %s %s consultation?",
+							strings.ToLower(variantNames[0]), strings.ToLower(variantNames[1]),
+							strings.ToLower(prefs.ServiceInterest))
+
+						s.logger.Info("service variant clarification needed",
+							"conversation_id", req.ConversationID,
+							"service", prefs.ServiceInterest,
+							"variants", variants,
+						)
+
+						// Replace the LLM reply with our clarifying question
+						for i := len(history) - 1; i >= 0; i-- {
+							if history[i].Role == ChatRoleAssistant {
+								history[i].Content = clarifyMsg
+								break
+							}
+						}
+						if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+							s.logger.Warn("failed to save history after variant question", "error", err)
+						}
+						return &Response{
+							ConversationID: req.ConversationID,
+							Message:        clarifyMsg,
+							Timestamp:      time.Now().UTC(),
+						}, nil
+					}
+				}
+			}
+
 			// Resolve patient-facing service name to booking-platform search term
 			// (e.g. "Botox" → "Tox" on Moxie where the service is "Tox (Botox, Jeuveau, ...)")
 			scraperServiceName := prefs.ServiceInterest
