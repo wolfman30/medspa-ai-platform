@@ -264,6 +264,16 @@ func (c *Config) ResolveServiceName(service string) string {
 			return alias
 		}
 	}
+	// Fuzzy match: check if the service contains an alias key or vice versa
+	// e.g. "weight loss consultation" contains "weight loss"
+	for aliasKey, alias := range c.ServiceAliases {
+		if alias == "" {
+			continue
+		}
+		if strings.Contains(key, aliasKey) || strings.Contains(aliasKey, key) {
+			return alias
+		}
+	}
 	return service
 }
 
@@ -275,8 +285,19 @@ func (c *Config) GetServiceVariants(service string) []string {
 		return nil
 	}
 	key := normalizeServiceKey(service)
+	// Exact match first
 	if variants, ok := c.ServiceVariants[key]; ok && len(variants) > 1 {
 		return variants
+	}
+	// Fuzzy match: check if the service contains a variant key or vice versa
+	// e.g. "weight loss consultation" contains "weight loss"
+	for variantKey, variants := range c.ServiceVariants {
+		if len(variants) <= 1 {
+			continue
+		}
+		if strings.Contains(key, variantKey) || strings.Contains(variantKey, key) {
+			return variants
+		}
 	}
 	return nil
 }
