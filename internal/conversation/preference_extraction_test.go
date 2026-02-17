@@ -59,6 +59,8 @@ func (m *mockLeadsRepo) UpdateEmail(ctx context.Context, leadID string, email st
 	return nil
 }
 
+func (m *mockLeadsRepo) ClearSelectedAppointment(context.Context, string) error { return nil }
+
 func TestExtractAndSavePreferences(t *testing.T) {
 	tests := []struct {
 		name          string

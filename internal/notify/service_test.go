@@ -115,6 +115,8 @@ func (m *mockLeadsRepo) UpdateEmail(ctx context.Context, leadID string, email st
 	return nil
 }
 
+func (m *mockLeadsRepo) ClearSelectedAppointment(context.Context, string) error { return nil }
+
 // Tests
 
 func TestService_NotifyPaymentSuccess_NilClinicStore(t *testing.T) {

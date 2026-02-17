@@ -102,6 +102,11 @@ func (s *historyStore) SaveTimeSelectionState(ctx context.Context, conversationI
 	return nil
 }
 
+// ClearTimeSelectionState removes the time selection state for a conversation.
+func (s *historyStore) ClearTimeSelectionState(ctx context.Context, conversationID string) error {
+	return s.SaveTimeSelectionState(ctx, conversationID, nil)
+}
+
 // LoadTimeSelectionState retrieves the time selection state for a conversation.
 func (s *historyStore) LoadTimeSelectionState(ctx context.Context, conversationID string) (*TimeSelectionState, error) {
 	ctx, span := s.tracer.Start(ctx, "conversation.load_time_selection")

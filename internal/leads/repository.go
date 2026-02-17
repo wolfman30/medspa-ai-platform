@@ -56,6 +56,7 @@ type Repository interface {
 	UpdateDepositStatus(ctx context.Context, leadID string, status string, priority string) error
 	UpdateBookingSession(ctx context.Context, leadID string, update BookingSessionUpdate) error
 	UpdateEmail(ctx context.Context, leadID string, email string) error
+	ClearSelectedAppointment(ctx context.Context, leadID string) error
 	ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error)
 }
 
@@ -244,6 +245,19 @@ func (r *InMemoryRepository) UpdateEmail(ctx context.Context, leadID string, ema
 		return ErrLeadNotFound
 	}
 	lead.Email = email
+	return nil
+}
+
+// ClearSelectedAppointment resets selected datetime and service on a lead.
+func (r *InMemoryRepository) ClearSelectedAppointment(ctx context.Context, leadID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lead, ok := r.leads[leadID]
+	if !ok {
+		return ErrLeadNotFound
+	}
+	lead.SelectedDateTime = nil
+	lead.SelectedService = ""
 	return nil
 }
 

@@ -209,6 +209,8 @@ func (s *stubLeadsRepo) UpdateEmail(context.Context, string, string) error {
 	return nil
 }
 
+func (s *stubLeadsRepo) ClearSelectedAppointment(context.Context, string) error { return nil }
+
 type stubPaymentRepo struct {
 	lastBookingIntent uuid.UUID
 	lastScheduled     *time.Time

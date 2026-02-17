@@ -329,6 +329,17 @@ func (r *PostgresRepository) UpdateSelectedAppointment(ctx context.Context, lead
 	return nil
 }
 
+// ClearSelectedAppointment resets the selected datetime and service on a lead
+// so a new service booking flow can start fresh.
+func (r *PostgresRepository) ClearSelectedAppointment(ctx context.Context, leadID string) error {
+	query := `UPDATE leads SET selected_datetime = NULL, selected_service = '' WHERE id = $1`
+	_, err := r.pool.Exec(ctx, query, leadID)
+	if err != nil {
+		return fmt.Errorf("leads: clear selected appointment failed: %w", err)
+	}
+	return nil
+}
+
 // ListByOrg retrieves leads for an organization with optional filtering
 func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter ListLeadsFilter) ([]*Lead, error) {
 	// Build query with optional filter

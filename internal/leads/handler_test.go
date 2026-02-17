@@ -154,6 +154,8 @@ func (f failingRepository) UpdateEmail(context.Context, string, string) error {
 	return errors.New("boom")
 }
 
+func (f failingRepository) ClearSelectedAppointment(context.Context, string) error { return nil }
+
 func TestCreateWebLead_RepositoryError(t *testing.T) {
 	logger := logging.Default()
 	handler := NewHandler(failingRepository{}, logger)

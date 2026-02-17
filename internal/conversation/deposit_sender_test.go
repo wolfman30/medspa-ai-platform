@@ -332,6 +332,8 @@ func (s *stubLeadsRepo) UpdateEmail(context.Context, string, string) error {
 	return nil
 }
 
+func (s *stubLeadsRepo) ClearSelectedAppointment(context.Context, string) error { return nil }
+
 // helper to satisfy repository expectations
 // keep compiler happy
 var _ = errors.New

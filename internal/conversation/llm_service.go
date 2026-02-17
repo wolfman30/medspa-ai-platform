@@ -1431,6 +1431,36 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		)
 	}
 
+	// NEW SERVICE DETECTION: If the patient just booked one service (SlotSelected=true)
+	// and is now asking about a DIFFERENT service, reset the time selection state so
+	// the availability flow triggers fresh for the new service.
+	if timeSelectionState != nil && timeSelectionState.SlotSelected && cfg != nil {
+		newService := detectServiceKey(rawMessage, cfg)
+		if newService != "" {
+			oldService := strings.ToLower(timeSelectionState.Service)
+			resolvedNew := strings.ToLower(cfg.ResolveServiceName(newService))
+			resolvedOld := strings.ToLower(cfg.ResolveServiceName(oldService))
+			if resolvedNew != resolvedOld {
+				s.logger.Info("new service detected after previous booking — resetting time selection state",
+					"conversation_id", req.ConversationID,
+					"old_service", timeSelectionState.Service,
+					"new_service", newService,
+				)
+				// Clear time selection state so availability triggers for the new service
+				if err := s.history.ClearTimeSelectionState(ctx, req.ConversationID); err != nil {
+					s.logger.Warn("failed to clear time selection state for new service", "error", err)
+				}
+				timeSelectionState = nil
+				// Clear previously selected datetime/service on the lead
+				if req.LeadID != "" && s.leadsRepo != nil {
+					if uerr := s.leadsRepo.ClearSelectedAppointment(ctx, req.LeadID); uerr != nil {
+						s.logger.Warn("failed to clear selected appointment for new service", "error", uerr)
+					}
+				}
+			}
+		}
+	}
+
 	// Handle time selection if user is in that flow
 	var timeSelectionResponse *TimeSelectionResponse
 	var selectedSlot *PresentedSlot

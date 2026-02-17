@@ -474,6 +474,10 @@ func (s *stubLeadRepo) UpdateEmail(context.Context, string, string) error {
 	return nil
 }
 
+func (s *stubLeadRepo) ClearSelectedAppointment(context.Context, string) error {
+	return nil
+}
+
 type stubProcessedTracker struct {
 	already bool
 	marked  bool
