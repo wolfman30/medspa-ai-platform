@@ -9,6 +9,7 @@ import { DepositDetail } from './components/DepositDetail';
 import { SettingsPage } from './components/SettingsPage';
 import { KnowledgeSettings } from './components/KnowledgeSettings';
 import { ProspectTracker } from './components/ProspectTracker';
+import { CEODashboard } from './components/CEODashboard';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -21,6 +22,7 @@ import {
 type OnboardingDecision = 'idle' | 'loading' | 'ready' | 'not_ready';
 type AppView =
   | 'dashboard'
+  | 'ceo-dashboard'
   | 'conversations'
   | 'conversation-detail'
   | 'deposits'
@@ -171,7 +173,7 @@ function AuthenticatedApp() {
   const [decision, setDecision] = useState<OnboardingDecision>('idle');
   const [checkedOrgId, setCheckedOrgId] = useState<string | null>(null);
   const [statusRefresh, setStatusRefresh] = useState(0);
-  const [view, setView] = useState<AppView>('dashboard');
+  const [view, setView] = useState<AppView>('ceo-dashboard');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null);
   const [adminOrgId, setAdminOrgId] = useState<string>(KNOWN_ORGS[0]?.id || '');
@@ -357,6 +359,15 @@ function AuthenticatedApp() {
                     Dashboard
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('ceo-dashboard')}
+                    aria-current={view === 'ceo-dashboard' ? 'page' : undefined}
+                    className={view === 'ceo-dashboard' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    CEO Dashboard
+                  </button>
+                )}
                 <button
                   onClick={() => { setView('conversations'); setSelectedConversationId(null); }}
                   aria-current={view === 'conversations' || view === 'conversation-detail' ? 'page' : undefined}
@@ -405,7 +416,9 @@ function AuthenticatedApp() {
       )}
       {/* Admin view - direct access to conversations and deposits */}
       {isAdmin && orgId ? (
-        view === 'prospects' ? (
+        view === 'ceo-dashboard' ? (
+          <CEODashboard />
+        ) : view === 'prospects' ? (
           <ProspectTracker />
         ) : view === 'conversation-detail' && selectedConversationId ? (
           <ConversationDetail
