@@ -47,7 +47,7 @@ const (
 	testPhone    = "+15005550002"
 	clinicPhone  = "+14407448197"
 	orgID        = "d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599"
-	convID       = "sms:d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599:5005550002"
+	convID       = "sms:d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599:15005550002"
 	maxWaitSecs  = 45
 	pollInterval = 2 * time.Second
 )

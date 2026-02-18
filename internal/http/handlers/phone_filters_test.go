@@ -13,12 +13,12 @@ func TestPhoneDigitsCandidates(t *testing.T) {
 	}{
 		{
 			name:  "ten digits adds leading one",
-			input: "(937) 896-2713",
+			input: "(500) 555-0001",
 			want:  []string{"5005550001", "15005550001"},
 		},
 		{
 			name:  "eleven digits adds local variant",
-			input: "+1 937 896 2713",
+			input: "+1 500 555 0001",
 			want:  []string{"15005550001", "5005550001"},
 		},
 		{

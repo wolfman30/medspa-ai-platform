@@ -44,7 +44,7 @@ func TestPortalDashboardHandlerWithConversationTable(t *testing.T) {
 		WithArgs("org-123", start, end, "5005550001", "15005550001").
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(15000))
 
-	req := httptest.NewRequest(http.MethodGet, "/portal/orgs/org-123/dashboard?start=2025-01-01T00:00:00Z&end=2025-01-08T00:00:00Z&phone=(937)%20896-2713", nil)
+	req := httptest.NewRequest(http.MethodGet, "/portal/orgs/org-123/dashboard?start=2025-01-01T00:00:00Z&end=2025-01-08T00:00:00Z&phone=(500)%20555-0001", nil)
 	req = withOrgParam(req, "org-123")
 	rec := httptest.NewRecorder()
 

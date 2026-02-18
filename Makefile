@@ -58,12 +58,14 @@ e2e:
 # Config-driven service tests (all services from clinic config)
 # Usage: make test-services ORG=<orgID> [TIER=1|2|3]
 test-services:
-	ADMIN_JWT_SECRET=REDACTED_JWT_SECRET \
+	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
 	go run scripts/e2e/service_tests.go \
 		--org=$(ORG) \
 		--tier=$(or $(TIER),1) \
-		--secret=REDACTED_JWT_SECRET
+		--secret=$$ADMIN_JWT_SECRET
 
 # Run E2E test with default dev settings
+# Requires: ADMIN_JWT_SECRET env var (see .env.example)
 e2e-dev:
-	ADMIN_JWT_SECRET=REDACTED_JWT_SECRET API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/run_e2e.go
+	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
+	API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/run_e2e.go
