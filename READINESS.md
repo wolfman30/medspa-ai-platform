@@ -2,6 +2,16 @@
 
 Last updated: 2026-02-18
 
+## Automated E2E Test Results (Live Dev API)
+
+**30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)**
+
+### Failures (5 checks across 4 scenarios):
+1. **multi-turn**: Provider preference/email not asked after schedule (LLM ordering)
+2. **service-vocabulary**: "fix my 11s" and "lip flip" not moving to next qualification (LLM service recognition)
+3. **post-procedure**: AI says "that's normal" for post-filler swelling (should defer to provider)
+4. **weight-loss-spam-filter**: "GLP-1" mentioned in response (carrier filter risk)
+
 ## Pre-Operator Testing Checklist (SPEC.md §3b)
 
 **Total: 102 scenarios | ✅ 64 passing | ❌ 0 failing | 🔲 38 untested**
@@ -24,10 +34,15 @@ Last updated: 2026-02-18
 
 ### Hard Blockers for Operator Testing
 
-1. **10DLC Registration** — Unregistered A2P SMS fully blocked since Feb 2025. Need EIN from Andrew. Timeline: ~2-3 weeks after submission.
-2. **A1 (Missed Call → SMS)** — Core feature never tested end-to-end with real phone. Brilliant Aesthetics test showed SMS delivery issues.
-3. **SMS delivery verification** — Need to confirm texts actually arrive on real phones (not just Telnyx delivery webhooks).
-4. **Multi-clinic `from` number wiring** — Must verify correct per-clinic Telnyx number used for outbound SMS.
+1. **A1 (Missed Call → SMS)** — Core feature never tested end-to-end with real phone by a non-Andrew user.
+2. **Multi-clinic `from` number wiring** — Must verify correct per-clinic Telnyx number used for outbound SMS.
+3. **5 E2E test failures** — LLM-level issues with service vocabulary recognition and response quality.
+
+### 10DLC Status
+- **AI Wolf Solutions brand**: Already registered on Telnyx ✅
+- **Forever 22 number (+14407448197)**: Registered under AI Wolf campaign, SMS delivery working ✅
+- **Brilliant Aesthetics number (+13305932634)**: NOT registered under campaign → SMS blocked
+- **New clinic numbers**: Must be added to AI Wolf campaign before SMS works
 
 ### Soft Blockers (Should fix, not deal-breakers)
 
@@ -39,22 +54,24 @@ Last updated: 2026-02-18
 
 ## Readiness: Forever 22 Operator Testing
 
-**Can Brandi/Gale test today? NO**
+**Can Brandi/Gale test today? ALMOST — 95% ready**
 
 ### What works ✅
 - Full booking flow: missed call → AI qualification → Moxie availability → Stripe Checkout → Moxie booking
 - All 46 services configured with aliases
 - Both providers (Brandi Sesock, Gale Tesar) configured
-- Service variants (weight loss in-person/virtual)
+- Service variants (weight loss in-person/virtual) — now with LLM-powered classification
 - Booking policies (deposit, age, terms) shown pre-payment
 - Prompt injection defense (3-layer)
 - TCPA compliance (STOP/HELP/START)
 - Admin portal: conversations, knowledge editor, Moxie sync
+- **10DLC registered & SMS delivery confirmed** on +14407448197
+- 26/30 E2E scenarios passing (101/106 checks)
 
 ### What's blocking ❌
-1. **10DLC not registered** — SMS will be blocked by carriers. HARD BLOCKER.
-2. **SMS delivery not verified on real phones** — Only webhook confirmations seen.
-3. **Ack messages still double SMS costs** — Root cause known (`internal/messaging/ack.go`), not fixed.
+1. **4 E2E failures** — LLM sometimes doesn't recognize "fix my 11s" or "lip flip" as Botox/lip filler
+2. **Ack messages still double SMS costs** — Root cause known (`internal/messaging/ack.go`), not fixed
+3. **Not tested by a real med spa operator yet** — Only Andrew has tested
 
 ### What would make it better (not blocking)
 - After-hours greeting logic untested (A3/A4)
@@ -65,14 +82,14 @@ Last updated: 2026-02-18
 
 ## Readiness: First Sale
 
-**Can we sell today? NO**
+**Can we sell today? CLOSE — demo-ready, marketing not**
 
 ### Sales Readiness Checklist
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| Working product demo | ⚠️ Partial | Blocked by 10DLC/SMS delivery |
-| 10DLC registered | ❌ | Need EIN from Andrew |
+| Working product demo | ✅ | 440 number works, SMS delivering |
+| 10DLC registered | ✅ | AI Wolf Solutions brand, Forever 22 number active |
 | Website updated | ❌ | 9 issues identified, not fixed |
 | Pricing page | ❌ | $497/mo not on website |
 | Calendly/booking link | ❌ | No way for leads to schedule demo |
@@ -83,20 +100,18 @@ Last updated: 2026-02-18
 
 ### Distance to First Sale
 
-**Estimated: 4-6 weeks**
+**Estimated: 2-4 weeks**
 
-1. **Week 1-2**: 10DLC registration (after Andrew provides EIN)
-2. **Week 1**: Fix SMS delivery, verify missed call → SMS works, fix website
-3. **Week 2-3**: Operator testing with Brandi/Gale at Forever 22
-4. **Week 3-4**: Iterate on feedback, fix issues
-5. **Week 4-6**: Sales outreach to configured clinics, close first deal
+1. **This week**: Fix 4 E2E failures, fix website, remove ack messages
+2. **Week 1-2**: Operator testing with Brandi/Gale at Forever 22
+3. **Week 2-3**: Iterate on feedback, fix issues
+4. **Week 3-4**: Close deal or expand outreach
 
 ### Critical Path (shortest path to first sale)
-1. Andrew provides EIN → 10DLC registration starts (2-3 weeks)
-2. Fix SMS delivery issue (1-2 days)
-3. Remove/gate ack messages (1 day)
-4. Fix website (2-3 days)
-5. Test with Brandi → iterate → close
+1. Fix remaining 4 E2E test failures (1-2 days)
+2. Fix website + add pricing + Calendly (2-3 days)
+3. Remove ack messages (1 day)
+4. Brandi tests → iterate → close
 
 ---
 
