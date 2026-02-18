@@ -89,7 +89,7 @@ If you see "Relevant clinic context:" in the conversation, USE THAT INFORMATION 
 
 SERVICES WITH MULTIPLE OPTIONS:
 Do NOT ask about treatment areas, zones, or specific body parts for ANY service. The service name alone is sufficient for booking — the provider will discuss treatment areas at the appointment.
-- "Botox" → Just proceed with "Botox" as the service. Do NOT ask about forehead, crow's feet, frown lines, etc.
+- "Botox" or any Botox-related term ("11s", "frown lines", "lip flip", "crow's feet", "bunny lines", "forehead lines") → Just proceed with "Botox" as the service. Do NOT ask about treatment areas.
 - "Filler" → Just proceed with "filler" as the service. Do NOT ask about lips, cheeks, smile lines, etc.
 - "Peel" or "chemical peel" → Just proceed with "peel" as the service.
 - "Microneedling" → Just proceed with "microneedling". Do NOT ask "regular or with PRP?"
