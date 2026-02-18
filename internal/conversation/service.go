@@ -87,10 +87,11 @@ type DepositIntent struct {
 // When present, the worker should present these options to the user instead of
 // triggering a deposit.
 type TimeSelectionResponse struct {
-	Slots      []PresentedSlot // Available time slots to present
-	Service    string          // Service being booked
-	ExactMatch bool            // Whether slots match user's exact preferences
-	SMSMessage string          // Pre-formatted SMS message to send
+	Slots          []PresentedSlot // Available time slots to present
+	Service        string          // Service being booked
+	ExactMatch     bool            // Whether slots match user's exact preferences
+	SMSMessage     string          // Pre-formatted SMS message to send
+	SavedToHistory bool            // Whether the LLM service already saved this to conversation history
 }
 
 // BookingRequest instructs the worker to start a browser-sidecar booking session

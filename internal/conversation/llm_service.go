@@ -1059,10 +1059,11 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 				s.logger.Error("StartConversation: failed to save time selection state", "error", err)
 			}
 			resp.TimeSelectionResponse = &TimeSelectionResponse{
-				Slots:      result.Slots,
-				Service:    prefs.ServiceInterest,
-				ExactMatch: result.ExactMatch,
-				SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
+				Slots:          result.Slots,
+				Service:        prefs.ServiceInterest,
+				ExactMatch:     result.ExactMatch,
+				SMSMessage:     FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
+				SavedToHistory: true,
 			}
 
 			// Replace the LLM reply in history with what we're actually sending
@@ -2064,6 +2065,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
 			s.logger.Warn("failed to re-save history after time selection", "error", err)
 		}
+		timeSelectionResponse.SavedToHistory = true
 	}
 
 	// For Moxie clinics: always clear Square deposit intent.
@@ -3266,14 +3268,17 @@ func matchProviderNameInText(userMessages string, history []ChatMessage) string 
 						segment := msg.Content[idx+len(pattern):]
 						// Split on " and " or ", "
 						segment = strings.ReplaceAll(segment, " and ", ", ")
-						// Take until end of sentence
+						// Take until end of sentence or " - " delimiter (structured knowledge format)
+						if dashIdx := strings.Index(segment, " - "); dashIdx >= 0 {
+							segment = segment[:dashIdx]
+						}
 						if dotIdx := strings.IndexAny(segment, ".!?\n"); dotIdx >= 0 {
 							segment = segment[:dotIdx]
 						}
 						parts := strings.Split(segment, ", ")
 						for _, p := range parts {
 							name := strings.TrimSpace(p)
-							if name != "" {
+							if name != "" && looksLikePersonName(name) {
 								providerNames = append(providerNames, name)
 							}
 						}
@@ -3291,6 +3296,32 @@ func matchProviderNameInText(userMessages string, history []ChatMessage) string 
 		}
 	}
 	return ""
+}
+
+// looksLikePersonName filters out extracted "provider names" that are actually
+// service names or other non-person text (e.g., "lip augmentation", "chemical peel").
+func looksLikePersonName(name string) bool {
+	// Must have at least 2 words (first + last name)
+	words := strings.Fields(name)
+	if len(words) < 2 || len(words) > 4 {
+		return false
+	}
+	// Reject if any word is a common service/medical term
+	serviceWords := map[string]bool{
+		"lip": true, "filler": true, "fillers": true, "augmentation": true,
+		"injection": true, "botox": true, "peel": true, "laser": true,
+		"hair": true, "removal": true, "weight": true, "loss": true,
+		"skin": true, "facial": true, "microneedling": true, "tixel": true,
+		"chemical": true, "dermal": true, "consultation": true, "treatment": true,
+		"prp": true, "b12": true, "vitamin": true, "iv": true, "therapy": true,
+		"enhancement": true, "rejuvenation": true, "sculpting": true,
+	}
+	for _, w := range words {
+		if serviceWords[strings.ToLower(w)] {
+			return false
+		}
+	}
+	return true
 }
 
 // providerPreferenceFromReply checks if the assistant asked about provider preference

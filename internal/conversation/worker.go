@@ -868,10 +868,10 @@ func (w *Worker) handleTimeSelectionResponse(ctx context.Context, msg MessageReq
 			_ = w.convStore.AppendMessage(ctx, msg.ConversationID, timeSelMsg)
 		}
 
-		// CRITICAL: Also save the time options to LLM conversation history.
+		// Save time options to LLM conversation history if not already saved by the LLM service.
 		// Without this, the LLM won't know what times were presented when the
 		// patient replies with a slot number (e.g. "6"), causing confusion.
-		if w.processor != nil {
+		if !tsr.SavedToHistory && w.processor != nil {
 			if histStore, ok := w.processor.(interface {
 				AppendAssistantMessage(ctx context.Context, conversationID, message string) error
 			}); ok {

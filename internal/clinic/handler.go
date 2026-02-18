@@ -60,34 +60,35 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateConfigRequest is the request body for updating clinic config.
 type UpdateConfigRequest struct {
-	Name                      string             `json:"name,omitempty"`
-	Email                     string             `json:"email,omitempty"`
-	Phone                     string             `json:"phone,omitempty"`
-	Address                   string             `json:"address,omitempty"`
-	City                      string             `json:"city,omitempty"`
-	State                     string             `json:"state,omitempty"`
-	ZipCode                   string             `json:"zip_code,omitempty"`
-	WebsiteURL                string             `json:"website_url,omitempty"`
-	Timezone                  string             `json:"timezone,omitempty"`
-	ClinicInfoConfirmed       *bool              `json:"clinic_info_confirmed,omitempty"`
-	BusinessHoursConfirmed    *bool              `json:"business_hours_confirmed,omitempty"`
-	ServicesConfirmed         *bool              `json:"services_confirmed,omitempty"`
-	ContactInfoConfirmed      *bool              `json:"contact_info_confirmed,omitempty"`
-	BusinessHours             *BusinessHours     `json:"business_hours,omitempty"`
-	CallbackSLAHours          *int               `json:"callback_sla_hours,omitempty"`
-	DepositAmountCents        *int               `json:"deposit_amount_cents,omitempty"`
-	Services                  []string           `json:"services,omitempty"`
-	BookingURL                string             `json:"booking_url,omitempty"`
-	BookingPlatform           string             `json:"booking_platform,omitempty"`
-	Notifications             *NotificationPrefs `json:"notifications,omitempty"`
-	AIPersona                 *AIPersona         `json:"ai_persona,omitempty"`
-	ServiceAliases            map[string]string  `json:"service_aliases,omitempty"`
-	MoxieConfig               *MoxieConfig       `json:"moxie_config,omitempty"`
-	PaymentProvider           string             `json:"payment_provider,omitempty"`
-	StripeAccountID           string             `json:"stripe_account_id,omitempty"`
-	BookingPolicies           []string           `json:"booking_policies,omitempty"`
-	ServicePriceText          map[string]string  `json:"service_price_text,omitempty"`
-	ServiceDepositAmountCents map[string]int     `json:"service_deposit_amount_cents,omitempty"`
+	Name                      string              `json:"name,omitempty"`
+	Email                     string              `json:"email,omitempty"`
+	Phone                     string              `json:"phone,omitempty"`
+	Address                   string              `json:"address,omitempty"`
+	City                      string              `json:"city,omitempty"`
+	State                     string              `json:"state,omitempty"`
+	ZipCode                   string              `json:"zip_code,omitempty"`
+	WebsiteURL                string              `json:"website_url,omitempty"`
+	Timezone                  string              `json:"timezone,omitempty"`
+	ClinicInfoConfirmed       *bool               `json:"clinic_info_confirmed,omitempty"`
+	BusinessHoursConfirmed    *bool               `json:"business_hours_confirmed,omitempty"`
+	ServicesConfirmed         *bool               `json:"services_confirmed,omitempty"`
+	ContactInfoConfirmed      *bool               `json:"contact_info_confirmed,omitempty"`
+	BusinessHours             *BusinessHours      `json:"business_hours,omitempty"`
+	CallbackSLAHours          *int                `json:"callback_sla_hours,omitempty"`
+	DepositAmountCents        *int                `json:"deposit_amount_cents,omitempty"`
+	Services                  []string            `json:"services,omitempty"`
+	BookingURL                string              `json:"booking_url,omitempty"`
+	BookingPlatform           string              `json:"booking_platform,omitempty"`
+	Notifications             *NotificationPrefs  `json:"notifications,omitempty"`
+	AIPersona                 *AIPersona          `json:"ai_persona,omitempty"`
+	ServiceAliases            map[string]string   `json:"service_aliases,omitempty"`
+	MoxieConfig               *MoxieConfig        `json:"moxie_config,omitempty"`
+	PaymentProvider           string              `json:"payment_provider,omitempty"`
+	StripeAccountID           string              `json:"stripe_account_id,omitempty"`
+	BookingPolicies           []string            `json:"booking_policies,omitempty"`
+	ServicePriceText          map[string]string   `json:"service_price_text,omitempty"`
+	ServiceDepositAmountCents map[string]int      `json:"service_deposit_amount_cents,omitempty"`
+	ServiceVariants           map[string][]string `json:"service_variants,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -207,6 +208,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ServiceDepositAmountCents != nil {
 		cfg.ServiceDepositAmountCents = req.ServiceDepositAmountCents
+	}
+	if req.ServiceVariants != nil {
+		cfg.ServiceVariants = req.ServiceVariants
 	}
 
 	// Save updated config

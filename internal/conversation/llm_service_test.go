@@ -1750,3 +1750,30 @@ func TestMoxieTimeSelection_EmailFallbackFromConversation(t *testing.T) {
 		t.Errorf("Email = %q, want andy@example.com", resp.BookingRequest.Email)
 	}
 }
+
+func TestLooksLikePersonName(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect bool
+	}{
+		{"valid provider", "Brandi Sesock", true},
+		{"valid provider 2", "Gale Tesar", true},
+		{"service term - lip augmentation", "lip augmentation", false},
+		{"service term - chemical peel", "chemical peel", false},
+		{"service term - laser removal", "laser removal", false},
+		{"single word", "Brandi", false},
+		{"too many words", "Dr John Smith Jr MD", false},
+		{"weight loss", "weight loss", false},
+		{"dermal filler", "dermal filler", false},
+		{"lip enhancement", "lip enhancement", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := looksLikePersonName(tt.input)
+			if got != tt.expect {
+				t.Errorf("looksLikePersonName(%q) = %v, want %v", tt.input, got, tt.expect)
+			}
+		})
+	}
+}
