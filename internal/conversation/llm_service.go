@@ -1021,6 +1021,29 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	browserReady := s.browser != nil && s.browser.IsConfigured()
 	if (moxieAPIReady || browserReady) && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history)
+
+		// SERVICE VARIANT CHECK — same logic as HandleMessage path
+		msgs := recentUserMessages(history, "", 6)
+		resolved, question := ResolveServiceVariant(startCfg, prefs.ServiceInterest, msgs)
+		if question != "" {
+			s.logger.Info("StartConversation: service variant clarification needed",
+				"conversation_id", conversationID,
+				"service", prefs.ServiceInterest,
+			)
+			for i := len(history) - 1; i >= 0; i-- {
+				if history[i].Role == ChatRoleAssistant {
+					history[i].Content = question
+					break
+				}
+			}
+			if err := s.history.Save(ctx, conversationID, history); err != nil {
+				s.logger.Warn("failed to save history after variant question", "error", err)
+			}
+			resp.Message = question
+			return resp, nil
+		}
+		prefs.ServiceInterest = resolved
+
 		timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 		scraperServiceName := prefs.ServiceInterest
 		if startCfg != nil {
@@ -1832,101 +1855,41 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		if bookingURL != "" {
 			// Extract service and time preferences
 			prefs, _ := extractPreferences(history)
-			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
 			// SERVICE VARIANT CHECK: If the service has delivery variants (e.g. in-person vs virtual),
 			// ask the patient which they prefer before fetching availability.
-			if clinicCfg != nil {
-				variants := clinicCfg.GetServiceVariants(prefs.ServiceInterest)
-				if len(variants) > 0 {
-					// Check if the patient already specified a variant in recent messages
-					resolvedVariant := "" // will be set to the specific variant name
-					// Define keyword groups for each variant type
-					inPersonKeywords := []string{"in person", "in-person", "come in", "office", "clinic"}
-					virtualKeywords := []string{"virtual", "telehealth", "online", "video", "zoom", "remote"}
-
-					// Check current message and recent history for variant keywords
-					messagesToCheck := []string{strings.ToLower(rawMessage)}
-					for i := len(history) - 1; i >= 0 && i >= len(history)-6; i-- {
-						if history[i].Role == ChatRoleUser {
-							messagesToCheck = append(messagesToCheck, strings.ToLower(history[i].Content))
-						}
+			msgs := recentUserMessages(history, rawMessage, 6)
+			resolved, question := ResolveServiceVariant(clinicCfg, prefs.ServiceInterest, msgs)
+			if question != "" {
+				s.logger.Info("service variant clarification needed",
+					"conversation_id", req.ConversationID,
+					"service", prefs.ServiceInterest,
+				)
+				for i := len(history) - 1; i >= 0; i-- {
+					if history[i].Role == ChatRoleAssistant {
+						history[i].Content = question
+						break
 					}
-
-					for _, msg := range messagesToCheck {
-						if resolvedVariant != "" {
-							break
-						}
-						for _, v := range variants {
-							vLower := strings.ToLower(v)
-							if strings.Contains(vLower, "in person") {
-								for _, kw := range inPersonKeywords {
-									if strings.Contains(msg, kw) {
-										resolvedVariant = v
-										break
-									}
-								}
-							}
-							if strings.Contains(vLower, "virtual") {
-								for _, kw := range virtualKeywords {
-									if strings.Contains(msg, kw) {
-										resolvedVariant = v
-										break
-									}
-								}
-							}
-							if resolvedVariant != "" {
-								break
-							}
-						}
-					}
-
-					if resolvedVariant == "" {
-						// Build clarifying question
-						variantNames := make([]string, len(variants))
-						for i, v := range variants {
-							parts := strings.SplitN(v, " - ", 2)
-							if len(parts) == 2 {
-								variantNames[i] = parts[1]
-							} else {
-								variantNames[i] = v
-							}
-						}
-						clarifyMsg := fmt.Sprintf("Would you prefer an %s or %s %s consultation?",
-							strings.ToLower(variantNames[0]), strings.ToLower(variantNames[1]),
-							strings.ToLower(prefs.ServiceInterest))
-
-						s.logger.Info("service variant clarification needed",
-							"conversation_id", req.ConversationID,
-							"service", prefs.ServiceInterest,
-							"variants", variants,
-						)
-
-						for i := len(history) - 1; i >= 0; i-- {
-							if history[i].Role == ChatRoleAssistant {
-								history[i].Content = clarifyMsg
-								break
-							}
-						}
-						if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
-							s.logger.Warn("failed to save history after variant question", "error", err)
-						}
-						return &Response{
-							ConversationID: req.ConversationID,
-							Message:        clarifyMsg,
-							Timestamp:      time.Now().UTC(),
-						}, nil
-					}
-
-					// Patient specified a variant — use the resolved variant name for availability
-					s.logger.Info("service variant resolved",
-						"conversation_id", req.ConversationID,
-						"original_service", prefs.ServiceInterest,
-						"resolved_variant", resolvedVariant,
-					)
-					prefs.ServiceInterest = resolvedVariant
 				}
+				if err := s.history.Save(ctx, req.ConversationID, history); err != nil {
+					s.logger.Warn("failed to save history after variant question", "error", err)
+				}
+				return &Response{
+					ConversationID: req.ConversationID,
+					Message:        question,
+					Timestamp:      time.Now().UTC(),
+				}, nil
 			}
+			if resolved != prefs.ServiceInterest {
+				s.logger.Info("service variant resolved",
+					"conversation_id", req.ConversationID,
+					"original_service", prefs.ServiceInterest,
+					"resolved_variant", resolved,
+				)
+			}
+			prefs.ServiceInterest = resolved
+
+			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
 			// Resolve patient-facing service name to booking-platform search term
 			// (e.g. "Botox" → "Tox" on Moxie where the service is "Tox (Botox, Jeuveau, ...)")
