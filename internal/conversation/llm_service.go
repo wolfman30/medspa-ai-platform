@@ -687,21 +687,22 @@ type depositConfig struct {
 
 // LLMService produces conversation responses using a configured LLM and stores context in Redis.
 type LLMService struct {
-	client         LLMClient
-	rag            RAGRetriever
-	emr            *EMRAdapter
-	browser        *BrowserAdapter
-	moxieClient    *moxieclient.Client
-	model          string
-	logger         *logging.Logger
-	history        *historyStore
-	deposit        depositConfig
-	leadsRepo      leads.Repository
-	clinicStore    *clinic.Store
-	audit          *compliance.AuditService
-	paymentChecker PaymentStatusChecker
-	faqClassifier  *FAQClassifier
-	apiBaseURL     string // Public API base URL for callback URLs
+	client          LLMClient
+	rag             RAGRetriever
+	emr             *EMRAdapter
+	browser         *BrowserAdapter
+	moxieClient     *moxieclient.Client
+	model           string
+	logger          *logging.Logger
+	history         *historyStore
+	deposit         depositConfig
+	leadsRepo       leads.Repository
+	clinicStore     *clinic.Store
+	audit           *compliance.AuditService
+	paymentChecker  PaymentStatusChecker
+	faqClassifier   *FAQClassifier
+	variantResolver *VariantResolver
+	apiBaseURL      string // Public API base URL for callback URLs
 }
 
 // NewLLMService returns an LLM-backed Service implementation.
@@ -721,12 +722,13 @@ func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever
 	}
 
 	service := &LLMService{
-		client:        client,
-		rag:           rag,
-		model:         model,
-		logger:        logger,
-		history:       newHistoryStore(redisClient, llmTracer),
-		faqClassifier: NewFAQClassifier(client),
+		client:          client,
+		rag:             rag,
+		model:           model,
+		logger:          logger,
+		history:         newHistoryStore(redisClient, llmTracer),
+		faqClassifier:   NewFAQClassifier(client),
+		variantResolver: NewVariantResolver(client, model, logger),
 	}
 
 	for _, opt := range opts {
@@ -1024,7 +1026,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 
 		// SERVICE VARIANT CHECK — same logic as HandleMessage path
 		msgs := recentUserMessages(history, "", 6)
-		resolved, question := ResolveServiceVariant(startCfg, prefs.ServiceInterest, msgs)
+		resolved, question := s.variantResolver.Resolve(ctx, startCfg, prefs.ServiceInterest, msgs)
 		if question != "" {
 			s.logger.Info("StartConversation: service variant clarification needed",
 				"conversation_id", conversationID,
@@ -1859,7 +1861,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			// SERVICE VARIANT CHECK: If the service has delivery variants (e.g. in-person vs virtual),
 			// ask the patient which they prefer before fetching availability.
 			msgs := recentUserMessages(history, rawMessage, 6)
-			resolved, question := ResolveServiceVariant(clinicCfg, prefs.ServiceInterest, msgs)
+			resolved, question := s.variantResolver.Resolve(ctx, clinicCfg, prefs.ServiceInterest, msgs)
 			if question != "" {
 				s.logger.Info("service variant clarification needed",
 					"conversation_id", req.ConversationID,

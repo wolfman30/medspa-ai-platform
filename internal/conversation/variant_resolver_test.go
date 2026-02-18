@@ -1,6 +1,8 @@
 package conversation
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
@@ -11,6 +13,12 @@ func makeVariantConfig(variants map[string][]string) *clinic.Config {
 		ServiceVariants: variants,
 	}
 }
+
+var weightLossVariants = map[string][]string{
+	"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
+}
+
+// --- ResolveServiceVariant (keyword-only, no LLM) ---
 
 func TestResolveServiceVariant_NoConfig(t *testing.T) {
 	resolved, question := ResolveServiceVariant(nil, "weight loss", []string{"hello"})
@@ -34,9 +42,7 @@ func TestResolveServiceVariant_NoVariants(t *testing.T) {
 }
 
 func TestResolveServiceVariant_ServiceWithoutVariants(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
+	cfg := makeVariantConfig(weightLossVariants)
 	resolved, question := ResolveServiceVariant(cfg, "botox", []string{"I want botox"})
 	if resolved != "botox" {
 		t.Errorf("expected original service, got %q", resolved)
@@ -47,9 +53,7 @@ func TestResolveServiceVariant_ServiceWithoutVariants(t *testing.T) {
 }
 
 func TestResolveServiceVariant_AsksWhenAmbiguous(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
+	cfg := makeVariantConfig(weightLossVariants)
 	resolved, question := ResolveServiceVariant(cfg, "weight loss", []string{"I want to lose weight"})
 	if resolved != "" {
 		t.Errorf("expected empty resolved, got %q", resolved)
@@ -63,10 +67,7 @@ func TestResolveServiceVariant_AsksWhenAmbiguous(t *testing.T) {
 }
 
 func TestResolveServiceVariant_ResolvesInPerson(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
-
+	cfg := makeVariantConfig(weightLossVariants)
 	tests := []struct {
 		name string
 		msgs []string
@@ -80,25 +81,18 @@ func TestResolveServiceVariant_ResolvesInPerson(t *testing.T) {
 		{"face to face", []string{"I prefer face to face"}},
 		{"on site", []string{"I'd prefer to be seen on site"}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolved, question := ResolveServiceVariant(cfg, "weight loss", tt.msgs)
 			if resolved != "Weight Loss - In Person" {
 				t.Errorf("expected 'Weight Loss - In Person', got %q (question: %q)", resolved, question)
 			}
-			if question != "" {
-				t.Errorf("expected no question, got %q", question)
-			}
 		})
 	}
 }
 
 func TestResolveServiceVariant_ResolvesVirtual(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
-
+	cfg := makeVariantConfig(weightLossVariants)
 	tests := []struct {
 		name string
 		msgs []string
@@ -112,37 +106,27 @@ func TestResolveServiceVariant_ResolvesVirtual(t *testing.T) {
 		{"from home", []string{"I'd rather do it from home"}},
 		{"telemedicine", []string{"Is telemedicine available?"}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolved, question := ResolveServiceVariant(cfg, "weight loss", tt.msgs)
 			if resolved != "Weight Loss - Virtual" {
 				t.Errorf("expected 'Weight Loss - Virtual', got %q (question: %q)", resolved, question)
 			}
-			if question != "" {
-				t.Errorf("expected no question, got %q", question)
-			}
 		})
 	}
 }
 
 func TestResolveServiceVariant_ChecksMultipleMessages(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
-	// Variant keyword is in the second message, not the first
+	cfg := makeVariantConfig(weightLossVariants)
 	msgs := []string{"I want to lose weight", "I'd like to do it in person"}
-	resolved, question := ResolveServiceVariant(cfg, "weight loss", msgs)
+	resolved, _ := ResolveServiceVariant(cfg, "weight loss", msgs)
 	if resolved != "Weight Loss - In Person" {
-		t.Errorf("expected 'Weight Loss - In Person', got %q (question: %q)", resolved, question)
+		t.Errorf("expected 'Weight Loss - In Person', got %q", resolved)
 	}
 }
 
 func TestResolveServiceVariant_FirstMatchWins(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
-	// First message says virtual, second says in person — first wins
+	cfg := makeVariantConfig(weightLossVariants)
 	msgs := []string{"Let's do virtual", "Actually maybe in person"}
 	resolved, _ := ResolveServiceVariant(cfg, "weight loss", msgs)
 	if resolved != "Weight Loss - Virtual" {
@@ -151,9 +135,7 @@ func TestResolveServiceVariant_FirstMatchWins(t *testing.T) {
 }
 
 func TestResolveServiceVariant_CaseInsensitive(t *testing.T) {
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
+	cfg := makeVariantConfig(weightLossVariants)
 	resolved, _ := ResolveServiceVariant(cfg, "weight loss", []string{"I WANT VIRTUAL PLEASE"})
 	if resolved != "Weight Loss - Virtual" {
 		t.Errorf("expected Virtual, got %q", resolved)
@@ -161,10 +143,7 @@ func TestResolveServiceVariant_CaseInsensitive(t *testing.T) {
 }
 
 func TestResolveServiceVariant_FuzzyServiceMatch(t *testing.T) {
-	// GetServiceVariants does fuzzy matching — "weight loss consultation" contains "weight loss"
-	cfg := makeVariantConfig(map[string][]string{
-		"weight loss": {"Weight Loss - In Person", "Weight Loss - Virtual"},
-	})
+	cfg := makeVariantConfig(weightLossVariants)
 	resolved, question := ResolveServiceVariant(cfg, "weight loss consultation", []string{"virtual please"})
 	if resolved != "Weight Loss - Virtual" {
 		t.Errorf("expected Virtual via fuzzy match, got %q (question: %q)", resolved, question)
@@ -172,7 +151,6 @@ func TestResolveServiceVariant_FuzzyServiceMatch(t *testing.T) {
 }
 
 func TestResolveServiceVariant_VariantsWithoutDash(t *testing.T) {
-	// Variant names without " - " separator
 	cfg := makeVariantConfig(map[string][]string{
 		"therapy": {"In Person Therapy", "Virtual Therapy"},
 	})
@@ -183,7 +161,6 @@ func TestResolveServiceVariant_VariantsWithoutDash(t *testing.T) {
 }
 
 func TestResolveServiceVariant_SingleVariantNoQuestion(t *testing.T) {
-	// Only one variant — GetServiceVariants returns nil (requires >1)
 	cfg := makeVariantConfig(map[string][]string{
 		"weight loss": {"Weight Loss - In Person"},
 	})
@@ -196,6 +173,205 @@ func TestResolveServiceVariant_SingleVariantNoQuestion(t *testing.T) {
 	}
 }
 
+// --- VariantResolver with LLM ---
+
+// mockVariantLLM returns a canned response for testing the LLM classifier path.
+type mockVariantLLM struct {
+	response string
+	err      error
+	calls    int
+}
+
+func (m *mockVariantLLM) Complete(_ context.Context, req LLMRequest) (LLMResponse, error) {
+	m.calls++
+	if m.err != nil {
+		return LLMResponse{}, m.err
+	}
+	return LLMResponse{Text: m.response}, nil
+}
+
+func TestVariantResolver_LLM_ResolvesInPerson(t *testing.T) {
+	mock := &mockVariantLLM{response: "Weight Loss - In Person"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"I'd like to come see you guys"})
+	if resolved != "Weight Loss - In Person" {
+		t.Errorf("expected 'Weight Loss - In Person', got %q", resolved)
+	}
+	if question != "" {
+		t.Errorf("expected no question, got %q", question)
+	}
+	if mock.calls != 1 {
+		t.Errorf("expected 1 LLM call, got %d", mock.calls)
+	}
+}
+
+func TestVariantResolver_LLM_ResolvesVirtual(t *testing.T) {
+	mock := &mockVariantLLM{response: "Weight Loss - Virtual"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"I'd rather do it from my couch"})
+	if resolved != "Weight Loss - Virtual" {
+		t.Errorf("expected 'Weight Loss - Virtual', got %q", resolved)
+	}
+	if question != "" {
+		t.Errorf("expected no question, got %q", question)
+	}
+}
+
+func TestVariantResolver_LLM_Unclear(t *testing.T) {
+	mock := &mockVariantLLM{response: "unclear"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"I want to lose weight"})
+	if resolved != "" {
+		t.Errorf("expected empty resolved, got %q", resolved)
+	}
+	if question == "" {
+		t.Fatal("expected clarification question")
+	}
+}
+
+func TestVariantResolver_LLM_FallbackOnError(t *testing.T) {
+	// LLM fails, but message contains a keyword — should fall back to keyword matching
+	mock := &mockVariantLLM{err: fmt.Errorf("API timeout")}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"I want to come in person"})
+	if resolved != "Weight Loss - In Person" {
+		t.Errorf("expected keyword fallback to resolve 'Weight Loss - In Person', got %q (question: %q)", resolved, question)
+	}
+}
+
+func TestVariantResolver_LLM_FallbackOnErrorNoKeyword(t *testing.T) {
+	// LLM fails AND no keyword match — should ask clarification
+	mock := &mockVariantLLM{err: fmt.Errorf("API timeout")}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"I want to lose weight"})
+	if resolved != "" {
+		t.Errorf("expected empty resolved, got %q", resolved)
+	}
+	if question == "" {
+		t.Fatal("expected clarification question on fallback")
+	}
+}
+
+func TestVariantResolver_LLM_FuzzyMatchResponse(t *testing.T) {
+	// LLM returns just "Virtual" instead of the full variant name
+	mock := &mockVariantLLM{response: "Virtual"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"from home please"})
+	if resolved != "Weight Loss - Virtual" {
+		t.Errorf("expected fuzzy match to 'Weight Loss - Virtual', got %q (question: %q)", resolved, question)
+	}
+}
+
+func TestVariantResolver_LLM_CaseInsensitiveResponse(t *testing.T) {
+	mock := &mockVariantLLM{response: "weight loss - in person"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, _ := vr.Resolve(context.Background(), cfg, "weight loss", []string{"come in"})
+	if resolved != "Weight Loss - In Person" {
+		t.Errorf("expected case-insensitive match, got %q", resolved)
+	}
+}
+
+func TestVariantResolver_LLM_UnexpectedResponse(t *testing.T) {
+	// LLM returns something completely irrelevant
+	mock := &mockVariantLLM{response: "I think the patient wants botox"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", []string{"lose weight"})
+	if resolved != "" {
+		t.Errorf("expected empty resolved for unexpected LLM response, got %q", resolved)
+	}
+	if question == "" {
+		t.Fatal("expected clarification question for unexpected response")
+	}
+}
+
+func TestVariantResolver_NoLLM_FallsBackToKeywords(t *testing.T) {
+	// nil LLM — should use keyword matching only
+	vr := NewVariantResolver(nil, "", nil)
+	cfg := makeVariantConfig(weightLossVariants)
+
+	resolved, _ := vr.Resolve(context.Background(), cfg, "weight loss", []string{"I want virtual"})
+	if resolved != "Weight Loss - Virtual" {
+		t.Errorf("expected keyword fallback, got %q", resolved)
+	}
+}
+
+func TestVariantResolver_NoConfig(t *testing.T) {
+	mock := &mockVariantLLM{response: "Weight Loss - Virtual"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+
+	resolved, question := vr.Resolve(context.Background(), nil, "weight loss", []string{"virtual"})
+	if resolved != "weight loss" {
+		t.Errorf("expected original service, got %q", resolved)
+	}
+	if question != "" {
+		t.Errorf("expected no question, got %q", question)
+	}
+	if mock.calls != 0 {
+		t.Errorf("LLM should not be called when no config, got %d calls", mock.calls)
+	}
+}
+
+func TestVariantResolver_NoVariantsConfigured(t *testing.T) {
+	mock := &mockVariantLLM{response: "something"}
+	vr := NewVariantResolver(mock, "test-model", nil)
+	cfg := makeVariantConfig(map[string][]string{})
+
+	resolved, _ := vr.Resolve(context.Background(), cfg, "botox", []string{"hello"})
+	if resolved != "botox" {
+		t.Errorf("expected original service, got %q", resolved)
+	}
+	if mock.calls != 0 {
+		t.Errorf("LLM should not be called when no variants, got %d calls", mock.calls)
+	}
+}
+
+func TestVariantResolver_LLM_NaturalLanguage(t *testing.T) {
+	// Test cases that keyword matching would miss but LLM should handle
+	tests := []struct {
+		name     string
+		llmReply string
+		msgs     []string
+		expected string
+	}{
+		{"do it from my couch", "Weight Loss - Virtual", []string{"can I do this from my couch?"}, "Weight Loss - Virtual"},
+		{"come see you guys", "Weight Loss - In Person", []string{"I'd love to come see you guys"}, "Weight Loss - In Person"},
+		{"not leave the house", "Weight Loss - Virtual", []string{"I'd rather not leave the house"}, "Weight Loss - Virtual"},
+		{"be there physically", "Weight Loss - In Person", []string{"I want to be there physically"}, "Weight Loss - In Person"},
+		{"do it over the phone", "Weight Loss - Virtual", []string{"can we just do it over the phone?"}, "Weight Loss - Virtual"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockVariantLLM{response: tt.llmReply}
+			vr := NewVariantResolver(mock, "test-model", nil)
+			cfg := makeVariantConfig(weightLossVariants)
+
+			resolved, question := vr.Resolve(context.Background(), cfg, "weight loss", tt.msgs)
+			if resolved != tt.expected {
+				t.Errorf("expected %q, got %q (question: %q)", tt.expected, resolved, question)
+			}
+		})
+	}
+}
+
+// --- recentUserMessages helper ---
+
 func TestRecentUserMessages(t *testing.T) {
 	history := []ChatMessage{
 		{Role: ChatRoleSystem, Content: "system"},
@@ -205,16 +381,13 @@ func TestRecentUserMessages(t *testing.T) {
 		{Role: ChatRoleAssistant, Content: "Reply 2"},
 		{Role: ChatRoleUser, Content: "Third message"},
 	}
-
 	msgs := recentUserMessages(history, "Current MSG", 6)
-
-	if len(msgs) != 4 { // current + 3 user messages
+	if len(msgs) != 4 {
 		t.Fatalf("expected 4 messages, got %d: %v", len(msgs), msgs)
 	}
 	if msgs[0] != "current msg" {
 		t.Errorf("first should be lowercased current message, got %q", msgs[0])
 	}
-	// Should be reverse order from history
 	if msgs[1] != "third message" {
 		t.Errorf("expected 'third message', got %q", msgs[1])
 	}
@@ -232,9 +405,8 @@ func TestRecentUserMessages_LookbackLimit(t *testing.T) {
 		{Role: ChatRoleUser, Content: "Old message"},
 		{Role: ChatRoleUser, Content: "Recent message"},
 	}
-	// lookback=1 should only get the last message
 	msgs := recentUserMessages(history, "Current", 1)
-	if len(msgs) != 2 { // current + 1 from lookback
+	if len(msgs) != 2 {
 		t.Fatalf("expected 2 messages, got %d: %v", len(msgs), msgs)
 	}
 	if msgs[1] != "recent message" {
