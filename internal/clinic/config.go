@@ -264,15 +264,23 @@ func (c *Config) ResolveServiceName(service string) string {
 			return alias
 		}
 	}
-	// Fuzzy match: check if the service contains an alias key or vice versa
-	// e.g. "weight loss consultation" contains "weight loss"
+	// Fuzzy match: check if the service contains an alias key or vice versa.
+	// Prefer the longest matching key to avoid "filler" matching before "lip filler".
+	bestAlias := ""
+	bestKeyLen := 0
 	for aliasKey, alias := range c.ServiceAliases {
 		if alias == "" {
 			continue
 		}
 		if strings.Contains(key, aliasKey) || strings.Contains(aliasKey, key) {
-			return alias
+			if len(aliasKey) > bestKeyLen {
+				bestAlias = alias
+				bestKeyLen = len(aliasKey)
+			}
 		}
+	}
+	if bestAlias != "" {
+		return bestAlias
 	}
 	return service
 }
