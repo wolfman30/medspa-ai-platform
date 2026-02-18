@@ -17,6 +17,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
+	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -72,6 +73,9 @@ type Config struct {
 
 	// Short payment URL redirect handler
 	PaymentRedirect *payments.RedirectHandler
+
+	// Prospect tracker
+	ProspectsHandler *prospects.Handler
 
 	// Readiness check dependencies
 	RedisClient    *redis.Client
@@ -198,6 +202,14 @@ func New(cfg *Config) http.Handler {
 				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
+			}
+			// Prospect tracker
+			if cfg.ProspectsHandler != nil {
+				admin.Get("/prospects", cfg.ProspectsHandler.List)
+				admin.Get("/prospects/{prospectID}", cfg.ProspectsHandler.Get)
+				admin.Put("/prospects/{prospectID}", cfg.ProspectsHandler.Upsert)
+				admin.Delete("/prospects/{prospectID}", cfg.ProspectsHandler.Delete)
+				admin.Post("/prospects/{prospectID}/events", cfg.ProspectsHandler.AddEvent)
 			}
 			// Clinic onboarding endpoints
 			if cfg.AdminOnboarding != nil {

@@ -45,6 +45,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/notify"
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
+	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -479,6 +480,7 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
+		ProspectsHandler: prospects.NewHandler(prospects.NewRepository(sqlDB)),
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,

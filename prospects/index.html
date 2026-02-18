@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Wolf Solutions — Prospect Tracker</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #8b8d98;
+    --accent: #6366f1;
+    --accent-dim: #4f46e5;
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,.12);
+    --yellow: #eab308;
+    --yellow-dim: rgba(234,179,8,.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,.12);
+    --orange: #f97316;
+    --orange-dim: rgba(249,115,22,.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  .header { padding:24px 32px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .header h1 { font-size:20px; font-weight:600; }
+  .header h1 span { color:var(--accent); }
+  .header .updated { font-size:13px; color:var(--muted); }
+
+  .stats { display:flex; gap:16px; padding:24px 32px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 20px; flex:1; }
+  .stat .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+  .stat .value { font-size:28px; font-weight:700; }
+  .stat .sub { font-size:12px; color:var(--muted); margin-top:2px; }
+
+  .pipeline { padding:0 32px 32px; }
+  .pipeline h2 { font-size:16px; font-weight:600; margin-bottom:16px; color:var(--muted); }
+
+  .prospect { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; transition:border-color .2s; }
+  .prospect:hover { border-color:var(--accent); }
+  .prospect-header { padding:16px 20px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+  .prospect-left { display:flex; align-items:center; gap:14px; }
+  .prospect-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; }
+  .prospect-name { font-size:15px; font-weight:600; }
+  .prospect-meta { font-size:13px; color:var(--muted); margin-top:1px; }
+  .prospect-right { display:flex; align-items:center; gap:10px; }
+
+  .badge { padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+  .badge-green { background:var(--green-dim); color:var(--green); }
+  .badge-yellow { background:var(--yellow-dim); color:var(--yellow); }
+  .badge-blue { background:var(--blue-dim); color:var(--blue); }
+  .badge-red { background:var(--red-dim); color:var(--red); }
+  .badge-orange { background:var(--orange-dim); color:var(--orange); }
+
+  .indicators { display:flex; gap:6px; }
+  .ind { width:8px; height:8px; border-radius:50%; }
+  .ind-on { background:var(--green); }
+  .ind-off { background:var(--border); }
+
+  .prospect-body { display:none; padding:0 20px 16px; border-top:1px solid var(--border); }
+  .prospect.open .prospect-body { display:block; padding-top:16px; }
+
+  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; margin-bottom:16px; }
+  .detail label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; display:block; margin-bottom:2px; }
+  .detail value { font-size:14px; display:block; }
+
+  .timeline-section h3 { font-size:13px; font-weight:600; color:var(--muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:.5px; }
+  .timeline-item { display:flex; gap:12px; margin-bottom:10px; position:relative; padding-left:20px; }
+  .timeline-item::before { content:''; position:absolute; left:5px; top:8px; width:8px; height:8px; border-radius:50%; background:var(--accent); }
+  .timeline-item::after { content:''; position:absolute; left:8px; top:18px; width:2px; height:calc(100% - 4px); background:var(--border); }
+  .timeline-item:last-child::after { display:none; }
+  .tl-date { font-size:12px; color:var(--muted); white-space:nowrap; min-width:90px; }
+  .tl-type { font-size:11px; font-weight:600; text-transform:uppercase; padding:2px 8px; border-radius:4px; background:var(--accent-dim); color:var(--accent); margin-right:8px; }
+  .tl-note { font-size:13px; line-height:1.5; }
+
+  .next-action { background:rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.2); border-radius:8px; padding:12px 16px; margin-top:12px; }
+  .next-action label { font-size:11px; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; display:block; }
+  .next-action p { font-size:14px; }
+
+  .chevron { transition:transform .2s; color:var(--muted); font-size:18px; }
+  .prospect.open .chevron { transform:rotate(90deg); }
+
+  @media (max-width:640px) {
+    .stats { flex-wrap:wrap; }
+    .stat { min-width:calc(50% - 8px); }
+    .detail-grid { grid-template-columns:1fr; }
+    .header, .stats, .pipeline { padding-left:16px; padding-right:16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🐺 <span>AI Wolf</span> — Prospect Tracker</h1>
+  <div class="updated" id="lastUpdated"></div>
+</div>
+
+<div class="stats" id="stats"></div>
+<div class="pipeline" id="pipeline"></div>
+
+<script>
+const STATUS_MAP = {
+  'outreach_sent':  { label:'Outreach Sent', badge:'badge-yellow', order:1 },
+  'responded':      { label:'Responded',     badge:'badge-blue',   order:2 },
+  'testing':        { label:'Testing',       badge:'badge-orange', order:3 },
+  'converted':      { label:'Converted',     badge:'badge-green',  order:4 },
+  'configured':     { label:'Configured',    badge:'badge-blue',   order:5 },
+  'identified':     { label:'Identified',    badge:'badge-red',    order:6 },
+  'lost':           { label:'Lost',          badge:'badge-red',    order:7 },
+};
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ' ' +
+         d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+}
+function timeAgo(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(ms/3600000);
+  if (h < 1) return Math.floor(ms/60000) + 'm ago';
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h/24) + 'd ago';
+}
+
+function getConfig() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    apiBase: params.get('api') || localStorage.getItem('prospect_api') || 'https://api-dev.aiwolfsolutions.com',
+    token: params.get('token') || localStorage.getItem('prospect_token') || '',
+  };
+}
+
+async function load() {
+  const cfg = getConfig();
+  let data;
+  if (cfg.token) {
+    localStorage.setItem('prospect_api', cfg.apiBase);
+    localStorage.setItem('prospect_token', cfg.token);
+    const resp = await fetch(cfg.apiBase + '/admin/prospects', {
+      headers: { 'Authorization': 'Bearer ' + cfg.token }
+    });
+    data = await resp.json();
+  } else {
+    const resp = await fetch('data.json?t=' + Date.now());
+    data = await resp.json();
+  }
+
+  document.getElementById('lastUpdated').textContent = 'Updated ' + timeAgo(data.lastUpdated);
+
+  const total = data.prospects.length;
+  const active = data.prospects.filter(p => ['outreach_sent','responded','testing'].includes(p.status)).length;
+  const configured = data.prospects.filter(p => p.configured).length;
+  const smsReady = data.prospects.filter(p => p.smsWorking).length;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="label">Total Prospects</div><div class="value">${total}</div></div>
+    <div class="stat"><div class="label">Active Outreach</div><div class="value">${active}</div><div class="sub">in pipeline</div></div>
+    <div class="stat"><div class="label">Configured</div><div class="value">${configured}/${total}</div><div class="sub">system ready</div></div>
+    <div class="stat"><div class="label">SMS Ready</div><div class="value">${smsReady}/${total}</div><div class="sub">10DLC + tested</div></div>
+  `;
+
+  const sorted = [...data.prospects].sort((a,b) =>
+    (STATUS_MAP[a.status]?.order||99) - (STATUS_MAP[b.status]?.order||99)
+  );
+
+  const html = sorted.map(p => {
+    const s = STATUS_MAP[p.status] || { label:p.status, badge:'badge-red' };
+    const initials = (p.clinic||'??').split(' ').map(w=>w[0]).join('').slice(0,2);
+    const indicators = `
+      <div class="indicators" title="Config | 10DLC | SMS">
+        <div class="ind ${p.configured?'ind-on':'ind-off'}" title="Configured"></div>
+        <div class="ind ${p['10dlc']?'ind-on':'ind-off'}" title="10DLC"></div>
+        <div class="ind ${p.smsWorking?'ind-on':'ind-off'}" title="SMS Working"></div>
+      </div>`;
+
+    const timeline = (p.timeline||[]).map(t => `
+      <div class="timeline-item">
+        <div><span class="tl-type">${t.type}</span></div>
+        <div>
+          <div class="tl-date">${formatDateTime(t.date)}</div>
+          <div class="tl-note">${t.note}</div>
+        </div>
+      </div>`).join('');
+
+    return `
+    <div class="prospect" onclick="this.classList.toggle('open')">
+      <div class="prospect-header">
+        <div class="prospect-left">
+          <div class="prospect-icon" style="background:${p.configured?'var(--accent-dim)':'var(--border)'};color:${p.configured?'var(--accent)':'var(--muted)'}">${initials}</div>
+          <div>
+            <div class="prospect-name">${p.clinic}</div>
+            <div class="prospect-meta">${[p.owner, p.location, p.emr].filter(Boolean).join(' · ')}</div>
+          </div>
+        </div>
+        <div class="prospect-right">
+          ${indicators}
+          <span class="badge ${s.badge}">${s.label}</span>
+          <span class="chevron">›</span>
+        </div>
+      </div>
+      <div class="prospect-body">
+        <div class="detail-grid">
+          <div class="detail"><label>Owner</label><value>${p.owner||'—'}</value></div>
+          <div class="detail"><label>Phone</label><value>${p.phone||'—'}</value></div>
+          <div class="detail"><label>Email</label><value>${p.email||'—'}</value></div>
+          <div class="detail"><label>EMR</label><value>${p.emr||'—'}</value></div>
+          <div class="detail"><label>Telnyx Number</label><value>${p.telnyxNumber||'—'}</value></div>
+          <div class="detail"><label>Services</label><value>${p.services||0} configured</value></div>
+          <div class="detail"><label>Providers</label><value>${(p.providers||[]).join(', ')||'—'}</value></div>
+          <div class="detail"><label>Notes</label><value>${p.notes||'—'}</value></div>
+        </div>
+        ${timeline ? `<div class="timeline-section"><h3>Timeline</h3>${timeline}</div>` : ''}
+        ${p.nextAction ? `<div class="next-action"><label>Next Action</label><p>${p.nextAction}</p></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('pipeline').innerHTML = `<h2>Pipeline</h2>${html}`;
+}
+
+load();
+</script>
+</body>
+</html>
