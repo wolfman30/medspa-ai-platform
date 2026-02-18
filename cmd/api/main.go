@@ -480,7 +480,7 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
-		ProspectsHandler: prospects.NewHandler(prospects.NewRepository(sqlDB)),
+		ProspectsHandler:       prospects.NewHandler(prospects.NewRepository(sqlDB)),
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,
