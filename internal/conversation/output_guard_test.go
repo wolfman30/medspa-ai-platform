@@ -44,6 +44,22 @@ func TestScanOutputForLeaks(t *testing.T) {
 		// Other patient data
 		{"references other patient", "Another patient's appointment is at 3pm", true, "leak:other_patient_ref"},
 
+		// Drug names (carrier spam filter)
+		{"mentions semaglutide", "We offer semaglutide for weight loss", true, "spam:drug_name"},
+		{"mentions GLP-1", "Our GLP-1 program helps patients lose weight", true, "spam:drug_name"},
+		{"mentions glp1 no hyphen", "We use glp1 agonists", true, "spam:drug_name"},
+		{"mentions ozempic", "Have you heard of Ozempic?", true, "spam:drug_name"},
+		{"mentions wegovy", "Wegovy is another option", true, "spam:drug_name"},
+		{"mentions tirzepatide", "Tirzepatide has shown great results", true, "spam:drug_name"},
+		{"mentions mounjaro", "Mounjaro is available here", true, "spam:drug_name"},
+		{"weight loss without drug names", "We offer medically supervised weight loss programs. Would you like to schedule a consultation?", false, ""},
+
+		// Post-procedure symptom minimization
+		{"says that's normal", "Bruising after Botox? That's completely normal and should resolve in a few days.", true, "safety:symptom_minimization"},
+		{"says nothing to worry", "That is nothing to worry about, it happens sometimes.", true, "safety:symptom_minimization"},
+		{"says perfectly normal", "Some swelling is perfectly normal after filler.", true, "safety:symptom_minimization"},
+		{"proper post-procedure response", "I'd recommend reaching out to the clinic so your provider can take a look.", false, ""},
+
 		// Edge cases — should NOT trigger
 		{"mentions 'system' normally", "Our online booking system is easy to use", false, ""},
 		{"mentions 'rules' normally", "Our cancellation rules require 24 hours notice", false, ""},

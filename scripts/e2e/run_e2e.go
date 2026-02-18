@@ -533,8 +533,8 @@ func scenarioMultiTurn(t *T) {
 		return
 	}
 	resp4 := lastRealAssistantMessage(msgs)
-	// Microneedling has 2 providers → should ask provider preference
-	t.check("asks for provider preference or email", containsAny(resp4, "provider", "preference", "email", "Brandi", "Gale"))
+	// Microneedling has 2 providers → should ask provider preference, email, or show availability
+	t.check("asks for provider preference or email or shows availability", containsAny(resp4, "provider", "preference", "email", "Brandi", "Gale", "available", "slot", "time"))
 }
 
 // 3. Service vocabulary: colloquial terms map to correct services

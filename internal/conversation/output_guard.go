@@ -46,6 +46,12 @@ var outputLeakPatterns = []outputLeakPattern{
 
 	// Other patient data patterns (should never appear in a reply)
 	{regexp.MustCompile(`(?i)other patient'?s?\s+(name|phone|email|appointment|record)`), "leak:other_patient_ref", true},
+
+	// Weight loss drug names — carrier spam filters block these
+	{regexp.MustCompile(`(?i)\b(semaglutide|tirzepatide|ozempic|wegovy|mounjaro|glp-?1)\b`), "spam:drug_name", false},
+
+	// Post-procedure symptom minimization — never say symptoms are "normal"
+	{regexp.MustCompile(`(?i)(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry)`), "safety:symptom_minimization", false},
 }
 
 // ScanOutputForLeaks checks an outbound AI reply for sensitive information leaks.
@@ -86,9 +92,13 @@ func ScanOutputForLeaks(reply string) OutputGuardResult {
 	return result
 }
 
-// sanitizeOutput removes AI identity disclosures from replies while preserving useful content.
+// sanitizeOutput removes AI identity disclosures and banned drug names from replies.
 func sanitizeOutput(reply string) string {
 	// Remove "I am an AI/chatbot" sentences
 	cleaned := regexp.MustCompile(`(?i)[^.!?]*\bi('m| am) (a|an) (AI|artificial intelligence|language model|LLM|GPT|Claude|chatbot)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(reply, "")
+	// Remove sentences containing banned drug names (carrier spam filter)
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*\b(semaglutide|tirzepatide|ozempic|wegovy|mounjaro|glp-?1)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	// Remove sentences that minimize post-procedure symptoms
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry)[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
 	return strings.TrimSpace(cleaned)
 }
