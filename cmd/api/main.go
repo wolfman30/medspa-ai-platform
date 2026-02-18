@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -46,7 +47,12 @@ import (
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
+	"github.com/wolfman30/medspa-ai-platform/migrations"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
+
+	"github.com/golang-migrate/migrate/v4"
+	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
 func main() {
@@ -89,6 +95,7 @@ func main() {
 	sqlDB := connectSQLDB(dbPool, logger)
 	if sqlDB != nil {
 		defer sqlDB.Close()
+		runAutoMigrate(sqlDB, logger)
 	}
 	conversationStore := appbootstrap.BuildConversationStore(sqlDB, cfg, logger, true)
 	var auditSvc *auditcompliance.AuditService
@@ -557,6 +564,29 @@ func connectPostgresPool(ctx context.Context, dbURL string, logger *logging.Logg
 	}
 	logger.Info("connected to postgres")
 	return pool
+}
+
+func runAutoMigrate(db *sql.DB, logger *logging.Logger) {
+	srcDriver, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		logger.Error("auto-migrate: failed to open migrations source", "error", err)
+		return
+	}
+	dbDriver, err := pgmigrate.WithInstance(db, &pgmigrate.Config{})
+	if err != nil {
+		logger.Error("auto-migrate: failed to create db driver", "error", err)
+		return
+	}
+	m, err := migrate.NewWithInstance("iofs", srcDriver, "postgres", dbDriver)
+	if err != nil {
+		logger.Error("auto-migrate: failed to create migrator", "error", err)
+		return
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		logger.Error("auto-migrate: migration failed", "error", err)
+		return
+	}
+	logger.Info("auto-migrate: database migrations applied")
 }
 
 func connectSQLDB(pool *pgxpool.Pool, logger *logging.Logger) *sql.DB {
