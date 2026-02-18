@@ -8,6 +8,7 @@ import { DepositList } from './components/DepositList';
 import { DepositDetail } from './components/DepositDetail';
 import { SettingsPage } from './components/SettingsPage';
 import { KnowledgeSettings } from './components/KnowledgeSettings';
+import { ProspectTracker } from './components/ProspectTracker';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -25,7 +26,8 @@ type AppView =
   | 'deposits'
   | 'deposit-detail'
   | 'settings'
-  | 'knowledge';
+  | 'knowledge'
+  | 'prospects';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -383,6 +385,15 @@ function AuthenticatedApp() {
                 >
                   Knowledge
                 </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('prospects')}
+                    aria-current={view === 'prospects' ? 'page' : undefined}
+                    className={view === 'prospects' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Prospects
+                  </button>
+                )}
               </nav>
             )}
 
@@ -394,7 +405,9 @@ function AuthenticatedApp() {
       )}
       {/* Admin view - direct access to conversations and deposits */}
       {isAdmin && orgId ? (
-        view === 'conversation-detail' && selectedConversationId ? (
+        view === 'prospects' ? (
+          <ProspectTracker />
+        ) : view === 'conversation-detail' && selectedConversationId ? (
           <ConversationDetail
             orgId={orgId}
             conversationId={selectedConversationId}
