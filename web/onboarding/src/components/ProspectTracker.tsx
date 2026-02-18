@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { listProspects, addProspectEvent } from '../api/client';
 
 interface ProspectEvent {
   id: number;
@@ -73,13 +74,7 @@ function AddEventForm({ prospectId, onAdded }: AddEventFormProps) {
     if (!note.trim()) return;
     setSaving(true);
     try {
-      const token = localStorage.getItem('admin_token') || '';
-      const apiBase = import.meta.env.VITE_API_URL || '';
-      await fetch(`${apiBase}/admin/prospects/${prospectId}/events`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ type, note: note.trim() }),
-      });
+      await addProspectEvent(prospectId, type, note.trim());
       setNote('');
       onAdded();
     } finally {
@@ -117,16 +112,10 @@ export function ProspectTracker() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProspects = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const token = localStorage.getItem('admin_token') || '';
-      const apiBase = import.meta.env.VITE_API_URL || '';
-      const resp = await fetch(`${apiBase}/admin/prospects`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      setProspects(data.prospects || []);
+      const data = await listProspects();
+      setProspects((data.prospects || []) as Prospect[]);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
@@ -135,7 +124,7 @@ export function ProspectTracker() {
     }
   }, []);
 
-  useEffect(() => { fetchProspects(); }, [fetchProspects]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) {
     return (
@@ -150,7 +139,7 @@ export function ProspectTracker() {
       <div className="ui-container py-8">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
           <p className="text-sm text-red-800 font-medium">Failed to load prospects: {error}</p>
-          <button onClick={fetchProspects} className="ui-btn ui-btn-ghost mt-3 text-sm">Retry</button>
+          <button onClick={fetchData} className="ui-btn ui-btn-ghost mt-3 text-sm">Retry</button>
         </div>
       </div>
     );
@@ -256,7 +245,7 @@ export function ProspectTracker() {
                       </div>
                     )}
 
-                    <AddEventForm prospectId={p.id} onAdded={fetchProspects} />
+                    <AddEventForm prospectId={p.id} onAdded={fetchData} />
 
                     {p.nextAction && (
                       <div className="mt-4 rounded-lg bg-violet-50 border border-violet-200 p-3">

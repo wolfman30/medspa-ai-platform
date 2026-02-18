@@ -983,3 +983,32 @@ export async function clearPatientDataByPhone(
   }
   return res.json();
 }
+
+// ── Prospects ───────────────────────────────────────────────────────
+
+export async function listProspects(): Promise<{ lastUpdated: string; prospects: unknown[] }> {
+  const res = await fetch(`${API_BASE}/admin/prospects`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function upsertProspect(id: string, data: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/prospects/${id}`, {
+    method: 'PUT',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function addProspectEvent(prospectId: string, type: string, note: string): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/admin/prospects/${prospectId}/events`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify({ type, note }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
