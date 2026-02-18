@@ -55,6 +55,15 @@ clear-test-deposit:
 e2e:
 	ADMIN_JWT_SECRET=$(ADMIN_JWT_SECRET) API_BASE_URL=$(API_BASE_URL) go run scripts/e2e/run_e2e.go
 
+# Config-driven service tests (all services from clinic config)
+# Usage: make test-services ORG=<orgID> [TIER=1|2|3]
+test-services:
+	ADMIN_JWT_SECRET=REDACTED_JWT_SECRET \
+	go run scripts/e2e/service_tests.go \
+		--org=$(ORG) \
+		--tier=$(or $(TIER),1) \
+		--secret=REDACTED_JWT_SECRET
+
 # Run E2E test with default dev settings
 e2e-dev:
 	ADMIN_JWT_SECRET=REDACTED_JWT_SECRET API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/run_e2e.go

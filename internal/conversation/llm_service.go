@@ -923,7 +923,8 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		prefs, _ := extractPreferences(history)
 
 		// Name guardrail: ask for name first if we have service but not name.
-		if prefs.ServiceInterest != "" && prefs.Name == "" {
+		// Skip if the last assistant message already asked for the name (avoid duplicate asks).
+		if prefs.ServiceInterest != "" && prefs.Name == "" && !lastAssistantAskedForName(history) {
 			history = append(history, ChatMessage{
 				Role: ChatRoleSystem,
 				Content: "[SYSTEM GUARDRAIL] The patient mentioned a service but you do NOT have their name yet. " +
@@ -1644,7 +1645,8 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 		// Name guardrail: if we have service but no name, ask for name FIRST.
 		// Name is #1 in the qualification checklist.
-		if prefs.ServiceInterest != "" && prefs.Name == "" {
+		// Skip if the last assistant message already asked for the name (avoid duplicate asks).
+		if prefs.ServiceInterest != "" && prefs.Name == "" && !lastAssistantAskedForName(history) {
 			history = append(history, ChatMessage{
 				Role: ChatRoleSystem,
 				Content: "[SYSTEM GUARDRAIL] The patient mentioned a service but you do NOT have their name yet. " +
@@ -3451,6 +3453,17 @@ func combineSplitNameReplies(history []ChatMessage, firstName string) string {
 		}
 	}
 	return ""
+}
+
+// lastAssistantAskedForName checks if the most recent assistant message in history
+// already asked for the patient's name, to avoid duplicate name requests.
+func lastAssistantAskedForName(history []ChatMessage) bool {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == ChatRoleAssistant {
+			return assistantAskedForName(history[i].Content)
+		}
+	}
+	return false
 }
 
 func assistantAskedForName(message string) bool {
