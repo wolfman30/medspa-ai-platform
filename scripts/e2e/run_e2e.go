@@ -284,6 +284,79 @@ func allRealAssistantMessages(msgs []map[string]interface{}) string {
 	return strings.Join(parts, "\n")
 }
 
+// checkNoDuplicateQuestions scans a conversation transcript for duplicate assistant
+// questions. Returns a list of violations (empty = clean). This is a universal check
+// that should run on EVERY conversation regardless of service or clinic.
+//
+// Duplicate detection works by categorizing each assistant message by "intent"
+// (asking for name, patient type, schedule, provider, email) and flagging when
+// the same intent appears in consecutive assistant messages without a user response
+// in between.
+func checkNoDuplicateQuestions(msgs []map[string]interface{}) []string {
+	type intentPattern struct {
+		name     string
+		keywords []string
+	}
+	intents := []intentPattern{
+		{"ask_name", []string{"your name", "full name", "first and last", "may i have your"}},
+		{"ask_patient_type", []string{"visited us before", "first time", "new or returning", "new or existing", "been here before"}},
+		{"ask_schedule", []string{"days and times", "when works", "what time", "schedule preference", "days work best"}},
+		{"ask_provider", []string{"preferred provider", "provider preference", "brandi or gale", "who would you like", "which provider"}},
+		{"ask_email", []string{"email address", "email for", "your email"}},
+		{"ask_variant", []string{"in-person or virtual", "in person or virtual", "prefer an in-person", "prefer a virtual"}},
+	}
+
+	detectIntent := func(content string) string {
+		lower := strings.ToLower(content)
+		for _, ip := range intents {
+			for _, kw := range ip.keywords {
+				if strings.Contains(lower, kw) {
+					return ip.name
+				}
+			}
+		}
+		return ""
+	}
+
+	var violations []string
+	lastAssistantIntent := ""
+	lastAssistantContent := ""
+
+	for _, m := range msgs {
+		if isUserMsg(m) {
+			// User responded — reset tracking
+			lastAssistantIntent = ""
+			lastAssistantContent = ""
+			continue
+		}
+		content, _ := m["content"].(string)
+		if isAckMessage(content) {
+			continue // skip ack messages
+		}
+		intent := detectIntent(content)
+		if intent != "" && intent == lastAssistantIntent {
+			violations = append(violations, fmt.Sprintf(
+				"DUPLICATE %s: %q ... then again: %q",
+				intent,
+				truncate(lastAssistantContent, 60),
+				truncate(content, 60),
+			))
+		}
+		if intent != "" {
+			lastAssistantIntent = intent
+			lastAssistantContent = content
+		}
+	}
+	return violations
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 func containsAny(s string, substrs ...string) bool {
 	lower := strings.ToLower(s)
 	for _, sub := range substrs {
@@ -1318,6 +1391,20 @@ func main() {
 
 		t := &T{name: s.Name}
 		s.Fn(t)
+
+		// Universal duplicate question check on every scenario's conversation
+		conv, convErr := getConversation()
+		if convErr == nil {
+			msgs := getMessages(conv)
+			dupes := checkNoDuplicateQuestions(msgs)
+			if len(dupes) == 0 {
+				t.check("no duplicate questions", true)
+			} else {
+				for _, d := range dupes {
+					t.check(fmt.Sprintf("no duplicate questions: %s", d), false)
+				}
+			}
+		}
 
 		totalPassed += t.passed
 		totalFailed += t.failed

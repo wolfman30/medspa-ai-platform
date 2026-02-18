@@ -459,10 +459,60 @@ func testFullFlow(cfg *ClinicConfig, serviceName string, idx int) (bool, string)
 	// Check if we already have slots
 	allText := allRealAssistantMessages(msgs)
 	if containsAny(allText, "reply with the number", "available time") {
+		// Check for duplicate questions
+		if dupes := checkNoDuplicateQuestions(msgs); len(dupes) > 0 {
+			return false, fmt.Sprintf("flow complete but DUPLICATE QUESTIONS: %s", dupes[0])
+		}
 		return true, "flow complete"
 	}
 
 	return false, "no time slots in final response"
+}
+
+// checkNoDuplicateQuestions scans for consecutive assistant messages asking the same question.
+func checkNoDuplicateQuestions(msgs []map[string]interface{}) []string {
+	type intentPattern struct {
+		name     string
+		keywords []string
+	}
+	intents := []intentPattern{
+		{"ask_name", []string{"your name", "full name", "first and last", "may i have your"}},
+		{"ask_patient_type", []string{"visited us before", "first time", "new or returning", "new or existing"}},
+		{"ask_schedule", []string{"days and times", "when works", "what time", "days work best"}},
+		{"ask_provider", []string{"preferred provider", "provider preference", "which provider"}},
+		{"ask_email", []string{"email address", "your email"}},
+	}
+	detectIntent := func(content string) string {
+		lower := strings.ToLower(content)
+		for _, ip := range intents {
+			for _, kw := range ip.keywords {
+				if strings.Contains(lower, kw) {
+					return ip.name
+				}
+			}
+		}
+		return ""
+	}
+	var violations []string
+	lastIntent := ""
+	for _, m := range msgs {
+		if isUserMsg(m) {
+			lastIntent = ""
+			continue
+		}
+		content, _ := m["content"].(string)
+		if isAckMessage(content) {
+			continue
+		}
+		intent := detectIntent(content)
+		if intent != "" && intent == lastIntent {
+			violations = append(violations, fmt.Sprintf("DUPLICATE %s", intent))
+		}
+		if intent != "" {
+			lastIntent = intent
+		}
+	}
+	return violations
 }
 
 // ---------------------------------------------------------------------------
