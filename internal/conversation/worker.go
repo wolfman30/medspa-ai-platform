@@ -63,6 +63,7 @@ type Worker struct {
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	logger           *logging.Logger
+	events           *EventLogger
 
 	cfg workerConfig
 	wg  sync.WaitGroup
@@ -315,6 +316,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		moxieClient:      cfg.moxieClient,
 		leadsRepo:        cfg.leadsRepo,
 		logger:           logger,
+		events:           NewEventLogger(logger),
 		cfg:              cfg,
 	}
 }
@@ -687,6 +689,9 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 	// Output guard: scan reply for sensitive data leaks before sending.
 	leakResult := ScanOutputForLeaks(resp.Message)
 	if leakResult.Leaked {
+		for _, reason := range leakResult.Reasons {
+			w.events.OutputGuardTriggered(ctx, resp.ConversationID, msg.OrgID, reason)
+		}
 		w.logger.Warn("output guard: sensitive data leak detected",
 			"conversation_id", resp.ConversationID,
 			"org_id", msg.OrgID,

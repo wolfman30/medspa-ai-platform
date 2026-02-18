@@ -703,6 +703,7 @@ type LLMService struct {
 	faqClassifier   *FAQClassifier
 	variantResolver *VariantResolver
 	apiBaseURL      string // Public API base URL for callback URLs
+	events          *EventLogger
 }
 
 // NewLLMService returns an LLM-backed Service implementation.
@@ -729,6 +730,7 @@ func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever
 		history:         newHistoryStore(redisClient, llmTracer),
 		faqClassifier:   NewFAQClassifier(client),
 		variantResolver: NewVariantResolver(client, model, logger),
+		events:          NewEventLogger(logger),
 	}
 
 	for _, opt := range opts {
@@ -759,6 +761,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	// Prompt injection detection on first message.
 	injectionResult := ScanForPromptInjection(req.Intro)
 	if injectionResult.Blocked {
+		s.events.PromptInjectionDetected(ctx, req.ConversationID, req.OrgID, true, injectionResult.Score, injectionResult.Reasons)
 		s.logger.Warn("StartConversation: prompt injection BLOCKED",
 			"org_id", req.OrgID,
 			"score", injectionResult.Score,
@@ -770,6 +773,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		return &Response{ConversationID: req.ConversationID, Message: blockedReply, Timestamp: time.Now().UTC()}, nil
 	}
 	if injectionResult.Score >= warnThreshold {
+		s.events.PromptInjectionDetected(ctx, req.ConversationID, req.OrgID, false, injectionResult.Score, injectionResult.Reasons)
 		s.logger.Warn("StartConversation: prompt injection WARNING",
 			"org_id", req.OrgID,
 			"score", injectionResult.Score,
@@ -777,6 +781,8 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		)
 		req.Intro = SanitizeForLLM(req.Intro)
 	}
+
+	s.events.ConversationStarted(ctx, req.ConversationID, req.OrgID, req.LeadID, req.From, string(req.Source))
 
 	s.logger.Info("StartConversation called",
 		"conversation_id", req.ConversationID,
@@ -1028,6 +1034,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		msgs := recentUserMessages(history, "", 6)
 		resolved, question := s.variantResolver.Resolve(ctx, startCfg, prefs.ServiceInterest, msgs)
 		if question != "" {
+			s.events.VariantAsked(ctx, conversationID, req.OrgID, prefs.ServiceInterest, nil)
 			s.logger.Info("StartConversation: service variant clarification needed",
 				"conversation_id", conversationID,
 				"service", prefs.ServiceInterest,
@@ -1052,6 +1059,8 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 			scraperServiceName = startCfg.ResolveServiceName(scraperServiceName)
 		}
 
+		s.events.ServiceExtracted(ctx, conversationID, req.OrgID, prefs.ServiceInterest, scraperServiceName)
+
 		s.logger.Info("StartConversation: all qualifications met, fetching availability",
 			"conversation_id", conversationID,
 			"service", prefs.ServiceInterest,
@@ -1072,8 +1081,10 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		fetchCancel()
 
 		if fetchErr != nil {
+			s.events.ErrorOccurred(ctx, conversationID, req.OrgID, "availability_fetch", fetchErr)
 			s.logger.Warn("StartConversation: availability fetch failed", "error", fetchErr)
 		} else if len(result.Slots) > 0 {
+			s.events.AvailabilityFetched(ctx, conversationID, req.OrgID, prefs.ServiceInterest, len(result.Slots), 0)
 			state := &TimeSelectionState{
 				PresentedSlots: result.Slots,
 				Service:        prefs.ServiceInterest,
@@ -1131,9 +1142,12 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 	}
 
+	s.events.MessageReceived(ctx, req.ConversationID, req.OrgID, req.LeadID, rawMessage)
+
 	// Prompt injection detection — scan inbound messages before they reach the LLM.
 	injectionResult := ScanForPromptInjection(rawMessage)
 	if injectionResult.Blocked {
+		s.events.PromptInjectionDetected(ctx, req.ConversationID, req.OrgID, true, injectionResult.Score, injectionResult.Reasons)
 		s.logger.Warn("ProcessMessage: prompt injection BLOCKED",
 			"conversation_id", req.ConversationID,
 			"org_id", req.OrgID,
@@ -1530,6 +1544,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		// User may be selecting a time slot
 		selectedSlot = DetectTimeSelection(rawMessage, timeSelectionState.PresentedSlots, selectionPrefs)
 		if selectedSlot != nil {
+			s.events.TimeSlotSelected(ctx, req.ConversationID, req.OrgID, selectedSlot.DateTime.Format(time.RFC3339), selectedSlot.Index)
 			s.logger.Info("time slot selected",
 				"slot_index", selectedSlot.Index,
 				"time", selectedSlot.DateTime,
@@ -1863,6 +1878,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			msgs := recentUserMessages(history, rawMessage, 6)
 			resolved, question := s.variantResolver.Resolve(ctx, clinicCfg, prefs.ServiceInterest, msgs)
 			if question != "" {
+				s.events.VariantAsked(ctx, req.ConversationID, req.OrgID, prefs.ServiceInterest, nil)
 				s.logger.Info("service variant clarification needed",
 					"conversation_id", req.ConversationID,
 					"service", prefs.ServiceInterest,
@@ -1883,6 +1899,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				}, nil
 			}
 			if resolved != prefs.ServiceInterest {
+				s.events.VariantResolved(ctx, req.ConversationID, req.OrgID, prefs.ServiceInterest, resolved, "auto")
 				s.logger.Info("service variant resolved",
 					"conversation_id", req.ConversationID,
 					"original_service", prefs.ServiceInterest,
@@ -1899,6 +1916,8 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			if clinicCfg != nil {
 				scraperServiceName = clinicCfg.ResolveServiceName(scraperServiceName)
 			}
+
+			s.events.ServiceExtracted(ctx, req.ConversationID, req.OrgID, prefs.ServiceInterest, scraperServiceName)
 
 			s.logger.Info("fetching available times",
 				"conversation_id", req.ConversationID,
@@ -1957,6 +1976,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 					SMSMessage: fmt.Sprintf("I had trouble checking availability for %s right now. Could you try again in a moment?", prefs.ServiceInterest),
 				}
 			} else if len(result.Slots) > 0 {
+				s.events.AvailabilityFetched(ctx, req.ConversationID, req.OrgID, prefs.ServiceInterest, len(result.Slots), 0)
 				// Save time selection state
 				state := &TimeSelectionState{
 					PresentedSlots: result.Slots,
