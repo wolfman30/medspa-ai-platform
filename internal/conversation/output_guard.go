@@ -51,7 +51,8 @@ var outputLeakPatterns = []outputLeakPattern{
 	{regexp.MustCompile(`(?i)\b(semaglutide|tirzepatide|ozempic|wegovy|mounjaro|glp-?1)\b`), "spam:drug_name", false},
 
 	// Post-procedure symptom minimization — never say symptoms are "normal"
-	{regexp.MustCompile(`(?i)(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry)`), "safety:symptom_minimization", false},
+	{regexp.MustCompile(`(?i)(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry|expected)`), "safety:symptom_minimization", false},
+	{regexp.MustCompile(`(?i)\b(normal|common|expected|typical)\s+(side effect|part of|after|following|reaction|response)\b`), "safety:symptom_minimization", false},
 }
 
 // ScanOutputForLeaks checks an outbound AI reply for sensitive information leaks.
@@ -99,6 +100,7 @@ func sanitizeOutput(reply string) string {
 	// Remove sentences containing banned drug names (carrier spam filter)
 	cleaned = regexp.MustCompile(`(?i)[^.!?]*\b(semaglutide|tirzepatide|ozempic|wegovy|mounjaro|glp-?1)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
 	// Remove sentences that minimize post-procedure symptoms
-	cleaned = regexp.MustCompile(`(?i)[^.!?]*(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry)[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry|expected)[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*\b(normal|common|expected|typical)\s+(side effect|part of|after|following|reaction|response)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
 	return strings.TrimSpace(cleaned)
 }
