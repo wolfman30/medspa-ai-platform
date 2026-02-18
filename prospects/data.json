@@ -5,7 +5,7 @@
       "id": "forever-22",
       "clinic": "Forever 22 Med Spa",
       "owner": "Brandi Sesock",
-      "title": "MSN, CNP — Founder",
+      "title": "MSN, CNP \u2014 Founder",
       "location": "Elyria, OH",
       "phone": "(440) 744-8197",
       "email": "brandi.forever22@gmail.com",
@@ -18,12 +18,19 @@
       "smsWorking": true,
       "orgId": "d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599",
       "services": 46,
-      "providers": ["Brandi Sesock", "Gale Tesar"],
+      "providers": [
+        "Brandi Sesock",
+        "Gale Tesar"
+      ],
       "timeline": [
-        {"date": "2026-02-18T15:12:00Z", "type": "email", "note": "Initial outreach email sent. Subject: 'What happens when someone calls Forever 22 and you're with a client?' Includes portal login + CTA to call test number."}
+        {
+          "date": "2026-02-18T15:12:00Z",
+          "type": "email",
+          "note": "Initial outreach email sent. Subject: 'What happens when someone calls Forever 22 and you're with a client?' Includes portal login + CTA to call test number."
+        }
       ],
       "nextAction": "Follow up if no response by Feb 21",
-      "notes": "Appointment-only clinic. '22' tattoo story — strong brand identity. Two providers: Brandi (founder) and Gale Tesar (RN, 30yr experience)."
+      "notes": "Appointment-only clinic. '22' tattoo story \u2014 strong brand identity. Two providers: Brandi (founder) and Gale Tesar (RN, 30yr experience)."
     },
     {
       "id": "brilliant-aesthetics",
@@ -35,17 +42,25 @@
       "email": "",
       "website": "brilliant-aesthetics.com",
       "emr": "Moxie",
-      "status": "configured",
+      "status": "outreach_sent",
       "configured": true,
       "telnyxNumber": "+13305932634",
       "10dlc": false,
       "smsWorking": false,
       "orgId": "124a2e4a-74bd-4a3a-8f60-84444079a35a",
       "services": 15,
-      "providers": ["Kimberly Enochs"],
-      "timeline": [],
-      "nextAction": "Add Telnyx number to 10DLC campaign, then test SMS",
-      "notes": "Solo NP practice. System configured but SMS blocked — number not in 10DLC campaign yet."
+      "providers": [
+        "Kimberly Enochs"
+      ],
+      "timeline": [
+        {
+          "date": "2026-01-14T20:41:00-05:00",
+          "type": "email",
+          "note": "Cold outreach email sent. Pitched SMS concierge for missed calls, offered DEMO reply or text to 937-896-2713. Mentioned Square deposit (pre-Stripe pivot). No response received."
+        }
+      ],
+      "nextAction": "Follow up \u2014 no response since Jan 14. Consider second touch with updated pitch (now has Stripe + auto-booking on Moxie).",
+      "notes": "Solo NP practice. System configured but SMS blocked \u2014 number not in 10DLC campaign yet."
     },
     {
       "id": "lucys-laser",
@@ -66,7 +81,7 @@
       "services": 0,
       "providers": [],
       "timeline": [],
-      "nextAction": "Configure clinic — spawn sub-agent",
+      "nextAction": "Configure clinic \u2014 spawn sub-agent",
       "notes": "Moxie clinic identified in Cleveland prospect research."
     },
     {
@@ -88,7 +103,7 @@
       "services": 0,
       "providers": [],
       "timeline": [],
-      "nextAction": "Configure clinic — spawn sub-agent",
+      "nextAction": "Configure clinic \u2014 spawn sub-agent",
       "notes": "Moxie clinic identified in Cleveland prospect research."
     }
   ]
