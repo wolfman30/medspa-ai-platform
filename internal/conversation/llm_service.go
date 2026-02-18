@@ -3041,6 +3041,8 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		{"weight loss consultation", "weight loss consultation"},
 		{"semaglutide", "semaglutide"},
 		{"weight loss", "weight loss"},
+		{"lose weight", "weight loss"},
+		{"losing weight", "weight loss"},
 		{"tirzepatide", "tirzepatide"},
 		{"ozempic", "weight loss"},
 		{"wegovy", "weight loss"},
