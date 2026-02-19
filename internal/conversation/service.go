@@ -33,6 +33,7 @@ const (
 	StatusEnded                 = "ended"
 	StatusDepositPaid           = "deposit_paid"
 	StatusAwaitingTimeSelection = "awaiting_time_selection"
+	StatusBooked                = "booked"
 )
 
 // StartRequest represents the minimal data we need to open a conversation.

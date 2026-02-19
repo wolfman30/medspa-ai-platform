@@ -1033,6 +1033,13 @@ func (w *Worker) handleMoxieBookingDirect(ctx context.Context, msg MessageReques
 		"org_id", req.OrgID, "lead_id", req.LeadID,
 		"service", req.Service, "date", req.Date, "time", req.Time)
 
+	// Update conversation status to booked
+	if w.convStore != nil {
+		if err := w.convStore.UpdateStatus(ctx, msg.ConversationID, StatusBooked); err != nil {
+			w.logger.Warn("failed to update conversation status to booked", "error", err, "conversation_id", msg.ConversationID)
+		}
+	}
+
 	// Send confirmation SMS
 	confirmMsg := fmt.Sprintf("Your appointment has been booked! 🎉\n\n📋 %s\n📅 %s at %s\n📍 %s\n\nYou'll receive a confirmation from the clinic shortly. See you then!",
 		req.Service, req.Date, req.Time, cfg.Name)
@@ -1535,6 +1542,13 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 		"appointment_id", result.AppointmentID,
 		"org_id", evt.OrgID, "lead_id", evt.LeadID,
 		"service", service)
+
+	// Update conversation status to booked
+	if w.convStore != nil {
+		if err := w.convStore.UpdateStatusByPhone(ctx, evt.OrgID, evt.LeadPhone, StatusBooked); err != nil {
+			w.logger.Warn("failed to update conversation status to booked", "error", err, "org_id", evt.OrgID, "lead_phone", evt.LeadPhone)
+		}
+	}
 
 	// Update lead with booking session info
 	now := time.Now()
