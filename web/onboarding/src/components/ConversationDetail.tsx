@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { getConversation, type ApiScope } from '../api/client';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { getConversation, clearPatientDataByPhone, type ApiScope } from '../api/client';
 import type { ConversationDetailResponse, MessageResponse } from '../types/conversation';
 
 interface ConversationDetailProps {
@@ -76,7 +76,23 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
   const [conversation, setConversation] = useState<ConversationDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleClear = useCallback(async () => {
+    if (!conversation) return;
+    setClearing(true);
+    try {
+      await clearPatientDataByPhone(orgId, conversation.customer_phone);
+      onBack();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear');
+    } finally {
+      setClearing(false);
+      setShowClearConfirm(false);
+    }
+  }, [conversation, orgId, onBack]);
 
   useEffect(() => {
     let isActive = true;
@@ -178,11 +194,42 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
               </p>
             </div>
           </div>
-          <span
-            className={`ui-badge ${conversation.status === 'active' ? 'ui-badge-success' : 'ui-badge-muted'}`}
-          >
-            {conversation.status}
-          </span>
+          <div className="flex items-center gap-3">
+            <span
+              className={`ui-badge ${conversation.status === 'active' ? 'ui-badge-success' : 'ui-badge-muted'}`}
+            >
+              {conversation.status}
+            </span>
+            {scope === 'admin' && (
+              <>
+                {showClearConfirm ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-600 font-medium">Clear all data?</span>
+                    <button
+                      onClick={handleClear}
+                      disabled={clearing}
+                      className="px-3 py-1 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {clearing ? 'Clearing...' : 'Yes, clear'}
+                    </button>
+                    <button
+                      onClick={() => setShowClearConfirm(false)}
+                      className="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowClearConfirm(true)}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

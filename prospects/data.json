@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-19T14:00:00Z",
+  "lastUpdated": "2026-02-19T17:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -308,6 +308,100 @@
       ],
       "nextAction": "Send outreach via Instagram DM or website",
       "notes": "Est. 2014, woman-owned. Text-to-book model already. 5.9K IG followers. Also runs aesthetics training. Industry-connected owner."
+    },
+    {
+      "id": "visage-medspa",
+      "clinic": "Visage MedSpa",
+      "owner": "Karen Michelson",
+      "title": "CNP \u2014 National Trainer in Aesthetic Medicine",
+      "location": "Willoughby, OH",
+      "phone": "(216) 236-1155",
+      "email": "karen@visagemedspaohio.com",
+      "website": "visagemedspaohio.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Xeomin",
+        "Daxxify",
+        "Dermal Fillers",
+        "Sculptra",
+        "Tixel"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-19T17:00:00Z",
+          "type": "research",
+          "note": "Initial research. Solo NP, 20+ yrs, limited hours (4 days/wk). Direct email found."
+        }
+      ],
+      "nextAction": "Send outreach email to karen@visagemedspaohio.com",
+      "notes": "Solo NP practice, Willoughby (east of Cleveland). Limited hours = high missed call potential. Has direct email."
+    },
+    {
+      "id": "gemma-wellness-medspa",
+      "clinic": "Gemma Wellness Medical Spa",
+      "owner": "Dr. Lori L. Gemma",
+      "title": "DO \u2014 Owner",
+      "location": "Akron (Bath), OH",
+      "phone": "(440) 785-5877",
+      "email": "",
+      "website": "gemmawellnessmedicalspa.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Daxxify",
+        "Fillers",
+        "Microneedling",
+        "PRF",
+        "Facials",
+        "Laser",
+        "Weight Loss"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-19T17:00:00Z",
+          "type": "research",
+          "note": "Initial research. Solo DO, all procedures done personally. Voted Top 3 Akron."
+        }
+      ],
+      "nextAction": "Send outreach via website contact form or Facebook DM",
+      "notes": "Solo physician doing ALL procedures herself. Voted Top 3 in Akron. Bath/Akron area. No email found."
+    },
+    {
+      "id": "neoskin-medspa",
+      "clinic": "NEOSkin Medical Spa",
+      "owner": "Dr. Tricia N. Bedrick",
+      "title": "Aesthetic Physician & Owner",
+      "location": "Hudson, OH",
+      "phone": "(234) 205-2029",
+      "email": "",
+      "website": "neoskincenter.com",
+      "emr": "Zenoti",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "CoolSculpting",
+        "EmTone",
+        "Laser",
+        "Chemical Peels",
+        "Acne Clinic"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-19T17:00:00Z",
+          "type": "research",
+          "note": "Initial research. Uses Zenoti EMR. Premium luxury positioning. Membership model."
+        }
+      ],
+      "nextAction": "Send outreach via website contact form",
+      "notes": "Uses Zenoti (non-Moxie tier). Premium practice with membership tiers. Hudson area. International training."
     }
   ]
 }
