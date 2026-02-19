@@ -503,10 +503,12 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			w.depositPreloader.StartPreload(ctx, payload.Message.ConversationID, payload.Message.OrgID, payload.Message.LeadID, payload.Message.To)
 		}
 		// Set up progress callback to send intermediate SMS during long searches
+		progressSent := make(map[string]bool)
 		payload.Message.OnProgress = func(progressCtx context.Context, msg string) {
-			if w.messenger == nil {
+			if w.messenger == nil || progressSent[msg] {
 				return
 			}
+			progressSent[msg] = true
 			reply := OutboundReply{
 				OrgID:          payload.Message.OrgID,
 				LeadID:         payload.Message.LeadID,

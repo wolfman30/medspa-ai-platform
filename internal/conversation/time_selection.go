@@ -341,10 +341,14 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 		for _, slot := range dateSlots.Slots {
 			slotTime, err := time.Parse(time.RFC3339, slot.Start)
 			if err != nil {
-				// Try alternate format "2006-01-02T15:04:05-07:00"
+				// Try alternate format with explicit offset
 				slotTime, err = time.Parse("2006-01-02T15:04:05-07:00", slot.Start)
 				if err != nil {
-					continue
+					// Moxie may return naive datetimes (no timezone) — treat as clinic local time
+					slotTime, err = time.ParseInLocation("2006-01-02T15:04:05", slot.Start, loc)
+					if err != nil {
+						continue
+					}
 				}
 			}
 			slotLocal := slotTime.In(loc)

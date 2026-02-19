@@ -165,6 +165,14 @@ func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDa
 	}
 
 	result := &AvailabilityResult{}
+	// Log first few raw slot times for debugging timezone issues
+	logged := 0
+	for _, d := range resp.Data.AvailableTimeSlots.Dates {
+		if logged < 3 && len(d.Slots) > 0 {
+			c.logger.Info("moxie raw slot sample", "date", d.Date, "first_start", d.Slots[0].Start, "first_end", d.Slots[0].End)
+			logged++
+		}
+	}
 	for _, d := range resp.Data.AvailableTimeSlots.Dates {
 		ds := DateSlots{Date: d.Date}
 		for _, s := range d.Slots {
