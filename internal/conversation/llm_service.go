@@ -1072,8 +1072,8 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		var fetchErr error
 
 		if moxieAPIReady {
-			result, fetchErr = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, startCfg,
-				scraperServiceName, timePrefs, nil, prefs.ServiceInterest)
+			result, fetchErr = FetchAvailableTimesFromMoxieAPIWithProvider(fetchCtx, s.moxieClient, startCfg,
+				scraperServiceName, prefs.ProviderPreference, timePrefs, nil, prefs.ServiceInterest)
 		} else {
 			result, fetchErr = FetchAvailableTimesWithFallback(fetchCtx, s.browser,
 				startCfg.BookingURL, scraperServiceName, timePrefs, nil, prefs.ServiceInterest)
@@ -1608,8 +1608,8 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				var fetchErr error
 
 				if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
-					result, fetchErr = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, cfg,
-						scraperServiceName, refinedPrefs, req.OnProgress, service)
+					result, fetchErr = FetchAvailableTimesFromMoxieAPIWithProvider(fetchCtx, s.moxieClient, cfg,
+						scraperServiceName, prefs.ProviderPreference, refinedPrefs, req.OnProgress, service)
 				} else if cfg != nil {
 					result, fetchErr = FetchAvailableTimesWithFallback(fetchCtx, s.browser,
 						cfg.BookingURL, scraperServiceName, refinedPrefs, req.OnProgress, service)
@@ -1936,7 +1936,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			if s.moxieClient != nil && clinicCfg != nil && clinicCfg.MoxieConfig != nil {
 				s.logger.Info("fetching availability via Moxie API (fast path)",
 					"conversation_id", req.ConversationID, "service", scraperServiceName)
-				result, err = FetchAvailableTimesFromMoxieAPI(fetchCtx, s.moxieClient, clinicCfg, scraperServiceName, timePrefs, req.OnProgress, prefs.ServiceInterest)
+				result, err = FetchAvailableTimesFromMoxieAPIWithProvider(fetchCtx, s.moxieClient, clinicCfg, scraperServiceName, prefs.ProviderPreference, timePrefs, req.OnProgress, prefs.ServiceInterest)
 				if err != nil {
 					// Check if this is a "service not found" error vs a transient API error.
 					// Don't waste 2+ minutes on the browser scraper if the service simply doesn't exist.

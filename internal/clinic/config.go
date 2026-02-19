@@ -182,6 +182,32 @@ type MoxieConfig struct {
 	ProviderNames map[string]string `json:"provider_names,omitempty"`
 }
 
+// ResolveProviderID returns the Moxie userMedspaId for a provider name (case-insensitive partial match).
+// Returns "" if no match found.
+func (c *Config) ResolveProviderID(providerName string) string {
+	if c.MoxieConfig == nil || c.MoxieConfig.ProviderNames == nil {
+		return ""
+	}
+	lower := strings.ToLower(strings.TrimSpace(providerName))
+	if lower == "" || lower == "no preference" {
+		return ""
+	}
+	// Exact match first
+	for id, name := range c.MoxieConfig.ProviderNames {
+		if strings.ToLower(name) == lower {
+			return id
+		}
+	}
+	// Partial match (first name only)
+	for id, name := range c.MoxieConfig.ProviderNames {
+		parts := strings.Fields(strings.ToLower(name))
+		if len(parts) > 0 && parts[0] == lower {
+			return id
+		}
+	}
+	return ""
+}
+
 // ServiceNeedsProviderPreference returns true if the given service (by normalized name)
 // has more than one eligible provider.
 func (c *Config) ServiceNeedsProviderPreference(serviceName string) bool {

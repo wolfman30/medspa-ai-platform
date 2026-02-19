@@ -107,18 +107,26 @@ type graphqlRequest struct {
 }
 
 // GetAvailableSlots queries Moxie for available time slots.
-func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDate, endDate string, serviceMenuItemID string, noPreference bool) (*AvailabilityResult, error) {
+// If providerUserMedspaID is non-empty, slots are filtered to that provider.
+func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDate, endDate string, serviceMenuItemID string, noPreference bool, providerUserMedspaID ...string) (*AvailabilityResult, error) {
 	type serviceVar struct {
-		ServiceMenuItemID string `json:"serviceMenuItemId"`
-		NoPreference      bool   `json:"noPreference"`
-		Order             int    `json:"order"`
+		ServiceMenuItemID    string `json:"serviceMenuItemId"`
+		NoPreference         bool   `json:"noPreference"`
+		Order                int    `json:"order"`
+		ProviderUserMedspaID string `json:"providerUserMedspaId,omitempty"`
+	}
+
+	svc := serviceVar{ServiceMenuItemID: serviceMenuItemID, NoPreference: noPreference, Order: 1}
+	if len(providerUserMedspaID) > 0 && providerUserMedspaID[0] != "" {
+		svc.ProviderUserMedspaID = providerUserMedspaID[0]
+		svc.NoPreference = false
 	}
 
 	variables := map[string]interface{}{
 		"medspaId":  medspaID,
 		"startDate": startDate,
 		"endDate":   endDate,
-		"services":  []serviceVar{{ServiceMenuItemID: serviceMenuItemID, NoPreference: noPreference, Order: 1}},
+		"services":  []serviceVar{svc},
 	}
 
 	query := `query AvailableTimeSlots($medspaId: ID!, $startDate: Date!, $endDate: Date!, $services: [CheckAvailabilityAppointmentServiceInput!]!) {

@@ -232,3 +232,39 @@ func TestResolveServiceName(t *testing.T) {
 		t.Errorf("expected Botox, got %s", got)
 	}
 }
+
+func TestResolveProviderID(t *testing.T) {
+	cfg := &Config{
+		MoxieConfig: &MoxieConfig{
+			ProviderNames: map[string]string{
+				"33950": "Brandi Sesock",
+				"38627": "Gale Tesar",
+			},
+		},
+	}
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Gale Tesar", "38627"},
+		{"gale tesar", "38627"},
+		{"Gale", "38627"},
+		{"gale", "38627"},
+		{"Brandi Sesock", "33950"},
+		{"Brandi", "33950"},
+		{"brandi", "33950"},
+		{"no preference", ""},
+		{"", ""},
+		{"Unknown Provider", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := cfg.ResolveProviderID(tt.input)
+			if got != tt.want {
+				t.Errorf("ResolveProviderID(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

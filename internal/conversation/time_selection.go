@@ -274,6 +274,21 @@ func FetchAvailableTimesFromMoxieAPI(
 	onProgress func(ctx context.Context, msg string),
 	patientFacingServiceName ...string,
 ) (*AvailabilityResult, error) {
+	return FetchAvailableTimesFromMoxieAPIWithProvider(ctx, moxie, cfg, serviceName, "", prefs, onProgress, patientFacingServiceName...)
+}
+
+// FetchAvailableTimesFromMoxieAPIWithProvider is like FetchAvailableTimesFromMoxieAPI
+// but also filters by provider preference name (e.g., "Gale").
+func FetchAvailableTimesFromMoxieAPIWithProvider(
+	ctx context.Context,
+	moxie *moxieclient.Client,
+	cfg *clinic.Config,
+	serviceName string,
+	providerPreference string,
+	prefs TimePreferences,
+	onProgress func(ctx context.Context, msg string),
+	patientFacingServiceName ...string,
+) (*AvailabilityResult, error) {
 	if moxie == nil || cfg == nil || cfg.MoxieConfig == nil {
 		return nil, fmt.Errorf("moxie API not configured")
 	}
@@ -308,7 +323,11 @@ func FetchAvailableTimesFromMoxieAPI(
 	startDate := today.Format("2006-01-02")
 	endDate := today.AddDate(0, 3, 0).Format("2006-01-02")
 
-	result, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, true)
+	// Resolve provider preference to Moxie userMedspaId
+	providerID := cfg.ResolveProviderID(providerPreference)
+	noProviderPref := providerID == ""
+
+	result, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, noProviderPref, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("moxie availability query failed: %w", err)
 	}
