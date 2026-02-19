@@ -224,7 +224,7 @@ export function CEODashboard() {
             </div>
 
             {/* Milestones */}
-            <div className="max-h-36 overflow-y-auto">
+            <div className="max-h-36 overflow-y-auto pr-3">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-slate-500 border-b border-slate-800">

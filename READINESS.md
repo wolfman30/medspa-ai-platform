@@ -1,16 +1,23 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 ## Automated E2E Test Results (Live Dev API)
 
 **30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)**
 
-### Failures (5 checks across 4 scenarios):
-1. **multi-turn**: Provider preference/email not asked after schedule (LLM ordering)
-2. **service-vocabulary**: "fix my 11s" and "lip flip" not moving to next qualification (LLM service recognition)
-3. **post-procedure**: AI says "that's normal" for post-filler swelling (should defer to provider)
-4. **weight-loss-spam-filter**: "GLP-1" mentioned in response (carrier filter risk)
+### Recent Fixes (Feb 18):
+- `07a84a2` fix: address 5 E2E test failures
+- `669678d` fix: broaden post-procedure output guard + E2E check
+- `30c57dd` fix: teach system prompt that '11s', 'lip flip', 'frown lines' = Botox (no area question)
+- `860fb8c` feat: prospect tracker — Postgres-backed CRUD
+- `bcf04d4` feat: auto-migrate database on app startup
+- `b0c130c` feat: CEO Dashboard as default admin tab
+
+### Remaining Issues (to verify):
+1. Re-run E2E to confirm 4 previous failures are resolved by commits above
+2. Post-procedure guard broadened — needs validation
+3. Service vocabulary ("11s", "lip flip") — prompt fix deployed, needs E2E confirmation
 
 ## Pre-Operator Testing Checklist (SPEC.md §3b)
 

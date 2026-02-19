@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-18T15:12:00Z",
+  "lastUpdated": "2026-02-19T14:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -64,47 +64,250 @@
     },
     {
       "id": "lucys-laser",
-      "clinic": "Lucy's Laser & Aesthetics",
-      "owner": "",
-      "title": "",
+      "clinic": "Lucy's Laser & MedSpa",
+      "owner": "Lucy Zappitelli Sason",
+      "title": "CNP \u2014 Founder",
       "location": "Mentor, OH",
-      "phone": "",
+      "phone": "(440) 223-1595",
       "email": "",
-      "website": "",
+      "website": "lucyslasermedspa.com",
       "emr": "Moxie",
-      "status": "identified",
-      "configured": false,
+      "status": "configured",
+      "configured": true,
       "telnyxNumber": "",
       "10dlc": false,
       "smsWorking": false,
-      "orgId": "",
-      "services": 0,
-      "providers": [],
+      "orgId": "de85b4e1-8fbb-455b-af7c-c3a5fdf4851a",
+      "services": 55,
+      "providers": [
+        "Lucy Zappitelli Sason",
+        "Megan Landry",
+        "Sarah Jusko",
+        "Jess Petush",
+        "Halie Rosser"
+      ],
       "timeline": [],
       "nextAction": "Configure clinic \u2014 spawn sub-agent",
-      "notes": "Moxie clinic identified in Cleveland prospect research."
+      "notes": "Moxie power user (featured in Moxie case study). 5 providers. Broad services incl HRT + weight loss. Opened Sept 2023."
     },
     {
       "id": "adela-medical",
-      "clinic": "Adela Medical Aesthetics",
-      "owner": "",
-      "title": "",
+      "clinic": "Adela Medical Spa",
+      "owner": "Dr. Brady Steineck",
+      "title": "MD \u2014 Owner/Medical Director",
       "location": "Canton, OH",
-      "phone": "",
+      "phone": "(234) 347-0170",
       "email": "",
-      "website": "",
+      "website": "adelamedicalspa.com",
       "emr": "Moxie",
-      "status": "identified",
-      "configured": false,
+      "status": "configured",
+      "configured": true,
       "telnyxNumber": "",
       "10dlc": false,
       "smsWorking": false,
-      "orgId": "",
-      "services": 0,
-      "providers": [],
+      "orgId": "4440091b-b73f-49fa-87a2-ae22d0110981",
+      "services": 70,
+      "providers": [
+        "Brady Steineck",
+        "Tiffany Steineck",
+        "Angela Solenthaler",
+        "Brandy Roberts",
+        "Paige Morse",
+        "McKenna Zehnder",
+        "Amy Petrillo",
+        "Demetria Soles",
+        "Tannah Hada",
+        "Bob Lung",
+        "Carol Mcnulty"
+      ],
       "timeline": [],
       "nextAction": "Configure clinic \u2014 spawn sub-agent",
-      "notes": "Moxie clinic identified in Cleveland prospect research."
+      "notes": "11+ providers \u2014 highest scheduling complexity. Satellite at Ora Doro. Founded 2018. Also runs Community Health Care Inc."
+    },
+    {
+      "id": "euro-look-medspa",
+      "clinic": "Euro Look MedSpa",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Cleveland, OH",
+      "phone": "",
+      "email": "",
+      "website": "eurolookmedspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Xeomin",
+        "Dermal Fillers",
+        "Kybella",
+        "RF Microneedling",
+        "Laser",
+        "Weight Loss"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-18T23:00:00Z",
+          "type": "research",
+          "note": "Initial research. 364+ 5-star reviews. No phone on homepage."
+        }
+      ],
+      "nextAction": "Find owner name and contact email, then send outreach",
+      "notes": "364+ five-star Google reviews. Strong online presence. Cleveland area."
+    },
+    {
+      "id": "relux-medical-spa",
+      "clinic": "ReLux Medical Spa",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Akron, OH",
+      "phone": "(330) 281-4699",
+      "email": "info@reluxmedspa.com",
+      "website": "reluxmedspa.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Sculptra",
+        "Fillers",
+        "Threads",
+        "PRF",
+        "HydraFacial",
+        "Chemical Peels"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-18T23:00:00Z",
+          "type": "research",
+          "note": "Initial research. Phone prominent, LLC, Akron. Email found."
+        }
+      ],
+      "nextAction": "Send outreach email to info@reluxmedspa.com",
+      "notes": "Phone-dependent booking. Limited hours = high after-hours call volume. Excellent fit."
+    },
+    {
+      "id": "define-you-medical-spa",
+      "clinic": "Define You Medical Spa",
+      "owner": "Molly",
+      "title": "",
+      "location": "North Canton, OH",
+      "phone": "",
+      "email": "",
+      "website": "defineyoumedicalspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Fillers",
+        "Microneedling",
+        "B12 Injections",
+        "Weight Loss"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-18T23:00:00Z",
+          "type": "research",
+          "note": "Initial research. Owner-operator Molly. North Canton."
+        }
+      ],
+      "nextAction": "Find phone number and email, then send outreach",
+      "notes": "Small owner-operator. Published pricing. Personalized approach. Good fit."
+    },
+    {
+      "id": "bodytonic-medspa",
+      "clinic": "BodyTonic Medspa",
+      "owner": "Unknown (Medical Director)",
+      "title": "",
+      "location": "Fairview Park, OH",
+      "phone": "(216) 307-6926",
+      "email": "info@bodytonicmedspas.com",
+      "website": "bodytonicmedspas.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "BBL Laser",
+        "Microneedling",
+        "Body Contouring"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-19T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Outreach email drafted."
+        }
+      ],
+      "nextAction": "Send outreach email",
+      "notes": "Single-location, Westgate area. Same-day booking. 210+ reviews. Closed Mondays. Online shop."
+    },
+    {
+      "id": "modern-vitality-medical-spa",
+      "clinic": "Modern Vitality Medical Spa",
+      "owner": "Julia",
+      "title": "NP, AANP Board-Certified",
+      "location": "Akron, OH",
+      "phone": "(234) 208-6867",
+      "email": "",
+      "website": "modernvitalitymedicalspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Jeuveau",
+        "Sculptra",
+        "Fillers",
+        "PRP",
+        "BBL",
+        "Moxi",
+        "Laser Hair Removal"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-19T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Outreach email drafted."
+        }
+      ],
+      "nextAction": "Send outreach via website contact form",
+      "notes": "NP-owned solo practice. Transparent pricing. Akron native. Closed weekends. Boutique component. 4.8 stars."
+    },
+    {
+      "id": "confidence-med-spa",
+      "clinic": "Confidence Med-Spa",
+      "owner": "Victoria",
+      "title": "VP, Cosmetic Therapy Association of Ohio",
+      "location": "Lakewood, OH",
+      "phone": "(216) 633-8280",
+      "email": "",
+      "website": "confidencemedspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Injectables",
+        "Permanent Cosmetics",
+        "Skincare",
+        "Laser",
+        "Body Treatments"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-19T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Outreach email drafted."
+        }
+      ],
+      "nextAction": "Send outreach via Instagram DM or website",
+      "notes": "Est. 2014, woman-owned. Text-to-book model already. 5.9K IG followers. Also runs aesthetics training. Industry-connected owner."
     }
   ]
 }
