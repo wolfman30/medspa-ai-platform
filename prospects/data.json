@@ -402,6 +402,75 @@
       ],
       "nextAction": "Send outreach via website contact form",
       "notes": "Uses Zenoti (non-Moxie tier). Premium practice with membership tiers. Hudson area. International training."
+    },
+    {
+      "id": "kur-modern-medical-aesthetics",
+      "clinic": "KÜR Modern Medical Aesthetics",
+      "owner": "Nina Pupovac",
+      "title": "NP, Board-Certified — Founder",
+      "location": "Cleveland, OH (Downtown)",
+      "phone": "",
+      "email": "",
+      "website": "chooseyourkur.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": ["Botox", "Dermal Fillers", "IV Hydration", "Facials", "Body Contouring", "Skin Tightening"],
+      "timeline": [
+        {
+          "date": "2026-02-19T20:00:00Z",
+          "type": "research",
+          "note": "Initial research. Top 100 Best Injectors 2021. Luxury positioning, small team. No phone on website."
+        }
+      ],
+      "nextAction": "Send outreach via website contact form or Instagram DM",
+      "notes": "Strong personal brand. Small team (Nina, Elizabeth, Nataleigh). Downtown Cleveland. No phone prominently listed — contact form based."
+    },
+    {
+      "id": "light-touch-aesthetic-center",
+      "clinic": "Light Touch Aesthetic Center",
+      "owner": "Unknown (Physician-owned)",
+      "title": "Physician Owner",
+      "location": "Cleveland, OH (Tremont/W 25th)",
+      "phone": "(216) 430-7188",
+      "email": "",
+      "website": "lighttouchonline.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": ["Laser Hair Removal", "Botox", "Dermal Fillers", "Chemical Peels", "Body Contouring"],
+      "timeline": [
+        {
+          "date": "2026-02-19T20:00:00Z",
+          "type": "research",
+          "note": "Initial research. 25+ years in business (since 2000). Phone on every page. Excellent text-back candidate."
+        }
+      ],
+      "nextAction": "Draft and send outreach email",
+      "notes": "Physician-owned since 2000. Originally Independence, OH. Two websites. Phone prominently displayed — ideal for missed call text-back. Score: 9/10."
+    },
+    {
+      "id": "cleveland-primecare-medspa",
+      "clinic": "Cleveland Primecare MedSpa",
+      "owner": "Deidra Bobincheck",
+      "title": "NP-C, Vice President",
+      "location": "Beachwood, OH",
+      "phone": "(216) 329-3810",
+      "email": "",
+      "website": "clevelandprimecaremedspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": ["BOTOX", "Xeomin", "Dermal Fillers", "PRP Hair Restoration", "Facials"],
+      "timeline": [
+        {
+          "date": "2026-02-19T20:00:00Z",
+          "type": "research",
+          "note": "Initial research. Combined primary care + mental health + medspa. Beachwood (affluent suburb). Small operation."
+        }
+      ],
+      "nextAction": "Send outreach email to Deidra",
+      "notes": "Hybrid primary care + medspa model. Beachwood location. Deidra has Cleveland Clinic background. Multiple service lines = busy phones."
     }
   ]
 }

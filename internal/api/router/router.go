@@ -210,6 +210,7 @@ func New(cfg *Config) http.Handler {
 				admin.Put("/prospects/{prospectID}", cfg.ProspectsHandler.Upsert)
 				admin.Delete("/prospects/{prospectID}", cfg.ProspectsHandler.Delete)
 				admin.Post("/prospects/{prospectID}/events", cfg.ProspectsHandler.AddEvent)
+				admin.Get("/prospects/{prospectID}/outreach", cfg.ProspectsHandler.GetOutreach)
 			}
 			// Clinic onboarding endpoints
 			if cfg.AdminOnboarding != nil {

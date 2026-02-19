@@ -3,16 +3,57 @@ package prospects
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 type Handler struct {
-	repo *Repository
+	repo        *Repository
+	researchDir string // base path to research/ directory
 }
 
 func NewHandler(repo *Repository) *Handler {
 	return &Handler{repo: repo}
+}
+
+// SetResearchDir sets the base path to the research/ directory for outreach/lead file lookups.
+func (h *Handler) SetResearchDir(dir string) {
+	h.researchDir = dir
+}
+
+// GET /admin/prospects/{id}/outreach
+func (h *Handler) GetOutreach(w http.ResponseWriter, r *http.Request) {
+	id := extractProspectID(r)
+	if id == "" {
+		http.Error(w, "missing prospect id", 400)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"draft":          "",
+		"research":       "",
+		"draftExists":    false,
+		"researchExists": false,
+	}
+
+	if h.researchDir != "" {
+		draftPath := filepath.Join(h.researchDir, "outreach", id+"-email.md")
+		if data, err := os.ReadFile(draftPath); err == nil {
+			resp["draft"] = string(data)
+			resp["draftExists"] = true
+		}
+
+		researchPath := filepath.Join(h.researchDir, "leads", id+".md")
+		if data, err := os.ReadFile(researchPath); err == nil {
+			resp["research"] = string(data)
+			resp["researchExists"] = true
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 // GET /admin/prospects

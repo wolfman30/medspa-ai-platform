@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { addProspectEvent } from '../api/client';
+import { useState, useEffect } from 'react';
+import { addProspectEvent, getProspectOutreach } from '../api/client';
+import type { ProspectOutreach } from '../api/client';
 
 interface ProspectEvent {
   id: number;
@@ -86,6 +87,24 @@ export function ProspectDetail({ prospect: p, onBack, onRefresh, dark = false }:
   const [eventType, setEventType] = useState('note');
   const [eventNote, setEventNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [outreach, setOutreach] = useState<ProspectOutreach | null>(null);
+  const [outreachLoading, setOutreachLoading] = useState(true);
+  const [copied, setCopied] = useState<'draft' | 'research' | null>(null);
+  const [researchOpen, setResearchOpen] = useState(false);
+
+  useEffect(() => {
+    setOutreachLoading(true);
+    getProspectOutreach(p.id)
+      .then(setOutreach)
+      .catch(() => setOutreach(null))
+      .finally(() => setOutreachLoading(false));
+  }, [p.id]);
+
+  const handleCopy = async (text: string, which: 'draft' | 'research') => {
+    await navigator.clipboard.writeText(text);
+    setCopied(which);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
   const s = STATUS_MAP[p.status] || { label: p.status, color: 'text-slate-400', bg: 'bg-slate-800 border-slate-700' };
 
@@ -250,6 +269,65 @@ export function ProspectDetail({ prospect: p, onBack, onRefresh, dark = false }:
             </div>
           </form>
         )}
+
+        {/* Outreach Draft */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">📧 Outreach Draft</h2>
+            {outreach?.draftExists && (
+              <button
+                onClick={() => handleCopy(outreach.draft, 'draft')}
+                className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium transition"
+              >
+                {copied === 'draft' ? '✓ Copied!' : '📋 Copy to Clipboard'}
+              </button>
+            )}
+          </div>
+          {outreachLoading ? (
+            <p className="text-sm text-slate-500">Loading...</p>
+          ) : outreach?.draftExists ? (
+            <div className="bg-slate-950 rounded-lg border border-slate-700 p-4 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+              {outreach.draft}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No outreach draft yet</p>
+          )}
+        </div>
+
+        {/* Research */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <button
+            onClick={() => setResearchOpen(!researchOpen)}
+            className="flex items-center justify-between w-full"
+          >
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">🔍 Research</h2>
+            <div className="flex items-center gap-2">
+              {researchOpen && outreach?.researchExists && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); handleCopy(outreach.research, 'research'); }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium transition"
+                >
+                  {copied === 'research' ? '✓ Copied!' : '📋 Copy'}
+                </span>
+              )}
+              <span className="text-slate-500 text-sm">{researchOpen ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {researchOpen && (
+            <div className="mt-4">
+              {outreachLoading ? (
+                <p className="text-sm text-slate-500">Loading...</p>
+              ) : outreach?.researchExists ? (
+                <div className="bg-slate-950 rounded-lg border border-slate-700 p-4 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+                  {outreach.research}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No research data available</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Outreach History / Timeline */}
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -487,7 +488,7 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
-		ProspectsHandler:       prospects.NewHandler(prospects.NewRepository(sqlDB)),
+		ProspectsHandler:       newProspectsHandler(sqlDB),
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,
@@ -929,6 +930,17 @@ func setupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxcli
 	}
 	logger.Debug("telnyx client created successfully")
 	return client
+}
+
+func newProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
+	h := prospects.NewHandler(prospects.NewRepository(sqlDB))
+	// Look for research/ dir relative to working directory
+	if abs, err := filepath.Abs("research"); err == nil {
+		if info, err := os.Stat(abs); err == nil && info.IsDir() {
+			h.SetResearchDir(abs)
+		}
+	}
+	return h
 }
 
 func initializeLeadsRepository(dbPool *pgxpool.Pool) leads.Repository {

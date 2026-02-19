@@ -1003,6 +1003,21 @@ export async function upsertProspect(id: string, data: Record<string, unknown>):
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
+export interface ProspectOutreach {
+  draft: string;
+  research: string;
+  draftExists: boolean;
+  researchExists: boolean;
+}
+
+export async function getProspectOutreach(prospectId: string): Promise<ProspectOutreach> {
+  const res = await fetch(`${API_BASE}/admin/prospects/${prospectId}/outreach`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function addProspectEvent(prospectId: string, type: string, note: string): Promise<unknown> {
   const res = await fetch(`${API_BASE}/admin/prospects/${prospectId}/events`, {
     method: 'POST',
