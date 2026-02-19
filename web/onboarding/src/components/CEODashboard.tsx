@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { listProspects } from '../api/client';
+import { ProspectDetail } from './ProspectDetail';
 
 interface ProspectEvent {
   id: number;
@@ -85,6 +86,7 @@ export function CEODashboard() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProspectId, setSelectedProspectId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -119,9 +121,21 @@ export function CEODashboard() {
 
   // All timeline events, sorted recent first
   const allEvents = prospects
-    .flatMap(p => (p.timeline || []).map(e => ({ ...e, clinic: p.clinic })))
+    .flatMap(p => (p.timeline || []).map(e => ({ ...e, clinic: p.clinic, prospectId: p.id })))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 20);
+
+  const selectedProspect = selectedProspectId ? prospects.find(p => p.id === selectedProspectId) as Prospect | undefined : undefined;
+  if (selectedProspect) {
+    return (
+      <ProspectDetail
+        prospect={selectedProspect as any}
+        onBack={() => setSelectedProspectId(null)}
+        onRefresh={refresh}
+        dark
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -288,7 +302,11 @@ export function CEODashboard() {
           ) : (
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {allEvents.map((ev, i) => (
-                <div key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition text-sm">
+                <button
+                  key={i}
+                  onClick={() => setSelectedProspectId(ev.prospectId)}
+                  className="w-full flex items-start gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition text-sm text-left cursor-pointer"
+                >
                   <span className="text-xs text-slate-500 whitespace-nowrap font-mono min-w-[110px]">
                     {new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
                     {new Date(ev.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
@@ -297,7 +315,7 @@ export function CEODashboard() {
                   <span className="text-slate-300">
                     <span className="text-violet-400 font-medium">{ev.clinic}</span> — {ev.note}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}

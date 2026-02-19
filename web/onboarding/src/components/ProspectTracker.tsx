@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { listProspects, addProspectEvent } from '../api/client';
+import { listProspects } from '../api/client';
+import { ProspectDetail } from './ProspectDetail';
 
 interface ProspectEvent {
   id: number;
@@ -44,12 +45,6 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   lost: { label: 'Lost', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
 };
 
-function formatDateTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
 function Indicator({ on, label }: { on: boolean; label: string }) {
   return (
     <span
@@ -59,57 +54,10 @@ function Indicator({ on, label }: { on: boolean; label: string }) {
   );
 }
 
-interface AddEventFormProps {
-  prospectId: string;
-  onAdded: () => void;
-}
-
-function AddEventForm({ prospectId, onAdded }: AddEventFormProps) {
-  const [type, setType] = useState('email');
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!note.trim()) return;
-    setSaving(true);
-    try {
-      await addProspectEvent(prospectId, type, note.trim());
-      setNote('');
-      onAdded();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="mt-3 flex gap-2 items-end">
-      <select value={type} onChange={e => setType(e.target.value)} className="ui-select text-xs py-1.5 w-28">
-        <option value="email">Email</option>
-        <option value="call">Call</option>
-        <option value="text">Text</option>
-        <option value="meeting">Meeting</option>
-        <option value="note">Note</option>
-        <option value="response">Response</option>
-      </select>
-      <input
-        type="text"
-        placeholder="What happened?"
-        value={note}
-        onChange={e => setNote(e.target.value)}
-        className="ui-input text-xs py-1.5 flex-1"
-      />
-      <button type="submit" disabled={saving || !note.trim()} className="ui-btn ui-btn-primary text-xs py-1.5 px-3">
-        {saving ? '...' : 'Add'}
-      </button>
-    </form>
-  );
-}
-
 export function ProspectTracker() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -125,6 +73,17 @@ export function ProspectTracker() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const selectedProspect = selectedId ? prospects.find(p => p.id === selectedId) : null;
+  if (selectedProspect) {
+    return (
+      <ProspectDetail
+        prospect={selectedProspect}
+        onBack={() => setSelectedId(null)}
+        onRefresh={fetchData}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -181,12 +140,11 @@ export function ProspectTracker() {
         <div className="space-y-3">
           {sorted.map(p => {
             const s = STATUS_MAP[p.status] || { label: p.status, color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200' };
-            const expanded = expandedId === p.id;
 
             return (
               <div key={p.id} className="ui-card ui-card-solid overflow-hidden">
                 <button
-                  onClick={() => setExpandedId(expanded ? null : p.id)}
+                  onClick={() => setSelectedId(p.id)}
                   className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -209,52 +167,9 @@ export function ProspectTracker() {
                     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${s.bg} ${s.color}`}>
                       {s.label}
                     </span>
-                    <span className={`text-slate-400 text-sm transition-transform ${expanded ? 'rotate-90' : ''}`}>›</span>
+                    <span className="text-slate-400 text-sm">›</span>
                   </div>
                 </button>
-
-                {expanded && (
-                  <div className="px-4 pb-4 border-t border-slate-100 pt-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                      <div><span className="text-xs text-slate-500 uppercase">Owner</span><div className="text-slate-800">{p.owner || '—'}</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">Phone</span><div className="text-slate-800">{p.phone || '—'}</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">Email</span><div className="text-slate-800">{p.email || '—'}</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">EMR</span><div className="text-slate-800">{p.emr || '—'}</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">Telnyx #</span><div className="text-slate-800">{p.telnyxNumber || '—'}</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">Services</span><div className="text-slate-800">{p.services} configured</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">Providers</span><div className="text-slate-800">{p.providers?.join(', ') || '—'}</div></div>
-                      <div><span className="text-xs text-slate-500 uppercase">Notes</span><div className="text-slate-800">{p.notes || '—'}</div></div>
-                    </div>
-
-                    {p.timeline && p.timeline.length > 0 && (
-                      <div className="mt-4">
-                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Timeline</h3>
-                        <div className="space-y-2">
-                          {p.timeline.map((ev, i) => (
-                            <div key={i} className="flex gap-3 items-start">
-                              <span className="inline-flex items-center rounded bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase shrink-0">
-                                {ev.type}
-                              </span>
-                              <div className="min-w-0">
-                                <span className="text-xs text-slate-400">{formatDateTime(ev.date)}</span>
-                                <p className="text-sm text-slate-700">{ev.note}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <AddEventForm prospectId={p.id} onAdded={fetchData} />
-
-                    {p.nextAction && (
-                      <div className="mt-4 rounded-lg bg-violet-50 border border-violet-200 p-3">
-                        <div className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide">Next Action</div>
-                        <p className="text-sm text-slate-800 mt-0.5">{p.nextAction}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
