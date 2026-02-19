@@ -1492,10 +1492,7 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 	}
 
 	// Parse start/end times from the selected datetime
-	loc, locErr := time.LoadLocation(cfg.Timezone)
-	if locErr != nil {
-		loc = time.UTC
-	}
+	loc := ClinicLocation(cfg.Timezone)
 	localTime := lead.SelectedDateTime.In(loc)
 	startTime := lead.SelectedDateTime.UTC().Format(time.RFC3339)
 	endTime := lead.SelectedDateTime.Add(45 * time.Minute).UTC().Format(time.RFC3339)
@@ -1564,18 +1561,8 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 			"error", err, "lead_id", evt.LeadID, "appointment_id", result.AppointmentID)
 	}
 
-	// Build Moxie-specific confirmation message with appointment details
-	dateStr := localTime.Format("Monday, January 2")
-	tzAbbrev := localTime.Format("MST")
-	timeStr := localTime.Format("3:04 PM") + " " + tzAbbrev
-	confirmMsg := fmt.Sprintf(
-		"Payment received and your appointment is booked! 🎉\n\n"+
-			"📋 %s\n"+
-			"📅 %s at %s\n"+
-			"📍 %s\n\n"+
-			"Reminder: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable.\n\n"+
-			"See you then!",
-		service, dateStr, timeStr, cfg.Name)
+	// Build confirmation message using centralized formatter
+	confirmMsg := FormatAppointmentConfirmation(service, localTime, cfg.Name)
 
 	return true, confirmMsg
 }
