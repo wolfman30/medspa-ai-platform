@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { listProspects } from '../api/client';
+import { listProspects, listBriefs, type MorningBrief } from '../api/client';
 import { ProspectDetail } from './ProspectDetail';
 
 interface ProspectEvent {
@@ -81,6 +81,101 @@ const WEEKLY_BRIEF = `## Weekly Brief — Feb 17, 2025
 **Blockers:** AWS creds need rotation. Outreach templates need CEO sign-off before next batch.
 
 **Next Week:** Target 10 new outreach emails. Follow up on Glow Medspa demo. Begin Stripe integration testing.`;
+
+// Simple markdown → HTML converter (no external deps)
+function mdToHtml(md: string): string {
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-slate-100 mt-4 mb-1">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-slate-100 mt-4 mb-2">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-slate-100 mt-4 mb-2">$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-violet-400">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-slate-300">$1</li>')
+    .replace(/\n{2,}/g, '<br/><br/>')
+    .replace(/\n/g, '<br/>');
+}
+
+function MorningBriefsCard() {
+  const [briefs, setBriefs] = useState<MorningBrief[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [modalBrief, setModalBrief] = useState<MorningBrief | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    listBriefs()
+      .then(data => setBriefs(data.briefs || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <>
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <h2 className="text-lg font-semibold mb-3">📰 Morning Briefs</h2>
+        {loading ? (
+          <div className="flex justify-center py-6">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-700 border-t-violet-500" />
+          </div>
+        ) : briefs.length === 0 ? (
+          <p className="text-sm text-slate-500">No briefs available yet.</p>
+        ) : (
+          <div className="space-y-1 max-h-96 overflow-y-auto">
+            {briefs.map(brief => {
+              const isExpanded = expandedId === brief.id;
+              const dateStr = new Date(brief.date + 'T12:00:00').toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+              });
+              return (
+                <div key={brief.id} className="border border-slate-800 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : brief.id)}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-800/50 transition text-left"
+                  >
+                    <span className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                    <span className="text-sm text-slate-500 font-mono min-w-[100px]">{dateStr}</span>
+                    <span className="text-sm text-slate-200 truncate flex-1">{brief.title}</span>
+                    <span
+                      role="button"
+                      onClick={e => { e.stopPropagation(); setModalBrief(brief); }}
+                      className="text-slate-500 hover:text-violet-400 transition text-lg"
+                      title="Full screen"
+                    >⛶</span>
+                  </button>
+                  {isExpanded && (
+                    <div
+                      className="px-4 pb-4 pt-1 text-sm text-slate-300 leading-relaxed prose-sm"
+                      dangerouslySetInnerHTML={{ __html: mdToHtml(brief.content) }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Full-screen modal */}
+      {modalBrief && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl p-6 sm:p-8 relative">
+            <button
+              onClick={() => setModalBrief(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 text-2xl leading-none"
+            >✕</button>
+            <div className="text-xs text-slate-500 mb-2">
+              {new Date(modalBrief.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>
+            <div
+              className="text-sm text-slate-200 leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: mdToHtml(modalBrief.content) }}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function CEODashboard() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -260,6 +355,9 @@ export function CEODashboard() {
             </div>
           </div>
         </div>
+
+        {/* Morning Briefs */}
+        <MorningBriefsCard />
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Weekly Brief */}

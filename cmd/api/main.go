@@ -488,6 +488,7 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
+		AdminBriefs:            newBriefsHandler(logger),
 		ProspectsHandler:       newProspectsHandler(sqlDB),
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
@@ -930,6 +931,17 @@ func setupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxcli
 	}
 	logger.Debug("telnyx client created successfully")
 	return client
+}
+
+func newBriefsHandler(logger *logging.Logger) *handlers.AdminBriefsHandler {
+	abs, err := filepath.Abs("research")
+	if err != nil {
+		return nil
+	}
+	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		return nil
+	}
+	return handlers.NewAdminBriefsHandler(abs, logger)
 }
 
 func newProspectsHandler(sqlDB *sql.DB) *prospects.Handler {

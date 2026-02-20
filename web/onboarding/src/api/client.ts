@@ -1018,6 +1018,31 @@ export async function getProspectOutreach(prospectId: string): Promise<ProspectO
   return res.json();
 }
 
+// ── Morning Briefs ──────────────────────────────────────────────────
+
+export interface MorningBrief {
+  id: string;
+  title: string;
+  date: string;
+  content: string;
+}
+
+export async function listBriefs(): Promise<{ briefs: MorningBrief[] }> {
+  const res = await fetch(`${API_BASE}/admin/briefs`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getBrief(date: string): Promise<MorningBrief> {
+  const res = await fetch(`${API_BASE}/admin/briefs/${date}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function addProspectEvent(prospectId: string, type: string, note: string): Promise<unknown> {
   const res = await fetch(`${API_BASE}/admin/prospects/${prospectId}/events`, {
     method: 'POST',

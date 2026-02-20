@@ -74,6 +74,9 @@ type Config struct {
 	// Short payment URL redirect handler
 	PaymentRedirect *payments.RedirectHandler
 
+	// Morning briefs handler
+	AdminBriefs *handlers.AdminBriefsHandler
+
 	// Prospect tracker
 	ProspectsHandler *prospects.Handler
 
@@ -202,6 +205,11 @@ func New(cfg *Config) http.Handler {
 				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
+			}
+			// Morning briefs
+			if cfg.AdminBriefs != nil {
+				admin.Get("/briefs", cfg.AdminBriefs.ListBriefs)
+				admin.Get("/briefs/{date}", cfg.AdminBriefs.GetBrief)
 			}
 			// Prospect tracker
 			if cfg.ProspectsHandler != nil {

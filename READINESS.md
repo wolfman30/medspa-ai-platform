@@ -1,23 +1,32 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 ## Automated E2E Test Results (Live Dev API)
 
 **30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)**
 
-### Recent Fixes (Feb 18):
-- `07a84a2` fix: address 5 E2E test failures
-- `669678d` fix: broaden post-procedure output guard + E2E check
-- `30c57dd` fix: teach system prompt that '11s', 'lip flip', 'frown lines' = Botox (no area question)
-- `860fb8c` feat: prospect tracker — Postgres-backed CRUD
-- `bcf04d4` feat: auto-migrate database on app startup
-- `b0c130c` feat: CEO Dashboard as default admin tab
+### Recent Fixes (Feb 19-20):
+- `9ebe104` fix: time range extraction in preferences + time-aware greeting
+- `c59a7d3` fix: use correct Moxie field 'providerId' for provider-filtered availability
+- `9ec7aea` fix: Moxie API does not support provider filtering on availability
+- `dbbcc8f` fix: time range parsing (5-6pm) and day range parsing (tue-thu)
+- `b8be352` fix: provider preference extraction from config + gibberish handling
+- `c57e3f4` fix: Moxie checklist no longer asks for email before time selection
+- `147a4ff` refactor: centralize timezone handling and confirmation formatting
+- `dab6c62` fix: duplicate progress SMS + timezone handling for Moxie slots
+- `4ab4f7c` feat: outreach draft & research viewing in prospect detail
+- `3e80214` fix: provider preference now filters Moxie availability slots
+- `11e90ee` feat: Clear button in conversation detail view (admin only)
+- `5c71f43` fix: conversation status updates to 'booked' after successful appointment
+- `c8ad58f` feat: ProspectDetail view with timeline, status, quick actions
+- `4027572` fix: revenue tracker MRR column clipped by scrollbar
 
 ### Remaining Issues (to verify):
-1. Re-run E2E to confirm 4 previous failures are resolved by commits above
-2. Post-procedure guard broadened — needs validation
-3. Service vocabulary ("11s", "lip flip") — prompt fix deployed, needs E2E confirmation
+1. Re-run E2E to confirm all 30 scenarios pass after 14 new commits
+2. Provider preference filtering — new feature, needs E2E coverage
+3. Time range extraction (5-6pm, tue-thu) — fixed, needs validation
+4. Centralized timezone handling — refactored, needs regression check
 
 ## Pre-Operator Testing Checklist (SPEC.md §3b)
 
