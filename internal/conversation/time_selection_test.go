@@ -939,3 +939,50 @@ func TestDetectTimeSelection_ShorthandTime_3p(t *testing.T) {
 	require.NotNil(t, result, "'3p' should match the 3:00 PM slot")
 	assert.Equal(t, 2, result.Index)
 }
+
+func TestDetectTimeSelection_DateBased(t *testing.T) {
+	slots := []PresentedSlot{
+		{Index: 1, DateTime: time.Date(2026, 2, 24, 10, 0, 0, 0, time.Local), TimeStr: "Mon Feb 24 at 10:00 AM"},
+		{Index: 2, DateTime: time.Date(2026, 2, 25, 14, 0, 0, 0, time.Local), TimeStr: "Tue Feb 25 at 2:00 PM"},
+		{Index: 3, DateTime: time.Date(2026, 2, 26, 11, 0, 0, 0, time.Local), TimeStr: "Wed Feb 26 at 11:00 AM"},
+		{Index: 4, DateTime: time.Date(2026, 2, 27, 15, 0, 0, 0, time.Local), TimeStr: "Thu Feb 27 at 3:00 PM"},
+		{Index: 5, DateTime: time.Date(2026, 2, 28, 9, 0, 0, 0, time.Local), TimeStr: "Fri Feb 28 at 9:00 AM"},
+	}
+	noPrefs := TimePreferences{}
+
+	tests := []struct {
+		name          string
+		message       string
+		expectedIndex int
+	}{
+		// Month + day (the critical fix for Andrew's "Feb 28" bug)
+		{name: "Feb 28", message: "Feb 28", expectedIndex: 5},
+		{name: "feb 28", message: "feb 28", expectedIndex: 5},
+		{name: "February 28", message: "February 28", expectedIndex: 5},
+		{name: "feb 28th", message: "feb 28th", expectedIndex: 5},
+		{name: "Feb 24", message: "Feb 24", expectedIndex: 1},
+		{name: "let's do feb 26", message: "let's do feb 26", expectedIndex: 3},
+		// Numeric date
+		{name: "2/28", message: "2/28", expectedIndex: 5},
+		{name: "2/24", message: "2/24", expectedIndex: 1},
+		// Ordinal day
+		{name: "the 28th", message: "the 28th", expectedIndex: 5},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := DetectTimeSelection(tc.message, slots, noPrefs)
+			if tc.expectedIndex == 0 {
+				if result != nil {
+					t.Errorf("expected nil, got slot %d", result.Index)
+				}
+			} else {
+				if result == nil {
+					t.Errorf("expected slot %d, got nil", tc.expectedIndex)
+				} else if result.Index != tc.expectedIndex {
+					t.Errorf("expected slot %d, got slot %d", tc.expectedIndex, result.Index)
+				}
+			}
+		})
+	}
+}

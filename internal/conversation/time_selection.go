@@ -1123,6 +1123,21 @@ func DetectTimeSelection(message string, presentedSlots []PresentedSlot, prefs T
 		return nil
 	}
 
+	// Priority 3.5: Date-based selection — "Feb 28", "Monday", "the 28th", "February 28"
+	// Match against presented slot dates. If exactly one slot matches the date, return it.
+	// If multiple slots on that date, pick the first (patient chose the day, we pick the time).
+	dateSlotMatches := matchSlotsByDate(message, presentedSlots)
+	if len(dateSlotMatches) == 1 {
+		return dateSlotMatches[0]
+	} else if len(dateSlotMatches) > 1 {
+		// Multiple slots on the same day — use preference disambiguation, else first slot
+		filtered := disambiguateByPrefs(dateSlotMatches, prefs)
+		if len(filtered) == 1 {
+			return filtered[0]
+		}
+		return dateSlotMatches[0]
+	}
+
 	// Priority 4: Extract a bare number from the message
 	// Could be a slot index OR a bare hour — need to disambiguate
 	bareNumRE := regexp.MustCompile(`\b(\d{1,2})\b`)
@@ -1167,6 +1182,92 @@ func DetectTimeSelection(message string, presentedSlots []PresentedSlot, prefs T
 }
 
 // disambiguateByPrefs filters candidate slots using the patient's time preferences.
+// matchSlotsByDate matches a patient's date reference against presented slots.
+// Handles: "Feb 28", "February 28", "Monday", "the 28th", "feb 28th", "2/28"
+func matchSlotsByDate(message string, slots []PresentedSlot) []*PresentedSlot {
+	msg := strings.ToLower(strings.TrimSpace(message))
+
+	var matches []*PresentedSlot
+
+	// Month name + day number: "feb 28", "february 28", "feb 28th"
+	monthDayRE := regexp.MustCompile(`(?i)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?`)
+	if m := monthDayRE.FindStringSubmatch(msg); len(m) > 2 {
+		monthStr := strings.ToLower(m[1])[:3]
+		dayNum, _ := strconv.Atoi(m[2])
+		monthMap := map[string]time.Month{
+			"jan": time.January, "feb": time.February, "mar": time.March, "apr": time.April,
+			"may": time.May, "jun": time.June, "jul": time.July, "aug": time.August,
+			"sep": time.September, "oct": time.October, "nov": time.November, "dec": time.December,
+		}
+		if month, ok := monthMap[monthStr]; ok {
+			for i := range slots {
+				if slots[i].DateTime.Month() == month && slots[i].DateTime.Day() == dayNum {
+					matches = append(matches, &slots[i])
+				}
+			}
+			if len(matches) > 0 {
+				return matches
+			}
+		}
+	}
+
+	// Numeric date: "2/28", "02/28"
+	numDateRE := regexp.MustCompile(`(\d{1,2})/(\d{1,2})`)
+	if m := numDateRE.FindStringSubmatch(msg); len(m) > 2 {
+		monthNum, _ := strconv.Atoi(m[1])
+		dayNum, _ := strconv.Atoi(m[2])
+		if monthNum >= 1 && monthNum <= 12 {
+			for i := range slots {
+				if int(slots[i].DateTime.Month()) == monthNum && slots[i].DateTime.Day() == dayNum {
+					matches = append(matches, &slots[i])
+				}
+			}
+			if len(matches) > 0 {
+				return matches
+			}
+		}
+	}
+
+	// Day of week: "monday", "tuesday", etc.
+	dayOfWeekMap := map[string]time.Weekday{
+		"monday": time.Monday, "tuesday": time.Tuesday, "wednesday": time.Wednesday,
+		"thursday": time.Thursday, "friday": time.Friday, "saturday": time.Saturday, "sunday": time.Sunday,
+		"mon": time.Monday, "tue": time.Tuesday, "tues": time.Tuesday, "wed": time.Wednesday,
+		"thu": time.Thursday, "thur": time.Thursday, "thurs": time.Thursday,
+		"fri": time.Friday, "sat": time.Saturday, "sun": time.Sunday,
+	}
+	for word, dow := range dayOfWeekMap {
+		if strings.Contains(msg, word) {
+			for i := range slots {
+				if slots[i].DateTime.Weekday() == dow {
+					matches = append(matches, &slots[i])
+				}
+			}
+			if len(matches) > 0 {
+				return matches
+			}
+		}
+	}
+
+	// "the 28th", "the 24th" — bare day number with ordinal
+	theDayRE := regexp.MustCompile(`(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)`)
+	if m := theDayRE.FindStringSubmatch(msg); len(m) > 1 {
+		dayNum, _ := strconv.Atoi(m[1])
+		if dayNum >= 1 && dayNum <= 31 {
+			for i := range slots {
+				if slots[i].DateTime.Day() == dayNum {
+					matches = append(matches, &slots[i])
+				}
+			}
+			if len(matches) > 0 {
+				return matches
+			}
+		}
+	}
+
+	return nil
+}
+
 func disambiguateByPrefs(candidates []*PresentedSlot, prefs TimePreferences) []*PresentedSlot {
 	if prefs.AfterTime == "" && prefs.BeforeTime == "" {
 		return candidates // no preferences to filter with
