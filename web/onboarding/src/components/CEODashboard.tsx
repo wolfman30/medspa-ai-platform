@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { listProspects, listBriefs, type MorningBrief } from '../api/client';
 import { ProspectDetail } from './ProspectDetail';
+import { Rule100Card } from './Rule100Card';
 
 interface ProspectEvent {
   id: number;
@@ -275,6 +276,9 @@ export function CEODashboard() {
             </div>
           ))}
         </div>
+
+        {/* Rule of 100 Tracker */}
+        <Rule100Card />
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Pipeline Funnel */}

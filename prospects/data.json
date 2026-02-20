@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-19T23:01:00Z",
+  "lastUpdated": "2026-02-20T14:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -534,6 +534,99 @@
       ],
       "nextAction": "Find email and send outreach",
       "notes": "#1 Galderma sales in region (90+ facilities). All-RN staff. Two locations. Community Choice winner 2023-2025. High volume = high missed call potential."
+    },
+    {
+      "id": "fairlawn-aesthetic-md",
+      "clinic": "Fairlawn Aesthetic MD",
+      "owner": "Dr. Matthew McDaniel",
+      "title": "MD \u2014 Co-founder",
+      "location": "Fairlawn, OH",
+      "phone": "(330) 801-9069",
+      "email": "Info@FairlawnAestheticMD.com",
+      "website": "fairlawnaestheticmd.com",
+      "emr": "Vagaro",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Fillers",
+        "Nova Threads",
+        "Cryo T Shock",
+        "CO2 Laser",
+        "IPL",
+        "RF Microneedling"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-20T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Two-location MD practice, Vagaro booking."
+        }
+      ],
+      "nextAction": "Send outreach email",
+      "notes": "Two locations (Fairlawn + Ontario OH). MD-led with clinical rigor positioning. Uses Vagaro for booking."
+    },
+    {
+      "id": "serenity-medical-aesthetics",
+      "clinic": "Serenity Medical Aesthetics",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Canton, OH",
+      "phone": "(330) 354-3885",
+      "email": "",
+      "website": "serenitymedicalaestheticscanton.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Injectables",
+        "Lasers",
+        "Skin Care",
+        "Wellness"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-20T14:00:00Z",
+          "type": "research",
+          "note": "Initial research. 10-19 employees, M-F 9-5 hours. No public email found."
+        }
+      ],
+      "nextAction": "Reach out via Facebook or find email",
+      "notes": "Canton OH. Strict 9-5 M-F hours = perfect after-hours use case. $1-5M revenue per ZoomInfo. Linktree-based booking suggests minimal tech."
+    },
+    {
+      "id": "monarch-aesthetic-medicine",
+      "clinic": "Monarch Aesthetic Medicine",
+      "owner": "Heather S. Friedeman",
+      "title": "CNP \u2014 Owner",
+      "location": "Columbus, OH",
+      "phone": "(614) 545-2002",
+      "email": "info@monarch-aesthetic.com",
+      "website": "monarch-aesthetic.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Fillers",
+        "Coolsculpting",
+        "Laser Hair Removal",
+        "Laser Facials",
+        "RF Skin Tightening",
+        "Microneedling",
+        "Sclerotherapy"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-20T14:00:00Z",
+          "type": "research",
+          "note": "Initial research. Woman-owned, est. 2002, new owner since 2022. 5-star Yelp."
+        }
+      ],
+      "nextAction": "Send outreach email to info@monarch-aesthetic.com",
+      "notes": "Columbus OH. 24-year legacy practice, Heather took ownership Jan 2022. OSU background. 100% recommend on Yelp. Two NP providers."
     }
   ]
 }

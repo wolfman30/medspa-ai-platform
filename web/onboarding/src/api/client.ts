@@ -1043,6 +1043,47 @@ export async function getBrief(date: string): Promise<MorningBrief> {
   return res.json();
 }
 
+// ── Rule of 100 ─────────────────────────────────────────────────────
+
+export interface Rule100ProspectCount {
+  id: string;
+  clinic: string;
+  count: number;
+}
+
+export interface Rule100DayHistory {
+  date: string;
+  touches: number;
+}
+
+export interface Rule100Response {
+  date: string;
+  touches: number;
+  goal: number;
+  streak: number;
+  byType: Record<string, number>;
+  byProspect: Rule100ProspectCount[];
+  history: Rule100DayHistory[];
+}
+
+export async function getRule100Today(): Promise<Rule100Response> {
+  const res = await fetch(`${API_BASE}/admin/rule100/today`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function logTouch(prospectId: string, type: string, note?: string): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/admin/prospects/${prospectId}/events`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify({ type, note: note || 'Rule of 100 touch' }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function addProspectEvent(prospectId: string, type: string, note: string): Promise<unknown> {
   const res = await fetch(`${API_BASE}/admin/prospects/${prospectId}/events`, {
     method: 'POST',
