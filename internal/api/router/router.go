@@ -11,7 +11,6 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
-	"github.com/wolfman30/medspa-ai-platform/internal/demo"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	httpmiddleware "github.com/wolfman30/medspa-ai-platform/internal/http/middleware"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -57,9 +56,6 @@ type Config struct {
 
 	// Client self-service registration
 	ClientRegistration *handlers.ClientRegistrationHandler
-
-	// Mock booking pages for testing (dev only)
-	MockBooking *demo.MockBookingHandler
 
 	// Stripe payment handlers
 	StripeWebhook *payments.StripeWebhookHandler
@@ -127,9 +123,6 @@ func New(cfg *Config) http.Handler {
 		if cfg.FakePayments != nil {
 			public.Mount("/demo", cfg.FakePayments.Routes())
 		}
-		if cfg.MockBooking != nil {
-			public.Mount("/demo/booking", cfg.MockBooking.Routes())
-		}
 		if cfg.TelnyxWebhooks != nil {
 			public.Post("/webhooks/telnyx/messages", cfg.TelnyxWebhooks.HandleMessages)
 			public.Post("/webhooks/telnyx/hosted", cfg.TelnyxWebhooks.HandleHosted)
@@ -196,8 +189,6 @@ func New(cfg *Config) http.Handler {
 			}
 			admin.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
 			if cfg.ConversationHandler != nil {
-				admin.Get("/e2e/phone-simulator", cfg.ConversationHandler.PhoneSimulator)
-				admin.Get("/e2e/phone-simulator-demo", cfg.ConversationHandler.EnhancedPhoneSimulator)
 			}
 			if cfg.AdminMessaging != nil {
 				admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)

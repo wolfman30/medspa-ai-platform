@@ -36,7 +36,6 @@ import (
 	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
-	"github.com/wolfman30/medspa-ai-platform/internal/demo"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -483,7 +482,6 @@ func main() {
 		AuditService:           auditSvc,
 		MetricsHandler:         metricsHandler,
 		CORSAllowedOrigins:     cfg.CORSAllowedOrigins,
-		MockBooking:            demo.NewMockBookingHandler(),
 		BookingCallbackHandler: bookingCallbackHandler,
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
