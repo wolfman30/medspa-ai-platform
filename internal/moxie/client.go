@@ -113,12 +113,16 @@ func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDa
 		ServiceMenuItemID string `json:"serviceMenuItemId"`
 		NoPreference      bool   `json:"noPreference"`
 		Order             int    `json:"order"`
+		ProviderID        string `json:"providerId,omitempty"`
 	}
 
-	// Moxie's availableTimeSlots API does NOT support provider filtering.
-	// Always query with noPreference=true to get all providers' slots.
-	// Provider preference is applied at booking time via createAppointmentByClient.
-	svc := serviceVar{ServiceMenuItemID: serviceMenuItemID, NoPreference: true, Order: 1}
+	// Moxie's availableTimeSlots uses "providerId" (not "providerUserMedspaId")
+	// for provider-specific availability. The value is the provider's userMedspaId.
+	svc := serviceVar{ServiceMenuItemID: serviceMenuItemID, NoPreference: noPreference, Order: 1}
+	if len(providerUserMedspaID) > 0 && providerUserMedspaID[0] != "" {
+		svc.ProviderID = providerUserMedspaID[0]
+		svc.NoPreference = false
+	}
 
 	variables := map[string]interface{}{
 		"medspaId":  medspaID,
