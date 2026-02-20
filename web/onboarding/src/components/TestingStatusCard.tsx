@@ -1,13 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { listTestResults, updateTestResult, type TestResult, type TestSummary } from '../api/client';
 
-const STATUS_COLORS: Record<string, string> = {
-  passed: 'bg-green-500',
-  failed: 'bg-red-500',
-  untested: 'bg-slate-600',
-  skipped: 'bg-yellow-600',
-};
-
 const STATUS_ICONS: Record<string, string> = {
   passed: '✅',
   failed: '❌',
@@ -28,32 +21,6 @@ function formatDate(dateStr: string | null): string {
     ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-function ProgressRing({ passed, total, label }: { passed: number; total: number; label: string }) {
-  const pct = total > 0 ? (passed / total) * 100 : 0;
-  const radius = 32;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (pct / 100) * circumference;
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <svg width="80" height="80" className="-rotate-90">
-        <circle cx="40" cy="40" r={radius} fill="none" stroke="#334155" strokeWidth="6" />
-        <circle
-          cx="40" cy="40" r={radius} fill="none"
-          stroke={pct === 100 ? '#22c55e' : pct > 0 ? '#a78bfa' : '#475569'}
-          strokeWidth="6" strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          className="transition-all duration-700"
-        />
-      </svg>
-      <div className="absolute mt-5 text-center">
-        <div className="text-lg font-bold">{passed}/{total}</div>
-      </div>
-      <span className="text-xs text-slate-400 mt-1">{label}</span>
-    </div>
-  );
-}
-
 function TestRow({
   result,
   onUpdate,
@@ -61,8 +28,7 @@ function TestRow({
   result: TestResult;
   onUpdate: (id: number, status: string, notes: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [notes, setNotes] = useState(result.notes);
+  const [notes] = useState(result.notes);
 
   return (
     <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition group">
