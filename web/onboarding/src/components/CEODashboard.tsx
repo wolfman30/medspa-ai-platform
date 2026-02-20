@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { listProspects, listBriefs, type MorningBrief } from '../api/client';
 import { ProspectDetail } from './ProspectDetail';
 import { Rule100Card } from './Rule100Card';
+import { TestingStatusCard } from './TestingStatusCard';
 
 interface ProspectEvent {
   id: number;
@@ -276,6 +277,9 @@ export function CEODashboard() {
             </div>
           ))}
         </div>
+
+        {/* Testing Status */}
+        <TestingStatusCard />
 
         {/* Rule of 100 Tracker */}
         <Rule100Card />

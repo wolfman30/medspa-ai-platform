@@ -1093,3 +1093,63 @@ export async function addProspectEvent(prospectId: string, type: string, note: s
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ── Manual Testing Tracker ──────────────────────────────────────────
+
+export interface TestResult {
+  id: number;
+  scenario_id: string;
+  scenario_name: string;
+  clinic: string;
+  category: string;
+  status: string;
+  tested_at: string | null;
+  tested_by: string;
+  notes: string;
+  conversation_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TestSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  untested: number;
+  skipped: number;
+  must_pass_total: number;
+  must_pass_passed: number;
+  smoke_total: number;
+  smoke_passed: number;
+  auto_total: number;
+  auto_passed: number;
+  ready_for_outreach: boolean;
+}
+
+export interface TestResultsResponse {
+  results: TestResult[];
+  summary: TestSummary;
+}
+
+export async function listTestResults(clinic?: string): Promise<TestResultsResponse> {
+  const params = clinic ? `?clinic=${encodeURIComponent(clinic)}` : '';
+  const res = await fetch(`${API_BASE}/admin/testing${params}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function updateTestResult(id: number, data: {
+  status: string;
+  tested_by?: string;
+  notes?: string;
+  conversation_id?: string;
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/testing/${id}`, {
+    method: 'PUT',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}

@@ -271,6 +271,12 @@ func New(cfg *Config) http.Handler {
 			// Admin dashboard, leads, and conversations routes
 			if cfg.DB != nil {
 				handlers.RegisterAdminRoutes(admin, cfg.DB, cfg.TranscriptStore, cfg.ClinicStore, cfg.Logger)
+
+				// Manual testing tracker
+				testingHandler := handlers.NewAdminTestingHandler(cfg.DB, cfg.Logger)
+				admin.Get("/testing", testingHandler.ListTestResults)
+				admin.Post("/testing", testingHandler.CreateTestResult)
+				admin.Put("/testing/{id}", testingHandler.UpdateTestResult)
 			}
 		})
 	}

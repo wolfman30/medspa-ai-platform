@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-20T14:00:00Z",
+  "lastUpdated": "2026-02-20T17:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -627,6 +627,96 @@
       ],
       "nextAction": "Send outreach email to info@monarch-aesthetic.com",
       "notes": "Columbus OH. 24-year legacy practice, Heather took ownership Jan 2022. OSU background. 100% recommend on Yelp. Two NP providers."
+    },
+    {
+      "id": "blush-aesthetics-toledo",
+      "clinic": "Blush Aesthetics",
+      "owner": "Erin Hennessey",
+      "title": "NP \u2014 Owner",
+      "location": "Toledo, OH",
+      "phone": "(419) 520-7546",
+      "email": "",
+      "website": "blushnwo.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "fillers",
+        "laser",
+        "microneedling",
+        "body contouring",
+        "medical skincare"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-20T17:00:00Z",
+          "type": "research",
+          "note": "Initial research complete. Industry leader \u2014 organizes clinical trials, trains providers nationally. Wedding services = seasonal demand."
+        }
+      ],
+      "nextAction": "Find email and send outreach",
+      "notes": "Family-owned, NP-led. Strong reputation. Toledo market \u2014 first prospect in area. Erin has LinkedIn."
+    },
+    {
+      "id": "timeless-aesthetics-cincinnati",
+      "clinic": "Timeless Aesthetics MedSpa",
+      "owner": "Timothy J. McCarren, MD",
+      "title": "MD \u2014 Co-owner",
+      "location": "Cincinnati, OH",
+      "phone": "(513) 451-9600",
+      "email": "info@cincymedspa.com",
+      "website": "cincymedspa.com",
+      "emr": "Possibly Tebra/Kareo",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Secret RF",
+        "Botox",
+        "fillers",
+        "laser",
+        "chemical peels",
+        "family medicine"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-20T17:00:00Z",
+          "type": "research",
+          "note": "Initial research complete. Dual practice (family medicine + aesthetics). Early adopter of Secret RF. Direct email available."
+        }
+      ],
+      "nextAction": "Send outreach email to info@cincymedspa.com",
+      "notes": "MD-led dual practice. Co-owned with Sonja (likely Dr. Heuker). Cincinnati market \u2014 first prospect in area."
+    },
+    {
+      "id": "captivating-u-medspa",
+      "clinic": "CaptivatingU Med Spa",
+      "owner": "Unknown (doctor-led)",
+      "title": "",
+      "location": "West Chester, OH",
+      "phone": "(513) 342-4411",
+      "email": "",
+      "website": "captivatingumedspa.com",
+      "emr": "Vagaro",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "fillers",
+        "laser",
+        "anti-aging",
+        "body contouring",
+        "Wegovy"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-20T17:00:00Z",
+          "type": "research",
+          "note": "Initial research complete. Single-provider model = perfect missed-call use case. Wegovy offering driving new demand."
+        }
+      ],
+      "nextAction": "Find owner name and email, then send outreach",
+      "notes": "Luxury positioning, single-provider model. Serves wide Cincinnati north area. CareCredit accepted."
     }
   ]
 }
