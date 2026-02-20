@@ -26,11 +26,11 @@ type S3Uploader interface {
 
 // AdminTestingHandler handles manual test result CRUD.
 type AdminTestingHandler struct {
-	db             *sql.DB
-	logger         *logging.Logger
-	s3Client       S3Uploader
-	s3Bucket       string
-	s3Region       string
+	db       *sql.DB
+	logger   *logging.Logger
+	s3Client S3Uploader
+	s3Bucket string
+	s3Region string
 }
 
 // NewAdminTestingHandler creates a new testing handler.
