@@ -497,6 +497,31 @@ func buildSystemPrompt(depositCents int, usesMoxie bool, cfg ...*clinic.Config) 
 	// Replace all instances of $50 with the actual deposit amount
 	prompt := strings.ReplaceAll(defaultSystemPrompt, "$50", depositDollars)
 
+	// Inject current clinic-local time for time-aware greetings
+	if len(cfg) > 0 && cfg[0] != nil {
+		tz := ClinicLocation(cfg[0].Timezone)
+		now := time.Now().In(tz)
+		hour := now.Hour()
+		timeStr := now.Format("3:04 PM MST")
+		dayStr := now.Format("Monday")
+
+		var timeContext string
+		if hour >= 7 && hour < 21 { // 7 AM - 8:59 PM
+			timeContext = fmt.Sprintf(
+				"\n\n⏰ CURRENT TIME: %s (%s). The clinic is within normal business hours. "+
+					"In your greeting, say providers are currently with patients or busy with appointments.",
+				timeStr, dayStr)
+		} else {
+			timeContext = fmt.Sprintf(
+				"\n\n⏰ CURRENT TIME: %s (%s). The clinic is CLOSED right now (after hours). "+
+					"In your greeting, do NOT say providers are with patients. Instead say something like: "+
+					"\"Hi! This is [Clinic]'s AI assistant. We're currently closed, but I can help you get started "+
+					"with booking an appointment. What treatment are you interested in?\"",
+				timeStr, dayStr)
+		}
+		prompt += timeContext
+	}
+
 	// Append Moxie-specific instructions if clinic uses Moxie booking
 	if usesMoxie {
 		prompt += moxieSystemPromptAddendum
@@ -3167,40 +3192,77 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		}
 	}
 
-	// Extract preferred times - check for specific times like "2pm", "2:30 pm", "around 3pm", "after 3p"
-	// Supports shorthand "3p"/"3a" in addition to full "3pm"/"3am"
-	// Preserves "after"/"before" qualifier so time preference filtering works correctly
-	specificTimeRE := regexp.MustCompile(`(?i)(around |about |at |after |before )?(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)\b`)
-	if matches := specificTimeRE.FindAllStringSubmatch(userMessages, -1); len(matches) > 0 {
-		// Extract all specific times mentioned
-		times := []string{}
-		for _, match := range matches {
-			qualifier := strings.TrimSpace(strings.ToLower(match[1]))
-			hour := match[2]
-			minutes := match[3]
-			ampm := strings.ToLower(strings.ReplaceAll(match[4], ".", ""))
-			// Normalize shorthand: "a" → "am", "p" → "pm"
-			if ampm == "a" {
-				ampm = "am"
-			} else if ampm == "p" {
-				ampm = "pm"
-			}
+	// Extract preferred times - check for time ranges first (e.g., "5-9p", "5pm-9pm", "between 3 and 5pm")
+	// then fall back to individual times like "2pm", "after 3p"
+	timeRangeRE := regexp.MustCompile(`(?i)(\d{1,2})(?::(\d{2}))?\s*(?:am|pm|a|p)?\s*[-–—]\s*(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)`)
+	betweenRE := regexp.MustCompile(`(?i)between\s+(\d{1,2})(?::(\d{2}))?\s*(?:am|pm|a|p)?\s+and\s+(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)`)
 
-			// Format the time nicely, preserving qualifier
-			timeStr := ""
-			if qualifier == "after" || qualifier == "before" {
-				timeStr = qualifier + " "
+	rangeMatched := false
+	for _, re := range []*regexp.Regexp{timeRangeRE, betweenRE} {
+		if m := re.FindStringSubmatch(userMessages); len(m) >= 6 {
+			endAMPM := strings.ToLower(strings.ReplaceAll(m[5], ".", ""))
+			if endAMPM == "a" {
+				endAMPM = "am"
+			} else if endAMPM == "p" {
+				endAMPM = "pm"
 			}
-			timeStr += hour
-			if minutes != "" {
-				timeStr += ":" + minutes
+			startHour := m[1]
+			startMin := m[2]
+			endHour := m[3]
+			endMin := m[4]
+			// Preserve the range as "after Xpm, before Ypm" so ExtractTimePreferences handles it
+			startStr := startHour
+			if startMin != "" {
+				startStr += ":" + startMin
 			}
-			timeStr += ampm
-			times = append(times, timeStr)
-		}
-		if len(times) > 0 {
-			prefs.PreferredTimes = strings.Join(times, ", ")
+			startStr += endAMPM // Inherit end's am/pm if start doesn't have one
+			endStr := endHour
+			if endMin != "" {
+				endStr += ":" + endMin
+			}
+			endStr += endAMPM
+			prefs.PreferredTimes = "after " + startStr + ", before " + endStr
 			hasPreferences = true
+			rangeMatched = true
+			break
+		}
+	}
+
+	if !rangeMatched {
+		// Supports shorthand "3p"/"3a" in addition to full "3pm"/"3am"
+		// Preserves "after"/"before" qualifier so time preference filtering works correctly
+		specificTimeRE := regexp.MustCompile(`(?i)(around |about |at |after |before )?(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)\b`)
+		if matches := specificTimeRE.FindAllStringSubmatch(userMessages, -1); len(matches) > 0 {
+			// Extract all specific times mentioned
+			times := []string{}
+			for _, match := range matches {
+				qualifier := strings.TrimSpace(strings.ToLower(match[1]))
+				hour := match[2]
+				minutes := match[3]
+				ampm := strings.ToLower(strings.ReplaceAll(match[4], ".", ""))
+				// Normalize shorthand: "a" → "am", "p" → "pm"
+				if ampm == "a" {
+					ampm = "am"
+				} else if ampm == "p" {
+					ampm = "pm"
+				}
+
+				// Format the time nicely, preserving qualifier
+				timeStr := ""
+				if qualifier == "after" || qualifier == "before" {
+					timeStr = qualifier + " "
+				}
+				timeStr += hour
+				if minutes != "" {
+					timeStr += ":" + minutes
+				}
+				timeStr += ampm
+				times = append(times, timeStr)
+			}
+			if len(times) > 0 {
+				prefs.PreferredTimes = strings.Join(times, ", ")
+				hasPreferences = true
+			}
 		}
 	}
 
