@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,12 +31,18 @@ func ExtractTimePreferences(text string) TimePreferences {
 		RawText: text,
 	}
 
-	// Extract days of week
+	// Extract days of week (handles ranges like "tuesday-thursday" → Tue, Wed, Thu)
 	prefs.DaysOfWeek = extractDaysOfWeek(text)
 
-	// Extract time constraints
-	prefs.AfterTime = extractAfterTime(text)
-	prefs.BeforeTime = extractBeforeTime(text)
+	// Check for time ranges first (e.g., "5-6pm", "5pm-6pm", "between 3 and 5pm")
+	if after, before, ok := extractTimeRange(text); ok {
+		prefs.AfterTime = after
+		prefs.BeforeTime = before
+	} else {
+		// Extract individual time constraints
+		prefs.AfterTime = extractAfterTime(text)
+		prefs.BeforeTime = extractBeforeTime(text)
+	}
 
 	return prefs
 }
@@ -65,6 +72,32 @@ func extractDaysOfWeek(text string) []int {
 		"sat":       6,
 	}
 
+	// Check for day ranges first: "tuesday-thursday", "mon - fri", "tuesday through thursday"
+	dayRangeRE := regexp.MustCompile(`(sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)\s*[-–—]\s*(sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)`)
+	dayThroughRE := regexp.MustCompile(`(sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)\s+(?:through|thru|to)\s+(sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)`)
+
+	for _, re := range []*regexp.Regexp{dayRangeRE, dayThroughRE} {
+		if m := re.FindStringSubmatch(text); len(m) == 3 {
+			startDay := dayToNumber(m[1], dayMap)
+			endDay := dayToNumber(m[2], dayMap)
+			if startDay >= 0 && endDay >= 0 {
+				// Fill in the range (handles wrap-around, e.g., fri-mon)
+				d := startDay
+				for {
+					if !seen[d] {
+						days = append(days, d)
+						seen[d] = true
+					}
+					if d == endDay {
+						break
+					}
+					d = (d + 1) % 7
+				}
+			}
+		}
+	}
+
+	// Individual days (only add if not already from a range)
 	for dayName, dayNum := range dayMap {
 		if strings.Contains(text, dayName) {
 			if !seen[dayNum] {
@@ -106,6 +139,84 @@ func extractDaysOfWeek(text string) []int {
 	sort.Ints(days)
 
 	return days
+}
+
+// dayToNumber converts a day abbreviation/name to its numeric value using the dayMap.
+func dayToNumber(s string, dayMap map[string]int) int {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if num, ok := dayMap[s]; ok {
+		return num
+	}
+	// Try prefix match for abbreviated forms
+	for name, num := range dayMap {
+		if strings.HasPrefix(name, s) || strings.HasPrefix(s, name) {
+			return num
+		}
+	}
+	return -1
+}
+
+// extractTimeRange detects time ranges like "5-6pm", "5pm-6pm", "between 3 and 5pm".
+// Returns (afterTime, beforeTime, matched).
+func extractTimeRange(text string) (string, string, bool) {
+	// Pattern: "5-6pm", "5-6p", "5pm-6pm", "3:00pm-4:30pm"
+	rangeRE := regexp.MustCompile(`(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)?\s*[-–—]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)`)
+	if m := rangeRE.FindStringSubmatch(text); len(m) >= 7 {
+		endAMPM := normalizeAMPM(m[6])
+		startAMPM := normalizeAMPM(m[3])
+		if startAMPM == "" {
+			startAMPM = endAMPM // "5-6pm" → both are PM
+		}
+		startTime := to24Hour(m[1], m[2], startAMPM)
+		endTime := to24Hour(m[4], m[5], endAMPM)
+		return startTime, endTime, true
+	}
+
+	// Pattern: "between 3 and 5pm", "between 3pm and 5pm"
+	betweenRE := regexp.MustCompile(`between\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)?\s+and\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)`)
+	if m := betweenRE.FindStringSubmatch(text); len(m) >= 7 {
+		endAMPM := normalizeAMPM(m[6])
+		startAMPM := normalizeAMPM(m[3])
+		if startAMPM == "" {
+			startAMPM = endAMPM
+		}
+		startTime := to24Hour(m[1], m[2], startAMPM)
+		endTime := to24Hour(m[4], m[5], endAMPM)
+		return startTime, endTime, true
+	}
+
+	return "", "", false
+}
+
+func normalizeAMPM(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "a":
+		return "am"
+	case "p":
+		return "pm"
+	default:
+		return s
+	}
+}
+
+func to24Hour(hourStr, minStr, ampm string) string {
+	h := 0
+	for _, c := range hourStr {
+		h = h*10 + int(c-'0')
+	}
+	m := 0
+	if minStr != "" {
+		for _, c := range minStr {
+			m = m*10 + int(c-'0')
+		}
+	}
+	if ampm == "pm" && h != 12 {
+		h += 12
+	} else if ampm == "am" && h == 12 {
+		h = 0
+	}
+	return fmt.Sprintf("%02d:%02d", h, m)
 }
 
 // extractAfterTime finds "after X" time constraints.

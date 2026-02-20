@@ -46,7 +46,7 @@ func TestExtractTimePreferences(t *testing.T) {
 		{
 			name:       "Monday through Wednesday mornings",
 			input:      "Monday through Wednesday mornings",
-			wantDays:   []int{1, 3},
+			wantDays:   []int{1, 2, 3},
 			wantBefore: "12:00",
 		},
 		{
@@ -71,6 +71,39 @@ func TestExtractTimePreferences(t *testing.T) {
 			input:      "Early morning Monday",
 			wantDays:   []int{1},
 			wantBefore: "12:00",
+		},
+		{
+			name:       "Time range 5-6pm",
+			input:      "tuesday, thursday 5-6pm",
+			wantDays:   []int{2, 4},
+			wantAfter:  "17:00",
+			wantBefore: "18:00",
+		},
+		{
+			name:       "Time range 5-6p shorthand",
+			input:      "tuesday- thursday 5-6p",
+			wantDays:   []int{2, 3, 4},
+			wantAfter:  "17:00",
+			wantBefore: "18:00",
+		},
+		{
+			name:       "Time range between 3 and 5pm",
+			input:      "between 3 and 5pm on weekdays",
+			wantDays:   []int{1, 2, 3, 4, 5},
+			wantAfter:  "15:00",
+			wantBefore: "17:00",
+		},
+		{
+			name:      "Day range tue-thu",
+			input:     "tue-thu after 4pm",
+			wantDays:  []int{2, 3, 4},
+			wantAfter: "16:00",
+		},
+		{
+			name:      "Day range mon - fri",
+			input:     "mon - fri after 3pm",
+			wantDays:  []int{1, 2, 3, 4, 5},
+			wantAfter: "15:00",
 		},
 	}
 
