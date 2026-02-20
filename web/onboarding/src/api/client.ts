@@ -1100,6 +1100,7 @@ export interface TestResult {
   id: number;
   scenario_id: string;
   scenario_name: string;
+  description: string;
   clinic: string;
   category: string;
   status: string;
@@ -1107,6 +1108,7 @@ export interface TestResult {
   tested_by: string;
   notes: string;
   conversation_id: string;
+  evidence_urls: string[];
   created_at: string;
   updated_at: string;
 }

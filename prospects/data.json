@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-20T17:00:00Z",
+  "lastUpdated": "2026-02-21T03:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -136,16 +136,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Xeomin",
-        "Dermal Fillers",
-        "Kybella",
-        "RF Microneedling",
-        "Laser",
-        "Weight Loss"
-      ],
+      "services": 8,
       "timeline": [
         {
           "date": "2026-02-18T23:00:00Z",
@@ -168,16 +159,7 @@
       "emr": "Unknown",
       "status": "outreach_ready",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Sculptra",
-        "Fillers",
-        "Threads",
-        "PRF",
-        "HydraFacial",
-        "Chemical Peels"
-      ],
+      "services": 8,
       "timeline": [
         {
           "date": "2026-02-18T23:00:00Z",
@@ -200,14 +182,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Fillers",
-        "Microneedling",
-        "B12 Injections",
-        "Weight Loss"
-      ],
+      "services": 6,
       "timeline": [
         {
           "date": "2026-02-18T23:00:00Z",
@@ -230,13 +205,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Fillers",
-        "BBL Laser",
-        "Microneedling",
-        "Body Contouring"
-      ],
+      "services": 5,
       "timeline": [
         {
           "date": "2026-02-19T14:00:00Z",
@@ -259,17 +228,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Jeuveau",
-        "Sculptra",
-        "Fillers",
-        "PRP",
-        "BBL",
-        "Moxi",
-        "Laser Hair Removal"
-      ],
+      "services": 9,
       "timeline": [
         {
           "date": "2026-02-19T14:00:00Z",
@@ -292,13 +251,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Injectables",
-        "Permanent Cosmetics",
-        "Skincare",
-        "Laser",
-        "Body Treatments"
-      ],
+      "services": 5,
       "timeline": [
         {
           "date": "2026-02-19T14:00:00Z",
@@ -321,15 +274,7 @@
       "emr": "Unknown",
       "status": "outreach_ready",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Xeomin",
-        "Daxxify",
-        "Dermal Fillers",
-        "Sculptra",
-        "Tixel"
-      ],
+      "services": 7,
       "timeline": [
         {
           "date": "2026-02-19T17:00:00Z",
@@ -352,16 +297,7 @@
       "emr": "Unknown",
       "status": "outreach_ready",
       "configured": false,
-      "services": [
-        "Botox",
-        "Daxxify",
-        "Fillers",
-        "Microneedling",
-        "PRF",
-        "Facials",
-        "Laser",
-        "Weight Loss"
-      ],
+      "services": 8,
       "timeline": [
         {
           "date": "2026-02-19T17:00:00Z",
@@ -384,15 +320,7 @@
       "emr": "Zenoti",
       "status": "outreach_ready",
       "configured": false,
-      "services": [
-        "Botox",
-        "Fillers",
-        "CoolSculpting",
-        "EmTone",
-        "Laser",
-        "Chemical Peels",
-        "Acne Clinic"
-      ],
+      "services": 7,
       "timeline": [
         {
           "date": "2026-02-19T17:00:00Z",
@@ -415,14 +343,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dermal Fillers",
-        "IV Hydration",
-        "Facials",
-        "Body Contouring",
-        "Skin Tightening"
-      ],
+      "services": 6,
       "timeline": [
         {
           "date": "2026-02-19T20:00:00Z",
@@ -445,13 +366,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Laser Hair Removal",
-        "Botox",
-        "Dermal Fillers",
-        "Chemical Peels",
-        "Body Contouring"
-      ],
+      "services": 5,
       "timeline": [
         {
           "date": "2026-02-19T20:00:00Z",
@@ -474,13 +389,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "BOTOX",
-        "Xeomin",
-        "Dermal Fillers",
-        "PRP Hair Restoration",
-        "Facials"
-      ],
+      "services": 5,
       "timeline": [
         {
           "date": "2026-02-19T20:00:00Z",
@@ -547,16 +456,7 @@
       "emr": "Vagaro",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Fillers",
-        "Nova Threads",
-        "Cryo T Shock",
-        "CO2 Laser",
-        "IPL",
-        "RF Microneedling"
-      ],
+      "services": 8,
       "timeline": [
         {
           "date": "2026-02-20T14:00:00Z",
@@ -579,12 +479,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Injectables",
-        "Lasers",
-        "Skin Care",
-        "Wellness"
-      ],
+      "services": 4,
       "timeline": [
         {
           "date": "2026-02-20T14:00:00Z",
@@ -607,17 +502,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "Dysport",
-        "Fillers",
-        "Coolsculpting",
-        "Laser Hair Removal",
-        "Laser Facials",
-        "RF Skin Tightening",
-        "Microneedling",
-        "Sclerotherapy"
-      ],
+      "services": 9,
       "timeline": [
         {
           "date": "2026-02-20T14:00:00Z",
@@ -640,14 +525,7 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "fillers",
-        "laser",
-        "microneedling",
-        "body contouring",
-        "medical skincare"
-      ],
+      "services": 6,
       "timeline": [
         {
           "date": "2026-02-20T17:00:00Z",
@@ -670,14 +548,7 @@
       "emr": "Possibly Tebra/Kareo",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Secret RF",
-        "Botox",
-        "fillers",
-        "laser",
-        "chemical peels",
-        "family medicine"
-      ],
+      "services": 6,
       "timeline": [
         {
           "date": "2026-02-20T17:00:00Z",
@@ -700,14 +571,7 @@
       "emr": "Vagaro",
       "status": "researched",
       "configured": false,
-      "services": [
-        "Botox",
-        "fillers",
-        "laser",
-        "anti-aging",
-        "body contouring",
-        "Wegovy"
-      ],
+      "services": 6,
       "timeline": [
         {
           "date": "2026-02-20T17:00:00Z",
@@ -717,6 +581,136 @@
       ],
       "nextAction": "Find owner name and email, then send outreach",
       "notes": "Luxury positioning, single-provider model. Serves wide Cincinnati north area. CareCredit accepted."
+    },
+    {
+      "id": "matrix-medspa",
+      "clinic": "Matrix MedSpa",
+      "owner": "Kristina Miller, CNP",
+      "status": "identified",
+      "configured": false,
+      "smsWorking": false,
+      "orgId": "",
+      "nextAction": "Send outreach \u2014 solo NP, clearest missed-call pain point",
+      "location": "Beachwood, OH",
+      "phone": "(216) 245-4525",
+      "email": "",
+      "website": "https://matrixmedspa.com",
+      "emr": "Unknown",
+      "telnyxNumber": "",
+      "tenDlc": false,
+      "servicesCount": 6,
+      "providers": [
+        "Kristina Miller"
+      ],
+      "notes": "#1 ranked MedSpa in Cleveland. Solo provider \u2014 perfect missed-call use case.",
+      "timeline": []
+    },
+    {
+      "id": "trouve-medspa",
+      "clinic": "Trouv\u00e9 MedSpa",
+      "owner": "",
+      "status": "identified",
+      "configured": false,
+      "smsWorking": false,
+      "orgId": "",
+      "nextAction": "Send outreach \u2014 two locations, strong social proof (7.7K IG followers)",
+      "location": "Mayfield Heights + Beachwood, OH",
+      "phone": "(216) 255-5201",
+      "email": "info@trouvemedspa.com",
+      "website": "https://www.trouvemedspa.com",
+      "emr": "Unknown",
+      "telnyxNumber": "",
+      "tenDlc": false,
+      "servicesCount": 10,
+      "providers": [],
+      "notes": "Two locations, training academy, 7.7K IG followers. Est revenue $800K-$1.5M.",
+      "timeline": []
+    },
+    {
+      "id": "indy-med-spa",
+      "clinic": "The Indy Medical Aesthetics & Wellness",
+      "owner": "Seana Rutherford, NP",
+      "status": "identified",
+      "configured": false,
+      "smsWorking": false,
+      "orgId": "",
+      "nextAction": "Send outreach \u2014 contact-form-only = lead leakage",
+      "location": "Downtown Cleveland, OH",
+      "phone": "",
+      "email": "",
+      "website": "https://beindy.com",
+      "emr": "Unknown",
+      "telnyxNumber": "",
+      "tenDlc": false,
+      "servicesCount": 8,
+      "providers": [
+        "Seana Rutherford"
+      ],
+      "notes": "Boutique longevity + aesthetics. Contact-form-only website = lead leakage.",
+      "timeline": []
+    },
+    {
+      "id": "oi-medical-aesthetics",
+      "clinic": "OI Medical Aesthetics",
+      "owner": "Timothy Hilty, MD",
+      "title": "Medical Director",
+      "location": "Oakwood, OH",
+      "phone": "(937) 545-6396",
+      "email": "",
+      "website": "oimedicalaesthetics.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": 9,
+      "providers": [
+        "Timothy Hilty, MD",
+        "Lindsey Bowen, PA-C",
+        "Sally Tahy, RN",
+        "Megan Beyerle, MSN, RN",
+        "Cindy Gray, APRN",
+        "Elaine Baker"
+      ],
+      "timeline": [],
+      "nextAction": "Send outreach email",
+      "notes": "Appointment-only, call-to-schedule. 6 providers. Affluent Oakwood location. Published pricing. High priority \u2014 perfect fit for missed-call text-back."
+    },
+    {
+      "id": "luxe-medspa-columbus",
+      "clinic": "The Luxe MedSpa",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Upper Arlington, OH",
+      "phone": "(614) 453-2056",
+      "email": "",
+      "website": "theluxemedicalspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": 7,
+      "providers": [],
+      "timeline": [],
+      "nextAction": "Identify owner/decision-maker, then send outreach",
+      "notes": "Single location in affluent Upper Arlington. Wellness + aesthetics hybrid (TRT, supplements). Active Facebook. Newer practice."
+    },
+    {
+      "id": "19-west-aesthetics",
+      "clinic": "19 West Aesthetics",
+      "owner": "Shannon Dillon",
+      "title": "BSN, RN \u2014 Founder",
+      "location": "Centerville/Dayton, OH",
+      "phone": "",
+      "email": "",
+      "website": "19westaesthetics.com",
+      "emr": "Aesthetic Record",
+      "status": "researched",
+      "configured": false,
+      "services": 5,
+      "providers": [
+        "Shannon Dillon, BSN, RN"
+      ],
+      "timeline": [],
+      "nextAction": "Find phone/email, then send outreach",
+      "notes": "Solo practitioner, newer practice. Uses Aesthetic Record EMR. No prominent phone number. Dayton market. Lower priority but good long-term fit."
     }
   ]
 }

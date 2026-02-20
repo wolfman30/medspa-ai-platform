@@ -273,10 +273,12 @@ func New(cfg *Config) http.Handler {
 				handlers.RegisterAdminRoutes(admin, cfg.DB, cfg.TranscriptStore, cfg.ClinicStore, cfg.Logger)
 
 				// Manual testing tracker
-				testingHandler := handlers.NewAdminTestingHandler(cfg.DB, cfg.Logger)
+				testingHandler := handlers.NewAdminTestingHandler(cfg.DB, cfg.Logger, nil, "", "")
 				admin.Get("/testing", testingHandler.ListTestResults)
 				admin.Post("/testing", testingHandler.CreateTestResult)
 				admin.Put("/testing/{id}", testingHandler.UpdateTestResult)
+				admin.Post("/testing/{id}/evidence", testingHandler.UploadEvidence)
+				admin.Delete("/testing/{id}/evidence", testingHandler.DeleteEvidence)
 			}
 		})
 	}

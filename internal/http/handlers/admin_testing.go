@@ -1,27 +1,44 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi/v5"
+	"github.com/lib/pq"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+// S3Uploader is an interface for S3 PutObject (testable).
+type S3Uploader interface {
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+}
+
 // AdminTestingHandler handles manual test result CRUD.
 type AdminTestingHandler struct {
-	db     *sql.DB
-	logger *logging.Logger
+	db             *sql.DB
+	logger         *logging.Logger
+	s3Client       S3Uploader
+	s3Bucket       string
+	s3Region       string
 }
 
 // NewAdminTestingHandler creates a new testing handler.
-func NewAdminTestingHandler(db *sql.DB, logger *logging.Logger) *AdminTestingHandler {
+func NewAdminTestingHandler(db *sql.DB, logger *logging.Logger, s3Client S3Uploader, s3Bucket, s3Region string) *AdminTestingHandler {
 	if logger == nil {
 		logger = logging.Default()
 	}
-	return &AdminTestingHandler{db: db, logger: logger}
+	return &AdminTestingHandler{db: db, logger: logger, s3Client: s3Client, s3Bucket: s3Bucket, s3Region: s3Region}
 }
 
 // TestResult represents a single manual test result.
@@ -29,6 +46,7 @@ type TestResult struct {
 	ID             int        `json:"id"`
 	ScenarioID     string     `json:"scenario_id"`
 	ScenarioName   string     `json:"scenario_name"`
+	Description    string     `json:"description"`
 	Clinic         string     `json:"clinic"`
 	Category       string     `json:"category"`
 	Status         string     `json:"status"`
@@ -36,6 +54,7 @@ type TestResult struct {
 	TestedBy       string     `json:"tested_by"`
 	Notes          string     `json:"notes"`
 	ConversationID string     `json:"conversation_id"`
+	EvidenceURLs   []string   `json:"evidence_urls"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
@@ -71,7 +90,7 @@ type TestSummary struct {
 func (h *AdminTestingHandler) ListTestResults(w http.ResponseWriter, r *http.Request) {
 	clinic := r.URL.Query().Get("clinic")
 
-	query := `SELECT id, scenario_id, scenario_name, clinic, category, status, tested_at, tested_by, notes, conversation_id, created_at, updated_at
+	query := `SELECT id, scenario_id, scenario_name, description, clinic, category, status, tested_at, tested_by, notes, conversation_id, evidence_urls, created_at, updated_at
 		FROM manual_test_results`
 	var args []any
 	if clinic != "" {
@@ -92,14 +111,17 @@ func (h *AdminTestingHandler) ListTestResults(w http.ResponseWriter, r *http.Req
 	for rows.Next() {
 		var tr TestResult
 		var testedAt sql.NullTime
-		if err := rows.Scan(&tr.ID, &tr.ScenarioID, &tr.ScenarioName, &tr.Clinic, &tr.Category,
+		if err := rows.Scan(&tr.ID, &tr.ScenarioID, &tr.ScenarioName, &tr.Description, &tr.Clinic, &tr.Category,
 			&tr.Status, &testedAt, &tr.TestedBy, &tr.Notes, &tr.ConversationID,
-			&tr.CreatedAt, &tr.UpdatedAt); err != nil {
+			pq.Array(&tr.EvidenceURLs), &tr.CreatedAt, &tr.UpdatedAt); err != nil {
 			h.logger.Error("failed to scan test result", "error", err)
 			continue
 		}
 		if testedAt.Valid {
 			tr.TestedAt = &testedAt.Time
+		}
+		if tr.EvidenceURLs == nil {
+			tr.EvidenceURLs = []string{}
 		}
 		results = append(results, tr)
 	}
@@ -144,7 +166,6 @@ func computeSummary(results []TestResult) TestSummary {
 			}
 		}
 	}
-	// Ready = all must-pass passed + at least 3 smoke tests passed + no failures
 	s.ReadyForOutreach = s.MustPassPassed == s.MustPassTotal && s.MustPassTotal > 0 &&
 		s.SmokePassed >= 3 && s.Failed == 0
 	return s
@@ -156,10 +177,11 @@ func (h *AdminTestingHandler) UpdateTestResult(w http.ResponseWriter, r *http.Re
 	id := chi.URLParam(r, "id")
 
 	var body struct {
-		Status         string `json:"status"`
-		TestedBy       string `json:"tested_by"`
-		Notes          string `json:"notes"`
-		ConversationID string `json:"conversation_id"`
+		Status         string   `json:"status"`
+		TestedBy       string   `json:"tested_by"`
+		Notes          string   `json:"notes"`
+		ConversationID string   `json:"conversation_id"`
+		EvidenceURLs   []string `json:"evidence_urls"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -178,12 +200,126 @@ func (h *AdminTestingHandler) UpdateTestResult(w http.ResponseWriter, r *http.Re
 		testedAt = &now
 	}
 
-	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE manual_test_results SET status=$1, tested_at=$2, tested_by=$3, notes=$4, conversation_id=$5, updated_at=NOW()
-		 WHERE id=$6`,
-		body.Status, testedAt, body.TestedBy, body.Notes, body.ConversationID, id)
+	if body.EvidenceURLs == nil {
+		// Don't overwrite evidence if not provided — only update if explicitly sent
+		_, err := h.db.ExecContext(r.Context(),
+			`UPDATE manual_test_results SET status=$1, tested_at=$2, tested_by=$3, notes=$4, conversation_id=$5, updated_at=NOW()
+			 WHERE id=$6`,
+			body.Status, testedAt, body.TestedBy, body.Notes, body.ConversationID, id)
+		if err != nil {
+			h.logger.Error("failed to update test result", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		_, err := h.db.ExecContext(r.Context(),
+			`UPDATE manual_test_results SET status=$1, tested_at=$2, tested_by=$3, notes=$4, conversation_id=$5, evidence_urls=$6, updated_at=NOW()
+			 WHERE id=$7`,
+			body.Status, testedAt, body.TestedBy, body.Notes, body.ConversationID, pq.Array(body.EvidenceURLs), id)
+		if err != nil {
+			h.logger.Error("failed to update test result", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// UploadEvidence handles screenshot/image uploads for test evidence.
+// POST /admin/testing/{id}/evidence
+// Content-Type: multipart/form-data, field name: "file"
+func (h *AdminTestingHandler) UploadEvidence(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	if h.s3Client == nil || h.s3Bucket == "" {
+		http.Error(w, "evidence upload not configured (no S3)", http.StatusServiceUnavailable)
+		return
+	}
+
+	// 10MB max
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "file too large (max 10MB)", http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
 	if err != nil {
-		h.logger.Error("failed to update test result", "error", err)
+		http.Error(w, "missing file field", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Validate content type
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	contentTypes := map[string]string{
+		".png":  "image/png",
+		".jpg":  "image/jpeg",
+		".jpeg": "image/jpeg",
+		".gif":  "image/gif",
+		".webp": "image/webp",
+	}
+	ct, ok := contentTypes[ext]
+	if !ok {
+		http.Error(w, "unsupported file type (png, jpg, gif, webp only)", http.StatusBadRequest)
+		return
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "failed to read file", http.StatusInternalServerError)
+		return
+	}
+
+	// Upload to S3
+	s3Key := fmt.Sprintf("testing-evidence/%s/%d-%s%s", id, time.Now().UnixMilli(), strings.TrimSuffix(header.Filename, ext), ext)
+	_, err = h.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
+		Bucket:      aws.String(h.s3Bucket),
+		Key:         aws.String(s3Key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(ct),
+	})
+	if err != nil {
+		h.logger.Error("failed to upload evidence to S3", "error", err)
+		http.Error(w, "upload failed", http.StatusInternalServerError)
+		return
+	}
+
+	evidenceURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", h.s3Bucket, h.s3Region, s3Key)
+
+	// Append to evidence_urls array
+	_, err = h.db.ExecContext(r.Context(),
+		`UPDATE manual_test_results SET evidence_urls = array_append(evidence_urls, $1), updated_at=NOW() WHERE id=$2`,
+		evidenceURL, id)
+	if err != nil {
+		h.logger.Error("failed to update evidence_urls", "error", err)
+		http.Error(w, "saved to S3 but failed to update DB", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"url": evidenceURL})
+}
+
+// DeleteEvidence removes an evidence URL from a test result.
+// DELETE /admin/testing/{id}/evidence
+func (h *AdminTestingHandler) DeleteEvidence(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+		http.Error(w, "url required", http.StatusBadRequest)
+		return
+	}
+
+	_, err := h.db.ExecContext(r.Context(),
+		`UPDATE manual_test_results SET evidence_urls = array_remove(evidence_urls, $1), updated_at=NOW() WHERE id=$2`,
+		body.URL, id)
+	if err != nil {
+		h.logger.Error("failed to remove evidence URL", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -198,6 +334,7 @@ func (h *AdminTestingHandler) CreateTestResult(w http.ResponseWriter, r *http.Re
 	var body struct {
 		ScenarioID   string `json:"scenario_id"`
 		ScenarioName string `json:"scenario_name"`
+		Description  string `json:"description"`
 		Clinic       string `json:"clinic"`
 		Category     string `json:"category"`
 	}
@@ -218,10 +355,10 @@ func (h *AdminTestingHandler) CreateTestResult(w http.ResponseWriter, r *http.Re
 
 	var id int
 	err := h.db.QueryRowContext(r.Context(),
-		`INSERT INTO manual_test_results (scenario_id, scenario_name, clinic, category) VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (scenario_id, clinic) DO UPDATE SET scenario_name=EXCLUDED.scenario_name, updated_at=NOW()
+		`INSERT INTO manual_test_results (scenario_id, scenario_name, description, clinic, category) VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (scenario_id, clinic) DO UPDATE SET scenario_name=EXCLUDED.scenario_name, description=EXCLUDED.description, updated_at=NOW()
 		 RETURNING id`,
-		body.ScenarioID, body.ScenarioName, body.Clinic, body.Category).Scan(&id)
+		body.ScenarioID, body.ScenarioName, body.Description, body.Clinic, body.Category).Scan(&id)
 	if err != nil {
 		h.logger.Error("failed to create test result", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
