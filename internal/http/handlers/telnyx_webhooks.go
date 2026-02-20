@@ -374,11 +374,13 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 		"from", payload.FromNumber(),
 	)
 	if h.processed != nil && dedupeID != "" {
-		already, err := h.processed.AlreadyProcessed(ctx, "telnyx.message_id", dedupeID)
+		// Use MarkProcessed atomically (SET NX) to both check and claim in one step.
+		// This prevents the race where two webhooks both pass AlreadyProcessed before either marks it.
+		isNew, err := h.processed.MarkProcessed(ctx, "telnyx.message_id", dedupeID)
 		if err != nil {
 			return fmt.Errorf("processed lookup failed: %w", err)
 		}
-		if already {
+		if !isNew {
 			h.logger.Info("telnyx inbound dedupe: already processed", "dedupe_id", dedupeID)
 			return nil
 		}
@@ -553,11 +555,6 @@ func (h *TelnyxWebhookHandler) handleInbound(ctx context.Context, evt telnyxEven
 			h.sendAutoReply(context.Background(), to, from, ack)
 		}
 		h.dispatchConversation(context.Background(), evt, payload, clinicID, conversationID, panRedacted)
-	}
-	if h.processed != nil && dedupeID != "" {
-		if _, err := h.processed.MarkProcessed(ctx, "telnyx.message_id", dedupeID); err != nil {
-			h.logger.Warn("telnyx inbound dedupe mark failed", "error", err, "dedupe_id", dedupeID)
-		}
 	}
 	return nil
 }
