@@ -22,13 +22,13 @@ var touchEventTypes = []string{
 
 // Rule100Response is the JSON shape returned by GET /admin/rule100/today.
 type Rule100Response struct {
-	Date      string                  `json:"date"`
-	Touches   int                     `json:"touches"`
-	Goal      int                     `json:"goal"`
-	Streak    int                     `json:"streak"`
-	ByType    map[string]int          `json:"byType"`
+	Date       string                 `json:"date"`
+	Touches    int                    `json:"touches"`
+	Goal       int                    `json:"goal"`
+	Streak     int                    `json:"streak"`
+	ByType     map[string]int         `json:"byType"`
 	ByProspect []Rule100ProspectCount `json:"byProspect"`
-	History   []Rule100DayHistory     `json:"history"`
+	History    []Rule100DayHistory    `json:"history"`
 }
 
 type Rule100ProspectCount struct {
@@ -221,4 +221,3 @@ func simplifyType(t string) string {
 func pqStringArray(ss []string) interface{} {
 	return pq.Array(ss)
 }
-
