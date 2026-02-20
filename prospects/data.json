@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-19T17:00:00Z",
+  "lastUpdated": "2026-02-19T23:01:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -405,9 +405,9 @@
     },
     {
       "id": "kur-modern-medical-aesthetics",
-      "clinic": "KÜR Modern Medical Aesthetics",
+      "clinic": "K\u00dcR Modern Medical Aesthetics",
       "owner": "Nina Pupovac",
-      "title": "NP, Board-Certified — Founder",
+      "title": "NP, Board-Certified \u2014 Founder",
       "location": "Cleveland, OH (Downtown)",
       "phone": "",
       "email": "",
@@ -415,7 +415,14 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": ["Botox", "Dermal Fillers", "IV Hydration", "Facials", "Body Contouring", "Skin Tightening"],
+      "services": [
+        "Botox",
+        "Dermal Fillers",
+        "IV Hydration",
+        "Facials",
+        "Body Contouring",
+        "Skin Tightening"
+      ],
       "timeline": [
         {
           "date": "2026-02-19T20:00:00Z",
@@ -424,7 +431,7 @@
         }
       ],
       "nextAction": "Send outreach via website contact form or Instagram DM",
-      "notes": "Strong personal brand. Small team (Nina, Elizabeth, Nataleigh). Downtown Cleveland. No phone prominently listed — contact form based."
+      "notes": "Strong personal brand. Small team (Nina, Elizabeth, Nataleigh). Downtown Cleveland. No phone prominently listed \u2014 contact form based."
     },
     {
       "id": "light-touch-aesthetic-center",
@@ -438,7 +445,13 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": ["Laser Hair Removal", "Botox", "Dermal Fillers", "Chemical Peels", "Body Contouring"],
+      "services": [
+        "Laser Hair Removal",
+        "Botox",
+        "Dermal Fillers",
+        "Chemical Peels",
+        "Body Contouring"
+      ],
       "timeline": [
         {
           "date": "2026-02-19T20:00:00Z",
@@ -447,7 +460,7 @@
         }
       ],
       "nextAction": "Draft and send outreach email",
-      "notes": "Physician-owned since 2000. Originally Independence, OH. Two websites. Phone prominently displayed — ideal for missed call text-back. Score: 9/10."
+      "notes": "Physician-owned since 2000. Originally Independence, OH. Two websites. Phone prominently displayed \u2014 ideal for missed call text-back. Score: 9/10."
     },
     {
       "id": "cleveland-primecare-medspa",
@@ -461,7 +474,13 @@
       "emr": "Unknown",
       "status": "researched",
       "configured": false,
-      "services": ["BOTOX", "Xeomin", "Dermal Fillers", "PRP Hair Restoration", "Facials"],
+      "services": [
+        "BOTOX",
+        "Xeomin",
+        "Dermal Fillers",
+        "PRP Hair Restoration",
+        "Facials"
+      ],
       "timeline": [
         {
           "date": "2026-02-19T20:00:00Z",
@@ -471,6 +490,50 @@
       ],
       "nextAction": "Send outreach email to Deidra",
       "notes": "Hybrid primary care + medspa model. Beachwood location. Deidra has Cleveland Clinic background. Multiple service lines = busy phones."
+    },
+    {
+      "id": "summit-medaesthetics",
+      "clinic": "Summit MedAesthetics",
+      "owner": "Dr. Costas Apostolis",
+      "title": "DO \u2014 Medical Director",
+      "location": "Akron, OH (+ Boardman)",
+      "phone": "(330) 953-3414",
+      "email": "",
+      "website": "summitmedaesthetics.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "timeline": [
+        {
+          "date": "2026-02-19T23:01:00Z",
+          "type": "research",
+          "note": "Initial research completed. Two locations, doctor-owned, injectables + surgical + IV therapy."
+        }
+      ],
+      "nextAction": "Find email and send outreach",
+      "notes": "Double board-certified urogynecologist. Mix of med spa + surgical. Two locations."
+    },
+    {
+      "id": "jdv-med-spa",
+      "clinic": "JDV Med Spa",
+      "owner": "James Franz",
+      "title": "DO \u2014 Medical Director",
+      "location": "Canton, OH (+ Cuyahoga Falls)",
+      "phone": "(330) 438-4088",
+      "email": "",
+      "website": "jdvmedspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "timeline": [
+        {
+          "date": "2026-02-19T23:01:00Z",
+          "type": "research",
+          "note": "Initial research completed. #1 Galderma sales in Akron/Canton, top 500 nationally. Est. 2011."
+        }
+      ],
+      "nextAction": "Find email and send outreach",
+      "notes": "#1 Galderma sales in region (90+ facilities). All-RN staff. Two locations. Community Choice winner 2023-2025. High volume = high missed call potential."
     }
   ]
 }

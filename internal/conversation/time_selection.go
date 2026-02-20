@@ -1304,6 +1304,16 @@ func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, 
 		return false
 	}
 
+	// If provider preference is empty, try matching against known providers from config.
+	// This handles cases like "I want lip filler with Gale" where the patient volunteers
+	// a provider name before the assistant ever lists providers.
+	if cfg != nil && prefs.ProviderPreference == "" {
+		prefs.ProviderPreference = matchProviderFromConfig(history, cfg)
+		if prefs.ProviderPreference != "" {
+			log.Printf("[DEBUG] ShouldFetchAvailability: matched provider %q from config", prefs.ProviderPreference)
+		}
+	}
+
 	// If the service has multiple providers, must have provider preference.
 	// BUT: skip this check if the service has variants (in-person/virtual) —
 	// the variant question will be asked first during availability fetch,
@@ -1318,6 +1328,41 @@ func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, 
 
 	// Email is collected on the Moxie booking page, not via SMS
 	return true
+}
+
+// matchProviderFromConfig checks if any user message contains a known provider's
+// first name from the clinic config. This is the most reliable source since it
+// doesn't depend on fragile pattern matching in system prompt text.
+func matchProviderFromConfig(history []ChatMessage, cfg *clinic.Config) string {
+	if cfg == nil || cfg.MoxieConfig == nil || cfg.MoxieConfig.ProviderNames == nil {
+		return ""
+	}
+
+	// Collect all user message text
+	var userText strings.Builder
+	for _, msg := range history {
+		if msg.Role == ChatRoleUser {
+			userText.WriteString(strings.ToLower(msg.Content))
+			userText.WriteString(" ")
+		}
+	}
+	lower := userText.String()
+
+	// Check each provider's first name against user messages
+	for _, fullName := range cfg.MoxieConfig.ProviderNames {
+		parts := strings.Fields(fullName)
+		if len(parts) == 0 {
+			continue
+		}
+		firstName := strings.ToLower(parts[0])
+		if len(firstName) < 3 {
+			continue // Skip very short names to avoid false positives
+		}
+		if strings.Contains(lower, firstName) {
+			return fullName
+		}
+	}
+	return ""
 }
 
 // mergeLeadContextIntoPrefs fills in missing preferences from system context messages
