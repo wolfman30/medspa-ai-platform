@@ -110,17 +110,15 @@ type graphqlRequest struct {
 // If providerUserMedspaID is non-empty, slots are filtered to that provider.
 func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDate, endDate string, serviceMenuItemID string, noPreference bool, providerUserMedspaID ...string) (*AvailabilityResult, error) {
 	type serviceVar struct {
-		ServiceMenuItemID    string `json:"serviceMenuItemId"`
-		NoPreference         bool   `json:"noPreference"`
-		Order                int    `json:"order"`
-		ProviderUserMedspaID string `json:"providerUserMedspaId,omitempty"`
+		ServiceMenuItemID string `json:"serviceMenuItemId"`
+		NoPreference      bool   `json:"noPreference"`
+		Order             int    `json:"order"`
 	}
 
-	svc := serviceVar{ServiceMenuItemID: serviceMenuItemID, NoPreference: noPreference, Order: 1}
-	if len(providerUserMedspaID) > 0 && providerUserMedspaID[0] != "" {
-		svc.ProviderUserMedspaID = providerUserMedspaID[0]
-		svc.NoPreference = false
-	}
+	// Moxie's availableTimeSlots API does NOT support provider filtering.
+	// Always query with noPreference=true to get all providers' slots.
+	// Provider preference is applied at booking time via createAppointmentByClient.
+	svc := serviceVar{ServiceMenuItemID: serviceMenuItemID, NoPreference: true, Order: 1}
 
 	variables := map[string]interface{}{
 		"medspaId":  medspaID,
@@ -165,14 +163,6 @@ func (c *Client) GetAvailableSlots(ctx context.Context, medspaID string, startDa
 	}
 
 	result := &AvailabilityResult{}
-	// Log first few raw slot times for debugging timezone issues
-	logged := 0
-	for _, d := range resp.Data.AvailableTimeSlots.Dates {
-		if logged < 3 && len(d.Slots) > 0 {
-			c.logger.Info("moxie raw slot sample", "date", d.Date, "first_start", d.Slots[0].Start, "first_end", d.Slots[0].End)
-			logged++
-		}
-	}
 	for _, d := range resp.Data.AvailableTimeSlots.Dates {
 		ds := DateSlots{Date: d.Date}
 		for _, s := range d.Slots {
