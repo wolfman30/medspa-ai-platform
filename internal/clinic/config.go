@@ -160,6 +160,12 @@ type Config struct {
 	// MoxieConfig holds Moxie-specific IDs needed for direct GraphQL API booking.
 	// Only used when BookingPlatform == "moxie".
 	MoxieConfig *MoxieConfig `json:"moxie_config,omitempty"`
+
+	// VoiceAIEnabled controls whether inbound voice calls use Telnyx Voice AI.
+	// When false (default), calls fall through to voicemail → SMS text-back flow.
+	VoiceAIEnabled bool `json:"voice_ai_enabled"`
+	// TelnyxAssistantID is the Telnyx AI Assistant ID configured for this clinic's voice calls.
+	TelnyxAssistantID string `json:"telnyx_assistant_id,omitempty"`
 }
 
 // MoxieConfig contains Moxie platform-specific identifiers for direct API integration.
@@ -438,9 +444,16 @@ func (c *Config) IsOpenAt(t time.Time) bool {
 
 	hours := c.BusinessHours.GetHoursForDay(localTime.Weekday())
 	if hours == nil {
-		// No hours configured for this day — if NO hours are configured at all,
-		// assume always open (appointment-only clinic). Otherwise, closed today.
-		return !c.BusinessHours.HasAnyHours()
+		if !c.BusinessHours.HasAnyHours() {
+			// No hours configured at all (appointment-only clinic).
+			// Use time-based heuristic: 7 AM - 9 PM = "open", otherwise "after hours".
+			// This ensures after-hours greetings fire at night instead of claiming
+			// "providers are with patients" at 11 PM.
+			h := localTime.Hour()
+			return h >= 7 && h < 21
+		}
+		// Hours configured for other days but not today — closed today.
+		return false
 	}
 
 	openTime, err := time.Parse("15:04", hours.Open)
