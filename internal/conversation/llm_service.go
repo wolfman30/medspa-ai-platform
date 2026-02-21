@@ -3175,7 +3175,7 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	} else if strings.Contains(userMessages, "weekend") {
 		prefs.PreferredDays = "weekends"
 		hasPreferences = true
-	} else if strings.Contains(userMessages, "any day") || strings.Contains(userMessages, "flexible") || strings.Contains(userMessages, "anytime") {
+	} else if strings.Contains(userMessages, "any day") || strings.Contains(userMessages, "flexible") || strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "whenever") || strings.Contains(userMessages, "open schedule") {
 		prefs.PreferredDays = "any"
 		hasPreferences = true
 	} else if strings.Contains(userMessages, "monday") || strings.Contains(userMessages, "tuesday") || strings.Contains(userMessages, "wednesday") || strings.Contains(userMessages, "thursday") || strings.Contains(userMessages, "friday") {
@@ -3281,8 +3281,18 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 		} else if strings.Contains(userMessages, "evening") || strings.Contains(userMessages, "after work") || strings.Contains(userMessages, "late") {
 			prefs.PreferredTimes = "evening"
 			hasPreferences = true
-		} else if strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "any time") || strings.Contains(userMessages, "flexible") {
+		} else if strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "any time") || strings.Contains(userMessages, "flexible") || strings.Contains(userMessages, "whenever") || strings.Contains(userMessages, "doesn't matter") || strings.Contains(userMessages, "don't care") || strings.Contains(userMessages, "works for me") || strings.Contains(userMessages, "i'm free") || strings.Contains(userMessages, "i am free") || strings.Contains(userMessages, "open schedule") {
 			prefs.PreferredTimes = "flexible"
+			hasPreferences = true
+		}
+	}
+
+	// Short-reply fallback: if assistant just asked about schedule and the patient
+	// gave a short reply that implies flexibility but didn't match patterns above.
+	if prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
+		if schedPref := scheduleFromShortReply(history); schedPref != "" {
+			prefs.PreferredDays = "any"
+			prefs.PreferredTimes = schedPref
 			hasPreferences = true
 		}
 	}
@@ -3967,6 +3977,70 @@ func assistantAskedPatientType(history []ChatMessage, userIndex int) bool {
 	}
 	if strings.Contains(content, "are you new") && (strings.Contains(content, "patient") || strings.Contains(content, "here") || strings.Contains(content, "before")) {
 		return true
+	}
+	return false
+}
+
+// scheduleFromShortReply detects flexible schedule replies when the assistant
+// just asked about preferred days/times. Catches things like "whenever works",
+// "I'm open", "no preference", "anything", etc. that the main pattern matching
+// missed because they were too short or unusual.
+func scheduleFromShortReply(history []ChatMessage) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role != ChatRoleUser {
+			continue
+		}
+		if !assistantAskedSchedule(history, i) {
+			continue
+		}
+		reply := strings.ToLower(strings.TrimSpace(history[i].Content))
+		reply = strings.Trim(reply, ".,!?")
+		// Check for flexible/open schedule short replies
+		flexPatterns := []string{
+			"whenever", "whenever works", "whenever is fine", "whenever works for me",
+			"anything", "anything works", "anything is fine",
+			"open", "i'm open", "im open", "i am open", "wide open",
+			"no preference", "no pref", "doesn't matter", "dont matter",
+			"don't care", "dont care", "whatever", "whatever works",
+			"any", "any time", "anytime", "any day",
+			"flexible", "i'm flexible", "im flexible", "pretty flexible",
+			"free", "i'm free", "im free", "i am free",
+			"works for me", "all good", "good with anything",
+		}
+		for _, pat := range flexPatterns {
+			if reply == pat || strings.Contains(reply, pat) {
+				return "flexible"
+			}
+		}
+	}
+	return ""
+}
+
+func assistantAskedSchedule(history []ChatMessage, userIndex int) bool {
+	prev := previousAssistantMessage(history, userIndex)
+	if prev == "" {
+		return false
+	}
+	content := strings.ToLower(prev)
+	scheduleIndicators := []string{
+		"days and times",
+		"day and time",
+		"what days",
+		"what times",
+		"when works",
+		"when would",
+		"preferred time",
+		"preferred day",
+		"schedule",
+		"availability",
+		"work best for you",
+		"work for you",
+		"convenient for you",
+	}
+	for _, ind := range scheduleIndicators {
+		if strings.Contains(content, ind) {
+			return true
+		}
 	}
 	return false
 }
