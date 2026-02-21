@@ -1,32 +1,30 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-20
+Last updated: 2026-02-21
 
 ## Automated E2E Test Results (Live Dev API)
 
 **30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)**
 
-### Recent Fixes (Feb 19-20):
-- `9ebe104` fix: time range extraction in preferences + time-aware greeting
-- `c59a7d3` fix: use correct Moxie field 'providerId' for provider-filtered availability
-- `9ec7aea` fix: Moxie API does not support provider filtering on availability
-- `dbbcc8f` fix: time range parsing (5-6pm) and day range parsing (tue-thu)
-- `b8be352` fix: provider preference extraction from config + gibberish handling
-- `c57e3f4` fix: Moxie checklist no longer asks for email before time selection
-- `147a4ff` refactor: centralize timezone handling and confirmation formatting
-- `dab6c62` fix: duplicate progress SMS + timezone handling for Moxie slots
-- `4ab4f7c` feat: outreach draft & research viewing in prospect detail
-- `3e80214` fix: provider preference now filters Moxie availability slots
-- `11e90ee` feat: Clear button in conversation detail view (admin only)
-- `5c71f43` fix: conversation status updates to 'booked' after successful appointment
-- `c8ad58f` feat: ProspectDetail view with timeline, status, quick actions
-- `4027572` fix: revenue tracker MRR column clipped by scrollbar
+### Recent Fixes (Feb 20-21):
+- `98be220` security: AssistantID validation for Voice AI webhook
+- `f3dfecc` feat: Telnyx Voice AI webhook handler (Phase II groundwork)
+- `a0c16f6` fix: after-hours greeting for appointment-only clinics
+- `ef4d6a6` fix: mobile responsive portal — nav stacks, table fits screen
+- `e39adc9` upgrade: LLM from Claude Haiku 4.5 → Sonnet 4.6
+- `c9c784d` fix: date-based slot selection ('Feb 28', '2/28', 'the 28th')
+- `10a6b89` fix: recognize 'whenever works' and flexible schedule replies
+- `8fb5238` feat: complete outreach scripts for all 21 prospects
+- `4bd8909` feat: Testing Status card on CEO Dashboard
+- `1de212c` feat: Rule of 100 tracker card for CEO Dashboard
+- `42a6f75` fix: evidence upload auth — use Cognito token
+- `ef33476` docs: consolidate into SPEC + ARCHITECTURE model
 
 ### Remaining Issues (to verify):
-1. Re-run E2E to confirm all 30 scenarios pass after 14 new commits
-2. Provider preference filtering — new feature, needs E2E coverage
-3. Time range extraction (5-6pm, tue-thu) — fixed, needs validation
-4. Centralized timezone handling — refactored, needs regression check
+1. Re-run E2E to confirm scenarios pass after 23 new commits + LLM upgrade
+2. 4 prior E2E failures may be resolved by Sonnet 4.6 upgrade (better service recognition)
+3. Voice AI webhook — new, needs integration testing
+4. Mobile portal — needs manual verification on real devices
 
 ## Pre-Operator Testing Checklist (SPEC.md §3b)
 

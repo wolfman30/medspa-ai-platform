@@ -362,7 +362,7 @@ resource "aws_iam_role_policy" "bedrock_runtime" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "BedrockInvokeClaudeHaiku45"
+        Sid    = "BedrockInvokeClaudeModels"
         Effect = "Allow"
         Action = [
           "bedrock:Converse",
@@ -371,6 +371,11 @@ resource "aws_iam_role_policy" "bedrock_runtime" {
           "bedrock:InvokeModelWithResponseStream"
         ]
         Resource = [
+          # Sonnet 4.6 (primary SMS + Voice LLM)
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6",
+
+          # Haiku 4.5 (classifier + fallback)
           "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw",
           "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
           "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0",
