@@ -460,6 +460,16 @@ func main() {
 		}
 	}
 
+	// GitHub workflow webhook notifications (to Andrew on Telegram)
+	var githubWebhookHandler *handlers.GitHubWebhookHandler
+	if cfg.GitHubWebhookSecret != "" {
+		githubNotifier := handlers.NewTelegramNotifier(cfg.TelegramBotToken, cfg.AndrewTelegramChatID, logger)
+		githubWebhookHandler = handlers.NewGitHubWebhookHandler(cfg.GitHubWebhookSecret, githubNotifier, logger)
+		logger.Info("github webhook handler initialized")
+	} else {
+		logger.Warn("github webhook handler not initialized (GITHUB_WEBHOOK_SECRET missing)")
+	}
+
 	// Setup router
 	routerCfg := &router.Config{
 		Logger:                 logger,
@@ -475,6 +485,7 @@ func main() {
 		AdminMessaging:         adminMessagingHandler,
 		AdminClinicData:        adminClinicDataHandler,
 		TelnyxWebhooks:         telnyxWebhookHandler,
+		GitHubWebhook:          githubWebhookHandler,
 		ClinicHandler:          clinicHandler,
 		ClinicStatsHandler:     clinicStatsHandler,
 		ClinicDashboard:        clinicDashboardHandler,

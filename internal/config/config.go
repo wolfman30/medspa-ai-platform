@@ -153,6 +153,11 @@ type Config struct {
 	InstagramPageAccessToken string // Meta Page Access Token for sending messages
 	InstagramAppSecret       string // Meta App Secret for webhook signature verification
 	InstagramVerifyToken     string // Webhook verification token (you choose this)
+
+	// GitHub webhook + Telegram ops alerts
+	GitHubWebhookSecret string
+	TelegramBotToken    string
+	AndrewTelegramChatID string
 }
 
 // SMSProviderIssues returns a list of configuration problems that would prevent
@@ -359,6 +364,11 @@ func Load() *Config {
 		InstagramPageAccessToken: getEnv("INSTAGRAM_PAGE_ACCESS_TOKEN", ""),
 		InstagramAppSecret:       getEnv("INSTAGRAM_APP_SECRET", ""),
 		InstagramVerifyToken:     getEnv("INSTAGRAM_VERIFY_TOKEN", ""),
+
+		// GitHub webhook + Telegram ops alerts
+		GitHubWebhookSecret: getEnv("GITHUB_WEBHOOK_SECRET", ""),
+		TelegramBotToken:    getEnv("TELEGRAM_BOT_TOKEN", ""),
+		AndrewTelegramChatID: getEnv("ANDREW_TELEGRAM_CHAT_ID", ""),
 	}
 
 	// Startup validation warnings

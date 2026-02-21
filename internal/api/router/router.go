@@ -80,6 +80,9 @@ type Config struct {
 	// Voice AI handler (Telnyx AI Assistant webhook)
 	VoiceAIHandler *handlers.VoiceAIHandler
 
+	// GitHub Actions webhook handler
+	GitHubWebhook *handlers.GitHubWebhookHandler
+
 	// Instagram DM adapter
 	InstagramAdapter *instagram.Adapter
 
@@ -146,6 +149,9 @@ func New(cfg *Config) http.Handler {
 		if cfg.InstagramAdapter != nil {
 			public.Get("/webhooks/instagram", cfg.InstagramAdapter.HandleVerification)
 			public.Post("/webhooks/instagram", cfg.InstagramAdapter.HandleWebhook)
+		}
+		if cfg.GitHubWebhook != nil {
+			public.Post("/webhooks/github", cfg.GitHubWebhook.Handle)
 		}
 		if cfg.BookingCallbackHandler != nil {
 			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)
