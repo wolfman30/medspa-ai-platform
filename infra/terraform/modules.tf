@@ -81,7 +81,7 @@ module "ecs_fargate" {
     ALLOW_FAKE_PAYMENTS          = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
     REDIS_ADDR                   = "${module.redis.primary_endpoint_address}:${module.redis.port}"
     REDIS_TLS                    = "true"
-    BEDROCK_MODEL_ID             = "us.anthropic.claude-sonnet-4-6"
+    BEDROCK_MODEL_ID             = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     BEDROCK_EMBEDDING_MODEL_ID   = "amazon.titan-embed-text-v1"
     TELNYX_TRACK_JOBS            = "true"
     PERSIST_CONVERSATION_HISTORY = "true"
