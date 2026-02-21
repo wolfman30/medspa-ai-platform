@@ -268,3 +268,48 @@ func TestResolveProviderID(t *testing.T) {
 		})
 	}
 }
+
+func TestUsesManualHandoff(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected bool
+	}{
+		{"nil config", nil, true},
+		{"empty config", &Config{}, true},
+		{"explicit manual", &Config{BookingAdapter: "manual"}, true},
+		{"moxie adapter", &Config{BookingAdapter: "moxie"}, false},
+		{"boulevard adapter", &Config{BookingAdapter: "boulevard"}, false},
+		{"moxie platform no adapter", &Config{BookingPlatform: "moxie"}, false},
+		{"square platform no adapter", &Config{BookingPlatform: "square"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.UsesManualHandoff(); got != tt.expected {
+				t.Errorf("UsesManualHandoff() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestResolvedBookingAdapter(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected string
+	}{
+		{"nil config", nil, "manual"},
+		{"empty config", &Config{}, "manual"},
+		{"explicit manual", &Config{BookingAdapter: "manual"}, "manual"},
+		{"explicit moxie", &Config{BookingAdapter: "moxie"}, "moxie"},
+		{"moxie platform", &Config{BookingPlatform: "moxie"}, "moxie"},
+		{"boulevard", &Config{BookingAdapter: "boulevard"}, "boulevard"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.ResolvedBookingAdapter(); got != tt.expected {
+				t.Errorf("ResolvedBookingAdapter() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
