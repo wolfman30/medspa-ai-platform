@@ -383,8 +383,8 @@ func (c *Config) ResolvedBookingAdapter() string {
 	if adapter := strings.ToLower(c.BookingAdapter); adapter != "" {
 		return adapter
 	}
-	if c.UsesMoxieBooking() {
-		return "moxie"
+	if platform := strings.ToLower(c.BookingPlatform); platform != "" {
+		return platform
 	}
 	return "manual"
 }
