@@ -148,6 +148,11 @@ type Config struct {
 	// S3 Training Data Configuration (for classified conversation archives)
 	S3TrainingBucket  string // S3 bucket for training data (empty = disabled)
 	ClassifierModelID string // Bedrock model ID for auto-classification (e.g., Haiku)
+
+	// Instagram DM Channel Configuration
+	InstagramPageAccessToken string // Meta Page Access Token for sending messages
+	InstagramAppSecret       string // Meta App Secret for webhook signature verification
+	InstagramVerifyToken     string // Webhook verification token (you choose this)
 }
 
 // SMSProviderIssues returns a list of configuration problems that would prevent
@@ -349,6 +354,11 @@ func Load() *Config {
 
 		S3TrainingBucket:  getEnv("S3_TRAINING_BUCKET", ""),
 		ClassifierModelID: getEnv("CLASSIFIER_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"),
+
+		// Instagram DM
+		InstagramPageAccessToken: getEnv("INSTAGRAM_PAGE_ACCESS_TOKEN", ""),
+		InstagramAppSecret:       getEnv("INSTAGRAM_APP_SECRET", ""),
+		InstagramVerifyToken:     getEnv("INSTAGRAM_VERIFY_TOKEN", ""),
 	}
 
 	// Startup validation warnings

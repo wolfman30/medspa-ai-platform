@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
+	"github.com/wolfman30/medspa-ai-platform/internal/channels/instagram"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
@@ -79,6 +80,9 @@ type Config struct {
 	// Voice AI handler (Telnyx AI Assistant webhook)
 	VoiceAIHandler *handlers.VoiceAIHandler
 
+	// Instagram DM adapter
+	InstagramAdapter *instagram.Adapter
+
 	// Readiness check dependencies
 	RedisClient    *redis.Client
 	HasSMSProvider bool
@@ -133,6 +137,10 @@ func New(cfg *Config) http.Handler {
 		}
 		if cfg.VoiceAIHandler != nil {
 			public.Post("/webhooks/telnyx/voice-ai", cfg.VoiceAIHandler.HandleVoiceAI)
+		}
+		if cfg.InstagramAdapter != nil {
+			public.Get("/webhooks/instagram", cfg.InstagramAdapter.HandleVerification)
+			public.Post("/webhooks/instagram", cfg.InstagramAdapter.HandleWebhook)
 		}
 		if cfg.BookingCallbackHandler != nil {
 			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)
