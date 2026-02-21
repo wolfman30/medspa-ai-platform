@@ -30,6 +30,6 @@ ui_domain_name    = "portal-dev.aiwolfsolutions.com"
 ui_certificate_arn = "arn:aws:acm:us-east-1:422017356225:certificate/65cd7cfe-4f83-48a6-8d3f-70db25dbf9d1"
 
 # Cognito auth
-cognito_user_pool_id = ""
-cognito_client_id    = ""
-cognito_region       = ""
+cognito_user_pool_id = "us-east-1_eGSeUyPdg"
+cognito_client_id    = "7dr4acv3909to0jk292sr0q3h"
+cognito_region       = "us-east-1"
