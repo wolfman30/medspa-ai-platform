@@ -1371,7 +1371,7 @@ func ShouldFetchAvailability(history []ChatMessage, lead interface{}) bool {
 // to trigger an availability fetch. When cfg is non-nil and the service has multiple
 // providers, provider preference is also required.
 func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, cfg *clinic.Config) bool {
-	prefs, ok := extractPreferences(history)
+	prefs, ok := extractPreferences(history, serviceAliasesFromConfig(cfg))
 	if !ok {
 		log.Printf("[DEBUG] ShouldFetchAvailability: extractPreferences returned not ok")
 		return false
