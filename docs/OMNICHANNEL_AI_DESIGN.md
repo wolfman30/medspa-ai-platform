@@ -132,40 +132,13 @@ IG DM from @sarah.j.beauty    ──┘
 | Instagram username | Secondary | Linked when patient provides phone in IG DM |
 | Name + clinic combo | Tertiary | Fuzzy match for edge cases |
 
-```sql
-CREATE TABLE patient_identities (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id      UUID NOT NULL REFERENCES leads(id),
-    channel         TEXT NOT NULL,     -- sms, voice, instagram
-    channel_identifier TEXT NOT NULL,  -- phone number, IG user ID, etc.
-    linked_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(channel, channel_identifier)
-);
-
-CREATE INDEX idx_patient_identities_lookup
-    ON patient_identities(channel, channel_identifier);
-```
+The `patient_identities` table links a single patient to multiple channel identifiers (phone, IG user ID, etc.). See **Section 4.2** for the canonical schema definition.
 
 **Cross-channel conversation continuity:** If a patient calls and gets handed off to SMS, or DMs on IG after seeing a missed call, the engine loads the existing conversation state. The patient doesn't repeat themselves.
 
 ### 2.5 Treatment Lifecycle Tracking (Proactive Rebooking)
 
-Store treatment dates and known durations to power proactive outreach:
-
-```sql
-CREATE TABLE treatment_records (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id      UUID NOT NULL REFERENCES leads(id),
-    org_id          UUID NOT NULL REFERENCES organizations(id),
-    service_name    TEXT NOT NULL,       -- "Botox", "Juvederm", etc.
-    treatment_date  DATE NOT NULL,
-    next_due_date   DATE,               -- computed from treatment_date + typical_duration
-    rebook_status   TEXT DEFAULT 'pending', -- pending | contacted | booked | declined
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_treatment_records_due ON treatment_records(next_due_date, rebook_status);
-```
+Store treatment dates and known durations to power proactive outreach. The `treatment_records` table tracks each treatment with computed rebooking dates. See **Section 4.3** for the canonical schema definition.
 
 **Known treatment durations:**
 
@@ -350,7 +323,42 @@ Patient ──phone──► Telnyx ──WebSocket──► Go Service
 10. On completion/failure: store voice_calls record, upload recording to S3
 ```
 
-### 3.6 Feature Toggle
+### 3.6 Concurrency Limits & Backpressure
+
+Each active voice call maintains **4 long-lived connections**:
+
+| Connection | Type | Lifetime |
+|-----------|------|----------|
+| Telnyx media stream | WebSocket | Duration of call |
+| Deepgram STT | WebSocket | Duration of call |
+| Cartesia TTS | WebSocket | Duration of call |
+| Bedrock Claude Haiku | HTTP/2 stream | Per-utterance (kept alive via connection pool) |
+
+**Per-task concurrency:**
+
+- Each ECS task can handle **~25 concurrent calls** (100 WebSockets + 25 Bedrock streams).
+- Go's goroutine model handles this easily; bottleneck is external connection limits.
+- Deepgram: 100 concurrent connections per API key (default). Cartesia: similar.
+- `max_concurrent_calls` per clinic (default 5) prevents any single clinic from monopolizing capacity.
+
+**Backpressure strategy:**
+
+1. **Connection pool pre-warming:** Maintain a pool of pre-authenticated WebSocket connections to Deepgram and Cartesia. New calls grab from the pool instead of handshaking.
+2. **Admission control:** Track active calls per ECS task. When at capacity (25), reject new calls with Telnyx `call.rejected` → falls back to voicemail → SMS text-back. Patient experience is graceful, not broken.
+3. **Circuit breaker per provider:** If Deepgram/Cartesia/Bedrock error rate exceeds 50% over 30s, trip the circuit → all new calls fall back to SMS text-back. Existing calls attempt graceful handoff: "I'm having trouble hearing you — let me text you instead."
+4. **ECS auto-scaling:** CloudWatch alarm on custom metric `active_voice_calls / task_count`. Scale out at 80% capacity (20 calls/task), scale in at 20% (5 calls/task).
+5. **Connection exhaustion protection:** Hard limit of 120 WebSockets per task (30 calls × 4 connections). Beyond this, Go's `net` layer returns errors caught by admission control.
+
+**ECS task sizing for voice:**
+
+| Resource | Current (SMS-only) | With Voice AI |
+|----------|-------------------|---------------|
+| CPU | 256 (0.25 vCPU) | 512 (0.5 vCPU) — audio encoding overhead |
+| Memory | 512 MB | 1024 MB — WebSocket buffers, audio frame queues |
+| Tasks (dev) | 1 | 1 (sufficient for testing) |
+| Tasks (prod) | 2 | 2-4 (auto-scaled on call volume) |
+
+### 3.7 Feature Toggle
 
 #### Per-Clinic Configuration
 
@@ -435,7 +443,9 @@ CREATE INDEX idx_voice_calls_phone ON voice_calls(caller_phone);
 CREATE INDEX idx_voice_calls_started ON voice_calls(started_at);
 ```
 
-### 4.2 patient_identities Table
+### 4.2 patient_identities Table (Canonical Schema)
+
+> This is the canonical schema definition. Section 2.4 provides the conceptual overview.
 
 ```sql
 CREATE TABLE patient_identities (
@@ -451,7 +461,9 @@ CREATE INDEX idx_patient_identities_lookup
     ON patient_identities(channel, channel_identifier);
 ```
 
-### 4.3 treatment_records Table
+### 4.3 treatment_records Table (Canonical Schema)
+
+> This is the canonical schema definition. Section 2.5 provides the conceptual overview.
 
 ```sql
 CREATE TABLE treatment_records (
@@ -474,6 +486,51 @@ CREATE INDEX idx_treatment_records_due
 - S3 bucket: `medspa-voice-recordings/{org_id}/{call_id}.wav`
 - Retention: 90 days (configurable per clinic)
 - Encryption: AES-256 SSE-S3
+
+### 4.5 PHI Handling & Compliance
+
+Voice calls and transcripts contain PHI (Protected Health Information). All handling must comply with HIPAA requirements.
+
+**Logging & metrics redaction:**
+
+| Data type | Log behavior | Example |
+|-----------|-------------|---------|
+| Patient name | Redacted → `[NAME]` | `"Processing call for [NAME]"` |
+| Phone number | Last 4 only | `"Inbound call from ***2713"` |
+| Service interest | Allowed (not PHI) | `"Service: Botox"` |
+| Transcript text | Never logged | Stored only in S3 (encrypted) and DB |
+| Call metadata (duration, status) | Allowed | `"Call ended, duration=142s, status=booked"` |
+
+**Implementation:**
+
+- `internal/voice/redact.go` — `RedactPHI(msg string) string` applied to all log output
+- Structured logger fields use redacted variants: `"patient": redact.Name(name)`
+- CloudWatch log group `/ecs/medspa-voice` — retention: **30 days** (shorter than app logs)
+- No PHI in CloudWatch metrics — only aggregate counts (calls/min, avg duration, booking rate)
+
+**Recording & transcript storage:**
+
+- Recordings: S3 with SSE-S3 encryption, bucket policy denies unencrypted uploads
+- Transcripts: Stored in `voice_calls.transcript` (PostgreSQL) — encrypted at rest via RDS encryption
+- Access: Admin portal only, authenticated via Cognito, audit-logged
+- Deletion: Automated lifecycle policy deletes recordings after retention period; patient deletion request triggers immediate purge of all recordings + transcripts
+
+**Provider BAAs:**
+
+All voice AI providers selected have HIPAA Business Associate Agreements:
+- Telnyx: BAA available (already signed for SMS)
+- Deepgram: BAA available for Enterprise tier
+- Cartesia: BAA available
+- AWS Bedrock: Covered under existing AWS BAA
+
+**Log retention summary:**
+
+| Log source | Retention | Contains PHI? |
+|-----------|-----------|---------------|
+| Application logs (`/ecs/medspa-*-api`) | 90 days | No (redacted) |
+| Voice logs (`/ecs/medspa-voice`) | 30 days | No (redacted) |
+| S3 recordings | 90 days (configurable) | Yes (encrypted) |
+| DB transcripts | Until patient deletion | Yes (encrypted at rest) |
 
 ## 5. Go Package Structure
 
