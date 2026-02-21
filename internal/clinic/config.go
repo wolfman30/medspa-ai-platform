@@ -166,6 +166,14 @@ type Config struct {
 	// Only used when BookingPlatform == "moxie".
 	MoxieConfig *MoxieConfig `json:"moxie_config,omitempty"`
 
+	// BookingAdapter specifies which booking adapter to use: "moxie", "manual", "boulevard".
+	// Defaults to "manual" if no EMR/booking platform is configured.
+	BookingAdapter string `json:"booking_adapter,omitempty"`
+	// HandoffNotificationPhone is the clinic owner's phone number for manual handoff SMS alerts.
+	HandoffNotificationPhone string `json:"handoff_notification_phone,omitempty"`
+	// HandoffNotificationEmail is the clinic owner's email for manual handoff email alerts.
+	HandoffNotificationEmail string `json:"handoff_notification_email,omitempty"`
+
 	// Boulevard API credentials (used when BookingPlatform == "boulevard").
 	BoulevardAPIKey     string `json:"boulevard_api_key,omitempty"`
 	BoulevardBusinessID string `json:"boulevard_business_id,omitempty"`
@@ -349,6 +357,36 @@ func (c *Config) GetServiceVariants(service string) []string {
 		}
 	}
 	return nil
+}
+
+// UsesManualHandoff returns true if the clinic should use the manual handoff adapter.
+// This is the default when no EMR/booking platform is configured.
+func (c *Config) UsesManualHandoff() bool {
+	if c == nil {
+		return true
+	}
+	adapter := strings.ToLower(c.BookingAdapter)
+	if adapter == "manual" {
+		return true
+	}
+	if adapter == "" && !c.UsesMoxieBooking() {
+		return true
+	}
+	return false
+}
+
+// ResolvedBookingAdapter returns the effective booking adapter name.
+func (c *Config) ResolvedBookingAdapter() string {
+	if c == nil {
+		return "manual"
+	}
+	if adapter := strings.ToLower(c.BookingAdapter); adapter != "" {
+		return adapter
+	}
+	if c.UsesMoxieBooking() {
+		return "moxie"
+	}
+	return "manual"
 }
 
 // UsesMoxieBooking returns true if the clinic is configured to use Moxie for booking.
