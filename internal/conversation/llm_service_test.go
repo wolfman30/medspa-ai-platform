@@ -277,8 +277,8 @@ func TestTierA_CI12_DepositRulesCorrectness_ServiceOverridesApply(t *testing.T) 
 
 	cfg := clinic.DefaultConfig("org-1")
 	cfg.ServiceDepositAmountCents = map[string]int{
-		"botox":  5000,
-		"filler": 10000,
+		"botox":         5000,
+		"dermal filler": 10000,
 	}
 	if err := clinicStore.Set(ctx, cfg); err != nil {
 		t.Fatalf("set clinic config: %v", err)
@@ -338,7 +338,7 @@ func TestTierA_CI12_DepositRulesCorrectness_ServiceOverridesApply(t *testing.T) 
 	}
 
 	start2, err := service.StartConversation(ctx, StartRequest{
-		ConversationID: "conv-filler",
+		ConversationID: "conv-dermal-filler",
 		LeadID:         lead.ID,
 		OrgID:          "org-1",
 		Intro:          "Hi",
@@ -351,14 +351,14 @@ func TestTierA_CI12_DepositRulesCorrectness_ServiceOverridesApply(t *testing.T) 
 		ConversationID: start2.ConversationID,
 		LeadID:         lead.ID,
 		OrgID:          "org-1",
-		Message:        "I want to book filler",
+		Message:        "I want to book dermal filler",
 		Channel:        ChannelSMS,
 	})
 	if err != nil {
 		t.Fatalf("process #2 failed: %v", err)
 	}
 	if resp2.DepositIntent == nil || resp2.DepositIntent.AmountCents != 10000 {
-		t.Fatalf("expected filler deposit override to 10000, got %#v", resp2.DepositIntent)
+		t.Fatalf("expected dermal filler deposit override to 10000, got %#v", resp2.DepositIntent)
 	}
 }
 
