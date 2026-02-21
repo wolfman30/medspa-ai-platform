@@ -341,16 +341,22 @@ func (s *ConversationStore) GetMessages(ctx context.Context, conversationID stri
 	return messages, nil
 }
 
-// LinkLead associates a lead with a conversation.
+// LinkLead associates a lead with a conversation and syncs the customer name.
 func (s *ConversationStore) LinkLead(ctx context.Context, conversationID string, leadID uuid.UUID) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
 
+	now := time.Now()
+
+	// Update lead_id and also sync customer_name from leads table
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE conversations SET lead_id = $1, updated_at = $2
+		UPDATE conversations SET
+			lead_id = $1,
+			customer_name = COALESCE((SELECT name FROM leads WHERE id = $1), ''),
+			updated_at = $2
 		WHERE conversation_id = $3
-	`, leadID, time.Now(), conversationID)
+	`, leadID, now, conversationID)
 
 	return err
 }

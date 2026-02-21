@@ -262,7 +262,7 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
               <thead>
                 <tr>
                   <th className="ui-th">
-                    <span className="ui-gradient-text-subtle">Phone</span>
+                    <span className="ui-gradient-text-subtle">Patient</span>
                   </th>
                   <th className="ui-th">
                     <span className="ui-gradient-text-subtle">Messages</span>
@@ -294,10 +294,13 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                       className="ui-row ui-row-hover"
                     >
                       <td
-                        className="ui-td whitespace-nowrap cursor-pointer font-medium text-slate-900"
+                        className="ui-td whitespace-nowrap cursor-pointer"
                         onClick={() => onSelect(conv.id)}
                       >
-                        {formatPhone(conv.customer_phone)}
+                        <div className="font-medium text-slate-900">
+                          {conv.customer_name ? conv.customer_name : <span className="italic text-slate-400">Name not provided</span>}
+                        </div>
+                        <div className="text-xs text-slate-500">{formatPhone(conv.customer_phone)}</div>
                       </td>
                       <td
                         className="ui-td whitespace-nowrap cursor-pointer"

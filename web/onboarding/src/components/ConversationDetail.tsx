@@ -186,8 +186,11 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
             </button>
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-                {formatPhone(conversation.customer_phone)}
+                {conversation.customer_name || <span className="italic text-slate-400">Name not provided</span>}
               </h1>
+              <p className="text-xs text-slate-500">
+                {formatPhone(conversation.customer_phone)}
+              </p>
               <p className="text-xs text-slate-500">
                 Started {formatDate(conversation.started_at)} &bull;{' '}
                 {conversation.metadata.total_messages} messages

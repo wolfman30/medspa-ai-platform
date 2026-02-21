@@ -4,6 +4,7 @@ export interface ConversationListItem {
   id: string;
   org_id: string;
   customer_phone: string;
+  customer_name: string;
   status: string;
   message_count: number;
   customer_message_count: number;
@@ -43,6 +44,7 @@ export interface ConversationDetailResponse {
   id: string;
   org_id: string;
   customer_phone: string;
+  customer_name: string;
   status: string;
   started_at: string;
   last_message_at?: string;

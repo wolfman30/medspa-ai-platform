@@ -41,6 +41,7 @@ type ConversationListItem struct {
 	ID                   string  `json:"id"`
 	OrgID                string  `json:"org_id"`
 	CustomerPhone        string  `json:"customer_phone"`
+	CustomerName         string  `json:"customer_name"`
 	Status               string  `json:"status"`
 	MessageCount         int     `json:"message_count"`
 	CustomerMessageCount int     `json:"customer_message_count"`
@@ -63,6 +64,7 @@ type ConversationDetailResponse struct {
 	ID            string            `json:"id"`
 	OrgID         string            `json:"org_id"`
 	CustomerPhone string            `json:"customer_phone"`
+	CustomerName  string            `json:"customer_name"`
 	Status        string            `json:"status"`
 	StartedAt     string            `json:"started_at"`
 	LastMessageAt *string           `json:"last_message_at,omitempty"`
@@ -175,41 +177,43 @@ func (h *AdminConversationsHandler) ListConversations(w http.ResponseWriter, r *
 
 func (h *AdminConversationsHandler) listFromConversationsTable(w http.ResponseWriter, r *http.Request, orgID, phone, status, dateFrom, dateTo string, page, pageSize, offset int) {
 	query := `
-		SELECT conversation_id, org_id, phone, status,
-			   message_count, customer_message_count, ai_message_count,
-			   started_at, last_message_at
+		SELECT conversations.conversation_id, conversations.org_id, conversations.phone, conversations.status,
+			   conversations.message_count, conversations.customer_message_count, conversations.ai_message_count,
+			   conversations.started_at, conversations.last_message_at,
+			   COALESCE(NULLIF(leads.name, ''), conversations.customer_name, '') as customer_name
 		FROM conversations
-		WHERE org_id = $1
+		LEFT JOIN leads ON conversations.lead_id = leads.id
+		WHERE conversations.org_id = $1
 	`
 	args := []any{orgID}
 	argNum := 2
 
 	if phone != "" {
-		query += " AND phone LIKE $" + strconv.Itoa(argNum)
+		query += " AND conversations.phone LIKE $" + strconv.Itoa(argNum)
 		args = append(args, "%"+phone+"%")
 		argNum++
 	}
 	if status != "" {
-		query += " AND status = $" + strconv.Itoa(argNum)
+		query += " AND conversations.status = $" + strconv.Itoa(argNum)
 		args = append(args, status)
 		argNum++
 	}
 	if dateFrom != "" {
 		if t, err := time.Parse("2006-01-02", dateFrom); err == nil {
-			query += " AND started_at >= $" + strconv.Itoa(argNum)
+			query += " AND conversations.started_at >= $" + strconv.Itoa(argNum)
 			args = append(args, t)
 			argNum++
 		}
 	}
 	if dateTo != "" {
 		if t, err := time.Parse("2006-01-02", dateTo); err == nil {
-			query += " AND started_at < $" + strconv.Itoa(argNum)
+			query += " AND conversations.started_at < $" + strconv.Itoa(argNum)
 			args = append(args, t.AddDate(0, 0, 1))
 			argNum++
 		}
 	}
 
-	query += " ORDER BY COALESCE(last_message_at, started_at) DESC"
+	query += " ORDER BY COALESCE(conversations.last_message_at, conversations.started_at) DESC"
 
 	// Get total count
 	countQuery := "SELECT COUNT(*) FROM conversations WHERE org_id = $1"
@@ -237,7 +241,7 @@ func (h *AdminConversationsHandler) listFromConversationsTable(w http.ResponseWr
 		err := rows.Scan(
 			&conv.ID, &conv.OrgID, &conv.CustomerPhone, &conv.Status,
 			&conv.MessageCount, &conv.CustomerMessageCount, &conv.AIMessageCount,
-			&startedAt, &lastMessageAt,
+			&startedAt, &lastMessageAt, &conv.CustomerName,
 		)
 		if err != nil {
 			h.logger.Error("failed to scan conversation", "error", err)
@@ -338,11 +342,19 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 			continue
 		}
 
+		// Try to look up patient name from leads table by phone
+		var customerName string
+		h.db.QueryRowContext(r.Context(),
+			`SELECT COALESCE(name, '') FROM leads WHERE org_id = $1 AND phone = $2 LIMIT 1`,
+			parsedOrgID, customerPhone,
+		).Scan(&customerName)
+
 		lastFormatted := formatTimeEastern(lastActivity)
 		conversations = append(conversations, ConversationListItem{
 			ID:            conversationID,
 			OrgID:         parsedOrgID,
 			CustomerPhone: customerPhone,
+			CustomerName:  customerName,
 			Status:        status,
 			MessageCount:  jobCount,
 			StartedAt:     formatTimeEastern(firstActivity),
@@ -399,6 +411,19 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 		OrgID:         parsedOrgID,
 		CustomerPhone: customerPhone,
 		Messages:      []MessageResponse{},
+	}
+
+	// Try to look up patient name from leads table
+	h.db.QueryRowContext(r.Context(),
+		`SELECT COALESCE(l.name, '') FROM conversations c LEFT JOIN leads l ON c.lead_id = l.id WHERE c.conversation_id = $1`,
+		conversationID,
+	).Scan(&conv.CustomerName)
+	if conv.CustomerName == "" {
+		// Fallback: look up by phone
+		h.db.QueryRowContext(r.Context(),
+			`SELECT COALESCE(name, '') FROM leads WHERE org_id = $1 AND phone = $2 LIMIT 1`,
+			parsedOrgID, customerPhone,
+		).Scan(&conv.CustomerName)
 	}
 
 	// Try to get conversation from conversations table
