@@ -173,6 +173,12 @@ func TestUsesMoxieBooking(t *testing.T) {
 			wantSquare:      false,
 		},
 		{
+			name:            "boulevard platform",
+			bookingPlatform: "boulevard",
+			wantMoxie:       false,
+			wantSquare:      false,
+		},
+		{
 			name:            "Square platform (capitalized)",
 			bookingPlatform: "Square",
 			wantMoxie:       false,
@@ -309,6 +315,8 @@ func TestResolvedBookingAdapter(t *testing.T) {
 		{"explicit manual", &Config{BookingAdapter: "manual"}, "manual"},
 		{"explicit moxie", &Config{BookingAdapter: "moxie"}, "moxie"},
 		{"moxie platform", &Config{BookingPlatform: "moxie"}, "moxie"},
+		{"vagaro platform", &Config{BookingPlatform: "vagaro"}, "vagaro"},
+		{"boulevard platform", &Config{BookingPlatform: "boulevard"}, "boulevard"},
 		{"boulevard", &Config{BookingAdapter: "boulevard"}, "boulevard"},
 	}
 	for _, tt := range tests {

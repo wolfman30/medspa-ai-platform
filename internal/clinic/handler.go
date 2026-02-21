@@ -79,6 +79,7 @@ type UpdateConfigRequest struct {
 	Services                  []string            `json:"services,omitempty"`
 	BookingURL                string              `json:"booking_url,omitempty"`
 	BookingPlatform           string              `json:"booking_platform,omitempty"`
+	VagaroBusinessAlias       string              `json:"vagaro_business_alias,omitempty"`
 	Notifications             *NotificationPrefs  `json:"notifications,omitempty"`
 	AIPersona                 *AIPersona          `json:"ai_persona,omitempty"`
 	ServiceAliases            map[string]string   `json:"service_aliases,omitempty"`
@@ -181,6 +182,9 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.BookingPlatform != "" {
 		cfg.BookingPlatform = req.BookingPlatform
+	}
+	if req.VagaroBusinessAlias != "" {
+		cfg.VagaroBusinessAlias = req.VagaroBusinessAlias
 	}
 	if req.Notifications != nil {
 		cfg.Notifications = *req.Notifications
