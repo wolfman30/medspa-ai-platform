@@ -124,7 +124,7 @@ jobs:
           ENV_NAME="development"
 
           NEED_BOOTSTRAP=0
-          for REPO in "medspa-${ENV_NAME}-api" "medspa-${ENV_NAME}-voice-lambda" "medspa-${ENV_NAME}-browser-sidecar"; do
+          for REPO in "medspa-${ENV_NAME}-api" "medspa-${ENV_NAME}-voice-lambda"; do
             if ! aws ecr describe-repositories --region "$REGION" --repository-names "$REPO" >/dev/null 2>&1; then
               NEED_BOOTSTRAP=1
               echo "ECR repo missing: $REPO"
@@ -152,7 +152,7 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=true" \
+            -var="enable_browser_sidecar=false" \
             -var="assign_public_ip=true" \
             -var="enable_nat_gateway=false"
 
@@ -180,13 +180,6 @@ jobs:
           IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-voice-lambda:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
-          docker push "$IMAGE"
-
-      - name: Build & push browser-sidecar image
-        env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-browser-sidecar:${{ steps.image_tag.outputs.tag }}
-        run: |
-          docker build -t "$IMAGE" ./browser-sidecar
           docker push "$IMAGE"
 
       - name: Set up Node
@@ -225,7 +218,7 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=true" \
+            -var="enable_browser_sidecar=false" \
             -var="assign_public_ip=true" \
             -var="enable_nat_gateway=false"
 
@@ -483,7 +476,7 @@ jobs:
           ENV_NAME="production"
 
           NEED_BOOTSTRAP=0
-          for REPO in "medspa-${ENV_NAME}-api" "medspa-${ENV_NAME}-voice-lambda" "medspa-${ENV_NAME}-browser-sidecar"; do
+          for REPO in "medspa-${ENV_NAME}-api" "medspa-${ENV_NAME}-voice-lambda"; do
             if ! aws ecr describe-repositories --region "$REGION" --repository-names "$REPO" >/dev/null 2>&1; then
               NEED_BOOTSTRAP=1
               echo "ECR repo missing: $REPO"
@@ -511,7 +504,7 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=true"
+            -var="enable_browser_sidecar=false"
 
       - name: Login to ECR
         run: |
@@ -537,13 +530,6 @@ jobs:
           IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-voice-lambda:${{ steps.image_tag.outputs.tag }}
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
-          docker push "$IMAGE"
-
-      - name: Build & push browser-sidecar image
-        env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-production-browser-sidecar:${{ steps.image_tag.outputs.tag }}
-        run: |
-          docker build -t "$IMAGE" ./browser-sidecar
           docker push "$IMAGE"
 
       - name: Set up Node
@@ -582,7 +568,7 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=true"
+            -var="enable_browser_sidecar=false"
 
       - name: Read UI outputs
         id: ui
