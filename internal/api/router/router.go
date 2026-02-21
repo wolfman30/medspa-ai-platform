@@ -76,6 +76,9 @@ type Config struct {
 	// Prospect tracker
 	ProspectsHandler *prospects.Handler
 
+	// Voice AI handler (Telnyx AI Assistant webhook)
+	VoiceAIHandler *handlers.VoiceAIHandler
+
 	// Readiness check dependencies
 	RedisClient    *redis.Client
 	HasSMSProvider bool
@@ -127,6 +130,9 @@ func New(cfg *Config) http.Handler {
 			public.Post("/webhooks/telnyx/messages", cfg.TelnyxWebhooks.HandleMessages)
 			public.Post("/webhooks/telnyx/hosted", cfg.TelnyxWebhooks.HandleHosted)
 			public.Post("/webhooks/telnyx/voice", cfg.TelnyxWebhooks.HandleVoice)
+		}
+		if cfg.VoiceAIHandler != nil {
+			public.Post("/webhooks/telnyx/voice-ai", cfg.VoiceAIHandler.HandleVoiceAI)
 		}
 		if cfg.BookingCallbackHandler != nil {
 			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)

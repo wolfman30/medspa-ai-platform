@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
@@ -68,11 +69,16 @@ type VoiceAIErrorResponse struct {
 
 // ----- Handler -----
 
+// clinicByNumberLookup resolves a clinic UUID from a phone number.
+type clinicByNumberLookup interface {
+	LookupClinicByNumber(ctx context.Context, number string) (uuid.UUID, error)
+}
+
 // VoiceAIHandler handles Telnyx Voice AI webhook events. It acts as a channel
 // adapter: it receives transcribed speech from the Telnyx AI Assistant, feeds
 // it through the shared conversation engine, and returns text for TTS.
 type VoiceAIHandler struct {
-	store       messagingStore
+	store       clinicByNumberLookup
 	publisher   conversationPublisher
 	clinicStore *clinic.Store
 	logger      *logging.Logger
@@ -83,7 +89,7 @@ type VoiceAIHandler struct {
 
 // VoiceAIHandlerConfig configures the VoiceAIHandler.
 type VoiceAIHandlerConfig struct {
-	Store       messagingStore
+	Store       clinicByNumberLookup
 	Publisher   conversationPublisher
 	ClinicStore *clinic.Store
 	Logger      *logging.Logger
