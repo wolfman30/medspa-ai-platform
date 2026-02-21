@@ -451,6 +451,15 @@ func main() {
 		logger.Info("booking callback handler initialized")
 	}
 
+	// Set up evidence upload S3 (reuse training bucket)
+	var evidenceS3 handlers.S3Uploader
+	if cfg.S3TrainingBucket != "" {
+		if awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg); err == nil {
+			evidenceS3 = s3.NewFromConfig(awsCfg)
+			logger.Info("evidence upload S3 enabled", "bucket", cfg.S3TrainingBucket)
+		}
+	}
+
 	// Setup router
 	routerCfg := &router.Config{
 		Logger:                 logger,
@@ -489,6 +498,9 @@ func main() {
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
 		AdminBriefs:            newBriefsHandler(dbPool, logger),
 		ProspectsHandler:       newProspectsHandler(sqlDB),
+		EvidenceS3Client:       evidenceS3,
+		EvidenceS3Bucket:       cfg.S3TrainingBucket,
+		EvidenceS3Region:       cfg.AWSRegion,
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,

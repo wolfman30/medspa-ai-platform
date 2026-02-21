@@ -83,6 +83,11 @@ type Config struct {
 	// Instagram DM adapter
 	InstagramAdapter *instagram.Adapter
 
+	// Evidence upload S3
+	EvidenceS3Client handlers.S3Uploader
+	EvidenceS3Bucket string
+	EvidenceS3Region string
+
 	// Readiness check dependencies
 	RedisClient    *redis.Client
 	HasSMSProvider bool
@@ -289,7 +294,7 @@ func New(cfg *Config) http.Handler {
 				handlers.RegisterAdminRoutes(admin, cfg.DB, cfg.TranscriptStore, cfg.ClinicStore, cfg.Logger)
 
 				// Manual testing tracker
-				testingHandler := handlers.NewAdminTestingHandler(cfg.DB, cfg.Logger, nil, "", "")
+				testingHandler := handlers.NewAdminTestingHandler(cfg.DB, cfg.Logger, cfg.EvidenceS3Client, cfg.EvidenceS3Bucket, cfg.EvidenceS3Region)
 				admin.Get("/testing", testingHandler.ListTestResults)
 				admin.Post("/testing", testingHandler.CreateTestResult)
 				admin.Put("/testing/{id}", testingHandler.UpdateTestResult)
