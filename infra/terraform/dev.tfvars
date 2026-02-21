@@ -3,8 +3,8 @@ environment = "development"
 aws_region  = "us-east-1"
 
 # ECS task sizing (current production values)
-api_task_cpu    = 1024
-api_task_memory = 3072
+api_task_cpu      = 1024
+api_task_memory   = 3072
 api_desired_count = 1
 
 # Blue/green deployment via CodeDeploy
@@ -26,7 +26,7 @@ assign_public_ip   = true
 enable_browser_sidecar = false
 
 # Portal UI
-ui_domain_name    = "portal-dev.aiwolfsolutions.com"
+ui_domain_name     = "portal-dev.aiwolfsolutions.com"
 ui_certificate_arn = "arn:aws:acm:us-east-1:422017356225:certificate/65cd7cfe-4f83-48a6-8d3f-70db25dbf9d1"
 
 # Cognito auth
