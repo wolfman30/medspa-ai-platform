@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/booking"
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -62,6 +63,7 @@ type Worker struct {
 	browserBooking   BrowserBookingClient
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
+	manualHandoff    *booking.ManualHandoffAdapter
 	logger           *logging.Logger
 	events           *EventLogger
 
@@ -88,6 +90,7 @@ type workerConfig struct {
 	browserBooking   BrowserBookingClient
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
+	manualHandoff    *booking.ManualHandoffAdapter
 }
 
 const (
@@ -261,6 +264,13 @@ func WithWorkerLeadsRepo(repo leads.Repository) WorkerOption {
 	}
 }
 
+// WithManualHandoff wires a manual handoff adapter for non-Moxie clinics.
+func WithManualHandoff(adapter *booking.ManualHandoffAdapter) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.manualHandoff = adapter
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -315,6 +325,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		browserBooking:   cfg.browserBooking,
 		moxieClient:      cfg.moxieClient,
 		leadsRepo:        cfg.leadsRepo,
+		manualHandoff:    cfg.manualHandoff,
 		logger:           logger,
 		events:           NewEventLogger(logger),
 		cfg:              cfg,
@@ -1300,6 +1311,113 @@ func (w *Worker) handleDepositIntent(ctx context.Context, msg MessageRequest, re
 	if err := w.deposits.SendDeposit(ctx, msg, resp); err != nil {
 		w.logger.Error("failed to send deposit intent", "error", err, "org_id", msg.OrgID, "lead_id", msg.LeadID)
 	}
+}
+
+// shouldUseManualHandoff checks if the clinic is configured for manual handoff.
+func (w *Worker) shouldUseManualHandoff(ctx context.Context, orgID string) bool {
+	if w.manualHandoff == nil {
+		return false
+	}
+	cfg := w.clinicConfig(ctx, orgID)
+	if cfg == nil {
+		return false
+	}
+	return cfg.UsesManualHandoff()
+}
+
+// handleManualHandoff creates a qualified lead summary and notifies the clinic
+// instead of sending a deposit/payment link. Used for non-Moxie clinics that
+// don't have automated booking.
+func (w *Worker) handleManualHandoff(ctx context.Context, msg MessageRequest, resp *Response) {
+	if w.manualHandoff == nil || resp == nil {
+		return
+	}
+	if w.isOptedOut(ctx, msg.OrgID, msg.From) {
+		return
+	}
+
+	cfg := w.clinicConfig(ctx, msg.OrgID)
+	clinicName := "the clinic"
+	if cfg != nil {
+		clinicName = cfg.Name
+	}
+
+	// Build lead summary from available data
+	lead := booking.LeadSummary{
+		OrgID:          msg.OrgID,
+		LeadID:         msg.LeadID,
+		ConversationID: msg.ConversationID,
+		ClinicName:     clinicName,
+		PatientPhone:   msg.From,
+		CollectedAt:    time.Now().UTC(),
+	}
+
+	// Enrich from leads repository if available
+	if w.leadsRepo != nil && msg.LeadID != "" {
+		if dbLead, err := w.leadsRepo.GetByID(ctx, msg.OrgID, msg.LeadID); err == nil && dbLead != nil {
+			lead.PatientName = dbLead.Name
+			lead.PatientEmail = dbLead.Email
+			lead.ServiceRequested = dbLead.ServiceInterest
+			lead.PatientType = dbLead.PatientType
+			lead.PreferredDays = dbLead.PreferredDays
+			lead.PreferredTimes = dbLead.PreferredTimes
+			lead.ConversationNotes = dbLead.SchedulingNotes
+		}
+	}
+
+	result, err := w.manualHandoff.CreateBooking(ctx, lead)
+	if err != nil {
+		w.logger.Error("manual handoff notification failed (non-fatal)",
+			"error", err,
+			"org_id", msg.OrgID,
+			"lead_id", msg.LeadID,
+		)
+		// Continue — still send the patient message even if clinic notification failed
+	}
+
+	// Send handoff confirmation to patient
+	handoffMsg := result.HandoffMessage
+	if handoffMsg == "" {
+		handoffMsg = w.manualHandoff.GetHandoffMessage(clinicName)
+	}
+	if w.messenger != nil {
+		reply := OutboundReply{
+			OrgID:          msg.OrgID,
+			LeadID:         msg.LeadID,
+			ConversationID: msg.ConversationID,
+			To:             msg.From,
+			From:           msg.To,
+			Body:           handoffMsg,
+		}
+		if err := w.messenger.SendReply(ctx, reply); err != nil {
+			w.logger.Error("failed to send manual handoff SMS to patient",
+				"error", err,
+				"org_id", msg.OrgID,
+				"lead_id", msg.LeadID,
+			)
+			return
+		}
+
+		// Record to transcript
+		handoffTranscript := SMSTranscriptMessage{
+			Role:      "assistant",
+			Body:      handoffMsg,
+			From:      msg.To,
+			To:        msg.From,
+			Timestamp: time.Now(),
+		}
+		w.appendTranscript(ctx, msg.ConversationID, handoffTranscript)
+		if w.convStore != nil {
+			_ = w.convStore.AppendMessage(ctx, msg.ConversationID, handoffTranscript)
+		}
+	}
+
+	w.logger.Info("manual handoff completed",
+		"org_id", msg.OrgID,
+		"lead_id", msg.LeadID,
+		"patient_name", lead.PatientName,
+		"service", lead.ServiceRequested,
+	)
 }
 
 func (w *Worker) handlePaymentEvent(ctx context.Context, evt *events.PaymentSucceededV1) error {
