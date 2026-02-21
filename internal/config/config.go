@@ -155,8 +155,8 @@ type Config struct {
 	InstagramVerifyToken     string // Webhook verification token (you choose this)
 
 	// GitHub webhook + Telegram ops alerts
-	GitHubWebhookSecret string
-	TelegramBotToken    string
+	GitHubWebhookSecret  string
+	TelegramBotToken     string
 	AndrewTelegramChatID string
 }
 
@@ -366,8 +366,8 @@ func Load() *Config {
 		InstagramVerifyToken:     getEnv("INSTAGRAM_VERIFY_TOKEN", ""),
 
 		// GitHub webhook + Telegram ops alerts
-		GitHubWebhookSecret: getEnv("GITHUB_WEBHOOK_SECRET", ""),
-		TelegramBotToken:    getEnv("TELEGRAM_BOT_TOKEN", ""),
+		GitHubWebhookSecret:  getEnv("GITHUB_WEBHOOK_SECRET", ""),
+		TelegramBotToken:     getEnv("TELEGRAM_BOT_TOKEN", ""),
 		AndrewTelegramChatID: getEnv("ANDREW_TELEGRAM_CHAT_ID", ""),
 	}
 
