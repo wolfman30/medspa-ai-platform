@@ -23,11 +23,21 @@ function formatDate(dateStr: string | null): string {
     ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  // Reuse the same auth pattern as the rest of the app
+async function getAuthHeaders(isFormData = false): Promise<Record<string, string>> {
+  // Reuse the same auth pattern as the rest of the app (Cognito/Amplify tokens)
   const headers: Record<string, string> = {};
-  const token = localStorage.getItem('admin_jwt');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  // Don't set Content-Type for FormData — browser sets multipart boundary automatically
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
+  try {
+    const { fetchAuthSession } = await import('aws-amplify/auth');
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  } catch {
+    // Not authenticated via Cognito — fall through
+  }
   const onboardingToken = import.meta.env.VITE_ONBOARDING_TOKEN;
   if (onboardingToken) headers['X-Onboarding-Token'] = onboardingToken;
   return headers;
@@ -55,7 +65,7 @@ function EvidenceGallery({
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true);
       const res = await fetch(`${API_BASE}/admin/testing/${testId}/evidence`, {
         method: 'POST',
         headers,
