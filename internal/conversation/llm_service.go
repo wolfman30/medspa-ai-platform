@@ -2937,7 +2937,7 @@ func extractPreferences(history []ChatMessage) (leads.SchedulingPreferences, boo
 	// Extract patient type.
 	// Match patterns: "new patient", "first time", "I'm new", "I am new", standalone ", new," or ", new " in comma-separated lists
 	newPatientRE := regexp.MustCompile(`(?i)\bnew patient\b|first time|\bi'm new\b|\bi am new\b|\bnever been\b|,\s*new\s*[,.]|\bnew here\b`)
-	returningPatientRE := regexp.MustCompile(`(?i)\breturning\b|\bexisting patient\b|\bi've been\b|\bi have been\b|\bbeen there\b|\bbeen before\b|,\s*returning\s*[,.]|,\s*existing\s*[,.]`)
+	returningPatientRE := regexp.MustCompile(`(?i)\breturning\b|\bexisting patient\b|\bi've been\b|\bi have been\b|\bbeen there\b|\bbeen before\b|\bvisited before\b|\bcome before\b|\bcome here before\b|,\s*returning\s*[,.]|,\s*existing\s*[,.]`)
 	if newPatientRE.MatchString(userMessages) {
 		prefs.PatientType = "new"
 		hasPreferences = true
@@ -3950,7 +3950,8 @@ func normalizePatientTypeReply(message string) string {
 	switch cleaned {
 	case "new", "new patient", "new here", "first time", "first-time", "never been", "never been before", "i'm new", "im new", "i am new":
 		return "new"
-	case "existing", "returning", "existing patient", "returning patient", "been before", "i've been before", "i have been before", "not new":
+	case "existing", "returning", "existing patient", "returning patient", "been before", "i've been before", "i have been before", "not new",
+		"visited before", "i've visited before", "i have visited before", "come before", "i've come before", "been here before", "yes i have":
 		return "existing"
 	default:
 		return ""
