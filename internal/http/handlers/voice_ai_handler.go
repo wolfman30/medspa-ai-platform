@@ -157,6 +157,18 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate AssistantID matches the clinic's configured Telnyx assistant.
+	// This prevents unauthorized callers from enqueuing work into the conversation engine.
+	if clinicCfg.TelnyxAssistantID != "" && event.AssistantID != clinicCfg.TelnyxAssistantID {
+		h.logger.Warn("voice-ai: assistant ID mismatch",
+			"expected", clinicCfg.TelnyxAssistantID,
+			"got", event.AssistantID,
+			"org_id", orgID,
+		)
+		h.writeError(w, event.Payload.ToolCallID, "unauthorized", http.StatusForbidden)
+		return
+	}
+
 	// Extract the patient's transcript from tool arguments.
 	transcript := strings.TrimSpace(event.Payload.Arguments["transcript"])
 	if transcript == "" {
