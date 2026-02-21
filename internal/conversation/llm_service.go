@@ -1085,6 +1085,26 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		}
 		prefs.ServiceInterest = resolved
 
+		// After variant resolution, check if provider preference is needed
+		if prefs.ProviderPreference == "" && startCfg != nil && startCfg.ServiceNeedsProviderPreference(resolved) {
+			providerNames := make([]string, 0)
+			if startCfg.MoxieConfig != nil {
+				for _, name := range startCfg.MoxieConfig.ProviderNames {
+					providerNames = append(providerNames, name)
+				}
+			}
+			var providerList string
+			if len(providerNames) > 0 {
+				providerList = " We have " + strings.Join(providerNames, " and ") + "."
+			}
+			s.logger.Info("asking provider preference after variant resolution (StartConversation)",
+				"conversation_id", conversationID,
+				"resolved_service", resolved,
+			)
+			resp.Message = fmt.Sprintf("Great choice — %s!%s Do you have a provider preference, or would you like the first available appointment?", resolved, providerList)
+			return resp, nil
+		}
+
 		timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 		scraperServiceName := prefs.ServiceInterest
 		if startCfg != nil {
@@ -1939,6 +1959,29 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				)
 			}
 			prefs.ServiceInterest = resolved
+
+			// After variant resolution, check if provider preference is needed
+			if prefs.ProviderPreference == "" && clinicCfg != nil && clinicCfg.ServiceNeedsProviderPreference(resolved) {
+				providerNames := make([]string, 0)
+				if clinicCfg.MoxieConfig != nil {
+					for _, name := range clinicCfg.MoxieConfig.ProviderNames {
+						providerNames = append(providerNames, name)
+					}
+				}
+				var providerList string
+				if len(providerNames) > 0 {
+					providerList = " We have " + strings.Join(providerNames, " and ") + "."
+				}
+				s.logger.Info("asking provider preference after variant resolution",
+					"conversation_id", req.ConversationID,
+					"resolved_service", resolved,
+				)
+				return &Response{
+					Message:        fmt.Sprintf("Great choice — %s!%s Do you have a provider preference, or would you like the first available appointment?", resolved, providerList),
+					ConversationID: req.ConversationID,
+					Timestamp:      time.Now().UTC(),
+				}, nil
+			}
 
 			timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
