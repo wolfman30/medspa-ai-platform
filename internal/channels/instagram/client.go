@@ -69,12 +69,13 @@ func (c *Client) send(ctx context.Context, req SendRequest) (*SendResponse, erro
 		return nil, fmt.Errorf("instagram: marshal send request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/me/messages?access_token=%s", c.graphAPIBase, c.pageAccessToken)
+	url := fmt.Sprintf("%s/me/messages", c.graphAPIBase)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("instagram: create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.pageAccessToken)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
