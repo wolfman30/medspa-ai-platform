@@ -1,7 +1,7 @@
 # MedSpa AI Platform Specification
 
-> Single source of truth for business requirements, acceptance criteria, and technical architecture.
-> This file is model-agnostic—use it with any AI assistant (Claude, Gemini, ChatGPT, etc.).
+> **What** the product does: business requirements, features, acceptance criteria, and testing.
+> For **how** it's built (system design, infrastructure, data models), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 

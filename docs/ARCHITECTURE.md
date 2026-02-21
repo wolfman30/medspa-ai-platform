@@ -1,7 +1,9 @@
-# Omnichannel AI Platform — Technical Design Document
+# MedSpa AI Platform — Architecture
 
-> **Version:** 2.0 · **Date:** 2026-02-21 · **Status:** RFC (Request for Comments)
-> **Author:** Voice AI Agent · **Reviewers:** Engineering Team
+> **How** the platform is built: system design, infrastructure, data models, compliance, and implementation plans.
+> For **what** the product does (features, business rules, testing), see [SPEC.md](../SPEC.md).
+
+> **Version:** 2.0 · **Date:** 2026-02-21 · **Last updated:** 2026-02-21
 
 ## 1. Overview
 
@@ -397,7 +399,7 @@ Environment variable: `VOICE_AI_ROLLOUT=internal|alpha|beta|ga`
 3. **beta** — 3-5 high-volume SMS clinics
 4. **ga** — Available to all via admin toggle
 
-### 3.7 Fallback & Resilience
+### 3.8 Fallback & Resilience
 
 | Failure | Detection | Fallback |
 |---------|-----------|----------|
