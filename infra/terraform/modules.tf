@@ -81,7 +81,7 @@ module "ecs_fargate" {
     ALLOW_FAKE_PAYMENTS          = var.environment != "production" && var.api_public_base_url != "" ? "true" : "false"
     REDIS_ADDR                   = "${module.redis.primary_endpoint_address}:${module.redis.port}"
     REDIS_TLS                    = "true"
-    BEDROCK_MODEL_ID             = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:application-inference-profile/0llkmqbvb1gw"
+    BEDROCK_MODEL_ID             = "us.anthropic.claude-sonnet-4-6"
     BEDROCK_EMBEDDING_MODEL_ID   = "amazon.titan-embed-text-v1"
     TELNYX_TRACK_JOBS            = "true"
     PERSIST_CONVERSATION_HISTORY = "true"
