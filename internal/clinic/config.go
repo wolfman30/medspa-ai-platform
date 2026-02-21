@@ -129,11 +129,15 @@ type Config struct {
 	Services         []string          `json:"services,omitempty"` // e.g., ["Botox", "Fillers"]
 	// BookingURL is the clinic's online booking page (e.g., Moxie, Calendly, etc.)
 	BookingURL string `json:"booking_url,omitempty"`
-	// BookingPlatform specifies which booking system the clinic uses: "moxie" or "square" (default: "square")
-	// When "moxie", the AI will use browser automation to book through Moxie's widget
+	// BookingPlatform specifies which booking system the clinic uses: "moxie", "vagaro", or "square" (default: "square")
+	// When "moxie", the AI will use Moxie integration for availability + booking
+	// When "vagaro", the AI will use Vagaro REST integration for availability + booking
 	// When "square", the AI will send a Square payment link for deposit collection
-	BookingPlatform string            `json:"booking_platform,omitempty"`
-	Notifications   NotificationPrefs `json:"notifications"`
+	BookingPlatform string `json:"booking_platform,omitempty"`
+	// VagaroBusinessAlias identifies the clinic on Vagaro (e.g., the {businessAlias} in vagaro.com/{businessAlias}).
+	// Used when BookingPlatform == "vagaro".
+	VagaroBusinessAlias string            `json:"vagaro_business_alias,omitempty"`
+	Notifications       NotificationPrefs `json:"notifications"`
 	// AIPersona customizes the AI assistant's voice for this clinic
 	AIPersona AIPersona `json:"ai_persona,omitempty"`
 	// StripeAccountID is the connected Stripe account ID for clinics using Stripe Connect.
@@ -349,6 +353,14 @@ func (c *Config) UsesMoxieBooking() bool {
 		return false
 	}
 	return strings.ToLower(c.BookingPlatform) == "moxie"
+}
+
+// UsesVagaroBooking returns true if the clinic is configured to use Vagaro for booking.
+func (c *Config) UsesVagaroBooking() bool {
+	if c == nil {
+		return false
+	}
+	return strings.ToLower(c.BookingPlatform) == "vagaro"
 }
 
 // UsesStripePayment returns true if the clinic is configured to use Stripe for deposit collection.

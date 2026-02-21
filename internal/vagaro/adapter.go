@@ -102,9 +102,9 @@ func (a *VagaroAdapter) CreateBookingForClinic(ctx context.Context, clinicConfig
 	}
 
 	result := &booking.BookingResult{
-		Booked:              resp.OK,
-		ConfirmationNumber:  resp.ConfirmationCode,
-		HandoffMessage:      "",
+		Booked:             resp.OK,
+		ConfirmationNumber: resp.ConfirmationCode,
+		HandoffMessage:     "",
 	}
 	if !req.Start.IsZero() {
 		t := req.Start
