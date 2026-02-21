@@ -207,6 +207,9 @@ func (s *Store) InsertMessage(ctx context.Context, q Querier, rec MessageRecord)
 			send_attempts, last_attempt_at, next_retry_at
 		)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		ON CONFLICT ON CONSTRAINT idx_messages_provider_message DO UPDATE SET
+			body = EXCLUDED.body,
+			provider_status = EXCLUDED.provider_status
 		RETURNING id
 	`
 	var id uuid.UUID
