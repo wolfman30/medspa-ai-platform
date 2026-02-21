@@ -25,6 +25,7 @@ type Channel string
 const (
 	ChannelUnknown Channel = ""
 	ChannelSMS     Channel = "sms"
+	ChannelVoice   Channel = "voice"
 )
 
 // Conversation status constants
