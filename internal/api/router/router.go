@@ -207,6 +207,8 @@ func New(cfg *Config) http.Handler {
 			if cfg.AdminBriefs != nil {
 				admin.Get("/briefs", cfg.AdminBriefs.ListBriefs)
 				admin.Get("/briefs/{date}", cfg.AdminBriefs.GetBrief)
+				admin.Post("/briefs", cfg.AdminBriefs.CreateBrief)
+				admin.Put("/briefs/seed", cfg.AdminBriefs.SeedBriefs)
 			}
 			// Prospect tracker
 			if cfg.ProspectsHandler != nil {

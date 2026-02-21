@@ -30,6 +30,7 @@ import (
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/archive"
 	"github.com/wolfman30/medspa-ai-platform/internal/bookings"
+	"github.com/wolfman30/medspa-ai-platform/internal/briefs"
 	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
@@ -486,7 +487,7 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
-		AdminBriefs:            newBriefsHandler(logger),
+		AdminBriefs:            newBriefsHandler(dbPool, logger),
 		ProspectsHandler:       newProspectsHandler(sqlDB),
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
@@ -931,15 +932,18 @@ func setupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxcli
 	return client
 }
 
-func newBriefsHandler(logger *logging.Logger) *handlers.AdminBriefsHandler {
+func newBriefsHandler(pool *pgxpool.Pool, logger *logging.Logger) *handlers.AdminBriefsHandler {
 	abs, err := filepath.Abs("research")
 	if err != nil {
-		return nil
+		abs = ""
+	} else if info, statErr := os.Stat(abs); statErr != nil || !info.IsDir() {
+		abs = ""
 	}
-	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
-		return nil
+	h := handlers.NewAdminBriefsHandler(abs, logger)
+	if pool != nil {
+		h.SetRepository(briefs.NewPostgresBriefsRepository(pool))
 	}
-	return handlers.NewAdminBriefsHandler(abs, logger)
+	return h
 }
 
 func newProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
