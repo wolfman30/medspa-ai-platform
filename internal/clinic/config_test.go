@@ -167,6 +167,12 @@ func TestUsesMoxieBooking(t *testing.T) {
 			wantSquare:      true,
 		},
 		{
+			name:            "boulevard platform",
+			bookingPlatform: "boulevard",
+			wantMoxie:       false,
+			wantSquare:      false,
+		},
+		{
 			name:            "Square platform (capitalized)",
 			bookingPlatform: "Square",
 			wantMoxie:       false,

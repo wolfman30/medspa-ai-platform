@@ -129,10 +129,11 @@ type Config struct {
 	Services         []string          `json:"services,omitempty"` // e.g., ["Botox", "Fillers"]
 	// BookingURL is the clinic's online booking page (e.g., Moxie, Calendly, etc.)
 	BookingURL string `json:"booking_url,omitempty"`
-	// BookingPlatform specifies which booking system the clinic uses: "moxie", "vagaro", or "square" (default: "square")
-	// When "moxie", the AI will use Moxie integration for availability + booking
-	// When "vagaro", the AI will use Vagaro REST integration for availability + booking
-	// When "square", the AI will send a Square payment link for deposit collection
+	// BookingPlatform specifies which booking system the clinic uses: "moxie", "boulevard", "vagaro", or "square" (default: "square")
+	// When "moxie", the AI will use Moxie integration for availability + booking.
+	// When "boulevard", the AI will use Boulevard GraphQL cart-based booking.
+	// When "vagaro", the AI will use Vagaro REST integration for availability + booking.
+	// When "square", the AI will send a Square payment link for deposit collection.
 	BookingPlatform string `json:"booking_platform,omitempty"`
 	// VagaroBusinessAlias identifies the clinic on Vagaro (e.g., the {businessAlias} in vagaro.com/{businessAlias}).
 	// Used when BookingPlatform == "vagaro".
@@ -164,6 +165,10 @@ type Config struct {
 	// MoxieConfig holds Moxie-specific IDs needed for direct GraphQL API booking.
 	// Only used when BookingPlatform == "moxie".
 	MoxieConfig *MoxieConfig `json:"moxie_config,omitempty"`
+
+	// Boulevard API credentials (used when BookingPlatform == "boulevard").
+	BoulevardAPIKey     string `json:"boulevard_api_key,omitempty"`
+	BoulevardBusinessID string `json:"boulevard_business_id,omitempty"`
 
 	// VoiceAIEnabled controls whether inbound voice calls use Telnyx Voice AI.
 	// When false (default), calls fall through to voicemail → SMS text-back flow.

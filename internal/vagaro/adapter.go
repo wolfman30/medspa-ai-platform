@@ -6,16 +6,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wolfman30/medspa-ai-platform/internal/booking"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// VagaroAdapter implements booking.BookingAdapter using the Vagaro REST client.
-// It includes clinic-aware helpers for availability resolution and booking.
+// VagaroAdapter connects clinic config + booking orchestration to VagaroClient.
 type VagaroAdapter struct {
 	client *VagaroClient
 	logger *logging.Logger
+}
+
+// BookingRequest is the adapter-level booking request shape.
+type BookingRequest struct {
+	ServiceID    string
+	ProviderID   string
+	Start        time.Time
+	End          time.Time
+	PatientName  string
+	PatientEmail string
+	PatientPhone string
+	Notes        string
+}
+
+// BookingResult is returned by CreateBooking.
+type BookingResult struct {
+	Booked              bool
+	ConfirmationNumber  string
+	AppointmentID       string
+	ScheduledFor        *time.Time
+	PatientFacingReason string
 }
 
 // NewVagaroAdapter creates a Vagaro booking adapter.
@@ -29,28 +48,24 @@ func NewVagaroAdapter(client *VagaroClient, logger *logging.Logger) *VagaroAdapt
 // Name returns the booking adapter identifier.
 func (a *VagaroAdapter) Name() string { return "vagaro" }
 
-// CheckAvailability satisfies booking.BookingAdapter.
-// This generic interface does not carry full clinic metadata, so this method is
-// intentionally conservative and returns nil when required data is unavailable.
-func (a *VagaroAdapter) CheckAvailability(_ context.Context, _ booking.LeadSummary) ([]booking.AvailabilitySlot, error) {
-	return nil, nil
-}
-
-// ResolveAvailability finds bookable slots using clinic Vagaro config.
+// ResolveAvailability returns available Vagaro slots for a service.
 func (a *VagaroAdapter) ResolveAvailability(ctx context.Context, clinicConfig *clinic.Config, service string, preferences AvailabilityPreferences) ([]TimeSlot, error) {
 	if a.client == nil {
 		return nil, fmt.Errorf("vagaro client is required")
 	}
-	businessID := resolveBusinessID(clinicConfig)
+	if clinicConfig == nil || !clinicConfig.UsesVagaroBooking() {
+		return nil, fmt.Errorf("clinic is not configured for Vagaro booking platform")
+	}
+	businessID := strings.TrimSpace(clinicConfig.VagaroBusinessAlias)
 	if businessID == "" {
-		return nil, fmt.Errorf("missing Vagaro business alias/id in clinic config")
+		return nil, fmt.Errorf("missing VagaroBusinessAlias in clinic config")
 	}
 
-	serviceID := service
+	serviceID := strings.TrimSpace(service)
 	if clinicConfig != nil {
-		serviceID = clinicConfig.ResolveServiceName(service)
+		serviceID = strings.TrimSpace(clinicConfig.ResolveServiceName(service))
 	}
-	if strings.TrimSpace(serviceID) == "" {
+	if serviceID == "" {
 		return nil, fmt.Errorf("service id is required")
 	}
 
@@ -61,6 +76,7 @@ func (a *VagaroAdapter) ResolveAvailability(ctx context.Context, clinicConfig *c
 
 	slots, err := a.client.GetAvailableSlots(ctx, businessID, serviceID, preferences.ProviderID, date)
 	if err != nil {
+		a.logger.Error("vagaro availability lookup failed", "error", err, "org_id", clinicConfig.OrgID)
 		return nil, err
 	}
 
@@ -73,67 +89,47 @@ func (a *VagaroAdapter) ResolveAvailability(ctx context.Context, clinicConfig *c
 	return available, nil
 }
 
-// CreateBooking attempts to create a booking from lead data.
-// Because the lead summary does not include exact slot + provider identifiers,
-// this method falls back to handoff guidance and should be paired with
-// CreateBookingForClinic when a fully specified appointment request exists.
-func (a *VagaroAdapter) CreateBooking(_ context.Context, lead booking.LeadSummary) (*booking.BookingResult, error) {
-	return &booking.BookingResult{
-		Booked:         false,
-		HandoffMessage: a.GetHandoffMessage(lead.ClinicName),
-	}, nil
-}
-
-// CreateBookingForClinic creates a Vagaro booking when full details are known.
-func (a *VagaroAdapter) CreateBookingForClinic(ctx context.Context, clinicConfig *clinic.Config, req AppointmentRequest) (*booking.BookingResult, error) {
+// CreateBooking creates an appointment via Vagaro REST API.
+func (a *VagaroAdapter) CreateBooking(ctx context.Context, clinicConfig *clinic.Config, req BookingRequest) (*BookingResult, error) {
 	if a.client == nil {
 		return nil, fmt.Errorf("vagaro client is required")
 	}
-	if req.BusinessID == "" {
-		req.BusinessID = resolveBusinessID(clinicConfig)
-	}
-	if req.BusinessID == "" {
-		return nil, fmt.Errorf("missing Vagaro business alias/id in booking request and clinic config")
+	if clinicConfig == nil || !clinicConfig.UsesVagaroBooking() {
+		return nil, fmt.Errorf("clinic is not configured for Vagaro booking platform")
 	}
 
-	resp, err := a.client.CreateAppointment(ctx, req)
+	businessID := strings.TrimSpace(clinicConfig.VagaroBusinessAlias)
+	if businessID == "" {
+		return nil, fmt.Errorf("missing VagaroBusinessAlias in clinic config")
+	}
+
+	resp, err := a.client.CreateAppointment(ctx, AppointmentRequest{
+		BusinessID:   businessID,
+		ServiceID:    req.ServiceID,
+		ProviderID:   req.ProviderID,
+		Start:        req.Start,
+		End:          req.End,
+		PatientName:  req.PatientName,
+		PatientEmail: req.PatientEmail,
+		PatientPhone: req.PatientPhone,
+		Notes:        req.Notes,
+	})
 	if err != nil {
+		a.logger.Error("vagaro booking failed", "error", err, "org_id", clinicConfig.OrgID)
 		return nil, err
 	}
 
-	result := &booking.BookingResult{
+	result := &BookingResult{
 		Booked:             resp.OK,
 		ConfirmationNumber: resp.ConfirmationCode,
-		HandoffMessage:     "",
+		AppointmentID:      resp.AppointmentID,
 	}
 	if !req.Start.IsZero() {
 		t := req.Start
 		result.ScheduledFor = &t
 	}
 	if !resp.OK {
-		result.HandoffMessage = a.GetHandoffMessage(clinicName(clinicConfig))
+		result.PatientFacingReason = "Thanks — we received your request and the clinic will follow up to confirm the appointment."
 	}
 	return result, nil
-}
-
-// GetHandoffMessage returns the patient-facing fallback message.
-func (a *VagaroAdapter) GetHandoffMessage(clinicName string) string {
-	if strings.TrimSpace(clinicName) == "" {
-		clinicName = "the clinic"
-	}
-	return fmt.Sprintf("Thanks! I’ve shared your request with %s and the team will reach out shortly to confirm your appointment.", clinicName)
-}
-
-func resolveBusinessID(cfg *clinic.Config) string {
-	if cfg == nil {
-		return ""
-	}
-	return strings.TrimSpace(cfg.VagaroBusinessAlias)
-}
-
-func clinicName(cfg *clinic.Config) string {
-	if cfg == nil {
-		return ""
-	}
-	return cfg.Name
 }
