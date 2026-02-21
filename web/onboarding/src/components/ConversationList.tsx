@@ -270,11 +270,11 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                   <th className="ui-th">
                     <span className="ui-gradient-text-subtle">Status</span>
                   </th>
-                  <th className="ui-th">
+                  <th className="ui-th hidden sm:table-cell">
                     <span className="ui-gradient-text-subtle">Last Activity</span>
                   </th>
                   {isAdmin && (
-                    <th className="ui-th">
+                    <th className="ui-th hidden sm:table-cell">
                       <span className="ui-gradient-text-subtle">Actions</span>
                     </th>
                   )}
@@ -321,13 +321,13 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                         </span>
                       </td>
                       <td
-                        className="ui-td whitespace-nowrap cursor-pointer text-slate-500"
+                        className="ui-td whitespace-nowrap cursor-pointer text-slate-500 hidden sm:table-cell"
                         onClick={() => onSelect(conv.id)}
                       >
                         {conv.last_message_at ? timeAgo(conv.last_message_at) : timeAgo(conv.started_at)}
                       </td>
                       {isAdmin && (
-                        <td className="ui-td whitespace-nowrap">
+                        <td className="ui-td whitespace-nowrap hidden sm:table-cell">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

@@ -326,17 +326,22 @@ function AuthenticatedApp() {
       {authEnabled && user && (
         <header className="ui-topbar">
           <div className="ui-topbar-accent" aria-hidden="true" />
-          <div className="ui-container py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="ui-brandmark" aria-hidden="true" />
-              <div className="min-w-0">
-                <div className="text-sm font-semibold tracking-tight text-slate-900">
-                  Medspa Concierge
-                </div>
-                <div className="text-xs text-slate-500 truncate">
-                  {isAdmin ? 'Admin' : 'Portal'} &middot; {user.email}
+          <div className="ui-container py-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="ui-brandmark" aria-hidden="true" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold tracking-tight text-slate-900">
+                    Medspa Concierge
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {isAdmin ? 'Admin' : 'Portal'} &middot; {user.email}
+                  </div>
                 </div>
               </div>
+              <button onClick={logout} className="ui-btn ui-btn-ghost shrink-0">
+                Sign out
+              </button>
             </div>
 
             {isAdmin && (
@@ -407,10 +412,6 @@ function AuthenticatedApp() {
                 )}
               </nav>
             )}
-
-            <button onClick={logout} className="ui-btn ui-btn-ghost">
-              Sign out
-            </button>
           </div>
         </header>
       )}

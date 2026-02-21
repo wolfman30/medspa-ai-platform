@@ -25,6 +25,7 @@
       radial-gradient(900px circle at 80% 10%, rgba(79, 70, 229, 0.08), transparent 50%),
       linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     min-height: 100vh;
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
