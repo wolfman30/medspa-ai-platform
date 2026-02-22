@@ -94,6 +94,7 @@ type workerConfig struct {
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
+	voiceCaller      VoiceCallInitiator
 	igMessenger      ReplyMessenger
 	webChatMessenger ReplyMessenger
 }
@@ -290,6 +291,13 @@ func WithManualHandoff(adapter *booking.ManualHandoffAdapter) WorkerOption {
 	}
 }
 
+// WithVoiceCaller wires a Telnyx voice client for initiating outbound AI callbacks.
+func WithVoiceCaller(caller VoiceCallInitiator) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.voiceCaller = caller
+	}
+}
+
 // NewWorker constructs a queue consumer around the provided processor.
 type bookingConfirmer interface {
 	ConfirmBooking(ctx context.Context, orgID uuid.UUID, leadID uuid.UUID, scheduledFor *time.Time) error
@@ -345,6 +353,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		moxieClient:      cfg.moxieClient,
 		leadsRepo:        cfg.leadsRepo,
 		manualHandoff:    cfg.manualHandoff,
+		voiceCaller:      cfg.voiceCaller,
 		igMessenger:      cfg.igMessenger,
 		webChatMessenger: cfg.webChatMessenger,
 		logger:           logger,
@@ -526,6 +535,30 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 		w.logger.Info("worker calling StartConversation", "job_id", payload.ID)
 		resp, err = w.processor.StartConversation(ctx, payload.Start)
 	case jobTypeMessage:
+		// Check for voice callback request before LLM processing.
+		// If the patient says "call me back", initiate an outbound voice call
+		// and skip the normal conversation flow.
+		if w.handleCallbackRequest(ctx, payload.Message) {
+			w.logger.Info("voice callback handled, skipping LLM",
+				"job_id", payload.ID,
+				"conversation_id", payload.Message.ConversationID,
+			)
+			// Record the inbound message to transcript
+			w.appendTranscript(ctx, payload.Message.ConversationID, SMSTranscriptMessage{
+				Role:      "user",
+				From:      payload.Message.From,
+				To:        payload.Message.To,
+				Body:      payload.Message.Message,
+				Timestamp: time.Now(),
+			})
+			if payload.TrackStatus {
+				if storeErr := w.jobs.MarkCompleted(ctx, payload.ID, nil, payload.Message.ConversationID); storeErr != nil {
+					w.logger.Error("failed to update job status", "error", storeErr, "job_id", payload.ID)
+				}
+			}
+			w.deleteMessage(context.Background(), msg.ReceiptHandle)
+			return
+		}
 		// Pre-detect deposit intent and start parallel checkout generation
 		if w.depositPreloader != nil && ShouldPreloadDeposit(payload.Message.Message) {
 			w.logger.Info("deposit preloader: detected potential deposit agreement, starting parallel generation",
