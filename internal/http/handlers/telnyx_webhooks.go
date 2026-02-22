@@ -184,9 +184,14 @@ func (h *TelnyxWebhookHandler) voiceAckMessage(ctx context.Context, orgID string
 		if strings.TrimSpace(cfg.AIPersona.CustomGreeting) != "" {
 			return cfg.AIPersona.CustomGreeting
 		}
+
+		// If voice AI is enabled, offer callback option
+		if cfg.VoiceAIEnabled {
+			return messaging.InstantAckMessageWithCallback(strings.TrimSpace(cfg.Name))
+		}
 	}
 
-	// Fall back to template with clinic name
+	// Fall back to standard template with clinic name (no callback option)
 	name := ""
 	if cfg != nil {
 		name = strings.TrimSpace(cfg.Name)

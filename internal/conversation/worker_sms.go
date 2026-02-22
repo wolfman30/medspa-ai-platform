@@ -30,6 +30,9 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 	if msg.Channel == ChannelInstagram {
 		return w.sendInstagramReply(ctx, payload, resp)
 	}
+	if msg.Channel == ChannelWebChat {
+		return w.sendWebChatReply(ctx, payload, resp)
+	}
 	if msg.Channel != ChannelSMS {
 		return false
 	}

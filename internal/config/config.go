@@ -149,6 +149,10 @@ type Config struct {
 	S3TrainingBucket  string // S3 bucket for training data (empty = disabled)
 	ClassifierModelID string // Bedrock model ID for auto-classification (e.g., Haiku)
 
+	// Telnyx Voice AI Configuration (callback flow)
+	TelnyxVoiceAIAssistantID string // Telnyx AI Assistant ID for outbound voice calls
+	TelnyxVoiceTexmlAppID    string // TeXML Application ID for voice channel
+
 	// Instagram DM Channel Configuration
 	InstagramPageAccessToken string // Meta Page Access Token for sending messages
 	InstagramAppSecret       string // Meta App Secret for webhook signature verification
@@ -359,6 +363,10 @@ func Load() *Config {
 
 		S3TrainingBucket:  getEnv("S3_TRAINING_BUCKET", ""),
 		ClassifierModelID: getEnv("CLASSIFIER_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"),
+
+		// Telnyx Voice AI (callback flow)
+		TelnyxVoiceAIAssistantID: getEnv("TELNYX_VOICE_AI_ASSISTANT_ID", ""),
+		TelnyxVoiceTexmlAppID:    getEnv("TELNYX_VOICE_TEXML_APP_ID", ""),
 
 		// Instagram DM
 		InstagramPageAccessToken: getEnv("INSTAGRAM_PAGE_ACCESS_TOKEN", ""),

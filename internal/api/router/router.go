@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/channels/instagram"
+	"github.com/wolfman30/medspa-ai-platform/internal/webchat"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
@@ -85,6 +86,9 @@ type Config struct {
 
 	// Instagram DM adapter
 	InstagramAdapter *instagram.Adapter
+
+	// Web Chat handler
+	WebChatHandler *webchat.Handler
 
 	// Evidence upload S3
 	EvidenceS3Client handlers.S3Uploader

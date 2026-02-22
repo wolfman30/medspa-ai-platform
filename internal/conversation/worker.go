@@ -64,7 +64,9 @@ type Worker struct {
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
+	voiceCaller      VoiceCallInitiator
 	igMessenger      ReplyMessenger
+	webChatMessenger ReplyMessenger
 	logger           *logging.Logger
 	events           *EventLogger
 
@@ -93,6 +95,7 @@ type workerConfig struct {
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
 	igMessenger      ReplyMessenger
+	webChatMessenger ReplyMessenger
 }
 
 const (
@@ -274,6 +277,13 @@ func WithInstagramMessenger(m ReplyMessenger) WorkerOption {
 	}
 }
 
+// WithWebChatMessenger sets the web chat reply messenger.
+func WithWebChatMessenger(m ReplyMessenger) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.webChatMessenger = m
+	}
+}
+
 func WithManualHandoff(adapter *booking.ManualHandoffAdapter) WorkerOption {
 	return func(cfg *workerConfig) {
 		cfg.manualHandoff = adapter
@@ -336,6 +346,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		leadsRepo:        cfg.leadsRepo,
 		manualHandoff:    cfg.manualHandoff,
 		igMessenger:      cfg.igMessenger,
+		webChatMessenger: cfg.webChatMessenger,
 		logger:           logger,
 		events:           NewEventLogger(logger),
 		cfg:              cfg,
