@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -146,6 +147,12 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get summary from Telnyx (cumulative conversation context).
+	summary := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["summary"]))
+	if summary == "<nil>" {
+		summary = ""
+	}
+
 	// Get caller/called info from body params or query params.
 	from := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["caller_number"]))
 	to := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["called_number"]))
@@ -158,8 +165,18 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 	from = messaging.NormalizeE164(from)
 	to = messaging.NormalizeE164(to)
 
+	// If Telnyx didn't provide caller number, try to extract from transcript/summary.
+	if from == "" {
+		if extracted := extractPhoneFromText(transcript); extracted != "" {
+			from = extracted
+		} else if extracted := extractPhoneFromText(summary); extracted != "" {
+			from = extracted
+		}
+	}
+
 	h.logger.Info("voice-ai: parsed tool call",
 		"transcript", transcript,
+		"summary", summary,
 		"from", from,
 		"to", to,
 	)
@@ -189,10 +206,18 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		convID = fmt.Sprintf("voice:%s:%d", orgID, time.Now().UnixMilli())
 	}
 
+	// Build the message. If we have a summary from Telnyx, include it as
+	// context so the brain knows the full conversation even if this is a
+	// "new" conversation from our perspective (no stable call ID).
+	message := transcript
+	if summary != "" {
+		message = fmt.Sprintf("[Conversation so far: %s]\n\nPatient just said: %s", summary, transcript)
+	}
+
 	msgReq := conversation.MessageRequest{
 		OrgID:          orgID,
 		ConversationID: convID,
-		Message:        transcript,
+		Message:        message,
 		Channel:        conversation.ChannelVoice,
 		From:           from,
 		To:             to,
@@ -272,6 +297,19 @@ func (h *VoiceAIHandler) writeError(w http.ResponseWriter, toolCallID, msg strin
 		ToolCallID: toolCallID,
 		Error:      msg,
 	})
+}
+
+// phoneFromTextRe matches US phone numbers in various formats.
+var phoneFromTextRe = regexp.MustCompile(`(?:\+?1[-.\s]?)?(?:\(?(\d{3})\)?[-.\s]?)(\d{3})[-.\s]?(\d{4})`)
+
+// extractPhoneFromText tries to find a US phone number in free text and
+// returns it in E.164 format, or "" if none found.
+func extractPhoneFromText(text string) string {
+	m := phoneFromTextRe.FindStringSubmatch(text)
+	if m == nil {
+		return ""
+	}
+	return messaging.NormalizeE164(fmt.Sprintf("+1%s%s%s", m[1], m[2], m[3]))
 }
 
 // respondJSON writes a generic JSON response (for Telnyx tool webhook format).
