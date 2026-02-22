@@ -127,8 +127,13 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log raw body for debugging Telnyx payload format.
-	h.logger.Info("voice-ai: raw body", "body", string(body))
+	// Log raw body and headers for debugging Telnyx payload format.
+	hdrs := make(map[string]string)
+	for k, v := range r.Header {
+		hdrs[k] = strings.Join(v, ", ")
+	}
+	hdrJSON, _ := json.Marshal(hdrs)
+	h.logger.Info("voice-ai: request debug", "body", string(body), "headers", string(hdrJSON), "query", r.URL.RawQuery)
 
 	// Telnyx AI Assistant webhook tools send the body parameters directly as JSON.
 	// We also accept the legacy VoiceAIEvent format for flexibility.
