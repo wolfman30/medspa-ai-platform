@@ -137,9 +137,9 @@ module "ecs_fargate" {
     NEXTECH_CLIENT_ID     = "${module.secrets.secret_arn}:NEXTECH_CLIENT_ID::"
     NEXTECH_CLIENT_SECRET = "${module.secrets.secret_arn}:NEXTECH_CLIENT_SECRET::"
 
-    GITHUB_WEBHOOK_SECRET    = "${module.secrets.secret_arn}:GITHUB_WEBHOOK_SECRET::"
-    TELEGRAM_BOT_TOKEN       = "${module.secrets.secret_arn}:TELEGRAM_BOT_TOKEN::"
-    ANDREW_TELEGRAM_CHAT_ID  = "${module.secrets.secret_arn}:ANDREW_TELEGRAM_CHAT_ID::"
+    GITHUB_WEBHOOK_SECRET   = "${module.secrets.secret_arn}:GITHUB_WEBHOOK_SECRET::"
+    TELEGRAM_BOT_TOKEN      = "${module.secrets.secret_arn}:TELEGRAM_BOT_TOKEN::"
+    ANDREW_TELEGRAM_CHAT_ID = "${module.secrets.secret_arn}:ANDREW_TELEGRAM_CHAT_ID::"
   }
 
   secret_arns = [module.secrets.secret_arn, module.redis.auth_token_secret_arn]
