@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/channels/instagram"
-	"github.com/wolfman30/medspa-ai-platform/internal/webchat"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
@@ -19,6 +18,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
+	"github.com/wolfman30/medspa-ai-platform/internal/webchat"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -159,6 +159,12 @@ func New(cfg *Config) http.Handler {
 		}
 		if cfg.BookingCallbackHandler != nil {
 			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)
+		}
+		if cfg.WebChatHandler != nil {
+			public.Get("/chat/ws", cfg.WebChatHandler.HandleWebSocket)
+			public.Post("/chat/message", cfg.WebChatHandler.HandleMessage)
+			public.Get("/chat/history", cfg.WebChatHandler.HandleHistory)
+			public.Get("/chat/widget.js", cfg.WebChatHandler.HandleWidgetJS)
 		}
 		if cfg.PaymentRedirect != nil {
 			public.Get("/pay/{code}", cfg.PaymentRedirect.Handle)

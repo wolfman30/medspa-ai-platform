@@ -55,11 +55,11 @@ type InboundMessage struct {
 
 // OutboundMessage is what we send to the widget.
 type OutboundMessage struct {
-	Type      string `json:"type"` // "message", "typing", "history", "session", "error"
-	Text      string `json:"text,omitempty"`
-	Role      string `json:"role,omitempty"` // "assistant" or "user"
-	SessionID string `json:"session_id,omitempty"`
-	Timestamp string `json:"timestamp,omitempty"`
+	Type      string           `json:"type"` // "message", "typing", "history", "session", "error"
+	Text      string           `json:"text,omitempty"`
+	Role      string           `json:"role,omitempty"` // "assistant" or "user"
+	SessionID string           `json:"session_id,omitempty"`
+	Timestamp string           `json:"timestamp,omitempty"`
 	Messages  []HistoryMessage `json:"messages,omitempty"`
 }
 

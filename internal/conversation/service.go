@@ -27,7 +27,7 @@ const (
 	ChannelSMS       Channel = "sms"
 	ChannelVoice     Channel = "voice"
 	ChannelInstagram Channel = "instagram"
-	ChannelWebChat  Channel = "webchat"
+	ChannelWebChat   Channel = "webchat"
 )
 
 // Conversation status constants
