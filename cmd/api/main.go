@@ -323,6 +323,7 @@ func main() {
 			Publisher:   conversationPublisher,
 			Processor:   conversationService,
 			ClinicStore: clinicStore,
+			Redis:       redisClient,
 			Logger:      logger,
 		})
 		logger.Info("voice AI handler initialized")

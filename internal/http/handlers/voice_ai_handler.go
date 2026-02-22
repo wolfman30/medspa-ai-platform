@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
@@ -83,6 +84,7 @@ type VoiceAIHandler struct {
 	publisher   conversationPublisher
 	processor   conversation.Service
 	clinicStore *clinic.Store
+	redis       *redis.Client
 	logger      *logging.Logger
 
 	// voicePromptAddition is injected into voice-channel conversations.
@@ -95,6 +97,7 @@ type VoiceAIHandlerConfig struct {
 	Publisher   conversationPublisher
 	Processor   conversation.Service
 	ClinicStore *clinic.Store
+	Redis       *redis.Client
 	Logger      *logging.Logger
 }
 
@@ -108,6 +111,7 @@ func NewVoiceAIHandler(cfg VoiceAIHandlerConfig) *VoiceAIHandler {
 		publisher:   cfg.Publisher,
 		processor:   cfg.Processor,
 		clinicStore: cfg.ClinicStore,
+		redis:       cfg.Redis,
 		logger:      cfg.Logger,
 		voicePromptAddition: "Keep responses to 1-2 sentences. " +
 			"Use spoken language, not written. " +
@@ -206,9 +210,20 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	convID := fmt.Sprintf("voice:%s:%s", orgID, strings.TrimPrefix(from, "+"))
-	if from == "" {
-		convID = fmt.Sprintf("voice:%s:%d", orgID, time.Now().UnixMilli())
+	// Build a stable conversation ID. If we have a phone number, use it.
+	// Otherwise, use Redis to maintain a session: the first webhook hit for
+	// an org creates a session ID with a 15-min TTL; subsequent hits reuse it.
+	// This keeps all turns of a single call in one conversation.
+	var convID string
+	if from != "" {
+		convID = fmt.Sprintf("voice:%s:%s", orgID, strings.TrimPrefix(from, "+"))
+		// Also update the active session to use this phone-based ID
+		if h.redis != nil {
+			sessionKey := fmt.Sprintf("voice_session:%s", orgID)
+			h.redis.Set(ctx, sessionKey, convID, 15*time.Minute)
+		}
+	} else {
+		convID = h.getOrCreateVoiceSession(ctx, orgID)
 	}
 
 	// Build the message. If we have a summary from Telnyx, include it as
@@ -302,6 +317,31 @@ func (h *VoiceAIHandler) writeError(w http.ResponseWriter, toolCallID, msg strin
 		ToolCallID: toolCallID,
 		Error:      msg,
 	})
+}
+
+// getOrCreateVoiceSession returns a stable conversation ID for voice calls
+// without a caller phone number. Uses Redis with a 15-minute TTL so all
+// webhook hits during a single call share the same conversation.
+func (h *VoiceAIHandler) getOrCreateVoiceSession(ctx context.Context, orgID string) string {
+	sessionKey := fmt.Sprintf("voice_session:%s", orgID)
+
+	if h.redis != nil {
+		// Try to get existing session
+		existing, err := h.redis.Get(ctx, sessionKey).Result()
+		if err == nil && existing != "" {
+			// Refresh TTL on each turn
+			h.redis.Expire(ctx, sessionKey, 15*time.Minute)
+			return existing
+		}
+
+		// Create new session
+		convID := fmt.Sprintf("voice:%s:call-%d", orgID, time.Now().UnixMilli())
+		h.redis.Set(ctx, sessionKey, convID, 15*time.Minute)
+		return convID
+	}
+
+	// No Redis — fall back to timestamp (no continuity)
+	return fmt.Sprintf("voice:%s:%d", orgID, time.Now().UnixMilli())
 }
 
 // phoneFromTextRe matches US phone numbers in various formats.
