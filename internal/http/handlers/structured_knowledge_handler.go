@@ -212,6 +212,17 @@ func (h *StructuredKnowledgeHandler) SyncMoxie(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Auto-derive clinic config (service_price_text, menu items, etc.) from synced knowledge.
+	conversation.DeriveConfigFromKnowledge(sk, cfg)
+	if err := h.clinicStore.Set(r.Context(), cfg); err != nil {
+		h.logger.Error("failed to auto-save derived config after Moxie sync", "org_id", orgID, "error", err)
+		// Non-fatal — still return the knowledge
+	} else {
+		h.logger.Info("auto-derived clinic config from Moxie sync", "org_id", orgID,
+			"services", len(sk.Sections.Services.Items),
+			"price_entries", len(cfg.ServicePriceText))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(sk)
 }
@@ -333,7 +344,7 @@ func parseMoxieBookingJSON(data []byte, orgID string) (*conversation.StructuredK
 
 			priceDisplay := "$" + item.Price
 			if priceType == "variable" {
-				priceDisplay = "Variable pricing"
+				priceDisplay = "Priced per treatment — your provider will give you an exact quote at your appointment"
 			} else if priceType == "free" {
 				priceDisplay = "Free"
 			}
