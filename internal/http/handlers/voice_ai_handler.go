@@ -217,29 +217,47 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 	var convID string
 	if from != "" {
 		convID = fmt.Sprintf("voice:%s:%s", orgID, strings.TrimPrefix(from, "+"))
-		// Also update the active session to use this phone-based ID
+		// Check if there's an existing anonymous session to migrate from
 		if h.redis != nil {
 			sessionKey := fmt.Sprintf("voice_session:%s", orgID)
+			oldConvID, err := h.redis.Get(ctx, sessionKey).Result()
+			if err == nil && oldConvID != "" && oldConvID != convID {
+				// Migrate: copy history from anonymous session to phone-based session
+				oldKey := fmt.Sprintf("conversation:%s", oldConvID)
+				if data, err := h.redis.Get(ctx, oldKey).Bytes(); err == nil {
+					newKey := fmt.Sprintf("conversation:%s", convID)
+					h.redis.Set(ctx, newKey, data, 24*time.Hour)
+					h.redis.Del(ctx, oldKey)
+					// Also migrate the active marker
+					oldActive := fmt.Sprintf("voice_active:%s", oldConvID)
+					h.redis.Del(ctx, oldActive)
+					h.logger.Info("voice-ai: migrated anonymous session to phone-based",
+						"old_id", oldConvID, "new_id", convID)
+				}
+			}
 			h.redis.Set(ctx, sessionKey, convID, 15*time.Minute)
 		}
 	} else {
 		convID = h.getOrCreateVoiceSession(ctx, orgID)
 	}
 
-	// When summary is empty, this is the first turn of a new call.
-	// Clear any stale voice conversation so we start fresh.
-	if summary == "" && h.redis != nil {
-		staleKey := fmt.Sprintf("conversation:%s", convID)
-		h.redis.Del(ctx, staleKey)
-		// Also clear related keys
-		for _, prefix := range []string{"time_selection:", "qualifications:", "voice_session:"} {
-			if prefix == "voice_session:" {
-				h.redis.Del(ctx, fmt.Sprintf("voice_session:%s", orgID))
-			} else {
+	// Detect if this is a genuinely new call vs a continuation.
+	// We use a Redis key "voice_active:{convID}" with a short TTL.
+	// If it exists, this is a continuation. If not, it's a new call.
+	if h.redis != nil {
+		activeKey := fmt.Sprintf("voice_active:%s", convID)
+		_, err := h.redis.Get(ctx, activeKey).Result()
+		if err == redis.Nil {
+			// New call — clear stale conversation data
+			staleKey := fmt.Sprintf("conversation:%s", convID)
+			h.redis.Del(ctx, staleKey)
+			for _, prefix := range []string{"time_selection:", "qualifications:"} {
 				h.redis.Del(ctx, fmt.Sprintf("%s%s", prefix, convID))
 			}
+			h.logger.Info("voice-ai: new call detected, cleared stale conversation", "conversation_id", convID)
 		}
-		h.logger.Info("voice-ai: new call detected, cleared stale conversation", "conversation_id", convID)
+		// Mark this conversation as active (refresh on every turn)
+		h.redis.Set(ctx, activeKey, "1", 10*time.Minute)
 	}
 
 	// Build the message. If we have a summary from Telnyx, include it as
