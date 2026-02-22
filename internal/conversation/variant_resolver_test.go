@@ -61,7 +61,7 @@ func TestResolveServiceVariant_AsksWhenAmbiguous(t *testing.T) {
 	if question == "" {
 		t.Fatal("expected clarification question")
 	}
-	if question != "Would you prefer an in person or virtual weight loss consultation?" {
+	if question != "We offer In Person and Virtual. Which are you interested in?" {
 		t.Errorf("unexpected question: %q", question)
 	}
 }

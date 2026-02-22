@@ -352,6 +352,12 @@ func (c *Config) GetServiceVariants(service string) []string {
 		if len(variants) <= 1 {
 			continue
 		}
+		// If the service IS one of the variants, it's already resolved — don't re-ask
+		for _, v := range variants {
+			if strings.EqualFold(normalizeServiceKey(v), key) {
+				return nil
+			}
+		}
 		if strings.Contains(key, variantKey) || strings.Contains(variantKey, key) {
 			return variants
 		}

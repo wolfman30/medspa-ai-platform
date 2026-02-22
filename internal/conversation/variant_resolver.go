@@ -168,13 +168,18 @@ func buildClarificationQuestion(service string, variants []string) string {
 	names := make([]string, len(variants))
 	for i, v := range variants {
 		if parts := strings.SplitN(v, " - ", 2); len(parts) == 2 {
-			names[i] = strings.ToLower(parts[1])
+			names[i] = parts[1]
 		} else {
-			names[i] = strings.ToLower(v)
+			names[i] = v
 		}
 	}
-	return fmt.Sprintf("Would you prefer an %s or %s %s consultation?",
-		names[0], names[1], strings.ToLower(service))
+	if len(names) == 2 {
+		return fmt.Sprintf("We offer %s and %s. Which are you interested in?", names[0], names[1])
+	}
+	// 3+ variants: comma-separated list with "or" before last
+	last := names[len(names)-1]
+	rest := strings.Join(names[:len(names)-1], ", ")
+	return fmt.Sprintf("We offer %s, or %s. Which are you interested in?", rest, last)
 }
 
 // ResolveServiceVariant is the stateless convenience function (keyword-only, no LLM).
