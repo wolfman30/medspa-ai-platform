@@ -64,6 +64,7 @@ type Worker struct {
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
+	igMessenger      ReplyMessenger
 	logger           *logging.Logger
 	events           *EventLogger
 
@@ -91,6 +92,7 @@ type workerConfig struct {
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
+	igMessenger      ReplyMessenger
 }
 
 const (
@@ -265,6 +267,13 @@ func WithWorkerLeadsRepo(repo leads.Repository) WorkerOption {
 }
 
 // WithManualHandoff wires a manual handoff adapter for non-Moxie clinics.
+// WithInstagramMessenger sets the Instagram DM reply messenger.
+func WithInstagramMessenger(m ReplyMessenger) WorkerOption {
+	return func(cfg *workerConfig) {
+		cfg.igMessenger = m
+	}
+}
+
 func WithManualHandoff(adapter *booking.ManualHandoffAdapter) WorkerOption {
 	return func(cfg *workerConfig) {
 		cfg.manualHandoff = adapter
@@ -326,6 +335,7 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		moxieClient:      cfg.moxieClient,
 		leadsRepo:        cfg.leadsRepo,
 		manualHandoff:    cfg.manualHandoff,
+		igMessenger:      cfg.igMessenger,
 		logger:           logger,
 		events:           NewEventLogger(logger),
 		cfg:              cfg,

@@ -114,6 +114,9 @@ func TestParseWebhookEvent(t *testing.T) {
 		if msgs[0].SenderID != "user_456" {
 			t.Errorf("sender = %s, want user_456", msgs[0].SenderID)
 		}
+		if msgs[0].RecipientID != "page_123" {
+			t.Errorf("recipient = %s, want page_123", msgs[0].RecipientID)
+		}
 		if msgs[0].Text != "I want Botox" {
 			t.Errorf("text = %s, want 'I want Botox'", msgs[0].Text)
 		}

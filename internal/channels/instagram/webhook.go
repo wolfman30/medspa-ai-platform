@@ -83,8 +83,9 @@ func ParseWebhookEvent(event WebhookEvent) []ParsedInboundMessage {
 	for _, entry := range event.Entry {
 		for _, m := range entry.Messaging {
 			parsed := ParsedInboundMessage{
-				SenderID:  m.Sender.ID,
-				Timestamp: time.UnixMilli(m.Timestamp),
+				SenderID:    m.Sender.ID,
+				RecipientID: m.Recipient.ID,
+				Timestamp:   time.UnixMilli(m.Timestamp),
 			}
 
 			if m.Message != nil {

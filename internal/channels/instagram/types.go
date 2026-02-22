@@ -102,6 +102,7 @@ type SendError struct {
 // ParsedInboundMessage is the normalized result of parsing a webhook event.
 type ParsedInboundMessage struct {
 	SenderID        string
+	RecipientID     string
 	Text            string
 	Timestamp       time.Time
 	IsPostback      bool

@@ -23,9 +23,10 @@ type Message struct {
 type Channel string
 
 const (
-	ChannelUnknown Channel = ""
-	ChannelSMS     Channel = "sms"
-	ChannelVoice   Channel = "voice"
+	ChannelUnknown   Channel = ""
+	ChannelSMS       Channel = "sms"
+	ChannelVoice     Channel = "voice"
+	ChannelInstagram Channel = "instagram"
 )
 
 // Conversation status constants
