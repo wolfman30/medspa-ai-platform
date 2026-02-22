@@ -791,7 +791,16 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 			if price, ok := cfg.PriceTextForService(service); ok {
 				depositCents := cfg.DepositAmountForService(service)
 				depositDollars := float64(depositCents) / 100.0
-				reply := fmt.Sprintf("%s pricing: %s. To secure priority booking, we collect a small refundable deposit of $%.0f that applies toward your treatment. Would you like to proceed?", strings.Title(service), price, depositDollars)
+				// Use the canonical service name for display but capitalize nicely.
+				displayName := strings.Title(service) //nolint:staticcheck
+				// Find a matching service in the config list for proper casing.
+				for _, svc := range cfg.Services {
+					if strings.EqualFold(svc, service) {
+						displayName = svc
+						break
+					}
+				}
+				reply := fmt.Sprintf("%s pricing: %s. To secure priority booking, we collect a small refundable deposit of $%.0f that applies toward your treatment. Would you like to proceed?", displayName, price, depositDollars)
 				// Best-effort tagging for analytics/triage.
 				s.appendLeadNote(ctx, req.OrgID, req.LeadID, "tag:price_shopper")
 
@@ -2226,6 +2235,12 @@ func detectServiceKey(message string, cfg *clinic.Config) string {
 			continue
 		}
 		if strings.Contains(message, key) {
+			// Resolve through aliases to canonical service name for price lookup.
+			if cfg != nil {
+				if resolved, ok := cfg.ServiceAliases[key]; ok {
+					return strings.ToLower(resolved)
+				}
+			}
 			return key
 		}
 	}

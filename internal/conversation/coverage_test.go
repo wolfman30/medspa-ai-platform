@@ -315,8 +315,8 @@ func TestDetectServiceKey_Coverage(t *testing.T) {
 		msg  string
 		want string
 	}{
-		{"I want botox", "botox"},
-		{"interested in filler", "filler"},
+		{"I want botox", "tox (wrinkle relaxer)"}, // resolved via alias
+		{"interested in filler", "dermal filler"}, // resolved via alias
 		{"hello", ""},
 		{"I want microneedling", "microneedling"},
 	}
