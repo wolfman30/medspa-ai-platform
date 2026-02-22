@@ -226,6 +226,22 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		convID = h.getOrCreateVoiceSession(ctx, orgID)
 	}
 
+	// When summary is empty, this is the first turn of a new call.
+	// Clear any stale voice conversation so we start fresh.
+	if summary == "" && h.redis != nil {
+		staleKey := fmt.Sprintf("conversation:%s", convID)
+		h.redis.Del(ctx, staleKey)
+		// Also clear related keys
+		for _, prefix := range []string{"time_selection:", "qualifications:", "voice_session:"} {
+			if prefix == "voice_session:" {
+				h.redis.Del(ctx, fmt.Sprintf("voice_session:%s", orgID))
+			} else {
+				h.redis.Del(ctx, fmt.Sprintf("%s%s", prefix, convID))
+			}
+		}
+		h.logger.Info("voice-ai: new call detected, cleared stale conversation", "conversation_id", convID)
+	}
+
 	// Build the message. If we have a summary from Telnyx, include it as
 	// context so the brain knows the full conversation even if this is a
 	// "new" conversation from our perspective (no stable call ID).

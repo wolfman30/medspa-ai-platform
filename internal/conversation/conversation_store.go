@@ -85,10 +85,14 @@ type MessageRecord struct {
 	CreatedAt         time.Time
 }
 
-// parseConversationID extracts orgID and phone from "sms:{orgID}:{phone}" format.
+// parseConversationID extracts orgID and phone from "{channel}:{orgID}:{phone}" format.
+// Supports both "sms:" and "voice:" prefixed conversation IDs.
 func parseConversationID(conversationID string) (orgID, phone string, ok bool) {
 	parts := strings.Split(conversationID, ":")
-	if len(parts) != 3 || parts[0] != "sms" {
+	if len(parts) != 3 {
+		return "", "", false
+	}
+	if parts[0] != "sms" && parts[0] != "voice" {
 		return "", "", false
 	}
 	return parts[1], parts[2], true
@@ -145,13 +149,19 @@ func (s *ConversationStore) EnsureConversation(ctx context.Context, conversation
 	newID := uuid.New()
 	now := time.Now()
 
+	// Determine channel from conversation ID prefix
+	channel := "sms"
+	if strings.HasPrefix(conversationID, "voice:") {
+		channel = "voice"
+	}
+
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO conversations (
 			id, conversation_id, org_id, phone, status, channel,
 			message_count, customer_message_count, ai_message_count,
 			started_at, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, newID, conversationID, orgID, phone, "active", "sms",
+	`, newID, conversationID, orgID, phone, "active", channel,
 		0, 0, 0, now, now, now,
 	)
 
