@@ -126,12 +126,21 @@ func extractDaysOfWeek(text string) []int {
 		}
 	}
 
-	if strings.Contains(text, "any day") || strings.Contains(text, "anytime") {
-		for i := 0; i <= 6; i++ {
-			if !seen[i] {
-				days = append(days, i)
-				seen[i] = true
+	anyDayPatterns := []string{
+		"any day", "anytime", "any time", "any of the day",
+		"any time of the day", "any day of the week",
+		"any of the week", "all week", "every day",
+		"throughout the week", "all days",
+	}
+	for _, pat := range anyDayPatterns {
+		if strings.Contains(text, pat) {
+			for i := 0; i <= 6; i++ {
+				if !seen[i] {
+					days = append(days, i)
+					seen[i] = true
+				}
 			}
+			break
 		}
 	}
 
