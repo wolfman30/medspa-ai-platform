@@ -99,7 +99,7 @@ func TestVoiceAI_EventTypes(t *testing.T) {
 		{
 			name:     "valid tool_call event",
 			event:    validVoiceAIEvent(),
-			wantCode: http.StatusNotFound, // clinic lookup fails without Redis
+			wantCode: http.StatusOK, // returns friendly fallback (no clinic store)
 		},
 		{
 			name: "missing transcript",
@@ -115,14 +115,14 @@ func TestVoiceAI_EventTypes(t *testing.T) {
 					Arguments:  map[string]string{},
 				},
 			},
-			wantCode: http.StatusNotFound, // clinic lookup fails first
+			wantCode: http.StatusOK, // returns "Could you say that again?"
 		},
 		{
 			name: "empty body",
 			event: VoiceAIEvent{
 				EventType: "tool_call",
 			},
-			wantCode: http.StatusNotFound, // empty To → clinic lookup fails
+			wantCode: http.StatusOK, // returns fallback response
 		},
 	}
 

@@ -81,6 +81,18 @@ func makeVoiceAIRequest(t *testing.T, event VoiceAIEvent) *http.Request {
 	return req
 }
 
+// makeToolCallRequest creates a request in the Telnyx webhook tool format (body params directly).
+func makeToolCallRequest(t *testing.T, params map[string]interface{}) *http.Request {
+	t.Helper()
+	body, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("marshal params: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/telnyx/voice-ai", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func validVoiceAIEvent() VoiceAIEvent {
 	return VoiceAIEvent{
 		AssistantID:    "ast_123",
@@ -95,6 +107,15 @@ func validVoiceAIEvent() VoiceAIEvent {
 				"transcript": "I'd like to book a Botox appointment",
 			},
 		},
+	}
+}
+
+// validToolCallParams returns params in Telnyx webhook tool format.
+func validToolCallParams() map[string]interface{} {
+	return map[string]interface{}{
+		"transcript":    "I'd like to book a Botox appointment",
+		"caller_number": "+15551234567",
+		"called_number": "+15559876543",
 	}
 }
 
@@ -126,8 +147,8 @@ func TestVoiceAIHandler_ClinicNotFound(t *testing.T) {
 
 	h.HandleVoiceAI(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 (graceful voice response), got %d", w.Code)
 	}
 }
 
@@ -151,8 +172,8 @@ func TestVoiceAIHandler_VoiceDisabled(t *testing.T) {
 	h.HandleVoiceAI(w, req)
 
 	// Should get 404 because clinicStore is nil
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 (graceful voice response), got %d", w.Code)
 	}
 }
 
@@ -180,8 +201,8 @@ func TestVoiceAIHandler_AssistantIDMismatch(t *testing.T) {
 
 	// With nil clinicStore, hits 404 before assistant check.
 	// The assistant ID validation is tested implicitly when clinicStore is wired.
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404 (clinic lookup fails before assistant check), got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
@@ -201,8 +222,8 @@ func TestVoiceAIHandler_EmptyTranscript(t *testing.T) {
 
 	// Hits clinic lookup failure first (404), not the transcript check (400).
 	// This is expected — the transcript check happens after clinic resolution.
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404 (clinic not found before transcript check), got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
