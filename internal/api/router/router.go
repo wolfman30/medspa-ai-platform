@@ -63,6 +63,10 @@ type Config struct {
 	StripeWebhook *payments.StripeWebhookHandler
 	StripeConnect *payments.StripeConnectHandler
 
+	// SaaS billing (AI Wolf's own subscriptions)
+	Billing        *payments.BillingHandler
+	BillingWebhook *payments.BillingWebhookHandler
+
 	// Structured knowledge handler
 	StructuredKnowledgeHandler *handlers.StructuredKnowledgeHandler
 
@@ -134,6 +138,12 @@ func New(cfg *Config) http.Handler {
 		}
 		if cfg.StripeWebhook != nil {
 			public.Post("/webhooks/stripe", cfg.StripeWebhook.Handle)
+		}
+		if cfg.Billing != nil {
+			public.Post("/api/subscribe", cfg.Billing.HandleSubscribe)
+		}
+		if cfg.BillingWebhook != nil {
+			public.Post("/webhooks/stripe-billing", cfg.BillingWebhook.Handle)
 		}
 		if cfg.StripeConnect != nil {
 			public.Get("/stripe/connect/authorize", cfg.StripeConnect.HandleAuthorize)
