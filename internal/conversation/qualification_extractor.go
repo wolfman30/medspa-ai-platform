@@ -28,6 +28,23 @@ var (
 	betweenRE          = regexp.MustCompile(`(?i)between\s+(\d{1,2})(?::(\d{2}))?\s*(?:am|pm|a|p)?\s+and\s+(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)`)
 	specificTimeRE     = regexp.MustCompile(`(?i)(around |about |at |after |before )?(\d{1,2})(?::(\d{2}))?\s*(a\.m\.|p\.m\.|am|pm|a|p)\b`)
 	noonRE             = regexp.MustCompile(`(?i)\b(noon|midday)\b`)
+
+	// Day abbreviation matching — word-boundary patterns to avoid false positives
+	// Handles: mon, monday, mondays, tue, tues, tuesday, tuesdays, wed, wednesday, etc.
+	dayAbbrevRE = regexp.MustCompile(`(?i)\b(?:mon(?:days?)?|tue(?:s(?:days?)?)?|wed(?:nesdays?)?|thu(?:rs(?:days?)?)?|fri(?:days?)?|sat(?:urdays?)?|sun(?:days?)?)\b`)
+
+	dayAbbreviations = []struct {
+		re   *regexp.Regexp
+		full string
+	}{
+		{regexp.MustCompile(`(?i)\bmon(?:days?)?\b`), "monday"},
+		{regexp.MustCompile(`(?i)\btue(?:s(?:days?)?)?\b`), "tuesday"},
+		{regexp.MustCompile(`(?i)\bwed(?:nesdays?)?\b`), "wednesday"},
+		{regexp.MustCompile(`(?i)\bthu(?:rs(?:days?)?)?\b`), "thursday"},
+		{regexp.MustCompile(`(?i)\bfri(?:days?)?\b`), "friday"},
+		{regexp.MustCompile(`(?i)\bsat(?:urdays?)?\b`), "saturday"},
+		{regexp.MustCompile(`(?i)\bsun(?:days?)?\b`), "sunday"},
+	}
 )
 
 // ---------- universal fallback service patterns ----------
@@ -853,11 +870,21 @@ func extractPreferences(history []ChatMessage, serviceAliases map[string]string)
 	} else if strings.Contains(userMessages, "any day") || strings.Contains(userMessages, "flexible") || strings.Contains(userMessages, "anytime") || strings.Contains(userMessages, "whenever") || strings.Contains(userMessages, "open schedule") {
 		prefs.PreferredDays = "any"
 		hasPreferences = true
-	} else if strings.Contains(userMessages, "monday") || strings.Contains(userMessages, "tuesday") || strings.Contains(userMessages, "wednesday") || strings.Contains(userMessages, "thursday") || strings.Contains(userMessages, "friday") {
+	} else if dayAbbrevRE.MatchString(userMessages) {
 		days := []string{}
-		for _, day := range []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"} {
-			if strings.Contains(userMessages, day) {
-				days = append(days, day)
+		for _, entry := range dayAbbreviations {
+			if entry.re.MatchString(userMessages) {
+				// Avoid duplicates
+				found := false
+				for _, d := range days {
+					if d == entry.full {
+						found = true
+						break
+					}
+				}
+				if !found {
+					days = append(days, entry.full)
+				}
 			}
 		}
 		if len(days) > 0 {
