@@ -90,6 +90,8 @@ type UpdateConfigRequest struct {
 	ServicePriceText          map[string]string   `json:"service_price_text,omitempty"`
 	ServiceDepositAmountCents map[string]int      `json:"service_deposit_amount_cents,omitempty"`
 	ServiceVariants           map[string][]string `json:"service_variants,omitempty"`
+	VoiceAIEnabled            *bool               `json:"voice_ai_enabled,omitempty"`
+	TelnyxAssistantID         string              `json:"telnyx_assistant_id,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -215,6 +217,12 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ServiceVariants != nil {
 		cfg.ServiceVariants = req.ServiceVariants
+	}
+	if req.VoiceAIEnabled != nil {
+		cfg.VoiceAIEnabled = *req.VoiceAIEnabled
+	}
+	if req.TelnyxAssistantID != "" {
+		cfg.TelnyxAssistantID = req.TelnyxAssistantID
 	}
 
 	// Save updated config

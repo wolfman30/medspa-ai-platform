@@ -315,6 +315,19 @@ func main() {
 		conversationHandler.SetService(conversationService)
 	}
 
+	// Voice AI handler (Telnyx AI Assistant webhook tool)
+	var voiceAIHandler *handlers.VoiceAIHandler
+	if msgStore != nil && clinicStore != nil {
+		voiceAIHandler = handlers.NewVoiceAIHandler(handlers.VoiceAIHandlerConfig{
+			Store:       msgStore,
+			Publisher:   conversationPublisher,
+			Processor:   conversationService,
+			ClinicStore: clinicStore,
+			Logger:      logger,
+		})
+		logger.Info("voice AI handler initialized")
+	}
+
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
 	var squareOAuthHandler *payments.OAuthHandler
@@ -512,6 +525,7 @@ func main() {
 		EvidenceS3Client:       evidenceS3,
 		EvidenceS3Bucket:       cfg.S3TrainingBucket,
 		EvidenceS3Region:       cfg.AWSRegion,
+		VoiceAIHandler:         voiceAIHandler,
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,
