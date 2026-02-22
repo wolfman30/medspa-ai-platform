@@ -260,13 +260,11 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		h.redis.Set(ctx, activeKey, "1", 10*time.Minute)
 	}
 
-	// Build the message. If we have a summary from Telnyx, include it as
-	// context so the brain knows the full conversation even if this is a
-	// "new" conversation from our perspective (no stable call ID).
+	// Use the raw transcript as the message. The conversation history in Redis
+	// provides context across turns. We no longer prepend Telnyx's summary
+	// because it confuses the qualification extractor (e.g., "And no" doesn't
+	// parse as patient type without the surrounding context that Redis provides).
 	message := transcript
-	if summary != "" {
-		message = fmt.Sprintf("[Conversation so far: %s]\n\nPatient just said: %s", summary, transcript)
-	}
 
 	msgReq := conversation.MessageRequest{
 		OrgID:          orgID,
