@@ -1,28 +1,29 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-21
+Last updated: 2026-02-22
 
 ## Automated E2E Test Results (Live Dev API)
 
-**30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)**
+**30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)** *(last validated run — 40+ commits since)*
 
-### Recent Fixes (Feb 20-21):
+### Recent Fixes (Feb 20-22):
+- `4b8d634` fix: smoke test resilience — remove day preference constraint
+- `426fc67` refactor: split worker.go into focused files by concern
+- `c7e3c92` fix: resolve service aliases in price inquiry handler
+- `3ed7cd1` feat: auto-populate service pricing from Moxie sync
+- `75f005d` fix: day abbreviation extraction (Mon, Tues, Wed, Thu, Fri, Sat, Sun)
+- `0efa564` test: add coverage tests for pure functions + refactored helpers
+- `ecd0b47` refactor: extract ProcessMessage into focused helper methods
+- `76e6cce` fix: variant resolution loop and broken clarification question
+- `f8266a3` fix: ON CONFLICT constraint reference for message insert
+- `6e7ac6a` fix: upsert messages to prevent duplicate key failures
+- `e785ad1` feat: GitHub workflow_run webhook with Telegram alerts
 - `98be220` security: AssistantID validation for Voice AI webhook
-- `f3dfecc` feat: Telnyx Voice AI webhook handler (Phase II groundwork)
-- `a0c16f6` fix: after-hours greeting for appointment-only clinics
-- `ef4d6a6` fix: mobile responsive portal — nav stacks, table fits screen
 - `e39adc9` upgrade: LLM from Claude Haiku 4.5 → Sonnet 4.6
-- `c9c784d` fix: date-based slot selection ('Feb 28', '2/28', 'the 28th')
-- `10a6b89` fix: recognize 'whenever works' and flexible schedule replies
-- `8fb5238` feat: complete outreach scripts for all 21 prospects
-- `4bd8909` feat: Testing Status card on CEO Dashboard
-- `1de212c` feat: Rule of 100 tracker card for CEO Dashboard
-- `42a6f75` fix: evidence upload auth — use Cognito token
-- `ef33476` docs: consolidate into SPEC + ARCHITECTURE model
 
-### Remaining Issues (to verify):
-1. Re-run E2E to confirm scenarios pass after 23 new commits + LLM upgrade
-2. 4 prior E2E failures may be resolved by Sonnet 4.6 upgrade (better service recognition)
+### Remaining Issues:
+1. **E2E blocked in sandbox** — ADMIN_JWT_SECRET not available; need manual `make e2e-dev` run
+2. 40+ commits untested — many bug fixes likely improved score, but unverified
 3. Voice AI webhook — new, needs integration testing
 4. Mobile portal — needs manual verification on real devices
 
