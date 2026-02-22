@@ -126,6 +126,9 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log raw body for debugging Telnyx payload format.
+	h.logger.Info("voice-ai: raw body", "body", string(body))
+
 	var event VoiceAIEvent
 	if err := json.Unmarshal(body, &event); err != nil {
 		h.logger.Error("voice-ai: failed to parse event", "error", err)
