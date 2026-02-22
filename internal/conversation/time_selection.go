@@ -327,6 +327,13 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 	providerID := cfg.ResolveProviderID(providerPreference)
 	noProviderPref := providerID == ""
 
+	// Moxie quirk: noPreference=true returns empty for some single-provider clinics.
+	// Fall back to DefaultProviderID when patient has no preference.
+	if noProviderPref && mc.DefaultProviderID != "" {
+		providerID = mc.DefaultProviderID
+		noProviderPref = false
+	}
+
 	result, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, noProviderPref, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("moxie availability query failed: %w", err)
