@@ -14,6 +14,22 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		return false
 	}
 	msg := payload.Message
+	// Voice channel responses are returned synchronously via the webhook handler,
+	// not sent as SMS. Log the response for transcript but skip SMS delivery.
+	if msg.Channel == ChannelVoice {
+		w.appendTranscript(ctx, resp.ConversationID, SMSTranscriptMessage{
+			Role:      "assistant",
+			From:      msg.To,
+			To:        msg.From,
+			Body:      resp.Message,
+			Timestamp: resp.Timestamp,
+			Kind:      "voice_reply",
+		})
+		return false
+	}
+	if msg.Channel == ChannelInstagram {
+		return w.sendInstagramReply(ctx, payload, resp)
+	}
 	if msg.Channel != ChannelSMS {
 		return false
 	}

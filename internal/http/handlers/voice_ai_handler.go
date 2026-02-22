@@ -80,6 +80,7 @@ type clinicByNumberLookup interface {
 type VoiceAIHandler struct {
 	store       clinicByNumberLookup
 	publisher   conversationPublisher
+	processor   conversation.Service
 	clinicStore *clinic.Store
 	logger      *logging.Logger
 
@@ -91,6 +92,7 @@ type VoiceAIHandler struct {
 type VoiceAIHandlerConfig struct {
 	Store       clinicByNumberLookup
 	Publisher   conversationPublisher
+	Processor   conversation.Service
 	ClinicStore *clinic.Store
 	Logger      *logging.Logger
 }
@@ -103,6 +105,7 @@ func NewVoiceAIHandler(cfg VoiceAIHandlerConfig) *VoiceAIHandler {
 	return &VoiceAIHandler{
 		store:       cfg.Store,
 		publisher:   cfg.Publisher,
+		processor:   cfg.Processor,
 		clinicStore: cfg.ClinicStore,
 		logger:      cfg.Logger,
 		voicePromptAddition: "Keep responses to 1-2 sentences. " +
@@ -177,14 +180,18 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enqueue the message through the conversation engine.
-	jobID := fmt.Sprintf("voice-%s-%d", event.ConversationID, time.Now().UnixMilli())
+	from := messaging.NormalizeE164(event.From)
+	convID := event.ConversationID
+	if convID == "" {
+		convID = fmt.Sprintf("voice:%s:%s", orgID, strings.TrimPrefix(from, "+"))
+	}
+
 	msgReq := conversation.MessageRequest{
 		OrgID:          orgID,
-		ConversationID: event.ConversationID,
+		ConversationID: convID,
 		Message:        transcript,
 		Channel:        conversation.ChannelVoice,
-		From:           messaging.NormalizeE164(event.From),
+		From:           from,
 		To:             to,
 		Metadata: map[string]string{
 			"voice_prompt_addition": h.voicePromptAddition,
@@ -193,16 +200,34 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	// Synchronous path: process inline and return the response for TTS.
+	// Voice calls need sub-second latency; queueing adds unacceptable delay.
+	if h.processor != nil {
+		resp, err := h.processor.ProcessMessage(ctx, msgReq)
+		if err != nil {
+			h.logger.Error("voice-ai: processor error",
+				"error", err, "conversation_id", convID)
+			h.writeResponse(w, event.Payload.ToolCallID,
+				"I'm sorry, I'm having a bit of trouble. Could you say that again?")
+			return
+		}
+		responseText := resp.Message
+		if responseText == "" {
+			responseText = "I'm sorry, could you repeat that?"
+		}
+		h.writeResponse(w, event.Payload.ToolCallID, responseText)
+		return
+	}
+
+	// Async fallback: enqueue and return interim response.
+	jobID := fmt.Sprintf("voice-%s-%d", convID, time.Now().UnixMilli())
 	if err := h.publisher.EnqueueMessage(ctx, jobID, msgReq); err != nil {
 		h.logger.Error("voice-ai: failed to enqueue message",
-			"error", err, "conversation_id", event.ConversationID)
+			"error", err, "conversation_id", convID)
 		h.writeError(w, event.Payload.ToolCallID, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	// Return an interim response. The actual conversation response will be
-	// delivered asynchronously once the worker processes the job.
-	// TODO(voice-ai): Implement synchronous response or Telnyx async callback.
 	h.writeResponse(w, event.Payload.ToolCallID,
 		"Let me look into that for you, one moment please.")
 }

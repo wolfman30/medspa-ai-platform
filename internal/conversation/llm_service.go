@@ -315,7 +315,12 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 			usesMoxie = cfg.UsesMoxieBooking()
 		}
 	}
-	systemPrompt := buildSystemPrompt(int(depositCents), usesMoxie, startCfg)
+	var systemPrompt string
+	if isVoiceChannel(req.Channel) {
+		systemPrompt = buildVoiceSystemPrompt(int(depositCents), usesMoxie, startCfg)
+	} else {
+		systemPrompt = buildSystemPrompt(int(depositCents), usesMoxie, startCfg)
+	}
 
 	if req.Silent {
 		history := []ChatMessage{

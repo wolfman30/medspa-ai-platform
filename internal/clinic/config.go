@@ -183,6 +183,26 @@ type Config struct {
 	VoiceAIEnabled bool `json:"voice_ai_enabled"`
 	// TelnyxAssistantID is the Telnyx AI Assistant ID configured for this clinic's voice calls.
 	TelnyxAssistantID string `json:"telnyx_assistant_id,omitempty"`
+	// VoiceAIConfig holds voice-specific settings for Telnyx AI Assistant integration.
+	VoiceAIConfig *VoiceAIConfig `json:"voice_ai_config,omitempty"`
+}
+
+// VoiceAIConfig holds voice AI configuration for a clinic.
+type VoiceAIConfig struct {
+	// Greeting is spoken when the AI assistant answers the call.
+	Greeting string `json:"greeting,omitempty"`
+	// AfterHoursGreeting is used when the clinic is closed.
+	AfterHoursGreeting string `json:"after_hours_greeting,omitempty"`
+	// MaxConcurrentCalls limits how many simultaneous voice calls the clinic can handle.
+	MaxConcurrentCalls int `json:"max_concurrent_calls,omitempty"`
+	// RecordingEnabled controls whether calls are recorded (requires consent announcement).
+	RecordingEnabled bool `json:"recording_enabled,omitempty"`
+	// RecordingConsentMessage is spoken before recording starts.
+	RecordingConsentMessage string `json:"recording_consent_message,omitempty"`
+	// TransferNumber is the fallback phone number for live agent transfer.
+	TransferNumber string `json:"transfer_number,omitempty"`
+	// BusinessHoursOnly limits voice AI to business hours; after hours falls back to voicemail.
+	BusinessHoursOnly bool `json:"business_hours_only,omitempty"`
 }
 
 // MoxieConfig contains Moxie platform-specific identifiers for direct API integration.
