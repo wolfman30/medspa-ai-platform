@@ -23,7 +23,7 @@ resource "aws_cloudwatch_log_group" "migrate" {
 resource "aws_cloudwatch_log_group" "nova_sonic_sidecar" {
   count             = var.enable_nova_sonic_sidecar ? 1 : 0
   name              = "/ecs/${local.name_prefix}-nova-sonic-sidecar"
-  retention_in_days = var.log_retention_days
+  retention_in_days = 14
 
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-nova-sonic-sidecar-logs"
