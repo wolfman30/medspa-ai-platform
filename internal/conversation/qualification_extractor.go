@@ -522,9 +522,10 @@ func normalizePatientTypeReply(message string) string {
 	cleaned := strings.ToLower(strings.TrimSpace(message))
 	cleaned = strings.Trim(cleaned, ".,!?")
 	switch cleaned {
-	case "new", "new patient", "new here", "first time", "first-time", "never been", "never been before",
+	case "new", "new patient", "new here", "first time", "first-time", "this time", "never been", "never been before",
 		"i'm new", "im new", "i am new", "no", "and no", "nope", "no i haven't", "no i have not",
-		"not yet", "haven't been", "i haven't", "i have not", "never", "no never":
+		"not yet", "haven't been", "i haven't", "i have not", "never", "no never",
+		"it's my first time", "its my first time", "this is my first time", "this would be my first time":
 		return "new"
 	case "existing", "returning", "existing patient", "returning patient", "been before", "i've been before",
 		"i have been before", "not new", "visited before", "i've visited before", "i have visited before",
