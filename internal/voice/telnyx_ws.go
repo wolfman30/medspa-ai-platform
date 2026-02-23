@@ -33,7 +33,7 @@ var wsUpgrader = websocket.Upgrader{
 // TelnyxEvent represents a Telnyx WebSocket media streaming event.
 type TelnyxEvent struct {
 	Event    string            `json:"event"`
-	Sequence int               `json:"sequence_number,omitempty"`
+	Sequence json.Number       `json:"sequence_number,omitempty"`
 	Media    *TelnyxMedia      `json:"media,omitempty"`
 	Start    *TelnyxStart      `json:"start,omitempty"`
 	Stop     *TelnyxStop       `json:"stop,omitempty"`
