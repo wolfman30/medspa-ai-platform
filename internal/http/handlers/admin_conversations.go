@@ -40,6 +40,7 @@ func NewAdminConversationsHandler(db *sql.DB, transcriptStore *conversation.SMST
 type ConversationListItem struct {
 	ID                   string  `json:"id"`
 	OrgID                string  `json:"org_id"`
+	Channel              string  `json:"channel"` // "sms" or "voice"
 	CustomerPhone        string  `json:"customer_phone"`
 	CustomerName         string  `json:"customer_name"`
 	Status               string  `json:"status"`
@@ -63,6 +64,7 @@ type ConversationsListResponse struct {
 type ConversationDetailResponse struct {
 	ID            string            `json:"id"`
 	OrgID         string            `json:"org_id"`
+	Channel       string            `json:"channel"` // "sms" or "voice"
 	CustomerPhone string            `json:"customer_phone"`
 	CustomerName  string            `json:"customer_name"`
 	Status        string            `json:"status"`
@@ -91,6 +93,14 @@ type ConversationMeta struct {
 	CustomerMessages int    `json:"customer_messages"`
 	AIMessages       int    `json:"ai_messages"`
 	Source           string `json:"source"` // "database" or "redis"
+}
+
+// channelFromConversationID extracts "sms" or "voice" from the conversation ID prefix.
+func channelFromConversationID(id string) string {
+	if strings.HasPrefix(id, "voice:") {
+		return "voice"
+	}
+	return "sms"
 }
 
 // parseConversationID extracts orgID and phone/session from conversation ID format
@@ -360,6 +370,7 @@ func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWrit
 		conversations = append(conversations, ConversationListItem{
 			ID:            conversationID,
 			OrgID:         parsedOrgID,
+			Channel:       channelFromConversationID(conversationID),
 			CustomerPhone: customerPhone,
 			CustomerName:  customerName,
 			Status:        status,
@@ -416,6 +427,7 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 	conv := ConversationDetailResponse{
 		ID:            conversationID,
 		OrgID:         parsedOrgID,
+		Channel:       channelFromConversationID(conversationID),
 		CustomerPhone: customerPhone,
 		Messages:      []MessageResponse{},
 	}

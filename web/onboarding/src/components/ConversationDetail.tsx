@@ -185,8 +185,15 @@ export function ConversationDetail({ orgId, conversationId, onBack, scope = 'adm
               <span aria-hidden="true">&larr;</span> Back
             </button>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900 flex items-center gap-2">
                 {conversation.customer_name || <span className="italic text-slate-400">Name not provided</span>}
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                  conversation.channel === 'voice'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {conversation.channel === 'voice' ? '🎙️ Voice' : '💬 SMS'}
+                </span>
               </h1>
               <p className="text-xs text-slate-500">
                 {formatPhone(conversation.customer_phone)}

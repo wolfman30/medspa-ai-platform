@@ -297,8 +297,15 @@ export function ConversationList({ orgId, onSelect, scope = 'admin' }: Conversat
                         className="ui-td whitespace-nowrap cursor-pointer"
                         onClick={() => onSelect(conv.id)}
                       >
-                        <div className="font-medium text-slate-900">
+                        <div className="font-medium text-slate-900 flex items-center gap-2">
                           {conv.customer_name ? conv.customer_name : <span className="italic text-slate-400">Name not provided</span>}
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                            conv.channel === 'voice'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {conv.channel === 'voice' ? '🎙️ Voice' : '💬 SMS'}
+                          </span>
                         </div>
                         <div className="text-xs text-slate-500">{formatPhone(conv.customer_phone)}</div>
                       </td>

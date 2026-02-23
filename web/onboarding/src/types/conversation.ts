@@ -3,6 +3,7 @@
 export interface ConversationListItem {
   id: string;
   org_id: string;
+  channel?: string; // "sms" or "voice"
   customer_phone: string;
   customer_name: string;
   status: string;
@@ -43,6 +44,7 @@ export interface ConversationMeta {
 export interface ConversationDetailResponse {
   id: string;
   org_id: string;
+  channel?: string; // "sms" or "voice"
   customer_phone: string;
   customer_name: string;
   status: string;
