@@ -2472,3 +2472,17 @@ func (s *LLMService) AppendAssistantMessage(ctx context.Context, conversationID,
 	})
 	return s.history.Save(ctx, conversationID, history)
 }
+
+// ClearLeadPreferences resets scheduling preferences for a lead identified by
+// org + phone. Used when a new voice call starts to prevent stale data from
+// a previous call leaking into qualification checks.
+func (s *LLMService) ClearLeadPreferences(ctx context.Context, orgID, phone string) error {
+	if s.leadsRepo == nil {
+		return nil
+	}
+	lead, err := s.leadsRepo.GetOrCreateByPhone(ctx, orgID, phone, "voice", "")
+	if err != nil {
+		return fmt.Errorf("get lead: %w", err)
+	}
+	return s.leadsRepo.UpdateSchedulingPreferences(ctx, lead.ID, leads.SchedulingPreferences{})
+}

@@ -277,6 +277,18 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 				h.redis.Del(ctx, fmt.Sprintf("%s%s", prefix, convID))
 			}
 			h.logger.Info("voice-ai: new call detected, cleared stale conversation", "conversation_id", convID)
+
+			// Also clear lead scheduling preferences from Postgres so stale data
+			// from a previous call doesn't pre-fill qualifications.
+			if h.processor != nil {
+				if svc, ok := h.processor.(interface {
+					ClearLeadPreferences(ctx context.Context, orgID, phone string) error
+				}); ok {
+					if err := svc.ClearLeadPreferences(ctx, orgID, from); err != nil {
+						h.logger.Warn("voice-ai: failed to clear lead preferences", "error", err, "org_id", orgID)
+					}
+				}
+			}
 		}
 		// Mark this conversation as active (refresh on every turn)
 		h.redis.Set(ctx, activeKey, "1", 10*time.Minute)
