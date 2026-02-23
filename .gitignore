@@ -96,3 +96,5 @@ package-lock.json
 CLAUDE.md
 api
 e2e
+.terraform/
+.terraform.lock.hcl

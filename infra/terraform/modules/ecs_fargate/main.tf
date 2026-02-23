@@ -20,6 +20,31 @@ resource "aws_cloudwatch_log_group" "migrate" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "nova_sonic_sidecar" {
+  count             = var.enable_nova_sonic_sidecar ? 1 : 0
+  name              = "/ecs/${local.name_prefix}-nova-sonic-sidecar"
+  retention_in_days = var.log_retention_days
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-nova-sonic-sidecar-logs"
+  })
+}
+
+resource "aws_ecr_repository" "nova_sonic_sidecar" {
+  count                = var.enable_nova_sonic_sidecar ? 1 : 0
+  name                 = "${local.name_prefix}-nova-sonic-sidecar"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = false
+  }
+
+  tags = merge(var.tags, {
+    Name = "${local.name_prefix}-nova-sonic-sidecar-ecr"
+  })
+}
+
 resource "aws_cloudwatch_log_group" "browser_sidecar" {
   count             = var.enable_browser_sidecar ? 1 : 0
   name              = "/ecs/${local.name_prefix}-browser-sidecar"
@@ -396,6 +421,45 @@ locals {
   migrate_image_uri  = "${aws_ecr_repository.api.repository_url}:migrate-${var.image_tag}"
   prod_listener_arns = var.certificate_arn != "" ? [aws_lb_listener.https[0].arn] : [aws_lb_listener.http.arn]
 
+  # Nova Sonic sidecar image URI (only computed when enabled)
+  nova_sonic_sidecar_image_uri = var.enable_nova_sonic_sidecar ? (
+    var.nova_sonic_sidecar_image_uri != "" ? var.nova_sonic_sidecar_image_uri : "${aws_ecr_repository.nova_sonic_sidecar[0].repository_url}:${var.image_tag}"
+  ) : ""
+
+  # Nova Sonic sidecar container definition (only when enabled)
+  nova_sonic_sidecar_container = var.enable_nova_sonic_sidecar ? [{
+    name      = "nova-sonic-sidecar"
+    image     = local.nova_sonic_sidecar_image_uri
+    essential = false
+    portMappings = [
+      {
+        containerPort = var.nova_sonic_sidecar_port
+        hostPort      = var.nova_sonic_sidecar_port
+        protocol      = "tcp"
+      }
+    ]
+    environment = [
+      { name = "PORT", value = tostring(var.nova_sonic_sidecar_port) },
+      { name = "AWS_REGION", value = var.aws_region },
+      { name = "NODE_ENV", value = "production" }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.nova_sonic_sidecar[0].name
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "nova-sonic"
+      }
+    }
+    healthCheck = {
+      command     = ["CMD-SHELL", "wget --spider -q http://localhost:${var.nova_sonic_sidecar_port}/health || exit 1"]
+      interval    = 30
+      timeout     = 10
+      retries     = 3
+      startPeriod = 30
+    }
+  }] : []
+
   # Browser sidecar image URI (only computed when enabled)
   browser_sidecar_image_uri = var.enable_browser_sidecar ? (
     var.browser_sidecar_image_uri != "" ? var.browser_sidecar_image_uri : "${aws_ecr_repository.browser_sidecar[0].repository_url}:${var.image_tag}"
@@ -441,6 +505,8 @@ locals {
     ENV  = var.environment
     }, var.environment_variables, var.enable_browser_sidecar ? {
     BROWSER_SIDECAR_URL = "http://localhost:${var.browser_sidecar_port}"
+    } : {}, var.enable_nova_sonic_sidecar ? {
+    NOVA_SONIC_SIDECAR_URL = "ws://localhost:${var.nova_sonic_sidecar_port}/ws/nova-sonic"
   } : {})
 
   env_list = [
@@ -470,8 +536,8 @@ resource "aws_ecs_task_definition" "api" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   # Increase CPU/memory when browser sidecar is enabled
-  cpu                = var.enable_browser_sidecar ? var.task_cpu + var.browser_sidecar_cpu : var.task_cpu
-  memory             = var.enable_browser_sidecar ? var.task_memory + var.browser_sidecar_memory : var.task_memory
+  cpu                = var.task_cpu + (var.enable_browser_sidecar ? var.browser_sidecar_cpu : 0) + (var.enable_nova_sonic_sidecar ? var.nova_sonic_sidecar_cpu : 0)
+  memory             = var.task_memory + (var.enable_browser_sidecar ? var.browser_sidecar_memory : 0) + (var.enable_nova_sonic_sidecar ? var.nova_sonic_sidecar_memory : 0)
   execution_role_arn = aws_iam_role.execution.arn
   task_role_arn      = aws_iam_role.task.arn
 
@@ -498,7 +564,7 @@ resource "aws_ecs_task_definition" "api" {
         }
       }
     }
-  ], local.browser_sidecar_container))
+  ], local.browser_sidecar_container, local.nova_sonic_sidecar_container))
 
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-taskdef"

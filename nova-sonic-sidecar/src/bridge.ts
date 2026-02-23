@@ -98,9 +98,27 @@ export class CallSession {
       return;
     }
 
+    // Normalize tools from Go format ({name, description, inputSchema}) to
+    // Bedrock format ({toolSpec: {name, description, inputSchema: {json}}})
+    let tools: ToolSpec[] = DEFAULT_TOOLS;
+    if (msg.config.tools && msg.config.tools.length > 0) {
+      tools = msg.config.tools.map((t: any) => {
+        // Already in Bedrock format?
+        if (t.toolSpec) return t as ToolSpec;
+        // Go ToolDefinition format — wrap it
+        return {
+          toolSpec: {
+            name: t.name,
+            description: t.description,
+            inputSchema: { json: typeof t.inputSchema === "string" ? JSON.parse(t.inputSchema) : t.inputSchema },
+          },
+        } as ToolSpec;
+      });
+    }
+
     const config: NovaSonicConfig = {
       systemPrompt: msg.config.systemPrompt,
-      tools: msg.config.tools || DEFAULT_TOOLS,
+      tools,
       voice: msg.config.voice || "tiffany",
       inputSampleRate: 8000,
       outputSampleRate: 8000,

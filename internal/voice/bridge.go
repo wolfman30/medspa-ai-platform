@@ -6,28 +6,27 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Bridge connects a Telnyx WebSocket media stream to a Nova Sonic session.
-// One Bridge per active phone call.
+// Bridge connects a Telnyx WebSocket media stream to Nova Sonic via the
+// Node.js sidecar. One Bridge per active phone call.
 // ──────────────────────────────────────────────────────────────────────────────
 
 // BridgeConfig holds configuration for creating a bridge.
 type BridgeConfig struct {
-	AWSConfig    aws.Config
+	SidecarURL   string // e.g. "ws://localhost:3002/ws/nova-sonic"
 	SystemPrompt string
 	Voice        string
 	OrgID        string
 	CallerPhone  string // E.164
+	Tools        []ToolDefinition
 }
 
 // Bridge manages the bidirectional audio flow between Telnyx and Nova Sonic.
 type Bridge struct {
 	logger      *slog.Logger
-	novaSonic   *NovaSonicSession
+	sidecar     *SidecarClient
 	toolHandler *ToolHandler
 
 	// telnyxOutput is the channel for audio going back to Telnyx
@@ -41,13 +40,10 @@ type Bridge struct {
 	mu       sync.Mutex
 	closed   bool
 	cancelFn context.CancelFunc
-
-	// Session renewal
-	sessionCount int
-	started      time.Time
+	started  time.Time
 }
 
-// NewBridge creates a bridge for a single call.
+// NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
 func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, mediaFormat TelnyxMediaFormat, logger *slog.Logger) (*Bridge, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -63,32 +59,33 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 		mediaFormat:   mediaFormat,
 		telnyxOutput:  make(chan []byte, 128),
 		cancelFn:      cancel,
-		sessionCount:  1,
 		started:       time.Now(),
 	}
 
 	// Create tool handler
 	b.toolHandler = NewToolHandler(cfg.OrgID, cfg.CallerPhone, logger)
 
-	// Create Nova Sonic session
-	novaSonicCfg := NovaSonicConfig{
-		SystemPrompt:     cfg.SystemPrompt,
-		Voice:            cfg.Voice,
-		InputSampleRate:  mediaFormat.SampleRate,
-		OutputSampleRate: mediaFormat.SampleRate,
-		Tools:            DefaultTools(),
-	}
-
-	b.novaSonic = NewNovaSonicSession(cfg.AWSConfig, novaSonicCfg, logger)
-
-	// Start the Nova Sonic session
-	if err := b.novaSonic.Start(ctx); err != nil {
+	// Connect to Nova Sonic sidecar
+	sidecar, err := DialSidecar(SidecarConfig{URL: cfg.SidecarURL}, logger)
+	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("start nova sonic: %w", err)
+		return nil, fmt.Errorf("connect to nova sonic sidecar: %w", err)
+	}
+	b.sidecar = sidecar
+
+	// Initialize the Nova Sonic session via the sidecar
+	tools := cfg.Tools
+	if tools == nil {
+		tools = DefaultTools()
+	}
+	if err := sidecar.Init(cfg.SystemPrompt, tools, cfg.Voice, cfg.OrgID, cfg.CallerPhone); err != nil {
+		cancel()
+		sidecar.Close()
+		return nil, fmt.Errorf("init nova sonic session: %w", err)
 	}
 
-	// Start goroutine to process Nova Sonic output events
-	go b.processNovaSonicOutput(ctx)
+	// Start goroutine to process sidecar output events
+	go b.processSidecarOutput(ctx)
 
 	logger.Info("bridge: created",
 		"call_control_id", callControlID,
@@ -96,13 +93,13 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 		"caller", cfg.CallerPhone,
 		"encoding", mediaFormat.Encoding,
 		"sample_rate", mediaFormat.SampleRate,
+		"sidecar_url", cfg.SidecarURL,
 	)
 
 	return b, nil
 }
 
-// SendAudioToNovaSonic forwards audio from Telnyx to Nova Sonic.
-// Handles audio format conversion if needed.
+// SendAudioToNovaSonic forwards audio from Telnyx to Nova Sonic via the sidecar.
 func (b *Bridge) SendAudioToNovaSonic(audio []byte) error {
 	b.mu.Lock()
 	if b.closed {
@@ -111,13 +108,13 @@ func (b *Bridge) SendAudioToNovaSonic(audio []byte) error {
 	}
 	b.mu.Unlock()
 
-	// Convert audio format if needed
+	// Convert audio format if needed (Telnyx mulaw → LPCM)
 	converted, err := b.convertInputAudio(audio)
 	if err != nil {
 		return fmt.Errorf("convert audio: %w", err)
 	}
 
-	return b.novaSonic.SendAudio(converted)
+	return b.sidecar.SendAudio(converted)
 }
 
 // ReadAudioForTelnyx returns the next audio chunk to send to Telnyx.
@@ -138,24 +135,23 @@ func (b *Bridge) Close() {
 	b.closed = true
 
 	b.cancelFn()
-	b.novaSonic.Close()
+	b.sidecar.Close()
 	close(b.telnyxOutput)
 
 	b.logger.Info("bridge: closed",
 		"call_control_id", b.callControlID,
 		"duration", time.Since(b.started).String(),
-		"sessions", b.sessionCount,
 	)
 }
 
-// processNovaSonicOutput reads events from Nova Sonic and routes them.
-func (b *Bridge) processNovaSonicOutput(ctx context.Context) {
+// processSidecarOutput reads events from the sidecar and routes them.
+func (b *Bridge) processSidecarOutput(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case event, ok := <-b.novaSonic.OutputEvents:
+		case event, ok := <-b.sidecar.OutputEvents:
 			if !ok {
 				return
 			}
@@ -178,19 +174,14 @@ func (b *Bridge) processNovaSonicOutput(ctx context.Context) {
 				if event.ToolCall == nil {
 					continue
 				}
-				// Execute tool and send result back to Nova Sonic
+				// Execute tool and send result back via sidecar
 				result := b.toolHandler.Handle(ctx, *event.ToolCall)
-				if err := b.novaSonic.SendToolResult(result); err != nil {
+				if err := b.sidecar.SendToolResult(result.ToolUseID, result.Content); err != nil {
 					b.logger.Error("bridge: send tool result", "error", err)
 				}
 
 			case "text":
 				b.logger.Info("bridge: transcript", "text", event.Text)
-
-			case "session_end":
-				if event.Text == "renewal_needed" {
-					b.handleSessionRenewal(ctx)
-				}
 
 			case "error":
 				b.logger.Error("bridge: nova sonic error", "error", event.Text)
@@ -199,74 +190,22 @@ func (b *Bridge) processNovaSonicOutput(ctx context.Context) {
 	}
 }
 
-// handleSessionRenewal creates a new Nova Sonic session to handle the
-// 8-minute connection limit. The old session is closed and a new one
-// is started seamlessly.
-func (b *Bridge) handleSessionRenewal(ctx context.Context) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.closed {
-		return
-	}
-
-	b.logger.Info("bridge: renewing nova sonic session",
-		"session_number", b.sessionCount,
-		"elapsed", time.Since(b.started).String(),
-	)
-
-	// Close old session
-	b.novaSonic.Close()
-
-	// Create new session with same config
-	newCfg := NovaSonicConfig{
-		SystemPrompt:     b.novaSonic.cfg.SystemPrompt,
-		Voice:            b.novaSonic.cfg.Voice,
-		InputSampleRate:  b.novaSonic.cfg.InputSampleRate,
-		OutputSampleRate: b.novaSonic.cfg.OutputSampleRate,
-		Tools:            b.novaSonic.cfg.Tools,
-	}
-
-	b.novaSonic = NewNovaSonicSession(aws.Config{}, newCfg, b.logger)
-	b.sessionCount++
-
-	if err := b.novaSonic.Start(ctx); err != nil {
-		b.logger.Error("bridge: session renewal failed", "error", err)
-		return
-	}
-
-	// Restart the output processor for the new session
-	go b.processNovaSonicOutput(ctx)
-
-	b.logger.Info("bridge: session renewed successfully",
-		"session_number", b.sessionCount,
-	)
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Audio format conversion
 // ──────────────────────────────────────────────────────────────────────────────
 
-// convertInputAudio converts Telnyx audio to Nova Sonic format.
-// Telnyx can send mulaw or linear16; Nova Sonic wants LPCM.
 func (b *Bridge) convertInputAudio(audio []byte) ([]byte, error) {
 	switch b.mediaFormat.Encoding {
 	case "audio/x-l16", "audio/x-linear16", "audio/lpcm":
-		// Already LPCM — pass through
 		return audio, nil
 	case "audio/x-mulaw":
-		// Convert mu-law to 16-bit linear PCM
 		return mulawToLinear16(audio), nil
 	default:
-		// Unknown format — pass through and hope for the best
-		b.logger.Warn("bridge: unknown input encoding, passing through",
-			"encoding", b.mediaFormat.Encoding,
-		)
+		b.logger.Warn("bridge: unknown input encoding, passing through", "encoding", b.mediaFormat.Encoding)
 		return audio, nil
 	}
 }
 
-// convertOutputAudio converts Nova Sonic audio to Telnyx format.
 func (b *Bridge) convertOutputAudio(audio []byte) ([]byte, error) {
 	switch b.mediaFormat.Encoding {
 	case "audio/x-l16", "audio/x-linear16", "audio/lpcm":
@@ -282,7 +221,6 @@ func (b *Bridge) convertOutputAudio(audio []byte) ([]byte, error) {
 // Mu-law ↔ Linear16 conversion (ITU-T G.711)
 // ──────────────────────────────────────────────────────────────────────────────
 
-// mulawToLinear16 converts mu-law encoded bytes to 16-bit signed LE PCM.
 func mulawToLinear16(mulaw []byte) []byte {
 	linear := make([]byte, len(mulaw)*2)
 	for i, b := range mulaw {
@@ -293,7 +231,6 @@ func mulawToLinear16(mulaw []byte) []byte {
 	return linear
 }
 
-// linear16ToMulaw converts 16-bit signed LE PCM to mu-law.
 func linear16ToMulaw(linear []byte) []byte {
 	n := len(linear) / 2
 	mulaw := make([]byte, n)
@@ -304,7 +241,6 @@ func linear16ToMulaw(linear []byte) []byte {
 	return mulaw
 }
 
-// linearToMulawSample encodes a single 16-bit sample as mu-law.
 func linearToMulawSample(sample int16) byte {
 	const (
 		mulawMax  = 0x1FFF
@@ -335,7 +271,6 @@ func linearToMulawSample(sample int16) byte {
 	return encoded
 }
 
-// mulawDecodeTable is the standard mu-law to linear PCM decode table.
 var mulawDecodeTable = [256]int16{
 	-32124, -31100, -30076, -29052, -28028, -27004, -25980, -24956,
 	-23932, -22908, -21884, -20860, -19836, -18812, -17788, -16764,

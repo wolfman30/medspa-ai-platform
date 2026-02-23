@@ -1,0 +1,25 @@
+version: "3.8"
+
+# Local dev compose for testing Nova Sonic voice AI.
+# Usage: docker compose -f docker-compose.voice.yml up
+#
+# Requires AWS credentials in environment:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+
+services:
+  nova-sonic-sidecar:
+    build:
+      context: ./nova-sonic-sidecar
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

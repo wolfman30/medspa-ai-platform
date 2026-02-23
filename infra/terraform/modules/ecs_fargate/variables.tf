@@ -214,3 +214,34 @@ variable "browser_sidecar_memory" {
   type        = number
   default     = 2048
 }
+
+# Nova Sonic voice AI sidecar
+variable "enable_nova_sonic_sidecar" {
+  description = "Enable the Nova Sonic voice AI sidecar for bidirectional speech-to-speech"
+  type        = bool
+  default     = false
+}
+
+variable "nova_sonic_sidecar_image_uri" {
+  description = "Full container image URI for the Nova Sonic sidecar"
+  type        = string
+  default     = ""
+}
+
+variable "nova_sonic_sidecar_port" {
+  description = "Port the Nova Sonic sidecar listens on"
+  type        = number
+  default     = 3002
+}
+
+variable "nova_sonic_sidecar_cpu" {
+  description = "CPU units for the Nova Sonic sidecar"
+  type        = number
+  default     = 256
+}
+
+variable "nova_sonic_sidecar_memory" {
+  description = "Memory (MiB) for the Nova Sonic sidecar"
+  type        = number
+  default     = 512
+}

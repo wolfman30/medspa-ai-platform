@@ -486,7 +486,7 @@ export class NovaSonicClient {
         } catch {
           input = { raw: toolBuf.input };
         }
-        const toolCallId = data?.toolResultInputConfiguration?.toolUseId || contentName;
+        const toolCallId = data?.toolUseConfiguration?.toolUseId || data?.toolResultInputConfiguration?.toolUseId || contentName;
         this.callbacks.onToolCall(toolCallId, toolBuf.toolName, input);
       }
       this.toolUseBuffers.delete(contentName);

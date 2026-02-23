@@ -154,6 +154,10 @@ type Config struct {
 	TelnyxVoiceAIAssistantID string // Telnyx AI Assistant ID for outbound voice calls
 	TelnyxVoiceTexmlAppID    string // TeXML Application ID for voice channel
 
+	// Nova Sonic Voice AI (bidirectional streaming via sidecar)
+	NovaSonicSidecarURL string // WebSocket URL for Node.js sidecar, e.g. "ws://localhost:3002/ws/nova-sonic"
+	NovaSonicVoice      string // Nova Sonic voice ID (tiffany, matthew, amy)
+
 	// Instagram DM Channel Configuration
 	InstagramPageAccessToken string // Meta Page Access Token for sending messages
 	InstagramAppSecret       string // Meta App Secret for webhook signature verification
@@ -369,6 +373,10 @@ func Load() *Config {
 		// Telnyx Voice AI (callback flow)
 		TelnyxVoiceAIAssistantID: getEnv("TELNYX_VOICE_AI_ASSISTANT_ID", ""),
 		TelnyxVoiceTexmlAppID:    getEnv("TELNYX_VOICE_TEXML_APP_ID", ""),
+
+		// Nova Sonic Voice AI (bidirectional streaming)
+		NovaSonicSidecarURL: getEnv("NOVA_SONIC_SIDECAR_URL", ""),
+		NovaSonicVoice:      getEnv("NOVA_SONIC_VOICE", "tiffany"),
 
 		// Instagram DM
 		InstagramPageAccessToken: getEnv("INSTAGRAM_PAGE_ACCESS_TOKEN", ""),

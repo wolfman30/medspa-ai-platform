@@ -23,7 +23,8 @@ enable_nat_gateway = false
 assign_public_ip   = true
 
 # No browser sidecar (replaced by Moxie API)
-enable_browser_sidecar = false
+enable_browser_sidecar    = false
+enable_nova_sonic_sidecar = true
 
 # Portal UI
 ui_domain_name     = "portal-dev.aiwolfsolutions.com"

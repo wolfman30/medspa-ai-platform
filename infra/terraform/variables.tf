@@ -185,6 +185,12 @@ variable "enable_browser_sidecar" {
   default     = false
 }
 
+variable "enable_nova_sonic_sidecar" {
+  description = "Enable the Nova Sonic voice AI sidecar for speech-to-speech via Bedrock"
+  type        = bool
+  default     = false
+}
+
 variable "enable_nat_gateway" {
   description = "Create NAT gateway for private subnet internet access. Disable when ECS uses public subnets to save ~$32/mo."
   type        = bool

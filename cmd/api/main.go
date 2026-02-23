@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -48,6 +49,7 @@ import (
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
+	"github.com/wolfman30/medspa-ai-platform/internal/voice"
 	"github.com/wolfman30/medspa-ai-platform/migrations"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 
@@ -330,6 +332,34 @@ func main() {
 		logger.Info("voice AI handler initialized")
 	}
 
+	// Nova Sonic Voice AI WebSocket handler (bidirectional streaming)
+	var voiceWSHandler *voice.TelnyxWSHandler
+	if cfg.NovaSonicSidecarURL != "" {
+		sidecarURL := cfg.NovaSonicSidecarURL
+		novaSonicVoice := cfg.NovaSonicVoice
+		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat) (*voice.Bridge, error) {
+			// Build system prompt for this call
+			systemPrompt := "You are a friendly and professional AI receptionist for a medical spa. " +
+				"Help callers book appointments, answer questions about services, and collect their information. " +
+				"Keep responses brief — 1-2 sentences max. Be warm but efficient. " +
+				"When you have time slots to share, use the send_sms tool to text them instead of reading them aloud. " +
+				"Say 'I'll text you the available times' and use the tool."
+
+			return voice.NewBridge(
+				context.Background(),
+				voice.BridgeConfig{
+					SidecarURL:   sidecarURL,
+					SystemPrompt: systemPrompt,
+					Voice:        novaSonicVoice,
+				},
+				callControlID,
+				mediaFormat,
+				l,
+			)
+		})
+		logger.Info("nova sonic voice WebSocket handler initialized", "sidecar_url", sidecarURL)
+	}
+
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
 	var squareOAuthHandler *payments.OAuthHandler
@@ -528,6 +558,7 @@ func main() {
 		EvidenceS3Bucket:       cfg.S3TrainingBucket,
 		EvidenceS3Region:       cfg.AWSRegion,
 		VoiceAIHandler:         voiceAIHandler,
+		VoiceWSHandler:         voiceWSHandler,
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,

@@ -153,6 +153,7 @@ jobs:
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
             -var="enable_browser_sidecar=false" \
+            -var="enable_nova_sonic_sidecar=false" \
             -var="assign_public_ip=true" \
             -var="enable_nat_gateway=false"
 
@@ -181,6 +182,17 @@ jobs:
         run: |
           docker build --target voice-lambda -t "$IMAGE" .
           docker push "$IMAGE"
+
+      - name: Build & push Nova Sonic sidecar image
+        env:
+          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/medspa-development-nova-sonic-sidecar:${{ steps.image_tag.outputs.tag }}
+        run: |
+          if aws ecr describe-repositories --region "${{ env.AWS_REGION }}" --repository-names "medspa-development-nova-sonic-sidecar" >/dev/null 2>&1; then
+            docker build -t "$IMAGE" nova-sonic-sidecar/
+            docker push "$IMAGE"
+          else
+            echo "Nova Sonic sidecar ECR repo not found; skipping build."
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -219,6 +231,7 @@ jobs:
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
             -var="enable_browser_sidecar=false" \
+            -var="enable_nova_sonic_sidecar=true" \
             -var="assign_public_ip=true" \
             -var="enable_nat_gateway=false"
 
@@ -504,7 +517,8 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=false"
+            -var="enable_browser_sidecar=false" \
+            -var="enable_nova_sonic_sidecar=false"
 
       - name: Login to ECR
         run: |
@@ -568,7 +582,8 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=false"
+            -var="enable_browser_sidecar=false" \
+            -var="enable_nova_sonic_sidecar=false"
 
       - name: Read UI outputs
         id: ui
