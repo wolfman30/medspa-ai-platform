@@ -177,6 +177,14 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		callSessionID = r.URL.Query().Get("call_session_id")
 	}
 
+	// Fallback: if call_session_id is missing or a static placeholder (e.g., "session_001"),
+	// use the X-Telnyx-Call-Control-Id header which is unique per call.
+	if callSessionID == "" || callSessionID == "session_001" {
+		if ccID := r.Header.Get("X-Telnyx-Call-Control-Id"); ccID != "" {
+			callSessionID = ccID
+		}
+	}
+
 	// Get caller/called info from body params or query params.
 	from := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["caller_number"]))
 	to := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["called_number"]))
