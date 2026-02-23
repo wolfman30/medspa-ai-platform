@@ -352,6 +352,35 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
+		// If the conversation engine requested async availability, enqueue it
+		// as a background job so the patient gets time slots via SMS while
+		// still on the voice call.
+		if resp.AsyncAvailability != nil && from != "" {
+			asyncReq := resp.AsyncAvailability
+			asyncReq.From = from
+			asyncReq.To = to
+			h.logger.Info("voice-ai: enqueueing async availability SMS",
+				"conversation_id", convID,
+				"service", asyncReq.ServiceInterest,
+				"patient_phone", from,
+			)
+			// Fire-and-forget: enqueue a message that triggers availability fetch via SMS path.
+			// We create a synthetic SMS conversation so the worker handles it normally.
+			smsConvID := fmt.Sprintf("sms:%s:%s", asyncReq.OrgID, strings.TrimPrefix(from, "+"))
+			asyncJobID := fmt.Sprintf("voice-avail-%s-%d", convID, time.Now().UnixMilli())
+			asyncMsg := conversation.MessageRequest{
+				OrgID:          asyncReq.OrgID,
+				ConversationID: smsConvID,
+				Message:        fmt.Sprintf("I'd like to book %s", asyncReq.ServiceInterest),
+				Channel:        conversation.ChannelSMS,
+				From:           from,
+				To:             to,
+			}
+			if pubErr := h.publisher.EnqueueMessage(ctx, asyncJobID, asyncMsg); pubErr != nil {
+				h.logger.Error("voice-ai: failed to enqueue async availability", "error", pubErr)
+			}
+		}
+
 		h.logger.Info("voice-ai: sending response", "response", responseText, "conversation_id", convID)
 		h.respondJSON(w, map[string]string{"response": responseText})
 		return

@@ -1359,6 +1359,28 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				return provResp, nil
 			}
 
+			// Voice calls: return filler immediately and fetch availability async via SMS.
+			// Time slots are hard to communicate verbally — SMS is the right UX.
+			if isVoiceChannel(req.Channel) {
+				s.logger.Info("voice channel: deferring availability to async SMS",
+					"conversation_id", req.ConversationID,
+					"service", prefs.ServiceInterest,
+				)
+				return &Response{
+					ConversationID: req.ConversationID,
+					Message:        fmt.Sprintf("Let me check what's available for %s. I'll text you the options in just a moment so you can pick the best time.", prefs.ServiceInterest),
+					Timestamp:      time.Now().UTC(),
+					AsyncAvailability: &AsyncAvailabilityRequest{
+						OrgID:           req.OrgID,
+						ConversationID:  req.ConversationID,
+						From:            req.From,
+						To:              req.To,
+						BookingURL:      bookingURL,
+						ServiceInterest: prefs.ServiceInterest,
+					},
+				}, nil
+			}
+
 			// Fetch real-time availability and present time slots.
 			timeSelectionResponse = s.fetchAndPresentAvailability(ctx, &prefs, clinicCfg, bookingURL, req.ConversationID, req.OrgID, req.OnProgress)
 			if timeSelectionResponse != nil && len(timeSelectionResponse.Slots) > 0 {

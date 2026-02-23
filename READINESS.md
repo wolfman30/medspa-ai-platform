@@ -1,25 +1,25 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-22
+Last updated: 2026-02-23 (07:30 UTC)
 
 ## Automated E2E Test Results (Live Dev API)
 
 **30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)** *(last validated run — 40+ commits since)*
 
-### Recent Fixes (Feb 20-22):
-- `4b8d634` fix: smoke test resilience — remove day preference constraint
-- `426fc67` refactor: split worker.go into focused files by concern
-- `c7e3c92` fix: resolve service aliases in price inquiry handler
-- `3ed7cd1` feat: auto-populate service pricing from Moxie sync
-- `75f005d` fix: day abbreviation extraction (Mon, Tues, Wed, Thu, Fri, Sat, Sun)
-- `0efa564` test: add coverage tests for pure functions + refactored helpers
-- `ecd0b47` refactor: extract ProcessMessage into focused helper methods
-- `76e6cce` fix: variant resolution loop and broken clarification question
-- `f8266a3` fix: ON CONFLICT constraint reference for message insert
-- `6e7ac6a` fix: upsert messages to prevent duplicate key failures
-- `e785ad1` feat: GitHub workflow_run webhook with Telegram alerts
-- `98be220` security: AssistantID validation for Voice AI webhook
-- `e39adc9` upgrade: LLM from Claude Haiku 4.5 → Sonnet 4.6
+### Recent Fixes (Feb 22-23):
+- `20f5608` fix: clear stale lead preferences on new voice call
+- `566fbd9` feat: separate voice model for lower latency
+- `50226c3` fix: inject qualification state summary for voice (no re-asking)
+- `13a9f4f` fix: spoken time range "four five pm" parsed as 4-5pm
+- `ae3114a` perf: optimize voice AI for natural conversation speed
+- `4bcfc9b` fix: explain deposit purpose before payment link
+- `1780f43` feat: Voice/SMS channel labels in conversation list
+- `d25d343` fix: admin portal supports voice conversation IDs
+- `b5a626e` refactor: split qualification_extractor.go into focused files
+- `bbdd397` feat: persist voice transcripts to Postgres for admin portal
+- `315f178` fix: use Telnyx call_session_id for stable voice continuity (#31)
+- `4641187` fix: use DefaultProviderID when noPreference returns empty
+- `cdec49a` fix: voice qualification extraction — handle short replies
 
 ### Remaining Issues:
 1. **E2E blocked in sandbox** — ADMIN_JWT_SECRET not available; need manual `make e2e-dev` run
@@ -87,6 +87,7 @@ Last updated: 2026-02-22
 1. **4 E2E failures** — LLM sometimes doesn't recognize "fix my 11s" or "lip flip" as Botox/lip filler
 2. **Ack messages still double SMS costs** — Root cause known (`internal/messaging/ack.go`), not fixed
 3. **Not tested by a real med spa operator yet** — Only Andrew has tested
+4. **Voice AI is NEW and needs operator validation** — Core flow works, edge cases being ironed out
 
 ### What would make it better (not blocking)
 - After-hours greeting logic untested (A3/A4)

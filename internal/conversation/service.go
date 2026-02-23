@@ -125,6 +125,21 @@ type Response struct {
 	DepositIntent         *DepositIntent
 	TimeSelectionResponse *TimeSelectionResponse // Set when presenting time options
 	BookingRequest        *BookingRequest        // Set when Moxie booking should be initiated
+
+	// AsyncAvailability is set when voice calls need availability fetched
+	// asynchronously. The voice handler returns a filler response immediately
+	// and the worker sends time slots via SMS.
+	AsyncAvailability *AsyncAvailabilityRequest
+}
+
+// AsyncAvailabilityRequest holds parameters for background availability fetch + SMS delivery.
+type AsyncAvailabilityRequest struct {
+	OrgID           string
+	ConversationID  string
+	From            string // patient phone
+	To              string // clinic phone
+	BookingURL      string
+	ServiceInterest string
 }
 
 // StubService is a placeholder implementation used until the real engine is ready.
