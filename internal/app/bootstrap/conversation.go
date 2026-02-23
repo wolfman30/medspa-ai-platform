@@ -98,6 +98,16 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	opts = append(opts, conversation.WithMoxieClient(moxieAPIClient))
 	logger.Info("Moxie direct API client enabled for availability queries")
 
+	// Availability pre-fetcher: starts background API calls as soon as
+	// a service is identified, before qualifications are complete.
+	var browserAdapterForPrefetch *conversation.BrowserAdapter
+	if cfg.BrowserSidecarURL != "" {
+		browserAdapterForPrefetch = conversation.NewBrowserAdapter(browser.NewClient(cfg.BrowserSidecarURL, browser.WithLogger(logger)), logger)
+	}
+	prefetcher := conversation.NewAvailabilityPrefetcher(moxieAPIClient, browserAdapterForPrefetch, redisClient, logger)
+	opts = append(opts, conversation.WithAvailabilityPrefetcher(prefetcher))
+	logger.Info("availability pre-fetcher enabled")
+
 	// Wire in leads repository for preference capture
 	if leadsRepo != nil {
 		opts = append(opts, conversation.WithLeadsRepo(leadsRepo))

@@ -179,6 +179,13 @@ func WithVoiceModel(model string) LLMOption {
 	}
 }
 
+// WithAvailabilityPrefetcher enables background availability pre-fetching.
+func WithAvailabilityPrefetcher(p *AvailabilityPrefetcher) LLMOption {
+	return func(s *LLMService) {
+		s.prefetcher = p
+	}
+}
+
 type depositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -206,6 +213,7 @@ type LLMService struct {
 	variantResolver *VariantResolver
 	apiBaseURL      string // Public API base URL for callback URLs
 	events          *EventLogger
+	prefetcher      *AvailabilityPrefetcher
 }
 
 // NewLLMService returns an LLM-backed Service implementation.
@@ -439,6 +447,13 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	// Apply qualification ordering guardrails (same as ProcessMessage).
 	if startCfg != nil && startCfg.UsesMoxieBooking() {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
+
+		// Pre-fetch availability as soon as we know the service — while we're
+		// still collecting name, patient type, etc. By the time qualifications
+		// are done, slots are already cached.
+		if prefs.ServiceInterest != "" && s.prefetcher != nil {
+			s.prefetcher.StartPrefetch(ctx, req.OrgID, startCfg, prefs.ServiceInterest, prefs.ProviderPreference)
+		}
 
 		// Name guardrail: ask for name first if we have service but not name.
 		// Skip if the last assistant message already asked for the name (avoid duplicate asks).
@@ -1180,6 +1195,11 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// Order: name → service → patient type → schedule → provider → email
 	if cfg != nil && cfg.UsesMoxieBooking() {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(cfg))
+
+		// Pre-fetch availability as soon as we know the service.
+		if prefs.ServiceInterest != "" && s.prefetcher != nil {
+			s.prefetcher.StartPrefetch(ctx, req.OrgID, cfg, prefs.ServiceInterest, prefs.ProviderPreference)
+		}
 
 		// Name guardrail: if we have service but no name, ask for name FIRST.
 		// Name is #1 in the qualification checklist.

@@ -121,6 +121,32 @@ func (s *LLMService) fetchAndPresentAvailability(
 		"preferred_times", prefs.PreferredTimes,
 	)
 
+	// Check pre-fetch cache first — availability may have been fetched while
+	// collecting name/patient type/schedule qualifications.
+	if s.prefetcher != nil {
+		if cached := s.prefetcher.GetCached(ctx, orgID, prefs.ServiceInterest, cfg); cached != nil {
+			s.logger.Info("using pre-fetched availability (cache hit)",
+				"conversation_id", conversationID,
+				"service", scraperServiceName,
+				"slots", len(cached.Result.Slots),
+				"age_seconds", int(time.Since(cached.FetchedAt).Seconds()),
+			)
+			// Apply time preference filter to cached results.
+			filtered := filterSlotsByTimePrefs(cached.Result.Slots, &timePrefs)
+			if len(filtered) > 0 {
+				result := &AvailabilityResult{
+					Slots:      filtered,
+					ExactMatch: cached.Result.ExactMatch,
+					Message:    cached.Result.Message,
+				}
+				return s.buildTimeSelectionResponse(ctx, result, prefs, conversationID, orgID, bookingURL)
+			}
+			// Cache had slots but none match time prefs — fall through to fresh fetch.
+			s.logger.Info("pre-fetched slots don't match time preferences, fetching fresh",
+				"conversation_id", conversationID)
+		}
+	}
+
 	// Try Moxie API first (instant, ~1s), fall back to browser scraper (~30-60s)
 	fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
 	var result *AvailabilityResult
@@ -166,33 +192,7 @@ func (s *LLMService) fetchAndPresentAvailability(
 	}
 
 	if len(result.Slots) > 0 {
-		s.events.AvailabilityFetched(ctx, conversationID, orgID, prefs.ServiceInterest, len(result.Slots), 0)
-		state := &TimeSelectionState{
-			PresentedSlots: result.Slots,
-			Service:        prefs.ServiceInterest,
-			BookingURL:     bookingURL,
-			PresentedAt:    time.Now(),
-		}
-		if err := s.history.SaveTimeSelectionState(ctx, conversationID, state); err != nil {
-			s.logger.Error("CRITICAL: failed to save time selection state — patient will not be able to select a slot",
-				"error", err,
-				"conversation_id", conversationID,
-				"slots", len(result.Slots),
-			)
-		} else {
-			s.logger.Info("time selection state saved successfully",
-				"conversation_id", conversationID,
-				"slots", len(state.PresentedSlots),
-				"service", state.Service,
-			)
-		}
-
-		return &TimeSelectionResponse{
-			Slots:      result.Slots,
-			Service:    prefs.ServiceInterest,
-			ExactMatch: result.ExactMatch,
-			SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
-		}
+		return s.buildTimeSelectionResponse(ctx, result, prefs, conversationID, orgID, bookingURL)
 	}
 
 	// No slots found
@@ -202,6 +202,57 @@ func (s *LLMService) fetchAndPresentAvailability(
 		ExactMatch: false,
 		SMSMessage: result.Message,
 	}
+}
+
+// buildTimeSelectionResponse saves time selection state and formats the SMS message.
+func (s *LLMService) buildTimeSelectionResponse(
+	ctx context.Context,
+	result *AvailabilityResult,
+	prefs *leads.SchedulingPreferences,
+	conversationID, orgID, bookingURL string,
+) *TimeSelectionResponse {
+	s.events.AvailabilityFetched(ctx, conversationID, orgID, prefs.ServiceInterest, len(result.Slots), 0)
+	state := &TimeSelectionState{
+		PresentedSlots: result.Slots,
+		Service:        prefs.ServiceInterest,
+		BookingURL:     bookingURL,
+		PresentedAt:    time.Now(),
+	}
+	if err := s.history.SaveTimeSelectionState(ctx, conversationID, state); err != nil {
+		s.logger.Error("CRITICAL: failed to save time selection state",
+			"error", err,
+			"conversation_id", conversationID,
+			"slots", len(result.Slots),
+		)
+	} else {
+		s.logger.Info("time selection state saved",
+			"conversation_id", conversationID,
+			"slots", len(state.PresentedSlots),
+			"service", state.Service,
+		)
+	}
+
+	return &TimeSelectionResponse{
+		Slots:      result.Slots,
+		Service:    prefs.ServiceInterest,
+		ExactMatch: result.ExactMatch,
+		SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
+	}
+}
+
+// filterSlotsByTimePrefs filters pre-fetched slots by patient's time preferences.
+// Returns all slots if no preferences specified.
+func filterSlotsByTimePrefs(slots []PresentedSlot, prefs *TimePreferences) []PresentedSlot {
+	if prefs == nil || (len(prefs.DaysOfWeek) == 0 && prefs.AfterTime == "" && prefs.BeforeTime == "") {
+		return slots
+	}
+	var filtered []PresentedSlot
+	for _, slot := range slots {
+		if matchesTimePreferences(slot.DateTime, *prefs) {
+			filtered = append(filtered, slot)
+		}
+	}
+	return filtered
 }
 
 // handleDepositFlow determines whether a deposit intent should be emitted for the
