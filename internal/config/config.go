@@ -157,6 +157,7 @@ type Config struct {
 	// Nova Sonic Voice AI (bidirectional streaming via sidecar)
 	NovaSonicSidecarURL string // WebSocket URL for Node.js sidecar, e.g. "ws://localhost:3002/ws/nova-sonic"
 	NovaSonicVoice      string // Nova Sonic voice ID (tiffany, matthew, amy)
+	NovaSonicStreamURL  string // Public WSS URL for Telnyx media streaming, e.g. "wss://api-dev.example.com/ws/voice"
 
 	// Instagram DM Channel Configuration
 	InstagramPageAccessToken string // Meta Page Access Token for sending messages
@@ -377,6 +378,7 @@ func Load() *Config {
 		// Nova Sonic Voice AI (bidirectional streaming)
 		NovaSonicSidecarURL: getEnv("NOVA_SONIC_SIDECAR_URL", ""),
 		NovaSonicVoice:      getEnv("NOVA_SONIC_VOICE", "tiffany"),
+		NovaSonicStreamURL:  getEnv("NOVA_SONIC_STREAM_URL", ""),
 
 		// Instagram DM
 		InstagramPageAccessToken: getEnv("INSTAGRAM_PAGE_ACCESS_TOKEN", ""),

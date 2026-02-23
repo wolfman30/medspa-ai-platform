@@ -95,6 +95,9 @@ type Config struct {
 	// Nova Sonic voice WebSocket handler
 	VoiceWSHandler *voice.TelnyxWSHandler
 
+	// Call Control handler (answers calls + starts media streaming)
+	CallControlHandler *handlers.CallControlHandler
+
 	// Web Chat handler
 	WebChatHandler *webchat.Handler
 
@@ -163,6 +166,9 @@ func New(cfg *Config) http.Handler {
 		}
 		if cfg.VoiceAIHandler != nil {
 			public.Post("/webhooks/telnyx/voice-ai", cfg.VoiceAIHandler.HandleVoiceAI)
+		}
+		if cfg.CallControlHandler != nil {
+			public.Post("/webhooks/telnyx/call-control", cfg.CallControlHandler.HandleCallControl)
 		}
 		if cfg.InstagramAdapter != nil {
 			public.Get("/webhooks/instagram", cfg.InstagramAdapter.HandleVerification)

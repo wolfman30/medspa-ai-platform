@@ -360,6 +360,17 @@ func main() {
 		logger.Info("nova sonic voice WebSocket handler initialized", "sidecar_url", sidecarURL)
 	}
 
+	// Call Control handler — answers inbound calls and starts media streaming
+	var callControlHandler *handlers.CallControlHandler
+	if cfg.NovaSonicStreamURL != "" && cfg.TelnyxAPIKey != "" {
+		callControlHandler = handlers.NewCallControlHandler(handlers.CallControlConfig{
+			Logger:       logger,
+			TelnyxAPIKey: cfg.TelnyxAPIKey,
+			StreamURL:    cfg.NovaSonicStreamURL,
+		})
+		logger.Info("call control handler initialized", "stream_url", cfg.NovaSonicStreamURL)
+	}
+
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
 	var squareOAuthHandler *payments.OAuthHandler
@@ -559,6 +570,7 @@ func main() {
 		EvidenceS3Region:       cfg.AWSRegion,
 		VoiceAIHandler:         voiceAIHandler,
 		VoiceWSHandler:         voiceWSHandler,
+		CallControlHandler:     callControlHandler,
 		StructuredKnowledgeHandler: handlers.NewStructuredKnowledgeHandler(
 			conversation.NewStructuredKnowledgeStore(redisClient),
 			clinicStore,
