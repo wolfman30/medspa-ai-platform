@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -207,6 +208,19 @@ func extractTimeRange(text string) (string, string, bool) {
 		startTime := to24Hour(m[1], m[2], startAMPM)
 		endTime := to24Hour(m[4], m[5], endAMPM)
 		return startTime, endTime, true
+	}
+
+	// Pattern: "4 5 pm", "4 5pm" — spoken as "four five pm" meaning 4pm-5pm range
+	spokenRangeRE := regexp.MustCompile(`(\d{1,2})\s+(\d{1,2})\s*(am|pm|a|p)`)
+	if m := spokenRangeRE.FindStringSubmatch(text); len(m) >= 4 {
+		ampm := normalizeAMPM(m[3])
+		start, _ := strconv.Atoi(m[1])
+		end, _ := strconv.Atoi(m[2])
+		if start < end && start >= 1 && end <= 12 {
+			startTime := to24Hour(m[1], "", ampm)
+			endTime := to24Hour(m[2], "", ampm)
+			return startTime, endTime, true
+		}
 	}
 
 	return "", "", false
