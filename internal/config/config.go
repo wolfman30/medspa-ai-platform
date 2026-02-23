@@ -77,6 +77,7 @@ type Config struct {
 	ConversationQueueURL            string
 	ConversationJobsTable           string
 	BedrockModelID                  string
+	BedrockVoiceModelID             string
 	BedrockEmbeddingModelID         string
 
 	// Gemini fallback provider configuration
@@ -293,6 +294,7 @@ func Load() *Config {
 		ConversationQueueURL:            getEnv("CONVERSATION_QUEUE_URL", ""),
 		ConversationJobsTable:           getEnv("CONVERSATION_JOBS_TABLE", "conversation_jobs"),
 		BedrockModelID:                  bedrockModel,
+		BedrockVoiceModelID:             getEnv("BEDROCK_VOICE_MODEL_ID", ""),
 		BedrockEmbeddingModelID:         getEnv("BEDROCK_EMBEDDING_MODEL_ID", ""),
 
 		// Gemini fallback configuration

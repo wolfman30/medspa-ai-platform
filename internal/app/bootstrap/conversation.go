@@ -125,6 +125,11 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		logger.Info("API base URL wired for booking callbacks", "url", cfg.PublicBaseURL)
 	}
 
+	if cfg.BedrockVoiceModelID != "" {
+		opts = append(opts, conversation.WithVoiceModel(cfg.BedrockVoiceModelID))
+		logger.Info("voice model configured", "voice_model", cfg.BedrockVoiceModelID)
+	}
+
 	// Build primary LLM client based on provider configuration
 	var primaryClient conversation.LLMClient
 	var modelID string

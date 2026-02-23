@@ -20,6 +20,10 @@ import (
 	"time"
 )
 
+type contextKey string
+
+const ctxKeyVoiceModel contextKey = "voiceModel"
+
 const (
 	maxHistoryMessages           = 40
 	maxVoiceHistoryMessages      = 20
@@ -168,6 +172,13 @@ func WithAPIBaseURL(url string) LLMOption {
 	}
 }
 
+// WithVoiceModel sets a separate (faster) model for voice conversations.
+func WithVoiceModel(model string) LLMOption {
+	return func(s *LLMService) {
+		s.voiceModel = model
+	}
+}
+
 type depositConfig struct {
 	DefaultAmountCents int32
 	SuccessURL         string
@@ -183,6 +194,7 @@ type LLMService struct {
 	browser         *BrowserAdapter
 	moxieClient     *moxieclient.Client
 	model           string
+	voiceModel      string
 	logger          *logging.Logger
 	history         *historyStore
 	deposit         depositConfig
@@ -239,6 +251,9 @@ func NewLLMService(client LLMClient, redisClient *redis.Client, rag RAGRetriever
 
 // StartConversation opens a new thread, generates the first assistant response, and persists context.
 func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*Response, error) {
+	if isVoiceChannel(req.Channel) && s.voiceModel != "" {
+		ctx = context.WithValue(ctx, ctxKeyVoiceModel, s.voiceModel)
+	}
 	redactedIntro, sawPHI := RedactPHI(req.Intro)
 	medicalKeywords := []string(nil)
 	if !sawPHI {
@@ -594,6 +609,9 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 // ProcessMessage continues an existing conversation with Redis-backed context.
 // If the conversation doesn't exist, it automatically starts a new one.
 func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*Response, error) {
+	if isVoiceChannel(req.Channel) && s.voiceModel != "" {
+		ctx = context.WithValue(ctx, ctxKeyVoiceModel, s.voiceModel)
+	}
 	if strings.TrimSpace(req.ConversationID) == "" {
 		return nil, errors.New("conversation: conversationID required")
 	}
@@ -1548,8 +1566,12 @@ func (s *LLMService) generateResponse(ctx context.Context, history []ChatMessage
 	trimmed := trimHistory(history, maxHistoryMessages)
 	system, messages := splitSystemAndMessages(trimmed)
 
+	model := s.model
+	if m, ok := ctx.Value(ctxKeyVoiceModel).(string); ok && m != "" {
+		model = m
+	}
 	req := LLMRequest{
-		Model:       s.model,
+		Model:       model,
 		System:      system,
 		Messages:    messages,
 		MaxTokens:   450,
