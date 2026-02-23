@@ -162,6 +162,13 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		summary = ""
 	}
 
+	// Get call_session_id — stable across all webhook hits within a single call.
+	// Telnyx AI Assistant can pass this as a body parameter or query parameter.
+	callSessionID := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["call_session_id"]))
+	if callSessionID == "<nil>" || callSessionID == "" {
+		callSessionID = r.URL.Query().Get("call_session_id")
+	}
+
 	// Get caller/called info from body params or query params.
 	from := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["caller_number"]))
 	to := strings.TrimSpace(fmt.Sprintf("%v", toolArgs["called_number"]))
@@ -188,6 +195,7 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		"summary", summary,
 		"from", from,
 		"to", to,
+		"call_session_id", callSessionID,
 	)
 
 	// Look up the clinic by the Telnyx number that received the call.
@@ -210,35 +218,27 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build a stable conversation ID. If we have a phone number, use it.
-	// Otherwise, use Redis to maintain a session: the first webhook hit for
-	// an org creates a session ID with a 15-min TTL; subsequent hits reuse it.
-	// This keeps all turns of a single call in one conversation.
+	// Build a stable conversation ID using the best available identifier:
+	// 1. call_session_id (Telnyx-provided, stable per call, best option)
+	// 2. caller phone number (stable but shared across calls from same number)
+	// 3. Redis-based org session (fallback, shared across concurrent calls to same org)
 	var convID string
-	if from != "" {
+	if callSessionID != "" {
+		// Best: Telnyx call_session_id uniquely identifies this call
+		convID = fmt.Sprintf("voice:%s:%s", orgID, callSessionID)
+	} else if from != "" {
 		convID = fmt.Sprintf("voice:%s:%s", orgID, strings.TrimPrefix(from, "+"))
-		// Check if there's an existing anonymous session to migrate from
-		if h.redis != nil {
-			sessionKey := fmt.Sprintf("voice_session:%s", orgID)
-			oldConvID, err := h.redis.Get(ctx, sessionKey).Result()
-			if err == nil && oldConvID != "" && oldConvID != convID {
-				// Migrate: copy history from anonymous session to phone-based session
-				oldKey := fmt.Sprintf("conversation:%s", oldConvID)
-				if data, err := h.redis.Get(ctx, oldKey).Bytes(); err == nil {
-					newKey := fmt.Sprintf("conversation:%s", convID)
-					h.redis.Set(ctx, newKey, data, 24*time.Hour)
-					h.redis.Del(ctx, oldKey)
-					// Also migrate the active marker
-					oldActive := fmt.Sprintf("voice_active:%s", oldConvID)
-					h.redis.Del(ctx, oldActive)
-					h.logger.Info("voice-ai: migrated anonymous session to phone-based",
-						"old_id", oldConvID, "new_id", convID)
-				}
-			}
-			h.redis.Set(ctx, sessionKey, convID, 15*time.Minute)
-		}
 	} else {
 		convID = h.getOrCreateVoiceSession(ctx, orgID)
+	}
+
+	// If we have a phone number and a call_session_id, also store a mapping
+	// from call_session_id to phone-based ID for later SMS handoff.
+	if callSessionID != "" && from != "" && h.redis != nil {
+		phoneConvID := fmt.Sprintf("voice:%s:%s", orgID, strings.TrimPrefix(from, "+"))
+		if phoneConvID != convID {
+			h.redis.Set(ctx, fmt.Sprintf("voice_phone_map:%s", convID), phoneConvID, 1*time.Hour)
+		}
 	}
 
 	// Detect if this is a genuinely new call vs a continuation.
