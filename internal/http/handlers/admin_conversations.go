@@ -93,13 +93,19 @@ type ConversationMeta struct {
 	Source           string `json:"source"` // "database" or "redis"
 }
 
-// parseConversationID extracts orgID and phone from conversation ID format "sms:{orgID}:{phone}"
+// parseConversationID extracts orgID and phone/session from conversation ID format
+// "sms:{orgID}:{phone}" or "voice:{orgID}:{sessionID}"
 func parseConversationID(conversationID string) (orgID, phone string, ok bool) {
 	parts := strings.Split(conversationID, ":")
-	if len(parts) != 3 || parts[0] != "sms" {
+	if len(parts) < 3 {
 		return "", "", false
 	}
-	return parts[1], parts[2], true
+	prefix := parts[0]
+	if prefix != "sms" && prefix != "voice" {
+		return "", "", false
+	}
+	// Rejoin remaining parts in case session ID contains colons
+	return parts[1], strings.Join(parts[2:], ":"), true
 }
 
 var easternLocation = loadEasternLocation()
@@ -275,7 +281,8 @@ func (h *AdminConversationsHandler) listFromConversationsTable(w http.ResponseWr
 }
 
 func (h *AdminConversationsHandler) listFromConversationJobs(w http.ResponseWriter, r *http.Request, orgID, phone, dateFrom, dateTo string, page, pageSize, offset int) {
-	conversationIDPattern := "sms:" + orgID + ":%"
+	// Match both sms: and voice: conversation IDs for this org
+	conversationIDPattern := "%:" + orgID + ":%"
 
 	query := `
 		SELECT conversation_id,
@@ -402,7 +409,7 @@ func (h *AdminConversationsHandler) GetConversation(w http.ResponseWriter, r *ht
 
 	parsedOrgID, customerPhone, ok := parseConversationID(conversationID)
 	if !ok || parsedOrgID != orgID {
-		jsonError(w, fmt.Sprintf("invalid conversation ID format: %s (expected sms:orgID:phone)", conversationID), http.StatusNotFound)
+		jsonError(w, fmt.Sprintf("invalid conversation ID format: %s (expected sms:orgID:phone or voice:orgID:session)", conversationID), http.StatusNotFound)
 		return
 	}
 
@@ -610,7 +617,7 @@ func (h *AdminConversationsHandler) GetConversationStats(w http.ResponseWriter, 
 		).Scan(&stats.SixMonthCount)
 	} else {
 		// Fallback to conversation_jobs
-		conversationIDPattern := "sms:" + orgID + ":%"
+		conversationIDPattern := "%:" + orgID + ":%"
 
 		h.db.QueryRowContext(r.Context(),
 			`SELECT COUNT(DISTINCT conversation_id) FROM conversation_jobs WHERE conversation_id LIKE $1`,

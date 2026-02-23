@@ -17,11 +17,22 @@ func TestParseConversationID(t *testing.T) {
 	}
 }
 
+func TestParseConversationIDVoice(t *testing.T) {
+	orgID, session, ok := parseConversationID("voice:org-1:session_abc123")
+	if !ok || orgID != "org-1" || session != "session_abc123" {
+		t.Fatalf("expected voice parse to work, got orgID=%q session=%q ok=%v", orgID, session, ok)
+	}
+	// Voice ID with colons in session
+	orgID, session, ok = parseConversationID("voice:org-1:v3:abc:def")
+	if !ok || orgID != "org-1" || session != "v3:abc:def" {
+		t.Fatalf("expected colon session parse, got orgID=%q session=%q ok=%v", orgID, session, ok)
+	}
+}
+
 func TestParseConversationIDInvalid(t *testing.T) {
 	cases := []string{
-		"voice:org-1:15551234567",
+		"email:org-1:15551234567",
 		"sms:org-1",
-		"sms:org-1:1555:extra",
 		"",
 	}
 	for _, input := range cases {
