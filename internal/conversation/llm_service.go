@@ -482,6 +482,32 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		}
 	}
 
+	// Voice: inject state summary so LLM knows what's already collected and doesn't re-ask
+	if isVoiceChannel(req.Channel) && startCfg != nil {
+		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
+		var collected []string
+		if prefs.Name != "" {
+			collected = append(collected, fmt.Sprintf("Name: %s", prefs.Name))
+		}
+		if prefs.ServiceInterest != "" {
+			collected = append(collected, fmt.Sprintf("Service: %s", prefs.ServiceInterest))
+		}
+		if prefs.PatientType != "" {
+			collected = append(collected, fmt.Sprintf("Patient type: %s", prefs.PatientType))
+		}
+		if prefs.PreferredDays != "" || prefs.PreferredTimes != "" {
+			collected = append(collected, fmt.Sprintf("Schedule: %s %s", prefs.PreferredDays, prefs.PreferredTimes))
+		}
+		if len(collected) > 0 {
+			history = append(history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: fmt.Sprintf("[STATE SUMMARY] Already collected from this patient: %s. "+
+					"Do NOT re-ask for any of these. Move to the NEXT missing qualification only.",
+					strings.Join(collected, ", ")),
+			})
+		}
+	}
+
 	reply, err := s.generateResponse(ctx, history)
 	if err != nil {
 		span.RecordError(err)
