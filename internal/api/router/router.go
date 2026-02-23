@@ -18,6 +18,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
+	"github.com/wolfman30/medspa-ai-platform/internal/voice"
 	"github.com/wolfman30/medspa-ai-platform/internal/webchat"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -90,6 +91,9 @@ type Config struct {
 
 	// Instagram DM adapter
 	InstagramAdapter *instagram.Adapter
+
+	// Nova Sonic voice WebSocket handler
+	VoiceWSHandler *voice.TelnyxWSHandler
 
 	// Web Chat handler
 	WebChatHandler *webchat.Handler
@@ -169,6 +173,9 @@ func New(cfg *Config) http.Handler {
 		}
 		if cfg.BookingCallbackHandler != nil {
 			public.Post("/webhooks/booking/callback", cfg.BookingCallbackHandler.Handle)
+		}
+		if cfg.VoiceWSHandler != nil {
+			public.Get("/ws/voice", cfg.VoiceWSHandler.ServeHTTP)
 		}
 		if cfg.WebChatHandler != nil {
 			public.Get("/chat/ws", cfg.WebChatHandler.HandleWebSocket)

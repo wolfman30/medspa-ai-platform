@@ -10,16 +10,20 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.21
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.21
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.47.1
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.49.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.52.4
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.59.1
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.13
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/generative-ai-go v0.20.1
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.10.9
 	github.com/pashagolub/pgxmock/v4 v4.9.0
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.5.0
@@ -51,8 +55,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.11.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.17 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.59.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.39.1 // indirect
@@ -70,7 +72,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
