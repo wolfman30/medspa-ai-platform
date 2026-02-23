@@ -507,6 +507,7 @@ locals {
     BROWSER_SIDECAR_URL = "http://localhost:${var.browser_sidecar_port}"
     } : {}, var.enable_nova_sonic_sidecar ? {
     NOVA_SONIC_SIDECAR_URL = "ws://localhost:${var.nova_sonic_sidecar_port}/ws/nova-sonic"
+    NOVA_SONIC_STREAM_URL  = "wss://api-dev.aiwolfsolutions.com/ws/voice"
   } : {})
 
   env_list = [
