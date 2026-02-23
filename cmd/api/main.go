@@ -323,6 +323,7 @@ func main() {
 			Publisher:   conversationPublisher,
 			Processor:   conversationService,
 			ClinicStore: clinicStore,
+			ConvStore:   conversationStore,
 			Redis:       redisClient,
 			Logger:      logger,
 		})

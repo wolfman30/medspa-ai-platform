@@ -79,11 +79,17 @@ type clinicByNumberLookup interface {
 // VoiceAIHandler handles Telnyx Voice AI webhook events. It acts as a channel
 // adapter: it receives transcribed speech from the Telnyx AI Assistant, feeds
 // it through the shared conversation engine, and returns text for TTS.
+// voiceConversationStore is the interface for persisting voice transcripts to Postgres.
+type voiceConversationStore interface {
+	AppendMessage(ctx context.Context, conversationID string, msg conversation.SMSTranscriptMessage) error
+}
+
 type VoiceAIHandler struct {
 	store       clinicByNumberLookup
 	publisher   conversationPublisher
 	processor   conversation.Service
 	clinicStore *clinic.Store
+	convStore   voiceConversationStore
 	redis       *redis.Client
 	logger      *logging.Logger
 
@@ -97,6 +103,7 @@ type VoiceAIHandlerConfig struct {
 	Publisher   conversationPublisher
 	Processor   conversation.Service
 	ClinicStore *clinic.Store
+	ConvStore   voiceConversationStore
 	Redis       *redis.Client
 	Logger      *logging.Logger
 }
@@ -111,6 +118,7 @@ func NewVoiceAIHandler(cfg VoiceAIHandlerConfig) *VoiceAIHandler {
 		publisher:   cfg.Publisher,
 		processor:   cfg.Processor,
 		clinicStore: cfg.ClinicStore,
+		convStore:   cfg.ConvStore,
 		redis:       cfg.Redis,
 		logger:      cfg.Logger,
 		voicePromptAddition: "Keep responses to 1-2 sentences. " +
@@ -292,6 +300,32 @@ func (h *VoiceAIHandler) HandleVoiceAI(w http.ResponseWriter, r *http.Request) {
 		if responseText == "" {
 			responseText = "I'm sorry, could you repeat that?"
 		}
+
+		// Persist voice transcript to Postgres for admin portal visibility.
+		if h.convStore != nil {
+			now := time.Now()
+			// Save inbound (patient speech-to-text)
+			_ = h.convStore.AppendMessage(ctx, convID, conversation.SMSTranscriptMessage{
+				Role:      "user",
+				From:      from,
+				To:        to,
+				Body:      transcript,
+				Timestamp: now,
+				Status:    "delivered",
+				Metadata:  map[string]string{"channel": "voice", "summary": summary},
+			})
+			// Save outbound (AI response for TTS)
+			_ = h.convStore.AppendMessage(ctx, convID, conversation.SMSTranscriptMessage{
+				Role:      "assistant",
+				From:      to,
+				To:        from,
+				Body:      responseText,
+				Timestamp: now,
+				Status:    "sent",
+				Metadata:  map[string]string{"channel": "voice"},
+			})
+		}
+
 		h.logger.Info("voice-ai: sending response", "response", responseText, "conversation_id", convID)
 		h.respondJSON(w, map[string]string{"response": responseText})
 		return
