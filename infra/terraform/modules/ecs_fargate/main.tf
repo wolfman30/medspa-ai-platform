@@ -536,8 +536,8 @@ resource "aws_ecs_task_definition" "api" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   # Increase CPU/memory when browser sidecar is enabled
-  cpu                = var.task_cpu + (var.enable_browser_sidecar ? var.browser_sidecar_cpu : 0) + (var.enable_nova_sonic_sidecar ? var.nova_sonic_sidecar_cpu : 0)
-  memory             = var.task_memory + (var.enable_browser_sidecar ? var.browser_sidecar_memory : 0) + (var.enable_nova_sonic_sidecar ? var.nova_sonic_sidecar_memory : 0)
+  cpu                = var.enable_browser_sidecar ? var.task_cpu + var.browser_sidecar_cpu : var.task_cpu
+  memory             = var.enable_browser_sidecar ? var.task_memory + var.browser_sidecar_memory : var.task_memory
   execution_role_arn = aws_iam_role.execution.arn
   task_role_arn      = aws_iam_role.task.arn
 
