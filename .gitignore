@@ -93,6 +93,7 @@ browser-sidecar/debug-screenshots/
 
 package-lock.json
 !browser-sidecar/package-lock.json
+!nova-sonic-sidecar/package-lock.json
 CLAUDE.md
 api
 e2e
