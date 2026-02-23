@@ -25,8 +25,23 @@ type TimePreferences struct {
 //   - "Mondays or Thursdays after 4pm" → {DaysOfWeek: [1,4], AfterTime: "16:00"}
 //   - "Weekdays before noon" → {DaysOfWeek: [1,2,3,4,5], BeforeTime: "12:00"}
 //   - "Mornings on Tuesdays and Fridays" → {DaysOfWeek: [2,5], BeforeTime: "12:00"}
+//
+// normalizeNumberWords replaces written-out numbers with digits for time parsing.
+func normalizeNumberWords(text string) string {
+	wordToDigit := map[string]string{
+		"one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+		"six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+		"eleven": "11", "twelve": "12",
+	}
+	for word, digit := range wordToDigit {
+		text = regexp.MustCompile(`\b`+word+`\b`).ReplaceAllString(text, digit)
+	}
+	return text
+}
+
 func ExtractTimePreferences(text string) TimePreferences {
 	text = strings.ToLower(text)
+	text = normalizeNumberWords(text)
 	prefs := TimePreferences{
 		RawText: text,
 	}
