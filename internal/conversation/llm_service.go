@@ -22,6 +22,7 @@ import (
 
 const (
 	maxHistoryMessages           = 40
+	maxVoiceHistoryMessages      = 20
 	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 	medicalAdviceDeflectionReply = "I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 )
@@ -624,6 +625,10 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	)
 
 	history, err := s.history.Load(ctx, req.ConversationID)
+	// Trim voice history more aggressively for lower latency
+	if isVoiceChannel(req.Channel) && len(history) > maxVoiceHistoryMessages {
+		history = trimHistory(history, maxVoiceHistoryMessages)
+	}
 	if err != nil {
 		// If conversation doesn't exist, start a new one
 		if strings.Contains(err.Error(), "unknown conversation") {
