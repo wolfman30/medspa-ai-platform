@@ -126,9 +126,7 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 func (h *CallControlHandler) answerCall(callControlID string) {
 	h.logger.Info("call-control: answering call", "call_control_id", callControlID)
 
-	payload := map[string]interface{}{
-		"client_state": "nova_sonic",
-	}
+	payload := map[string]interface{}{}
 	h.sendCallControlCommand(callControlID, "answer", payload)
 }
 
