@@ -316,13 +316,16 @@ export class NovaSonicClient {
       },
     };
 
+    // NOTE: Tools are disabled for now. When toolConfiguration is present
+    // (any format — string or object schema, with or without toolChoice),
+    // Nova Sonic switches to text-only mode and never emits audioOutput events.
+    // Audio works perfectly without tools. We handle tool-like functionality
+    // (availability, SMS, qualification) via system prompt + post-call extraction.
+    // TODO: Re-enable when AWS fixes Nova Sonic tool + audio coexistence.
     if (this.config.tools.length > 0) {
-      const sanitizedTools = this.sanitizeToolSpecs(this.config.tools);
-      cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
-      cfg.toolConfiguration = { tools: sanitizedTools };
-      this.log("info", "Tools configured", {
-        count: sanitizedTools.length,
-        names: sanitizedTools.map((t) => t.toolSpec.name),
+      this.log("info", "Tools available but DISABLED (Nova Sonic audio incompatibility)", {
+        count: this.config.tools.length,
+        names: this.config.tools.map((t) => t.toolSpec?.name ?? "unknown"),
       });
     }
 
