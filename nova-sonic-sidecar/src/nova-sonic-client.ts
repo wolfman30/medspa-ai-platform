@@ -10,6 +10,7 @@ import {
 import { NodeHttp2Handler } from "@smithy/node-http-handler";
 import {
   fromEnv,
+  fromContainerMetadata,
   fromInstanceMetadata,
   createCredentialChain,
 } from "@aws-sdk/credential-providers";
@@ -83,7 +84,7 @@ export class NovaSonicClient {
 
     this.client = new BedrockRuntimeClient({
       region: process.env.AWS_REGION || "us-east-1",
-      credentials: createCredentialChain(fromEnv(), fromInstanceMetadata()),
+      credentials: createCredentialChain(fromEnv(), fromContainerMetadata(), fromInstanceMetadata()),
       requestHandler: handler,
     });
   }
