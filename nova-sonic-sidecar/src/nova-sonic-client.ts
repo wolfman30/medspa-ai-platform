@@ -257,7 +257,11 @@ export class NovaSonicClient {
           const evt = self.queue.shift()!;
           const jsonStr = JSON.stringify(evt);
           const eventType = Object.keys(evt.event)[0] ?? "unknown";
-          self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length });
+          if (eventType === "promptStart") {
+            self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length, payload: jsonStr.substring(0, 2000) });
+          } else {
+            self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length });
+          }
           yield { chunk: { bytes: encoder.encode(jsonStr) } };
           continue;
         }
