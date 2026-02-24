@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-24T17:00:00Z",
+  "lastUpdated": "2026-02-24T20:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -1117,6 +1117,74 @@
       "notes": "Husband-wife owned. BBB listed. CNI on staff. Community-focused. Youngstown area.",
       "nextAction": "Send outreach email",
       "timeline": []
+    },
+    {
+      "id": "freya-aesthetics",
+      "clinic": "Freya Aesthetics & Wellness",
+      "owner": "David DeMasi",
+      "title": "MSN, APRN, FNP-C \u2014 Owner/Injector",
+      "location": "Johnstown & Zanesville, OH",
+      "phone": "(740) 963-4465",
+      "email": "",
+      "website": "freya-aesthetics.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "PRP",
+        "Chemical Peels",
+        "Microneedling"
+      ],
+      "notes": "Two locations + mobile services. Husband-wife team, founded 2021. Great fit \u2014 misses calls during house calls.",
+      "timeline": [],
+      "nextAction": "Send outreach email"
+    },
+    {
+      "id": "skin-retouch-medispa",
+      "clinic": "Skin Retouch MediSpa",
+      "owner": "Hannah Pellett",
+      "title": "NP \u2014 Lead Provider",
+      "location": "Newark, OH",
+      "phone": "(740) 480-2484",
+      "email": "",
+      "website": "skinretouchmedispa.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "Body Contouring",
+        "Weight Loss",
+        "Facials"
+      ],
+      "notes": "Recently moved to bigger location. 100+ Google reviews. Open 6 days/week. Growing fast.",
+      "timeline": [],
+      "nextAction": "Send outreach email"
+    },
+    {
+      "id": "vital-balance-10",
+      "clinic": "Vital Balance 10",
+      "owner": "Jennifer McClain",
+      "title": "NP \u2014 Owner",
+      "location": "Canton, OH",
+      "phone": "",
+      "email": "",
+      "website": "vitalbalance10.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "RF Microneedling",
+        "HRT",
+        "Weight Loss"
+      ],
+      "notes": "Wellness-heavy, no prominent phone number. Lower priority \u2014 Canton already saturated with prospects.",
+      "timeline": [],
+      "nextAction": "Low priority \u2014 revisit if Canton prospects dry up"
     }
   ]
 }

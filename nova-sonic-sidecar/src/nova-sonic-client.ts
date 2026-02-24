@@ -319,7 +319,7 @@ export class NovaSonicClient {
     if (this.config.tools.length > 0) {
       const sanitizedTools = this.sanitizeToolSpecs(this.config.tools);
       cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
-      cfg.toolConfiguration = { tools: sanitizedTools, toolChoice: { auto: {} } };
+      cfg.toolConfiguration = { tools: sanitizedTools };
       this.log("info", "Tools configured", {
         count: sanitizedTools.length,
         names: sanitizedTools.map((t) => t.toolSpec.name),
@@ -330,10 +330,11 @@ export class NovaSonicClient {
   }
 
   /**
-   * Sanitize tool specs for Nova Sonic. Ensure inputSchema.json is a
-   * proper object (parse if string, pass through if already object).
+   * Sanitize tool specs for Nova Sonic. Per AWS docs, inputSchema.json
+   * MUST be a JSON string (e.g. '{"type":"object",...}'), not a nested object.
+   * See: docs.aws.amazon.com/nova/latest/userguide/input-events.html
    */
-  private sanitizeToolSpecs(tools: ToolSpec[]): ToolSpec[] {
+  private sanitizeToolSpecs(tools: ToolSpec[]): { toolSpec: { name: string; description: string; inputSchema: { json: string } } }[] {
     return tools.map((t) => ({
       toolSpec: {
         name: t.toolSpec.name,
@@ -341,8 +342,8 @@ export class NovaSonicClient {
         inputSchema: {
           json:
             typeof t.toolSpec.inputSchema.json === "string"
-              ? JSON.parse(t.toolSpec.inputSchema.json as unknown as string)
-              : t.toolSpec.inputSchema.json,
+              ? (t.toolSpec.inputSchema.json as unknown as string)
+              : JSON.stringify(t.toolSpec.inputSchema.json),
         },
       },
     }));
