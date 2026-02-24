@@ -393,7 +393,8 @@ resource "aws_iam_role_policy" "bedrock_runtime" {
           "bedrock:Converse",
           "bedrock:ConverseStream",
           "bedrock:InvokeModel",
-          "bedrock:InvokeModelWithResponseStream"
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:InvokeModelWithBidirectionalStream"
         ]
         Resource = [
           # Sonnet 4.6 (primary SMS + Voice LLM)
@@ -409,7 +410,10 @@ resource "aws_iam_role_policy" "bedrock_runtime" {
           "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1",
           "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1:2:8k",
           "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
-          "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0:8k"
+          "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0:8k",
+
+          # Nova Sonic (voice AI - bidirectional streaming)
+          "arn:aws:bedrock:${var.aws_region}::foundation-model/amazon.nova-sonic-v1:0"
         ]
       }
     ]
