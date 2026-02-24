@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -85,26 +84,14 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 		logger.Info("EMR integration enabled")
 	}
 
-	// Configure browser sidecar for booking page scraping (fallback when EMR is not available)
-	if cfg.BrowserSidecarURL != "" {
-		browserClient := browser.NewClient(cfg.BrowserSidecarURL, browser.WithLogger(logger))
-		browserAdapter := conversation.NewBrowserAdapter(browserClient, logger)
-		opts = append(opts, conversation.WithBrowserAdapter(browserAdapter))
-		logger.Info("browser sidecar integration enabled", "url", cfg.BrowserSidecarURL)
-	}
-
-	// Configure direct Moxie GraphQL API client for fast availability queries
+	// Configure direct Moxie GraphQL API client for availability queries
 	moxieAPIClient := moxie.NewClient(logger)
 	opts = append(opts, conversation.WithMoxieClient(moxieAPIClient))
 	logger.Info("Moxie direct API client enabled for availability queries")
 
 	// Availability pre-fetcher: starts background API calls as soon as
 	// a service is identified, before qualifications are complete.
-	var browserAdapterForPrefetch *conversation.BrowserAdapter
-	if cfg.BrowserSidecarURL != "" {
-		browserAdapterForPrefetch = conversation.NewBrowserAdapter(browser.NewClient(cfg.BrowserSidecarURL, browser.WithLogger(logger)), logger)
-	}
-	prefetcher := conversation.NewAvailabilityPrefetcher(moxieAPIClient, browserAdapterForPrefetch, redisClient, logger)
+	prefetcher := conversation.NewAvailabilityPrefetcher(moxieAPIClient, redisClient, logger)
 	opts = append(opts, conversation.WithAvailabilityPrefetcher(prefetcher))
 	logger.Info("availability pre-fetcher enabled")
 

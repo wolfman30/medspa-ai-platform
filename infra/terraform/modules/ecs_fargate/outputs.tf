@@ -53,15 +53,6 @@ output "codedeploy_deployment_group_name" {
   value       = var.enable_blue_green ? aws_codedeploy_deployment_group.api[0].deployment_group_name : ""
 }
 
-output "browser_sidecar_ecr_repository_url" {
-  description = "ECR repository URL for the browser sidecar image (empty if sidecar not enabled)"
-  value       = var.enable_browser_sidecar ? aws_ecr_repository.browser_sidecar[0].repository_url : ""
-}
-
-output "browser_sidecar_enabled" {
-  description = "Whether the browser sidecar is enabled"
-  value       = var.enable_browser_sidecar
-}
 
 output "task_role_name" {
   description = "IAM role name for ECS tasks"

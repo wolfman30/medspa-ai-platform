@@ -34,15 +34,7 @@ func WithEMR(emr *EMRAdapter) LLMOption {
 	}
 }
 
-// WithBrowserAdapter configures a browser adapter for scraping booking page availability.
-// This is used when EMR integration is not available but a booking URL is configured.
-func WithBrowserAdapter(browser *BrowserAdapter) LLMOption {
-	return func(s *LLMService) {
-		s.browser = browser
-	}
-}
-
-// WithMoxieClient configures the direct Moxie GraphQL API client for fast availability queries.
+// WithMoxieClient configures the direct Moxie GraphQL API client for availability queries.
 func WithMoxieClient(client *moxieclient.Client) LLMOption {
 	return func(s *LLMService) {
 		s.moxieClient = client

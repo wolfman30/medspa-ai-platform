@@ -33,7 +33,6 @@ type LLMService struct {
 	client          LLMClient
 	rag             RAGRetriever
 	emr             *EMRAdapter
-	browser         *BrowserAdapter
 	moxieClient     *moxieclient.Client
 	model           string
 	voiceModel      string
@@ -412,8 +411,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	// Check if all qualifications are met on the first message — if so, trigger
 	// time selection immediately instead of requiring a second message.
 	moxieAPIReady := s.moxieClient != nil && startCfg != nil && startCfg.MoxieConfig != nil
-	browserReady := s.browser != nil && s.browser.IsConfigured()
-	if (moxieAPIReady || browserReady) && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
+	if moxieAPIReady && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 
 		// SERVICE VARIANT CHECK — resolve delivery variants (e.g. in-person vs virtual).
@@ -929,8 +927,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 			// Try to re-fetch with the patient's refined request
 			moreTimesHandled := false
-			if (s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil) ||
-				(s.browser != nil && s.browser.IsConfigured()) {
+			if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
 
 				prefs, _ := extractPreferences(history, serviceAliasesFromConfig(cfg))
 				service := timeSelectionState.Service
@@ -957,9 +954,6 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 				if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
 					result, fetchErr = FetchAvailableTimesFromMoxieAPIWithProvider(fetchCtx, s.moxieClient, cfg,
 						scraperServiceName, prefs.ProviderPreference, refinedPrefs, req.OnProgress, service)
-				} else if cfg != nil {
-					result, fetchErr = FetchAvailableTimesWithFallback(fetchCtx, s.browser,
-						cfg.BookingURL, scraperServiceName, refinedPrefs, req.OnProgress, service)
 				}
 				fetchCancel()
 
@@ -1164,10 +1158,9 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	// Check if we should trigger time selection flow
 	// For Moxie: trigger when qualifications are met (no deposit intent needed)
 	// For Square: trigger when deposit intent exists AND qualifications are met
-	browserReady := s.browser != nil && s.browser.IsConfigured()
 	moxieAPIReady := s.moxieClient != nil && clinicCfg != nil && clinicCfg.MoxieConfig != nil
 	qualificationsMet := ShouldFetchAvailabilityWithConfig(history, nil, clinicCfg)
-	shouldTriggerTimeSelection := (browserReady || moxieAPIReady) && timeSelectionState == nil
+	shouldTriggerTimeSelection := moxieAPIReady && timeSelectionState == nil
 	// Don't re-scrape if a slot was already selected (patient is now providing email, etc.)
 	if timeSelectionState != nil && timeSelectionState.SlotSelected {
 		shouldTriggerTimeSelection = false
@@ -1182,7 +1175,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 
 	s.logger.Info("time selection trigger check",
 		"conversation_id", req.ConversationID,
-		"browser_ready", browserReady,
+		"moxie_api_ready", moxieAPIReady,
 		"qualifications_met", qualificationsMet,
 		"time_selection_state_exists", timeSelectionState != nil,
 		"uses_moxie", usesMoxie,

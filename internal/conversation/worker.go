@@ -12,23 +12,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/booking"
-	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
-
-// BrowserBookingClient is the subset of browser.Client used for Moxie booking sessions.
-// Moxie clinics do NOT use Square — the sidecar automates Steps 1-4, then hands off
-// Moxie's Step 5 payment page URL so the patient can enter their card and finalize.
-type BrowserBookingClient interface {
-	StartBookingSession(ctx context.Context, req browser.BookingStartRequest) (*browser.BookingStartResponse, error)
-	GetHandoffURL(ctx context.Context, sessionID string) (*browser.BookingHandoffResponse, error)
-	GetBookingStatus(ctx context.Context, sessionID string) (*browser.BookingStatusResponse, error)
-	CancelBookingSession(ctx context.Context, sessionID string) error
-}
 
 // PaymentNotifier sends notifications when payments are received.
 type PaymentNotifier interface {
@@ -60,7 +49,6 @@ type Worker struct {
 	supervisorMode   SupervisorMode
 	transcript       *SMSTranscriptStore
 	convStore        *ConversationStore
-	browserBooking   BrowserBookingClient
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
@@ -90,7 +78,6 @@ type workerConfig struct {
 	supervisorMode   SupervisorMode
 	transcript       *SMSTranscriptStore
 	convStore        *ConversationStore
-	browserBooking   BrowserBookingClient
 	moxieClient      *moxieclient.Client
 	leadsRepo        leads.Repository
 	manualHandoff    *booking.ManualHandoffAdapter
@@ -248,15 +235,7 @@ func WithClinicConfigStore(store *clinic.Store) WorkerOption {
 	}
 }
 
-// WithBrowserBookingClient wires a browser sidecar client for Moxie booking sessions.
-func WithBrowserBookingClient(client BrowserBookingClient) WorkerOption {
-	return func(cfg *workerConfig) {
-		cfg.browserBooking = client
-	}
-}
-
 // WithWorkerMoxieClient wires a direct Moxie GraphQL API client for booking creation.
-// When set, Moxie clinics will use the API directly instead of browser automation.
 func WithWorkerMoxieClient(client *moxieclient.Client) WorkerOption {
 	return func(cfg *workerConfig) {
 		cfg.moxieClient = client
@@ -349,7 +328,6 @@ func NewWorker(processor Service, queue queueClient, jobs JobUpdater, messenger 
 		supervisorMode:   cfg.supervisorMode,
 		transcript:       cfg.transcript,
 		convStore:        cfg.convStore,
-		browserBooking:   cfg.browserBooking,
 		moxieClient:      cfg.moxieClient,
 		leadsRepo:        cfg.leadsRepo,
 		manualHandoff:    cfg.manualHandoff,
@@ -662,7 +640,7 @@ func (w *Worker) handleMessage(ctx context.Context, msg queueMessage) {
 			// Time selection responses take priority over LLM reply — send only the slots/fallback message
 			if resp != nil && resp.TimeSelectionResponse != nil && resp.TimeSelectionResponse.SMSMessage != "" {
 				w.handleTimeSelectionResponse(ctx, payload.Message, resp)
-			} else if resp != nil && resp.BookingRequest != nil && (w.browserBooking != nil || w.deposits != nil) {
+			} else if resp != nil && resp.BookingRequest != nil && w.deposits != nil {
 				// Booking response: skip LLM reply, go directly to Moxie booking/Stripe checkout
 				w.handleMoxieBooking(ctx, payload.Message, resp.BookingRequest)
 			} else {

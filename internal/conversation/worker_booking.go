@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wolfman30/medspa-ai-platform/internal/browser"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
@@ -56,13 +55,9 @@ func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req
 		}
 	}
 
-	// Fallback: use browser sidecar for Moxie checkout URL handoff
-	if w.browserBooking == nil {
-		w.logger.Warn("booking request received but no booking client configured",
-			"org_id", req.OrgID, "lead_id", req.LeadID)
-		return
-	}
-	w.handleMoxieBookingSidecar(ctx, msg, req)
+	w.logger.Warn("booking request received but no payment provider configured",
+		"org_id", req.OrgID, "lead_id", req.LeadID)
+	w.sendBookingFallbackSMS(ctx, msg, "We're having trouble processing your booking right now. Please call the clinic directly to complete your appointment.")
 }
 
 // handleMoxieBookingDirect creates a Moxie appointment via their GraphQL API.
@@ -230,131 +225,6 @@ func (w *Worker) parseMoxieTimeSlot(date, timeStr, timezone string) (string, str
 
 	return start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339), nil
 }
-
-func (w *Worker) handleMoxieBookingSidecar(ctx context.Context, msg MessageRequest, req *BookingRequest) {
-	if w.browserBooking == nil {
-		w.logger.Warn("booking request received but no browser booking client configured",
-			"org_id", req.OrgID, "lead_id", req.LeadID)
-		return
-	}
-
-	// Step 1: Start the booking session on the sidecar
-	startReq := browser.BookingStartRequest{
-		BookingURL: req.BookingURL,
-		Date:       req.Date,
-		Time:       req.Time,
-		Lead: browser.BookingLeadInfo{
-			FirstName: req.FirstName,
-			LastName:  req.LastName,
-			Phone:     req.Phone,
-			Email:     req.Email,
-		},
-		Service:     req.Service,
-		Provider:    req.Provider,
-		CallbackURL: req.CallbackURL,
-	}
-
-	startResp, err := w.browserBooking.StartBookingSession(ctx, startReq)
-	if err != nil {
-		w.logger.Error("failed to start Moxie booking session", "error", err,
-			"org_id", req.OrgID, "lead_id", req.LeadID, "booking_url", req.BookingURL)
-		w.sendBookingFallbackSMS(ctx, msg, "We're having trouble starting your booking right now. Please try again in a moment or call the clinic directly.")
-		return
-	}
-	if !startResp.Success {
-		w.logger.Error("Moxie booking session start failed", "error", startResp.Error,
-			"org_id", req.OrgID, "lead_id", req.LeadID)
-		w.sendBookingFallbackSMS(ctx, msg, "We're having trouble starting your booking right now. Please try again in a moment or call the clinic directly.")
-		return
-	}
-
-	sessionID := startResp.SessionID
-	w.logger.Info("Moxie booking session started", "session_id", sessionID,
-		"org_id", req.OrgID, "lead_id", req.LeadID)
-
-	// Step 2: Update lead with session ID
-	if w.leadsRepo != nil && req.LeadID != "" {
-		if err := w.leadsRepo.UpdateBookingSession(ctx, req.LeadID, leads.BookingSessionUpdate{
-			SessionID: sessionID,
-			Platform:  "moxie",
-		}); err != nil {
-			w.logger.Warn("failed to update lead with booking session", "error", err,
-				"lead_id", req.LeadID, "session_id", sessionID)
-		}
-	}
-
-	// Step 3: Poll for handoff URL (every 2s, up to 90s)
-	var handoffURL string
-	pollCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-pollCtx.Done():
-			w.logger.Warn("Moxie booking handoff URL timed out", "session_id", sessionID,
-				"org_id", req.OrgID, "lead_id", req.LeadID)
-			_ = w.browserBooking.CancelBookingSession(ctx, sessionID)
-			w.sendBookingFallbackSMS(ctx, msg, "We're having trouble completing your booking right now. Please try again in a moment or call the clinic directly.")
-			return
-		case <-ticker.C:
-			resp, err := w.browserBooking.GetHandoffURL(pollCtx, sessionID)
-			if err != nil {
-				w.logger.Debug("handoff URL poll error", "error", err, "session_id", sessionID)
-				continue
-			}
-			if resp.Success && resp.HandoffURL != "" {
-				handoffURL = resp.HandoffURL
-				goto gotHandoff
-			}
-		}
-	}
-
-gotHandoff:
-	w.logger.Info("Moxie booking handoff URL received", "session_id", sessionID,
-		"handoff_url", handoffURL[:min(50, len(handoffURL))], "org_id", req.OrgID)
-
-	handoffMsg := fmt.Sprintf("Your booking is almost complete! Tap the link below to enter your payment info and finalize your appointment:\n%s", handoffURL)
-	if w.messenger != nil {
-		reply := OutboundReply{
-			OrgID:          msg.OrgID,
-			LeadID:         msg.LeadID,
-			ConversationID: msg.ConversationID,
-			To:             msg.From,
-			From:           msg.To,
-			Body:           handoffMsg,
-		}
-		if err := w.messenger.SendReply(ctx, reply); err != nil {
-			w.logger.Error("failed to send booking handoff SMS", "error", err,
-				"session_id", sessionID, "org_id", req.OrgID)
-		}
-	}
-
-	// Update lead with handoff URL
-	if w.leadsRepo != nil && req.LeadID != "" {
-		now := time.Now()
-		if err := w.leadsRepo.UpdateBookingSession(ctx, req.LeadID, leads.BookingSessionUpdate{
-			HandoffURL:    handoffURL,
-			HandoffSentAt: &now,
-		}); err != nil {
-			w.logger.Warn("failed to update lead with handoff URL", "error", err,
-				"lead_id", req.LeadID, "session_id", sessionID)
-		}
-	}
-
-	// Record to transcript
-	w.appendTranscript(ctx, msg.ConversationID, SMSTranscriptMessage{
-		Role:      "assistant",
-		From:      msg.To,
-		To:        msg.From,
-		Body:      handoffMsg,
-		Timestamp: time.Now(),
-		Kind:      "booking_handoff",
-	})
-}
-
 func (w *Worker) shouldUseManualHandoff(ctx context.Context, orgID string) bool {
 	if w.manualHandoff == nil {
 		return false

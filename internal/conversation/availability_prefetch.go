@@ -21,7 +21,6 @@ const prefetchTTL = 5 * time.Minute
 // cached in Redis and consumed by fetchAndPresentAvailability when ready.
 type AvailabilityPrefetcher struct {
 	moxieClient *moxieclient.Client
-	browser     *BrowserAdapter
 	redis       *redis.Client
 	logger      *logging.Logger
 
@@ -33,13 +32,11 @@ type AvailabilityPrefetcher struct {
 // NewAvailabilityPrefetcher creates a new prefetcher.
 func NewAvailabilityPrefetcher(
 	moxieClient *moxieclient.Client,
-	browser *BrowserAdapter,
 	rdb *redis.Client,
 	logger *logging.Logger,
 ) *AvailabilityPrefetcher {
 	return &AvailabilityPrefetcher{
 		moxieClient: moxieClient,
-		browser:     browser,
 		redis:       rdb,
 		logger:      logger,
 		inflight:    make(map[string]bool),
@@ -70,7 +67,7 @@ func (p *AvailabilityPrefetcher) StartPrefetch(
 	if cfg == nil || !cfg.UsesMoxieBooking() || cfg.BookingURL == "" {
 		return
 	}
-	if p.moxieClient == nil && (p.browser == nil || !p.browser.IsConfigured()) {
+	if p.moxieClient == nil {
 		return
 	}
 	if p.redis == nil {
@@ -113,11 +110,6 @@ func (p *AvailabilityPrefetcher) StartPrefetch(
 			result, err = FetchAvailableTimesFromMoxieAPIWithProvider(
 				fetchCtx, p.moxieClient, cfg, resolvedService,
 				providerPreference, timePrefs, nil, serviceInterest,
-			)
-		} else if p.browser != nil && p.browser.IsConfigured() {
-			result, err = FetchAvailableTimesWithFallback(
-				fetchCtx, p.browser, cfg.BookingURL, resolvedService,
-				timePrefs, nil, serviceInterest,
 			)
 		}
 

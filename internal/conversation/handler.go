@@ -578,11 +578,11 @@ func (h *Handler) GetSMSTranscript(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// BookingCallbackHandler — receives POST from browser sidecar when booking
-// outcome is detected (success, payment failure, timeout, etc.)
+// BookingCallbackHandler — receives POST when booking outcome is detected
+// (success, payment failure, timeout, etc.)
 // ---------------------------------------------------------------------------
 
-// BookingCallbackHandler handles callbacks from the browser sidecar about booking outcomes.
+// BookingCallbackHandler handles callbacks about booking outcomes.
 type BookingCallbackHandler struct {
 	leadsRepo leads.Repository
 	messenger ReplyMessenger
@@ -601,7 +601,7 @@ func NewBookingCallbackHandler(repo leads.Repository, messenger ReplyMessenger, 
 	}
 }
 
-// bookingCallbackPayload is the JSON body POSTed by the browser sidecar.
+// bookingCallbackPayload is the JSON body POSTed by the booking callback.
 type bookingCallbackPayload struct {
 	SessionID           string                       `json:"sessionId"`
 	State               string                       `json:"state"`

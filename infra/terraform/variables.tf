@@ -179,12 +179,6 @@ variable "cognito_region" {
   default     = ""
 }
 
-variable "enable_browser_sidecar" {
-  description = "Enable the browser sidecar container for booking availability scraping (Moxie integration)"
-  type        = bool
-  default     = false
-}
-
 variable "enable_nova_sonic_sidecar" {
   description = "Enable the Nova Sonic voice AI sidecar for speech-to-speech via Bedrock"
   type        = bool

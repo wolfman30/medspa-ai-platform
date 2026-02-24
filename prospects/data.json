@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-21T03:00:00Z",
+  "lastUpdated": "2026-02-24T14:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -711,6 +711,343 @@
       "timeline": [],
       "nextAction": "Find phone/email, then send outreach",
       "notes": "Solo practitioner, newer practice. Uses Aesthetic Record EMR. No prominent phone number. Dayton market. Lower priority but good long-term fit."
+    },
+    {
+      "id": "blurred-lines-beauty",
+      "clinic": "Blurred Lines Beauty LLC",
+      "owner": "Staci Martin",
+      "title": "Nurse / Owner",
+      "location": "Canton, OH",
+      "phone": "(330) 271-8100",
+      "email": "",
+      "website": "blurredlinesbeautycanton.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Xeomin",
+        "Dysport",
+        "Jeuveau",
+        "Fillers",
+        "PRP/PRF"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-23T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Independent practice, Canton area."
+        }
+      ],
+      "nextAction": "Send outreach email",
+      "notes": "Small independent practice. Emphasis on natural results. Board-certified physician + nurse practitioner."
+    },
+    {
+      "id": "fab-medical-aesthetics",
+      "clinic": "FAB Medical Aesthetics",
+      "owner": "Nicole Ports",
+      "title": "Licensed Advanced Esthetician / Founder",
+      "location": "Medina, OH",
+      "phone": "(330) 590-5511",
+      "email": "nicole.ports@fabmedicalaesthetics.com",
+      "website": "fabmedicalaesthetics.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Neurotoxins",
+        "Fillers",
+        "HydraFacial",
+        "Microneedling",
+        "Weight Loss",
+        "Sculptra",
+        "Kybella"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-23T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Solo practice in Medina, near Brunswick. Only open Wed-Sat."
+        }
+      ],
+      "nextAction": "Send outreach email \u2014 high priority (local, clear missed-call pain point)",
+      "notes": "Solo practice, 22yr nursing vet, limited hours (Wed-Sat) = high missed call potential. Near Andrew in Brunswick. Has direct email."
+    },
+    {
+      "id": "opmc-med-spa",
+      "clinic": "OPMC Med Spa",
+      "owner": "Unknown",
+      "title": "",
+      "location": "North Canton, OH",
+      "phone": "(330) 526-6070",
+      "email": "opmc2017@gmail.com",
+      "website": "opmcmedspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "Hair Restoration",
+        "Microneedling",
+        "Tattoo Removal",
+        "HRT",
+        "IV Therapy",
+        "Laser Hair Removal"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-23T14:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. Massive service menu, Gmail-based = small operation."
+        }
+      ],
+      "nextAction": "Send outreach email",
+      "notes": "Very broad service menu for independent practice. Gmail email suggests small team. Est. 2017. Only 2 FB reviews \u2014 under-marketed."
+    },
+    {
+      "id": "so-estheva-wellness",
+      "clinic": "SO Esth\u0113Va Wellness Medspa",
+      "owner": "Stephanie (last name unknown)",
+      "title": "Owner/Provider",
+      "location": "Wooster, OH",
+      "phone": "(330) 846-4100",
+      "email": "",
+      "website": "soesthevawellnessmedspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "Weight Loss",
+        "HRT",
+        "DiamondGlow"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-23T17:00:00Z",
+          "type": "research",
+          "note": "Initial research completed. 2-person team (Stephanie + Olivia). No direct email \u2014 contact form or FB message needed."
+        }
+      ],
+      "nextAction": "Send outreach via website contact form or Facebook",
+      "notes": "2-provider team, excellent reviews, Wooster market. ~45 min from Andrew."
+    },
+    {
+      "id": "cru-clinic",
+      "clinic": "The Cru Clinic",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Ontario, OH (near Mansfield)",
+      "phone": "(419) 775-5457",
+      "email": "info@cruclinic.com",
+      "website": "cruclinic.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Dysport",
+        "Sculptra",
+        "Fillers",
+        "PRP",
+        "Hormone Therapy",
+        "Weight Loss"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-23T17:00:00Z",
+          "type": "research",
+          "note": "Initial research. Open only Tue-Fri (4 days/week). Direct email available. HIGH PRIORITY \u2014 limited hours = obvious missed-call pain point."
+        }
+      ],
+      "nextAction": "Send outreach email to info@cruclinic.com",
+      "notes": "Only open Tue-Fri. Direct email. 12 FB reviews. Near Mansfield."
+    },
+    {
+      "id": "jenna-lizzi-medspa",
+      "clinic": "Jenna Lizzi Med Spa",
+      "owner": "Jenna Lizzi",
+      "title": "PA-C",
+      "location": "Sandusky, OH",
+      "phone": "(419) 370-2602",
+      "email": "",
+      "website": "lizzimedspa.com",
+      "emr": "Fresha (basic scheduling)",
+      "status": "researched",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "Facials",
+        "Hair Restoration",
+        "Weight Loss",
+        "Skincare",
+        "Sexual Wellness"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-23T17:00:00Z",
+          "type": "research",
+          "note": "Initial research. Solo PA-C practitioner, 99 reviews on Birdeye, inside Sandusky Wellness Center. Uses Fresha for scheduling."
+        }
+      ],
+      "nextAction": "Send outreach via website contact form or Facebook",
+      "notes": "Solo provider, very busy (99 reviews), broad service menu. No direct email found."
+    },
+    {
+      "id": "awaken-aesthetics",
+      "clinic": "Awaken Aesthetics",
+      "owner": "Chetna Patel",
+      "title": "MSN, ACNP \u2014 Founder",
+      "location": "Warren, OH",
+      "phone": "(330) 469-5059",
+      "email": "awakenaesthetics06@gmail.com",
+      "website": "awakenaesthetics.net",
+      "emr": "Vagaro",
+      "status": "researched",
+      "configured": false,
+      "timeline": [],
+      "nextAction": "Send outreach email",
+      "notes": "Solo NP, 20+ years in Youngstown-Warren area. Uses Vagaro. Injectables, PRP, weight loss, laser."
+    },
+    {
+      "id": "youthology-medspa",
+      "clinic": "Youthology Medspa",
+      "owner": "Dr. Jason Rupeka",
+      "title": "DO \u2014 Founder",
+      "location": "Warren, OH",
+      "phone": "(330) 979-2126",
+      "email": "",
+      "website": "youthologymedspa.com",
+      "emr": "Setmore",
+      "status": "researched",
+      "configured": false,
+      "timeline": [],
+      "nextAction": "Send outreach via contact form or Facebook",
+      "notes": "4+ staff, VASER lipo, 4.1K FB likes. Dr appointments phone-only. Mon-Fri 9-5."
+    },
+    {
+      "id": "megs-med-spa",
+      "clinic": "Meg's Med Spa",
+      "owner": "Megan Coleman",
+      "title": "CNP \u2014 Owner",
+      "location": "Willoughby, OH",
+      "phone": "(440) 510-8519",
+      "email": "megsmedspa@yahoo.com",
+      "website": "megsmedspa.com",
+      "emr": "Unknown (has patient portal)",
+      "status": "researched",
+      "configured": false,
+      "timeline": [],
+      "nextAction": "Send outreach email",
+      "notes": "Downtown Willoughby. Yahoo email = low tech. Injectables, Sculptra, IV hydration. 2.6K FB likes. Closed weekends."
+    },
+    {
+      "id": "livio-med-spa-cincinnati",
+      "clinic": "Livio Med Spa",
+      "owner": "Lisa McMillan",
+      "title": "Owner",
+      "location": "Cincinnati, OH",
+      "phone": "(513) 323-3015",
+      "email": "livio@liviospa.com",
+      "website": "liviospa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "timeline": [],
+      "nextAction": "Send outreach email",
+      "notes": "10 years, 9000+ treatments, 5 providers. Closed weekends. First Cincinnati prospect."
+    },
+    {
+      "id": "flawless-aesthetics-springfield",
+      "clinic": "Flawless Aesthetics",
+      "owner": "Heidi Thompson",
+      "title": "Founder",
+      "location": "Springfield, OH",
+      "phone": "(937) 204-3390",
+      "email": "",
+      "website": "flawlessaestheticsllc.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "timeline": [],
+      "nextAction": "Send outreach via contact form or FB",
+      "notes": "Appointment only. Full facial balancing focus. Chamber of Commerce member. First Springfield prospect."
+    },
+    {
+      "id": "m-esthetics-springfield",
+      "clinic": "M~Esthetics",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Springfield, OH",
+      "phone": "(937) 925-0339",
+      "email": "",
+      "website": "m-esthetics.org",
+      "emr": "Unknown",
+      "status": "researched",
+      "configured": false,
+      "timeline": [],
+      "nextAction": "Research owner name, then outreach via FB",
+      "notes": "Appointment only. Wellness + aesthetics + mens health. Very small, may be price-sensitive."
+    },
+    {
+      "id": "nuiq-wellness-lounge",
+      "clinic": "N\u00dcIQ Wellness Lounge & Med Spa",
+      "owner": "Ilya Palatnik",
+      "title": "Co-Founder",
+      "location": "Cleveland, OH",
+      "phone": "(216) 377-1778",
+      "email": "",
+      "website": "nuiqwellness.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "injectables",
+        "laser",
+        "facials",
+        "IV therapy",
+        "hair restoration"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-24T14:00:00Z",
+          "type": "research",
+          "note": "Initial research complete. Premium Cleveland boutique med spa, prominent phone, VISIA AI skin analysis."
+        }
+      ],
+      "nextAction": "Send outreach email",
+      "notes": "Premium positioning, Detroit Ave Cleveland, own app, tech-forward. Co-founder has multiple businesses."
+    },
+    {
+      "id": "medical-spa-np-lancaster",
+      "clinic": "Medical Spa NP",
+      "owner": "Unknown (NP team)",
+      "title": "NP",
+      "location": "Lancaster, OH",
+      "phone": "(740) 277-7660",
+      "email": "",
+      "website": "medicalspanp.com",
+      "emr": "Zenoti",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "botox",
+        "fillers",
+        "kybella",
+        "weight loss",
+        "mens services"
+      ],
+      "timeline": [
+        {
+          "date": "2026-02-24T14:00:00Z",
+          "type": "research",
+          "note": "Initial research complete. NP-led, Brotox positioning, Zenoti EMR, BBB A+ rated."
+        }
+      ],
+      "nextAction": "Send outreach email",
+      "notes": "Strong mens marketing (Brotox), Lancaster OH (underserved), Zenoti EMR, BBB A+ accredited."
     }
   ]
 }

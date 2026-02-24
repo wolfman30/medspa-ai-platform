@@ -200,23 +200,6 @@ func (s *LLMService) appendContext(ctx context.Context, history []ChatMessage, o
 				Content: "Real-time appointment availability from clinic calendar:\n" + availabilityContext,
 			})
 		}
-	} else if s.browser != nil && s.browser.IsConfigured() && containsBookingIntent(query) {
-		// Fall back to browser scraping if EMR is not configured but browser adapter is
-		if s.clinicStore != nil {
-			cfg, err := s.clinicStore.Get(ctx, orgID)
-			if err == nil && cfg != nil && cfg.BookingURL != "" {
-				slots, err := s.browser.GetUpcomingAvailability(ctx, cfg.BookingURL, 7)
-				if err != nil {
-					s.logger.Warn("failed to fetch browser availability", "error", err, "url", cfg.BookingURL)
-				} else if len(slots) > 0 {
-					availabilityContext := FormatSlotsForLLM(slots, 5)
-					history = append(history, ChatMessage{
-						Role:    ChatRoleSystem,
-						Content: "Real-time appointment availability from booking page:\n" + availabilityContext,
-					})
-				}
-			}
-		}
 	}
 
 	return history

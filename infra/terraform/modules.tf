@@ -62,8 +62,6 @@ module "ecs_fargate" {
   deployment_minimum_healthy_percent       = var.deployment_minimum_healthy_percent
   deployment_maximum_percent               = var.deployment_maximum_percent
 
-  # Browser sidecar for Moxie booking availability scraping
-  enable_browser_sidecar    = var.enable_browser_sidecar
   enable_nova_sonic_sidecar = var.enable_nova_sonic_sidecar
 
   assign_public_ip = var.assign_public_ip

@@ -152,7 +152,6 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=false" \
             -var="enable_nova_sonic_sidecar=false" \
             -var="assign_public_ip=true" \
             -var="enable_nat_gateway=false"
@@ -230,7 +229,6 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=false" \
             -var="enable_nova_sonic_sidecar=true" \
             -var="assign_public_ip=true" \
             -var="enable_nat_gateway=false"
@@ -517,7 +515,6 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=false" \
             -var="enable_nova_sonic_sidecar=false"
 
       - name: Login to ECR
@@ -582,7 +579,6 @@ jobs:
             -var="cognito_client_id=${{ secrets.ONBOARDING_COGNITO_CLIENT_ID }}" \
             -var="cognito_region=${{ secrets.ONBOARDING_COGNITO_REGION }}" \
             -var="enable_blue_green=true" \
-            -var="enable_browser_sidecar=false" \
             -var="enable_nova_sonic_sidecar=false"
 
       - name: Read UI outputs

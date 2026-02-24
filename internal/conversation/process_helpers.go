@@ -147,19 +147,19 @@ func (s *LLMService) fetchAndPresentAvailability(
 		}
 	}
 
-	// Try Moxie API first (instant, ~1s), fall back to browser scraper (~30-60s)
+	// Fetch availability via Moxie GraphQL API
 	fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
 	var result *AvailabilityResult
 	var err error
 
 	if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
-		s.logger.Info("fetching availability via Moxie API (fast path)",
+		s.logger.Info("fetching availability via Moxie API",
 			"conversation_id", conversationID, "service", scraperServiceName)
 		result, err = FetchAvailableTimesFromMoxieAPIWithProvider(fetchCtx, s.moxieClient, cfg, scraperServiceName, prefs.ProviderPreference, timePrefs, onProgress, prefs.ServiceInterest)
 		if err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "no serviceMenuItemId") {
-				s.logger.Warn("Moxie API: service not found — skipping browser scraper fallback",
+				s.logger.Warn("Moxie API: service not found",
 					"error", err, "conversation_id", conversationID, "service", scraperServiceName)
 				result = &AvailabilityResult{
 					Slots:      nil,
@@ -170,14 +170,8 @@ func (s *LLMService) fetchAndPresentAvailability(
 						prefs.ServiceInterest),
 				}
 				err = nil
-			} else {
-				s.logger.Warn("Moxie API availability failed, falling back to browser scraper",
-					"error", err, "conversation_id", conversationID)
-				result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, onProgress, prefs.ServiceInterest)
 			}
 		}
-	} else {
-		result, err = FetchAvailableTimesWithFallback(fetchCtx, s.browser, bookingURL, scraperServiceName, timePrefs, onProgress, prefs.ServiceInterest)
 	}
 	fetchCancel()
 

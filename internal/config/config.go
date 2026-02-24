@@ -139,9 +139,6 @@ type Config struct {
 	DisclaimerFirstOnly bool   // Only add disclaimer to first message in conversation
 	AuditRetentionDays  int    // How long to retain audit logs (default: 2555 = 7 years)
 
-	// Browser Sidecar Configuration (for scraping booking page availability)
-	BrowserSidecarURL string // URL of the browser sidecar service (e.g., "http://localhost:3000")
-
 	// S3 Archive Configuration (for archiving conversation data before purge)
 	S3ArchiveBucket string // S3 bucket for conversation archives (e.g., "medspa-conversation-archives")
 	S3ArchiveKMSKey string // Optional KMS key ID for SSE-KMS encryption
@@ -360,9 +357,6 @@ func Load() *Config {
 		DisclaimerLevel:     strings.ToLower(strings.TrimSpace(getEnv("DISCLAIMER_LEVEL", "medium"))),
 		DisclaimerFirstOnly: getEnvAsBool("DISCLAIMER_FIRST_ONLY", true),
 		AuditRetentionDays:  getEnvAsInt("AUDIT_RETENTION_DAYS", 2555), // 7 years for HIPAA
-
-		// Browser Sidecar Configuration
-		BrowserSidecarURL: getEnv("BROWSER_SIDECAR_URL", ""),
 
 		// S3 Archive Configuration
 		S3ArchiveBucket: getEnv("S3_ARCHIVE_BUCKET", ""),

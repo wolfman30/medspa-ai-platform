@@ -1,25 +1,28 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-23 (07:30 UTC)
+Last updated: 2026-02-24 (07:30 UTC)
 
 ## Automated E2E Test Results (Live Dev API)
 
-**30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)** *(last validated run — 40+ commits since)*
+**30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)** *(last validated run — 65+ commits since)*
 
-### Recent Fixes (Feb 22-23):
+### Recent Fixes (Feb 23-24):
+- `87af1f2` fix: voice AI greeting, dedup, qualification flow, prompt overhaul
+- `57bfdc4` fix: auto-greeting trigger + deduplicate transcript responses
+- `39cf713` fix: output audio logging, busy-spin fix, auto-greeting prompt
+- `673b16c` fix: request L16 codec from Telnyx (Nova Sonic needs LPCM, not G722)
+- `86a8ece` fix: use async generator for Bedrock stream
+- `b712089` fix: add Nova Sonic model + bidirectional stream IAM
+- `4f96191` fix: use ECS container metadata for AWS creds in sidecar
+- `22fb639` feat: Call Control handler — answer calls + start media streaming
+- `16e05ff` feat: Nova Sonic voice AI sidecar integration + llm_service refactor
+- *(25 commits in last 24h — all voice AI sidecar work)*
+
+### Previous Fixes (Feb 22-23):
 - `20f5608` fix: clear stale lead preferences on new voice call
 - `566fbd9` feat: separate voice model for lower latency
 - `50226c3` fix: inject qualification state summary for voice (no re-asking)
-- `13a9f4f` fix: spoken time range "four five pm" parsed as 4-5pm
-- `ae3114a` perf: optimize voice AI for natural conversation speed
-- `4bcfc9b` fix: explain deposit purpose before payment link
-- `1780f43` feat: Voice/SMS channel labels in conversation list
-- `d25d343` fix: admin portal supports voice conversation IDs
-- `b5a626e` refactor: split qualification_extractor.go into focused files
-- `bbdd397` feat: persist voice transcripts to Postgres for admin portal
-- `315f178` fix: use Telnyx call_session_id for stable voice continuity (#31)
 - `4641187` fix: use DefaultProviderID when noPreference returns empty
-- `cdec49a` fix: voice qualification extraction — handle short replies
 
 ### Remaining Issues:
 1. **E2E blocked in sandbox** — ADMIN_JWT_SECRET not available; need manual `make e2e-dev` run

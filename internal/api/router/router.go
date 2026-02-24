@@ -71,7 +71,7 @@ type Config struct {
 	// Structured knowledge handler
 	StructuredKnowledgeHandler *handlers.StructuredKnowledgeHandler
 
-	// Booking callback handler (browser sidecar → Go API)
+	// Booking callback handler
 	BookingCallbackHandler *conversation.BookingCallbackHandler
 
 	// Short payment URL redirect handler
