@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-24T14:00:00Z",
+  "lastUpdated": "2026-02-24T17:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -1048,6 +1048,75 @@
       ],
       "nextAction": "Send outreach email",
       "notes": "Strong mens marketing (Brotox), Lancaster OH (underserved), Zenoti EMR, BBB A+ accredited."
+    },
+    {
+      "id": "elite-beauty-toledo",
+      "clinic": "Elite Beauty Medical Aesthetics",
+      "owner": "Dr. Nickalis Dumas",
+      "title": "Owner",
+      "location": "Toledo, OH",
+      "phone": "(419) 265-0404",
+      "email": "",
+      "website": "elitebeautytoledo.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Lip Filler",
+        "CoolSculpting",
+        "Microneedling",
+        "Weight Loss"
+      ],
+      "notes": "Independent. $10/unit Botox, 4.9 Google stars. No online booking system. BBB listed.",
+      "nextAction": "Send outreach email",
+      "timeline": []
+    },
+    {
+      "id": "apricity-renew-you",
+      "clinic": "Apricity Renew You Med Spa",
+      "owner": "Sara & Michelle (NPs)",
+      "title": "NP",
+      "location": "Maumee/Toledo, OH",
+      "phone": "",
+      "email": "",
+      "website": "apricityrenewyoumed.com",
+      "emr": "Aesthetic Record",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Xeomin",
+        "Dermal Fillers",
+        "Mesotherapy",
+        "Microneedling",
+        "Weight Loss"
+      ],
+      "notes": "NP-owned, opened April 2024. Uses Aesthetic Record. No prominent phone number. Strong reviews.",
+      "nextAction": "Send outreach via contact form or Facebook",
+      "timeline": []
+    },
+    {
+      "id": "luxe-loft-youngstown",
+      "clinic": "Luxe Loft by Mathews Aesthetics",
+      "owner": "Zack & Stephanie Mathews",
+      "title": "Owners",
+      "location": "Poland/Youngstown, OH",
+      "phone": "(330) 423-2114",
+      "email": "",
+      "website": "theluxeloft.com",
+      "emr": "Unknown",
+      "status": "outreach_ready",
+      "configured": false,
+      "services": [
+        "Botox",
+        "Fillers",
+        "Laser Hair Removal",
+        "PRP",
+        "Microneedling"
+      ],
+      "notes": "Husband-wife owned. BBB listed. CNI on staff. Community-focused. Youngstown area.",
+      "nextAction": "Send outreach email",
+      "timeline": []
     }
   ]
 }
