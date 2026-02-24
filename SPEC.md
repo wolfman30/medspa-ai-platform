@@ -207,7 +207,7 @@ Each clinic configures:
 
 These are managed via the admin portal and stored in Redis.
 
-**Key files:** `internal/clinic/config.go`, `internal/conversation/knowledge_repository.go`, `web/onboarding/src/components/AIPersonaSettings.tsx`, `web/onboarding/src/components/KnowledgeSettings.tsx`
+**Key files:** `internal/clinic/config.go`, `internal/conversation/knowledge_repository.go`, `web/portal/src/components/AIPersonaSettings.tsx`, `web/portal/src/components/KnowledgeSettings.tsx`
 
 ---
 
@@ -1141,7 +1141,7 @@ func handleInboundCall(call TelnyxCall) {
 
 #### 8.3.4 Admin Portal Toggle
 
-Add to Settings page in `web/onboarding/`:
+Add to Settings page in `web/portal/`:
 - **Voice AI** section with on/off toggle
 - Business hours schedule editor
 - Voice selection (dropdown of available voices)

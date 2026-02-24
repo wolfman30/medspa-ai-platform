@@ -8,7 +8,7 @@
 - **SMS:** Telnyx (primary), Twilio (fallback)
 - **Payments:** Moxie checkout (auto-booking) or Square (deposits)
 - **Browser Sidecar:** TypeScript, Playwright, Node.js
-- **Frontend:** React (onboarding portal)
+- **Frontend:** React (admin portal)
 - **Infra:** AWS ECS/Fargate, Terraform
 
 ## Quick Commands
@@ -40,7 +40,7 @@ internal/browser/         → Browser sidecar Go client
 internal/payments/        → Square integration
 internal/notify/          → Operator notifications (SES email + SMS)
 browser-sidecar/          → Playwright scraper + booking automation
-web/onboarding/           → React admin portal
+web/portal/           → React admin portal
 ```
 
 ## Code Standards
