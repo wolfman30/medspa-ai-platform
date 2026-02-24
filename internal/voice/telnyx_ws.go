@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -230,21 +231,35 @@ func (s *telnyxSession) handleMedia(event TelnyxEvent) error {
 
 // sendOutputAudio reads audio from the bridge and sends it back to Telnyx.
 func (s *telnyxSession) sendOutputAudio() {
+	// Wait for bridge to be established
 	for {
 		s.mu.Lock()
 		bridge := s.bridge
 		s.mu.Unlock()
-
-		if bridge == nil {
-			// Bridge not yet established; wait a bit
-			// This is a simple spin — in production, use a channel signal
-			continue
+		if bridge != nil {
+			break
 		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
-		// Read from bridge output channel
+	s.mu.Lock()
+	bridge := s.bridge
+	s.mu.Unlock()
+
+	outputChunks := 0
+	for {
 		audioData, ok := bridge.ReadAudioForTelnyx()
 		if !ok {
-			return // bridge closed
+			s.logger.Info("telnyx-ws: output audio channel closed", "total_chunks_sent", outputChunks)
+			return
+		}
+
+		outputChunks++
+		if outputChunks <= 3 || outputChunks%50 == 0 {
+			s.logger.Info("telnyx-ws: sending output audio to Telnyx",
+				"chunk", outputChunks,
+				"bytes", len(audioData),
+			)
 		}
 
 		// Encode to base64 and send as Telnyx media event
@@ -261,7 +276,7 @@ func (s *telnyxSession) sendOutputAudio() {
 		s.mu.Unlock()
 
 		if err != nil {
-			s.logger.Error("telnyx-ws: write error", "error", err)
+			s.logger.Error("telnyx-ws: write error", "error", err, "chunks_sent", outputChunks)
 			return
 		}
 	}

@@ -340,10 +340,12 @@ func main() {
 		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat) (*voice.Bridge, error) {
 			// Build system prompt for this call
 			systemPrompt := "You are a friendly and professional AI receptionist for a medical spa. " +
+				"IMPORTANT: As soon as the call connects, immediately greet the caller by saying something like " +
+				"'Hi, thank you for calling! This is your virtual assistant at Brilliant Aesthetics. How can I help you today?' " +
+				"Do NOT wait for the caller to speak first — greet them immediately. " +
 				"Help callers book appointments, answer questions about services, and collect their information. " +
 				"Keep responses brief — 1-2 sentences max. Be warm but efficient. " +
-				"When you have time slots to share, use the send_sms tool to text them instead of reading them aloud. " +
-				"Say 'I'll text you the available times' and use the tool."
+				"When you have time slots to share, tell the caller you'll text them the options instead of reading them aloud."
 
 			return voice.NewBridge(
 				context.Background(),

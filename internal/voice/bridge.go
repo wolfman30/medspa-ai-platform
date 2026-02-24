@@ -37,10 +37,11 @@ type Bridge struct {
 	callerPhone   string
 	mediaFormat   TelnyxMediaFormat
 
-	mu       sync.Mutex
-	closed   bool
-	cancelFn context.CancelFunc
-	started  time.Time
+	mu           sync.Mutex
+	closed       bool
+	cancelFn     context.CancelFunc
+	started      time.Time
+	outputChunks int
 }
 
 // NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
@@ -163,6 +164,14 @@ func (b *Bridge) processSidecarOutput(ctx context.Context) {
 				if err != nil {
 					b.logger.Error("bridge: convert output audio", "error", err)
 					continue
+				}
+				b.outputChunks++
+				if b.outputChunks <= 3 || b.outputChunks%50 == 0 {
+					b.logger.Info("bridge: forwarding audio to Telnyx",
+						"chunk", b.outputChunks,
+						"input_bytes", len(event.Audio),
+						"output_bytes", len(output),
+					)
 				}
 				select {
 				case b.telnyxOutput <- output:
