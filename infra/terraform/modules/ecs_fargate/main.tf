@@ -473,10 +473,10 @@ resource "aws_ecs_task_definition" "api" {
   family                   = "${local.name_prefix}-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                = var.task_cpu
-  memory             = var.task_memory
-  execution_role_arn = aws_iam_role.execution.arn
-  task_role_arn      = aws_iam_role.task.arn
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode(concat([
     {
