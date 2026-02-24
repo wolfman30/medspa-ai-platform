@@ -138,9 +138,11 @@ func (h *CallControlHandler) startStreaming(callControlID string) {
 	)
 
 	payload := map[string]interface{}{
-		"stream_url":        h.streamURL,
-		"stream_track":      "both_tracks",
-		"enable_dialogflow": false,
+		"stream_url":                 h.streamURL,
+		"stream_track":               "both_tracks",
+		"stream_bidirectional_mode":  "rtp",
+		"stream_bidirectional_codec": "L16",
+		"enable_dialogflow":          false,
 	}
 	h.sendCallControlCommand(callControlID, "streaming_start", payload)
 }
