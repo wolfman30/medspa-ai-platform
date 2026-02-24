@@ -274,11 +274,25 @@ export class NovaSonicClient {
     };
 
     if (this.config.tools.length > 0) {
+      // Nova Sonic v1 expects inputSchema.json to be a JSON STRING, not an object.
+      // e.g. inputSchema: { json: '{"type":"object","properties":{...}}' }
+      const sanitizedTools = this.config.tools.map((t) => ({
+        toolSpec: {
+          name: t.toolSpec.name,
+          description: t.toolSpec.description,
+          inputSchema: {
+            json: typeof t.toolSpec.inputSchema.json === "string"
+              ? t.toolSpec.inputSchema.json
+              : JSON.stringify(t.toolSpec.inputSchema.json),
+          },
+        },
+      }));
       cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
       cfg.toolConfiguration = {
-        tools: this.config.tools,
+        tools: sanitizedTools,
         toolChoice: { auto: {} },
       };
+      this.log("info", "Tools configured", { count: sanitizedTools.length, names: sanitizedTools.map(t => t.toolSpec.name) });
     }
 
     this.addEvent({ event: { promptStart: cfg } });
