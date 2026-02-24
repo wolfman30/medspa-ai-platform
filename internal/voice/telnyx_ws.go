@@ -43,10 +43,10 @@ type TelnyxEvent struct {
 
 // TelnyxMedia carries the audio payload.
 type TelnyxMedia struct {
-	Track     string `json:"track"`     // "inbound" or "outbound"
-	Chunk     int    `json:"chunk"`     // sequential chunk number
-	Timestamp string `json:"timestamp"` // relative timestamp
-	Payload   string `json:"payload"`   // base64-encoded audio
+	Track     string      `json:"track"`     // "inbound" or "outbound"
+	Chunk     json.Number `json:"chunk"`     // sequential chunk number (string from Telnyx)
+	Timestamp json.Number `json:"timestamp"` // relative timestamp (string from Telnyx)
+	Payload   string      `json:"payload"`   // base64-encoded audio
 }
 
 // TelnyxStart carries stream metadata.
