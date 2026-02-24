@@ -95,6 +95,7 @@ package-lock.json
 !browser-sidecar/package-lock.json
 !nova-sonic-sidecar/package-lock.json
 !web/portal/package-lock.json
+!web/portal/src/api/
 CLAUDE.md
 api
 e2e
