@@ -6,6 +6,7 @@
 import {
   BedrockRuntimeClient,
   InvokeModelWithBidirectionalStreamCommand,
+  type InvokeModelWithBidirectionalStreamCommandOutput,
 } from "@aws-sdk/client-bedrock-runtime";
 import { NodeHttp2Handler } from "@smithy/node-http-handler";
 import {
@@ -17,9 +18,13 @@ import {
 import { randomUUID } from "node:crypto";
 import { type ToolSpec } from "./tools.js";
 
+// ── Constants ──────────────────────────────────────────────────────────
+
 const MODEL_ID = "amazon.nova-sonic-v1:0";
 const SESSION_MAX_MS = 8 * 60 * 1000; // 8 minutes
 const RENEWAL_BUFFER_MS = 30 * 1000; // renew 30s before expiry
+
+// ── Public interfaces ──────────────────────────────────────────────────
 
 export interface NovaSonicConfig {
   systemPrompt: string;
@@ -37,9 +42,46 @@ export interface NovaSonicCallbacks {
   onSessionRenewed: () => void;
 }
 
+// ── Internal types ─────────────────────────────────────────────────────
+
+/** Wrapper around a single Bedrock stream event to send. */
 interface QueuedEvent {
   event: Record<string, unknown>;
 }
+
+/** Shape of a parsed Bedrock response event (top-level wrapper). */
+interface BedrockResponseEvent {
+  event?: Record<string, unknown>;
+}
+
+/** contentStart event payload. */
+interface ContentStartPayload {
+  contentName?: string;
+  type?: "AUDIO" | "TEXT" | "TOOL";
+  role?: string;
+  toolUseConfiguration?: { toolName?: string };
+}
+
+/** contentEnd event payload. */
+interface ContentEndPayload {
+  contentName?: string;
+  type?: "AUDIO" | "TEXT" | "TOOL";
+  toolUseConfiguration?: { toolUseId?: string };
+  toolResultInputConfiguration?: { toolUseId?: string };
+}
+
+/** textOutput / toolUse event payload. */
+interface TextPayload {
+  contentName?: string;
+  content?: string;
+}
+
+/** audioOutput event payload. */
+interface AudioOutputPayload {
+  content?: string;
+}
+
+// ── Client class ───────────────────────────────────────────────────────
 
 export class NovaSonicClient {
   private callId: string;
@@ -50,26 +92,26 @@ export class NovaSonicClient {
   private promptName = randomUUID();
   private audioContentId = randomUUID();
 
+  // Event queues
   private queue: QueuedEvent[] = [];
   private audioQueue: QueuedEvent[] = [];
   private isActive = false;
   private sessionStartTime = 0;
   private renewalTimer: ReturnType<typeof setTimeout> | null = null;
+  private audioChunkCount = 0;
 
-  // Signaling for async iterator
+  // Async iterator signaling — any of these resolves unblocks the generator
   private queueResolve: (() => void) | null = null;
   private closeResolve: (() => void) | null = null;
-
-  // Track output audio state to hold input while assistant speaks
-  private audioOutputActive = false;
-  private lastEmittedTranscript = "";
   private audioStateResolve: (() => void) | null = null;
 
-  // Track text content for transcripts
+  // Output audio state — hold input while assistant speaks
+  private audioOutputActive = false;
+  private lastEmittedTranscript = "";
+
+  // Accumulation buffers for multi-chunk content
   private textContentBuffers = new Map<string, { role: string; text: string }>();
-  // Track tool use content
   private toolUseBuffers = new Map<string, { toolName: string; input: string }>();
-  private pendingToolContentType = new Map<string, "toolUse" | "text" | "audio">();
 
   constructor(callId: string, config: NovaSonicConfig, callbacks: NovaSonicCallbacks) {
     this.callId = callId;
@@ -90,14 +132,18 @@ export class NovaSonicClient {
     });
   }
 
-  private log(level: string, msg: string, extra?: Record<string, unknown>) {
+  // ── Logging ────────────────────────────────────────────────────────
+
+  private log(level: string, msg: string, extra?: Record<string, unknown>): void {
     const ts = new Date().toISOString();
     const payload = JSON.stringify({ ts, level, callId: this.callId, msg, ...extra });
     if (level === "error") console.error(payload);
     else console.log(payload);
   }
 
-  /** Start the bidirectional stream. */
+  // ── Public API ─────────────────────────────────────────────────────
+
+  /** Start the bidirectional stream and begin processing responses. */
   async start(): Promise<void> {
     this.isActive = true;
     this.sessionStartTime = Date.now();
@@ -108,12 +154,10 @@ export class NovaSonicClient {
     this.enqueueGreetingTrigger();
     this.enqueueAudioContentStart();
 
-    const asyncIterable = this.createAsyncIterable();
-
     const response = await this.client.send(
       new InvokeModelWithBidirectionalStreamCommand({
         modelId: MODEL_ID,
-        body: asyncIterable,
+        body: this.createAsyncIterable(),
       })
     );
 
@@ -122,13 +166,12 @@ export class NovaSonicClient {
     this.processResponseStream(response);
   }
 
-  /** Send audio data (base64 PCM). */
-  private audioChunkCount = 0;
+  /** Send audio data (base64 PCM) from the caller to Bedrock. */
   sendAudio(base64Data: string): void {
     if (!this.isActive) return;
     this.audioChunkCount++;
     if (this.audioChunkCount <= 3 || this.audioChunkCount % 50 === 0) {
-      this.log("info", `Audio chunk received from Go`, {
+      this.log("info", "Audio chunk received from Go", {
         chunk: this.audioChunkCount,
         audioOutputActive: this.audioOutputActive,
         audioQueueLen: this.audioQueue.length,
@@ -152,6 +195,7 @@ export class NovaSonicClient {
   /** Send a tool result back to Nova Sonic. */
   sendToolResult(toolCallId: string, result: string): void {
     if (!this.isActive) return;
+    this.log("info", "Sending tool result", { toolCallId });
     this.addEvent({
       event: {
         toolResult: {
@@ -173,23 +217,9 @@ export class NovaSonicClient {
       this.renewalTimer = null;
     }
 
-    // Send contentEnd, promptEnd, sessionEnd
-    this.addEvent({
-      event: {
-        contentEnd: {
-          promptName: this.promptName,
-          contentName: this.audioContentId,
-        },
-      },
-    });
-
-    this.addEvent({
-      event: { promptEnd: { promptName: this.promptName } },
-    });
-
-    this.addEvent({
-      event: { sessionEnd: {} },
-    });
+    this.addEvent({ event: { contentEnd: { promptName: this.promptName, contentName: this.audioContentId } } });
+    this.addEvent({ event: { promptEnd: { promptName: this.promptName } } });
+    this.addEvent({ event: { sessionEnd: {} } });
 
     // Give events time to flush, then force close
     await new Promise<void>((resolve) => setTimeout(resolve, 500));
@@ -197,8 +227,9 @@ export class NovaSonicClient {
     this.closeResolve?.();
   }
 
-  // ---- Queue management ----
+  // ── Queue management ───────────────────────────────────────────────
 
+  /** Enqueue an event for sending; isAudio events go to the audio queue. */
   private addEvent(event: QueuedEvent, isAudio = false): void {
     if (!this.isActive) return;
     if (isAudio) {
@@ -210,28 +241,35 @@ export class NovaSonicClient {
     this.queueResolve = null;
   }
 
+  /**
+   * Async iterable that yields queued events to the Bedrock SDK.
+   * Control events are sent first; audio is held while the assistant is speaking.
+   */
   private createAsyncIterable(): AsyncIterable<{ chunk: { bytes: Uint8Array } }> {
     const self = this;
+
     async function* generator() {
+      const encoder = new TextEncoder();
+
       while (self.isActive) {
-        // Non-audio events first
+        // Priority 1: control/non-audio events
         if (self.queue.length > 0) {
           const evt = self.queue.shift()!;
           const jsonStr = JSON.stringify(evt);
-          const eventType = Object.keys(evt.event || {})[0] || "unknown";
+          const eventType = Object.keys(evt.event)[0] ?? "unknown";
           self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length });
-          yield { chunk: { bytes: new TextEncoder().encode(jsonStr) } };
+          yield { chunk: { bytes: encoder.encode(jsonStr) } };
           continue;
         }
 
-        // Audio events only when output audio is not active
+        // Priority 2: audio input (only when assistant isn't speaking)
         if (self.audioQueue.length > 0 && !self.audioOutputActive) {
           const evt = self.audioQueue.shift()!;
-          yield { chunk: { bytes: new TextEncoder().encode(JSON.stringify(evt)) } };
+          yield { chunk: { bytes: encoder.encode(JSON.stringify(evt)) } };
           continue;
         }
 
-        // Wait for signal
+        // Wait until something changes (new event, audio state change, or close)
         await new Promise<void>((resolve) => {
           self.queueResolve = resolve;
           self.audioStateResolve = resolve;
@@ -239,10 +277,11 @@ export class NovaSonicClient {
         });
       }
     }
+
     return generator();
   }
 
-  // ---- Session events ----
+  // ── Session setup events ───────────────────────────────────────────
 
   private enqueueSessionStart(): void {
     this.addEvent({
@@ -274,91 +313,51 @@ export class NovaSonicClient {
     };
 
     if (this.config.tools.length > 0) {
-      // Nova Sonic v1 expects inputSchema.json to be a JSON STRING, not an object.
-      // e.g. inputSchema: { json: '{"type":"object","properties":{...}}' }
-      const sanitizedTools = this.config.tools.map((t) => ({
-        toolSpec: {
-          name: t.toolSpec.name,
-          description: t.toolSpec.description,
-          inputSchema: {
-            json: typeof t.toolSpec.inputSchema.json === "string"
-              ? t.toolSpec.inputSchema.json
-              : JSON.stringify(t.toolSpec.inputSchema.json),
-          },
-        },
-      }));
+      const sanitizedTools = this.sanitizeToolSpecs(this.config.tools);
       cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
-      cfg.toolConfiguration = {
-        tools: sanitizedTools,
-        toolChoice: { auto: {} },
-      };
-      this.log("info", "Tools configured", { count: sanitizedTools.length, names: sanitizedTools.map(t => t.toolSpec.name) });
+      cfg.toolConfiguration = { tools: sanitizedTools, toolChoice: { auto: {} } };
+      this.log("info", "Tools configured", {
+        count: sanitizedTools.length,
+        names: sanitizedTools.map((t) => t.toolSpec.name),
+      });
     }
 
     this.addEvent({ event: { promptStart: cfg } });
   }
 
-  private enqueueSystemPrompt(): void {
-    const contentName = randomUUID();
-    this.addEvent({
-      event: {
-        contentStart: {
-          promptName: this.promptName,
-          contentName,
-          type: "TEXT",
-          interactive: false,
-          role: "SYSTEM",
-          textInputConfiguration: { mediaType: "text/plain" },
+  /**
+   * Ensure inputSchema.json is a JSON string (Nova Sonic v1 requirement).
+   * The Bedrock ToolSpec type declares json as Record, but Nova Sonic v1
+   * actually expects a stringified JSON schema — hence the cast.
+   */
+  private sanitizeToolSpecs(tools: ToolSpec[]): { toolSpec: { name: string; description: string; inputSchema: { json: string } } }[] {
+    return tools.map((t) => ({
+      toolSpec: {
+        name: t.toolSpec.name,
+        description: t.toolSpec.description,
+        inputSchema: {
+          json:
+            typeof t.toolSpec.inputSchema.json === "string"
+              ? (t.toolSpec.inputSchema.json as unknown as string)
+              : JSON.stringify(t.toolSpec.inputSchema.json),
         },
       },
-    });
-    this.addEvent({
-      event: {
-        textInput: {
-          promptName: this.promptName,
-          contentName,
-          content: this.config.systemPrompt,
-        },
-      },
-    });
-    this.addEvent({
-      event: {
-        contentEnd: { promptName: this.promptName, contentName },
-      },
-    });
+    }));
   }
 
-  private enqueueGreetingTrigger(): void {
-    // Send a synthetic user text turn to trigger the AI to greet immediately.
-    // Using interactive:true + role:USER so Nova Sonic treats it as user input
-    // that requires an immediate response (greeting).
+  private enqueueSystemPrompt(): void {
     const contentName = randomUUID();
-    this.addEvent({
-      event: {
-        contentStart: {
-          promptName: this.promptName,
-          contentName,
-          type: "TEXT",
-          interactive: true,
-          role: "USER",
-          textInputConfiguration: { mediaType: "text/plain" },
-        },
-      },
-    });
-    this.addEvent({
-      event: {
-        textInput: {
-          promptName: this.promptName,
-          contentName,
-          content: "Hello",
-        },
-      },
-    });
-    this.addEvent({
-      event: {
-        contentEnd: { promptName: this.promptName, contentName },
-      },
-    });
+    this.addEvent({ event: { contentStart: { promptName: this.promptName, contentName, type: "TEXT", interactive: false, role: "SYSTEM", textInputConfiguration: { mediaType: "text/plain" } } } });
+    this.addEvent({ event: { textInput: { promptName: this.promptName, contentName, content: this.config.systemPrompt } } });
+    this.addEvent({ event: { contentEnd: { promptName: this.promptName, contentName } } });
+  }
+
+  /** Send a synthetic "Hello" turn so Nova Sonic greets immediately. */
+  private enqueueGreetingTrigger(): void {
+    const contentName = randomUUID();
+    this.addEvent({ event: { contentStart: { promptName: this.promptName, contentName, type: "TEXT", interactive: true, role: "USER", textInputConfiguration: { mediaType: "text/plain" } } } });
+    this.addEvent({ event: { textInput: { promptName: this.promptName, contentName, content: "Hello" } } });
+    this.addEvent({ event: { contentEnd: { promptName: this.promptName, contentName } } });
   }
 
   private enqueueAudioContentStart(): void {
@@ -383,86 +382,102 @@ export class NovaSonicClient {
     });
   }
 
-  // ---- Response processing ----
+  // ── Response stream processing ─────────────────────────────────────
 
-  private async processResponseStream(response: any): Promise<void> {
+  /** Read and dispatch all events from the Bedrock response stream. */
+  private async processResponseStream(response: InvokeModelWithBidirectionalStreamCommandOutput): Promise<void> {
     let eventCount = 0;
     try {
-      for await (const event of response.body) {
+      for await (const event of response.body as AsyncIterable<{ chunk?: { bytes?: Uint8Array } }>) {
         if (!this.isActive) break;
         if (!event.chunk?.bytes) continue;
         eventCount++;
 
-        const text = new TextDecoder().decode(event.chunk.bytes);
-        let json: any;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          this.log("error", "Failed to parse response chunk", { text: text.substring(0, 200) });
-          continue;
-        }
+        const parsed = this.parseResponseEvent(event.chunk.bytes);
+        if (!parsed) continue;
 
-        const eventType = Object.keys(json.event || {})[0] || "unknown";
+        const eventType = Object.keys(parsed.event ?? {})[0] ?? "unknown";
         if (eventType !== "audioOutput") {
-          this.log("info", `Bedrock response event #${eventCount}: ${eventType}`, {
+          this.log("info", `Bedrock event #${eventCount}: ${eventType}`, {
             audioOutputActive: this.audioOutputActive,
             audioQueueLen: this.audioQueue.length,
           });
         }
 
-        switch (eventType) {
-          case "contentStart":
-            this.handleContentStart(json.event.contentStart);
-            break;
-          case "textOutput":
-            this.handleTextOutput(json.event.textOutput);
-            break;
-          case "audioOutput":
-            this.handleAudioOutput(json.event.audioOutput);
-            break;
-          case "contentEnd":
-            this.handleContentEnd(json.event.contentEnd);
-            break;
-          case "toolUse":
-            this.handleToolUse(json.event.toolUse);
-            break;
-          case "completionStart":
-          case "completionEnd":
-          case "usageEvent":
-            break;
-          default:
-            this.log("warn", "Unknown event type", { eventType });
-        }
+        this.dispatchResponseEvent(eventType, parsed.event ?? {});
       }
 
-      this.log("info", "Response stream ended");
-    } catch (err: any) {
-      this.log("error", "Stream error", { error: err.message });
+      this.log("info", "Response stream ended", { totalEvents: eventCount });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log("error", "Stream error", { error: message });
       if (this.isActive) {
-        this.callbacks.onError(`Stream error: ${err.message}`);
+        this.callbacks.onError(`Stream error: ${message}`);
       }
     }
   }
 
-  private handleContentStart(data: any): void {
-    const contentName = data?.contentName;
-    const type = data?.type;
-
-    if (type === "AUDIO") {
-      this.audioOutputActive = true;
-    } else if (type === "TEXT") {
-      this.textContentBuffers.set(contentName, { role: data?.role?.toLowerCase() || "assistant", text: "" });
-      this.pendingToolContentType.set(contentName, "text");
-    } else if (type === "TOOL") {
-      const toolName = data?.toolUseConfiguration?.toolName || "";
-      this.toolUseBuffers.set(contentName, { toolName, input: "" });
-      this.pendingToolContentType.set(contentName, "toolUse");
+  /** Decode and parse a raw Bedrock response chunk. Returns null on failure. */
+  private parseResponseEvent(bytes: Uint8Array): BedrockResponseEvent | null {
+    const text = new TextDecoder().decode(bytes);
+    try {
+      return JSON.parse(text) as BedrockResponseEvent;
+    } catch {
+      this.log("error", "Failed to parse response chunk", { text: text.substring(0, 200) });
+      return null;
     }
   }
 
-  private handleTextOutput(data: any): void {
-    const contentName = data?.contentName;
-    const content = data?.content || "";
+  /** Route a parsed response event to the appropriate handler. */
+  private dispatchResponseEvent(eventType: string, eventData: Record<string, unknown>): void {
+    switch (eventType) {
+      case "contentStart":
+        this.handleContentStart(eventData.contentStart as ContentStartPayload);
+        break;
+      case "textOutput":
+        this.handleTextOutput(eventData.textOutput as TextPayload);
+        break;
+      case "audioOutput":
+        this.handleAudioOutput(eventData.audioOutput as AudioOutputPayload);
+        break;
+      case "contentEnd":
+        this.handleContentEnd(eventData.contentEnd as ContentEndPayload);
+        break;
+      case "toolUse":
+        this.handleToolUse(eventData.toolUse as TextPayload);
+        break;
+      case "completionStart":
+      case "completionEnd":
+      case "usageEvent":
+        break;
+      default:
+        this.log("warn", "Unknown event type", { eventType });
+    }
+  }
+
+  // ── Event handlers ─────────────────────────────────────────────────
+
+  private handleContentStart(data: ContentStartPayload): void {
+    const contentName = data.contentName;
+    if (!contentName) return;
+
+    if (data.type === "AUDIO") {
+      this.audioOutputActive = true;
+    } else if (data.type === "TEXT") {
+      this.textContentBuffers.set(contentName, {
+        role: data.role?.toLowerCase() || "assistant",
+        text: "",
+      });
+    } else if (data.type === "TOOL") {
+      const toolName = data.toolUseConfiguration?.toolName ?? "";
+      this.toolUseBuffers.set(contentName, { toolName, input: "" });
+    }
+  }
+
+  private handleTextOutput(data: TextPayload): void {
+    const contentName = data.contentName;
+    if (!contentName) return;
+    const content = data.content ?? "";
 
     const textBuf = this.textContentBuffers.get(contentName);
     if (textBuf) {
@@ -476,82 +491,92 @@ export class NovaSonicClient {
     }
   }
 
-  private handleAudioOutput(data: any): void {
-    const content = data?.content;
-    if (content) {
-      this.callbacks.onAudio(content);
+  private handleAudioOutput(data: AudioOutputPayload): void {
+    if (data.content) {
+      this.callbacks.onAudio(data.content);
     }
   }
 
-  private handleToolUse(data: any): void {
-    const contentName = data?.contentName;
-    const content = data?.content || "";
+  private handleToolUse(data: TextPayload): void {
+    const contentName = data.contentName;
+    if (!contentName) return;
     const toolBuf = this.toolUseBuffers.get(contentName);
     if (toolBuf) {
-      toolBuf.input += content;
+      toolBuf.input += data.content ?? "";
     }
   }
 
-  private handleContentEnd(data: any): void {
-    const contentName = data?.contentName;
-    const type = data?.type;
+  private handleContentEnd(data: ContentEndPayload): void {
+    const contentName = data.contentName;
+    if (!contentName) return;
 
-    if (type === "AUDIO") {
+    if (data.type === "AUDIO") {
       this.audioOutputActive = false;
       this.audioStateResolve?.();
       this.audioStateResolve = null;
-    } else if (type === "TEXT") {
-      const textBuf = this.textContentBuffers.get(contentName);
-      if (textBuf && textBuf.text) {
-        const role = textBuf.role === "user" ? "user" : "assistant";
-        // Deduplicate — Nova Sonic sends each response as TEXT twice
-        // (once as plan, once as spoken transcript)
-        const normalized = textBuf.text.trim().replace(/\s+/g, " ");
-        if (normalized && normalized !== this.lastEmittedTranscript) {
-          this.callbacks.onTranscript(role, textBuf.text);
-          if (role === "assistant") {
-            this.lastEmittedTranscript = normalized;
-          }
-        }
-      }
-      this.textContentBuffers.delete(contentName);
-      this.pendingToolContentType.delete(contentName);
-    } else if (type === "TOOL") {
-      const toolBuf = this.toolUseBuffers.get(contentName);
-      if (toolBuf) {
-        let input: Record<string, unknown> = {};
-        try {
-          input = JSON.parse(toolBuf.input);
-        } catch {
-          input = { raw: toolBuf.input };
-        }
-        const toolCallId = data?.toolUseConfiguration?.toolUseId || data?.toolResultInputConfiguration?.toolUseId || contentName;
-        this.callbacks.onToolCall(toolCallId, toolBuf.toolName, input);
-      }
-      this.toolUseBuffers.delete(contentName);
-      this.pendingToolContentType.delete(contentName);
+    } else if (data.type === "TEXT") {
+      this.emitTextTranscript(contentName);
+    } else if (data.type === "TOOL") {
+      this.emitToolCall(contentName, data);
     }
   }
 
-  // ---- Session renewal ----
+  /** Emit a transcript callback for a completed text content block. */
+  private emitTextTranscript(contentName: string): void {
+    const textBuf = this.textContentBuffers.get(contentName);
+    if (textBuf?.text) {
+      const role = textBuf.role === "user" ? "user" as const : "assistant" as const;
+      // Deduplicate — Nova Sonic sends each response as TEXT twice
+      const normalized = textBuf.text.trim().replace(/\s+/g, " ");
+      if (normalized && normalized !== this.lastEmittedTranscript) {
+        this.callbacks.onTranscript(role, textBuf.text);
+        if (role === "assistant") {
+          this.lastEmittedTranscript = normalized;
+        }
+      }
+    }
+    this.textContentBuffers.delete(contentName);
+  }
 
+  /** Emit a tool call callback for a completed tool content block. */
+  private emitToolCall(contentName: string, data: ContentEndPayload): void {
+    const toolBuf = this.toolUseBuffers.get(contentName);
+    if (toolBuf) {
+      let input: Record<string, unknown> = {};
+      try {
+        input = JSON.parse(toolBuf.input);
+      } catch {
+        input = { raw: toolBuf.input };
+      }
+      const toolCallId =
+        data.toolUseConfiguration?.toolUseId ??
+        data.toolResultInputConfiguration?.toolUseId ??
+        contentName;
+      this.log("info", "Tool call received", { toolCallId, toolName: toolBuf.toolName });
+      this.callbacks.onToolCall(toolCallId, toolBuf.toolName, input);
+    }
+    this.toolUseBuffers.delete(contentName);
+  }
+
+  // ── Session renewal ────────────────────────────────────────────────
+
+  /** Schedule automatic session renewal before the 8-minute limit. */
   private scheduleRenewal(): void {
     const renewIn = SESSION_MAX_MS - RENEWAL_BUFFER_MS;
     this.renewalTimer = setTimeout(() => {
-      this.renewSession().catch((err) => {
-        this.log("error", "Session renewal failed", { error: err.message });
+      this.renewSession().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.log("error", "Session renewal failed", { error: message });
         this.callbacks.onError("Session renewal failed");
       });
     }, renewIn);
   }
 
+  /** Tear down the current session and start a fresh one. */
   private async renewSession(): Promise<void> {
     this.log("info", "Renewing Nova Sonic session");
 
-    // Close current audio content, prompt, and session
-    this.addEvent({
-      event: { contentEnd: { promptName: this.promptName, contentName: this.audioContentId } },
-    });
+    this.addEvent({ event: { contentEnd: { promptName: this.promptName, contentName: this.audioContentId } } });
     this.addEvent({ event: { promptEnd: { promptName: this.promptName } } });
     this.addEvent({ event: { sessionEnd: {} } });
 
@@ -565,11 +590,10 @@ export class NovaSonicClient {
     this.queue = [];
     this.audioQueue = [];
     this.audioOutputActive = false;
+    this.audioChunkCount = 0;
     this.textContentBuffers.clear();
     this.toolUseBuffers.clear();
-    this.pendingToolContentType.clear();
 
-    // Start fresh
     await this.start();
     this.callbacks.onSessionRenewed();
   }

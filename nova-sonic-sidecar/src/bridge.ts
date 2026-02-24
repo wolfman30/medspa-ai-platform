@@ -1,5 +1,5 @@
 /**
- * Bridge: manages WebSocket connections from Go server,
+ * Bridge: manages WebSocket connections from the Go server,
  * mapping each connection to a Nova Sonic session.
  */
 
@@ -7,7 +7,8 @@ import { type WebSocket } from "ws";
 import { NovaSonicClient, type NovaSonicConfig } from "./nova-sonic-client.js";
 import { DEFAULT_TOOLS, type ToolSpec } from "./tools.js";
 
-/** Messages from Go → Sidecar */
+// ── Inbound messages (Go → Sidecar) ───────────────────────────────────
+
 interface InitMessage {
   type: "init";
   config: {
@@ -36,7 +37,8 @@ interface CloseMessage {
 
 type InboundMessage = InitMessage | AudioMessage | ToolResultMessage | CloseMessage;
 
-/** Messages from Sidecar → Go */
+// ── Outbound messages (Sidecar → Go) ──────────────────────────────────
+
 type OutboundMessage =
   | { type: "audio"; data: string }
   | { type: "tool_call"; toolCallId: string; toolName: string; input: Record<string, unknown> }
@@ -44,6 +46,17 @@ type OutboundMessage =
   | { type: "error"; message: string }
   | { type: "session_renewed" };
 
+// ── GoToolDefinition (flat format from Go) ─────────────────────────────
+
+interface GoToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: string | Record<string, unknown>;
+}
+
+// ── CallSession ────────────────────────────────────────────────────────
+
+/** Manages a single call's lifecycle over one WebSocket connection. */
 export class CallSession {
   private ws: WebSocket;
   private callId: string;
@@ -57,8 +70,9 @@ export class CallSession {
       try {
         const msg: InboundMessage = JSON.parse(raw.toString());
         this.handleMessage(msg);
-      } catch (err: any) {
-        this.send({ type: "error", message: `Invalid message: ${err.message}` });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.send({ type: "error", message: `Invalid message: ${message}` });
       }
     });
 
@@ -75,6 +89,7 @@ export class CallSession {
     this.log("info", "Call session created");
   }
 
+  /** Route an inbound message to the appropriate handler. */
   private handleMessage(msg: InboundMessage): void {
     switch (msg.type) {
       case "init":
@@ -92,29 +107,14 @@ export class CallSession {
     }
   }
 
+  /** Initialize the Nova Sonic client from an init message. */
   private async handleInit(msg: InitMessage): Promise<void> {
     if (this.client) {
       this.send({ type: "error", message: "Session already initialized" });
       return;
     }
 
-    // Normalize tools from Go format ({name, description, inputSchema}) to
-    // Bedrock format ({toolSpec: {name, description, inputSchema: {json}}})
-    let tools: ToolSpec[] = DEFAULT_TOOLS;
-    if (msg.config.tools && msg.config.tools.length > 0) {
-      tools = msg.config.tools.map((t: any) => {
-        // Already in Bedrock format?
-        if (t.toolSpec) return t as ToolSpec;
-        // Go ToolDefinition format — wrap it
-        return {
-          toolSpec: {
-            name: t.name,
-            description: t.description,
-            inputSchema: { json: typeof t.inputSchema === "string" ? JSON.parse(t.inputSchema) : t.inputSchema },
-          },
-        } as ToolSpec;
-      });
-    }
+    const tools = this.normalizeTools(msg.config.tools);
 
     const config: NovaSonicConfig = {
       systemPrompt: msg.config.systemPrompt,
@@ -136,25 +136,56 @@ export class CallSession {
     try {
       await this.client.start();
       this.log("info", "Nova Sonic session started");
-    } catch (err: any) {
-      this.log("error", `Failed to start Nova Sonic: ${err.message}`);
-      this.send({ type: "error", message: `Init failed: ${err.message}` });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log("error", `Failed to start Nova Sonic: ${message}`);
+      this.send({ type: "error", message: `Init failed: ${message}` });
       this.client = null;
     }
   }
 
+  /**
+   * Normalize tools from Go format ({name, description, inputSchema})
+   * to Bedrock format ({toolSpec: {name, description, inputSchema: {json}}}).
+   */
+  private normalizeTools(rawTools?: ToolSpec[] | GoToolDefinition[]): ToolSpec[] {
+    if (!rawTools || rawTools.length === 0) return DEFAULT_TOOLS;
+
+    return rawTools.map((t) => {
+      // Already in Bedrock format
+      if ("toolSpec" in t) return t as ToolSpec;
+
+      // Go ToolDefinition format — wrap it
+      const goTool = t as GoToolDefinition;
+      return {
+        toolSpec: {
+          name: goTool.name,
+          description: goTool.description,
+          inputSchema: {
+            json:
+              typeof goTool.inputSchema === "string"
+                ? JSON.parse(goTool.inputSchema)
+                : goTool.inputSchema,
+          },
+        },
+      } as ToolSpec;
+    });
+  }
+
+  /** Send a message to Go over the WebSocket. */
   private send(msg: OutboundMessage): void {
     if (this.ws.readyState === this.ws.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
   }
 
+  /** Close the Nova Sonic client and WebSocket. */
   private async cleanup(): Promise<void> {
     if (this.client) {
       try {
         await this.client.close();
       } catch {
-        // ignore
+        // ignore cleanup errors
       }
       this.client = null;
     }
