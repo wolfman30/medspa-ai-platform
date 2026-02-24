@@ -229,48 +229,34 @@ export class NovaSonicClient {
 
   private createAsyncIterable(): AsyncIterable<{ chunk: { bytes: Uint8Array } }> {
     const self = this;
-    return {
-      [Symbol.asyncIterator]() {
-        return {
-          async next() {
-            while (self.isActive) {
-              // Non-audio events first
-              if (self.queue.length > 0) {
-                const evt = self.queue.shift()!;
-                const jsonStr = JSON.stringify(evt);
-                const eventType = Object.keys(evt.event || {})[0] || "unknown";
-                self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length });
-                return {
-                  value: { chunk: { bytes: new TextEncoder().encode(jsonStr) } },
-                  done: false,
-                };
-              }
+    async function* generator() {
+      while (self.isActive) {
+        // Non-audio events first
+        if (self.queue.length > 0) {
+          const evt = self.queue.shift()!;
+          const jsonStr = JSON.stringify(evt);
+          const eventType = Object.keys(evt.event || {})[0] || "unknown";
+          self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length });
+          yield { chunk: { bytes: new TextEncoder().encode(jsonStr) } };
+          continue;
+        }
 
-              // Audio events only when output audio is not active
-              if (self.audioQueue.length > 0 && !self.audioOutputActive) {
-                const evt = self.audioQueue.shift()!;
-                return {
-                  value: { chunk: { bytes: new TextEncoder().encode(JSON.stringify(evt)) } },
-                  done: false,
-                };
-              }
+        // Audio events only when output audio is not active
+        if (self.audioQueue.length > 0 && !self.audioOutputActive) {
+          const evt = self.audioQueue.shift()!;
+          yield { chunk: { bytes: new TextEncoder().encode(JSON.stringify(evt)) } };
+          continue;
+        }
 
-              // Wait for signal
-              await new Promise<void>((resolve) => {
-                self.queueResolve = resolve;
-                self.audioStateResolve = resolve;
-                self.closeResolve = resolve;
-              });
-            }
-            return { value: undefined, done: true as const };
-          },
-          async return() {
-            self.isActive = false;
-            return { value: undefined, done: true as const };
-          },
-        };
-      },
-    };
+        // Wait for signal
+        await new Promise<void>((resolve) => {
+          self.queueResolve = resolve;
+          self.audioStateResolve = resolve;
+          self.closeResolve = resolve;
+        });
+      }
+    }
+    return generator();
   }
 
   // ---- Session events ----
