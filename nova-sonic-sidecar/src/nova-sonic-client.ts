@@ -237,8 +237,11 @@ export class NovaSonicClient {
               // Non-audio events first
               if (self.queue.length > 0) {
                 const evt = self.queue.shift()!;
+                const jsonStr = JSON.stringify(evt);
+                const eventType = Object.keys(evt.event || {})[0] || "unknown";
+                self.log("info", `Sending event to Bedrock: ${eventType}`, { size: jsonStr.length });
                 return {
-                  value: { chunk: { bytes: new TextEncoder().encode(JSON.stringify(evt)) } },
+                  value: { chunk: { bytes: new TextEncoder().encode(jsonStr) } },
                   done: false,
                 };
               }
