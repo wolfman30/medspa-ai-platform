@@ -198,14 +198,14 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: web/onboarding/package-lock.json
+          cache-dependency-path: web/portal/package-lock.json
 
-      - name: Install onboarding dependencies
-        working-directory: web/onboarding
+      - name: Install portal dependencies
+        working-directory: web/portal
         run: npm ci
 
-      - name: Build onboarding UI
-        working-directory: web/onboarding
+      - name: Build portal UI
+        working-directory: web/portal
         env:
           VITE_API_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
           VITE_COGNITO_USER_POOL_ID: ${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}
@@ -240,17 +240,16 @@ jobs:
           echo "bucket=$(terraform output -raw ui_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "distribution=$(terraform output -raw ui_cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
 
-      - name: Upload onboarding UI
+      - name: Upload portal UI
         if: steps.ui.outputs.bucket != ''
         run: |
-          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete --exclude "booking/*" --exclude "prospects/*"
+          aws s3 sync web/portal/dist "s3://${{ steps.ui.outputs.bucket }}" --delete --exclude "booking/*" --exclude "prospects/*"
 
       - name: Upload test booking page
         if: steps.ui.outputs.bucket != ''
         run: |
-          aws s3 sync web/test-booking "s3://${{ steps.ui.outputs.bucket }}/booking" --delete
 
-      - name: Invalidate onboarding UI cache
+      - name: Invalidate portal UI cache
         if: steps.ui.outputs.distribution != ''
         run: |
           aws cloudfront create-invalidation --distribution-id "${{ steps.ui.outputs.distribution }}" --paths "/*"
@@ -395,8 +394,21 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Wait for service to stabilize
-        run: sleep 30
+      - name: Wait for API readiness
+        env:
+          API_BASE_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
+        run: |
+          echo "Polling ${API_BASE_URL}/ready (up to 5 minutes)..."
+          for i in $(seq 1 30); do
+            if curl -sf "${API_BASE_URL}/ready" -o /dev/null; then
+              echo "✅ API ready after $((i * 10)) seconds"
+              exit 0
+            fi
+            echo "  Attempt $i/30 — not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "❌ API not ready after 5 minutes"
+          exit 1
 
       - name: Run E2E smoke test (happy-path)
         env:
@@ -548,14 +560,14 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: web/onboarding/package-lock.json
+          cache-dependency-path: web/portal/package-lock.json
 
-      - name: Install onboarding dependencies
-        working-directory: web/onboarding
+      - name: Install portal dependencies
+        working-directory: web/portal
         run: npm ci
 
-      - name: Build onboarding UI
-        working-directory: web/onboarding
+      - name: Build portal UI
+        working-directory: web/portal
         env:
           VITE_API_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
           VITE_COGNITO_USER_POOL_ID: ${{ secrets.ONBOARDING_COGNITO_USER_POOL_ID }}
@@ -588,17 +600,16 @@ jobs:
           echo "bucket=$(terraform output -raw ui_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "distribution=$(terraform output -raw ui_cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
 
-      - name: Upload onboarding UI
+      - name: Upload portal UI
         if: steps.ui.outputs.bucket != ''
         run: |
-          aws s3 sync web/onboarding/dist "s3://${{ steps.ui.outputs.bucket }}" --delete --exclude "booking/*" --exclude "prospects/*"
+          aws s3 sync web/portal/dist "s3://${{ steps.ui.outputs.bucket }}" --delete --exclude "booking/*" --exclude "prospects/*"
 
       - name: Upload test booking page
         if: steps.ui.outputs.bucket != ''
         run: |
-          aws s3 sync web/test-booking "s3://${{ steps.ui.outputs.bucket }}/booking" --delete
 
-      - name: Invalidate onboarding UI cache
+      - name: Invalidate portal UI cache
         if: steps.ui.outputs.distribution != ''
         run: |
           aws cloudfront create-invalidation --distribution-id "${{ steps.ui.outputs.distribution }}" --paths "/*"
