@@ -121,8 +121,18 @@ export class NovaSonicClient {
   }
 
   /** Send audio data (base64 PCM). */
+  private audioChunkCount = 0;
   sendAudio(base64Data: string): void {
     if (!this.isActive) return;
+    this.audioChunkCount++;
+    if (this.audioChunkCount <= 3 || this.audioChunkCount % 50 === 0) {
+      this.log("info", `Audio chunk received from Go`, {
+        chunk: this.audioChunkCount,
+        audioOutputActive: this.audioOutputActive,
+        audioQueueLen: this.audioQueue.length,
+        dataLen: base64Data.length,
+      });
+    }
     this.addEvent(
       {
         event: {
@@ -355,21 +365,29 @@ export class NovaSonicClient {
   // ---- Response processing ----
 
   private async processResponseStream(response: any): Promise<void> {
+    let eventCount = 0;
     try {
       for await (const event of response.body) {
         if (!this.isActive) break;
         if (!event.chunk?.bytes) continue;
+        eventCount++;
 
         const text = new TextDecoder().decode(event.chunk.bytes);
         let json: any;
         try {
           json = JSON.parse(text);
         } catch {
-          this.log("error", "Failed to parse response chunk", { text });
+          this.log("error", "Failed to parse response chunk", { text: text.substring(0, 200) });
           continue;
         }
 
         const eventType = Object.keys(json.event || {})[0] || "unknown";
+        if (eventType !== "audioOutput") {
+          this.log("info", `Bedrock response event #${eventCount}: ${eventType}`, {
+            audioOutputActive: this.audioOutputActive,
+            audioQueueLen: this.audioQueue.length,
+          });
+        }
 
         switch (eventType) {
           case "contentStart":
