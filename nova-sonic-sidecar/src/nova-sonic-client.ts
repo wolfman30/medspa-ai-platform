@@ -290,10 +290,12 @@ export class NovaSonicClient {
       },
     };
 
-    if (this.config.tools.length > 0) {
-      cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
-      cfg.toolConfiguration = { tools: this.config.tools };
-    }
+    // TODO: Re-enable tools after confirming basic audio works
+    // Nova Sonic tool format may differ from Converse API
+    // if (this.config.tools.length > 0) {
+    //   cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
+    //   cfg.toolConfiguration = { tools: this.config.tools };
+    // }
 
     this.addEvent({ event: { promptStart: cfg } });
   }
