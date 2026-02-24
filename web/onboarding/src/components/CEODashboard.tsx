@@ -3,6 +3,7 @@ import { listProspects, listBriefs, type MorningBrief } from '../api/client';
 import { ProspectDetail } from './ProspectDetail';
 import { Rule100Card } from './Rule100Card';
 import { TestingStatusCard } from './TestingStatusCard';
+import { LeadLeakAuditCard } from './LeadLeakAuditCard';
 
 interface ProspectEvent {
   id: number;
@@ -277,6 +278,9 @@ export function CEODashboard() {
             </div>
           ))}
         </div>
+
+        {/* Lead Leak Audits */}
+        <LeadLeakAuditCard />
 
         {/* Testing Status */}
         <TestingStatusCard />
