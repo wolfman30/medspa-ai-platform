@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -18,6 +21,7 @@ type CallControlHandler struct {
 	logger       *logging.Logger
 	telnyxAPIKey string
 	streamURL    string // e.g. "wss://api-dev.aiwolfsolutions.com/ws/voice"
+	orgResolver  messaging.OrgResolver
 }
 
 // CallControlConfig configures the handler.
@@ -25,6 +29,7 @@ type CallControlConfig struct {
 	Logger       *logging.Logger
 	TelnyxAPIKey string
 	StreamURL    string
+	OrgResolver  messaging.OrgResolver
 }
 
 // NewCallControlHandler creates a new Call Control webhook handler.
@@ -36,6 +41,7 @@ func NewCallControlHandler(cfg CallControlConfig) *CallControlHandler {
 		logger:       cfg.Logger,
 		telnyxAPIKey: cfg.TelnyxAPIKey,
 		streamURL:    cfg.StreamURL,
+		orgResolver:  cfg.OrgResolver,
 	}
 }
 
@@ -93,8 +99,8 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Call answered — start media streaming
-		h.startStreaming(callControlID)
+		// Call answered — start media streaming with caller context
+		h.startStreaming(callControlID, from, to)
 
 	case "streaming.started":
 		h.logger.Info("call-control: media streaming started",
@@ -131,11 +137,34 @@ func (h *CallControlHandler) answerCall(callControlID string) {
 }
 
 // startStreaming tells Telnyx to start media streaming to our WebSocket.
-func (h *CallControlHandler) startStreaming(callControlID string) {
+// It encodes caller context (from, to, orgID) into client_state so the
+// WebSocket handler can associate the stream with the right clinic.
+func (h *CallControlHandler) startStreaming(callControlID, from, to string) {
+	// Resolve orgID from the "to" number (the clinic's phone)
+	orgID := ""
+	if h.orgResolver != nil {
+		if resolved, err := h.orgResolver.ResolveOrgID(context.Background(), to); err == nil {
+			orgID = resolved
+		} else {
+			h.logger.Warn("call-control: could not resolve org for number", "to", to, "error", err)
+		}
+	}
+
 	h.logger.Info("call-control: starting media stream",
 		"call_control_id", callControlID,
 		"stream_url", h.streamURL,
+		"from", from,
+		"to", to,
+		"org_id", orgID,
 	)
+
+	// Encode caller context as base64 JSON in client_state
+	cs, _ := json.Marshal(map[string]string{
+		"from":   from,
+		"to":     to,
+		"org_id": orgID,
+	})
+	clientState := base64.StdEncoding.EncodeToString(cs)
 
 	payload := map[string]interface{}{
 		"stream_url":                 h.streamURL,
@@ -143,6 +172,7 @@ func (h *CallControlHandler) startStreaming(callControlID string) {
 		"stream_bidirectional_mode":  "rtp",
 		"stream_bidirectional_codec": "L16",
 		"enable_dialogflow":          false,
+		"client_state":               clientState,
 	}
 	h.sendCallControlCommand(callControlID, "streaming_start", payload)
 }

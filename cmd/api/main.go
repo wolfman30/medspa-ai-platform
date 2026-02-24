@@ -337,7 +337,20 @@ func main() {
 	if cfg.NovaSonicSidecarURL != "" {
 		sidecarURL := cfg.NovaSonicSidecarURL
 		novaSonicVoice := cfg.NovaSonicVoice
-		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat) (*voice.Bridge, error) {
+
+		// Build shared tool dependencies for voice AI
+		voiceToolDeps := &voice.ToolDeps{
+			MoxieClient: func() *moxieclient.Client {
+				// Moxie client is created later in worker init; create one here too
+				moxieDryRun := os.Getenv("MOXIE_DRY_RUN") == "true"
+				return moxieclient.NewClient(logger, moxieclient.WithDryRun(moxieDryRun))
+			}(),
+			Messenger:   webhookMessenger,
+			ClinicStore: clinicStore,
+			LeadsRepo:   leadsRepo,
+		}
+
+		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {
 			// Build system prompt for this call
 			systemPrompt := "You are a friendly and professional AI receptionist for a medical spa called Brilliant Aesthetics. " +
 				"When the caller says hello or the call starts, greet them warmly: " +
@@ -359,6 +372,9 @@ func main() {
 					SidecarURL:   sidecarURL,
 					SystemPrompt: systemPrompt,
 					Voice:        novaSonicVoice,
+					OrgID:        callCtx.OrgID,
+					CallerPhone:  callCtx.From,
+					ToolDeps:     voiceToolDeps,
 				},
 				callControlID,
 				mediaFormat,
@@ -375,6 +391,7 @@ func main() {
 			Logger:       logger,
 			TelnyxAPIKey: cfg.TelnyxAPIKey,
 			StreamURL:    cfg.NovaSonicStreamURL,
+			OrgResolver:  resolver,
 		})
 		logger.Info("call control handler initialized", "stream_url", cfg.NovaSonicStreamURL)
 	}

@@ -21,6 +21,7 @@ type BridgeConfig struct {
 	OrgID        string
 	CallerPhone  string // E.164
 	Tools        []ToolDefinition
+	ToolDeps     *ToolDeps
 }
 
 // Bridge manages the bidirectional audio flow between Telnyx and Nova Sonic.
@@ -64,7 +65,7 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 	}
 
 	// Create tool handler
-	b.toolHandler = NewToolHandler(cfg.OrgID, cfg.CallerPhone, logger)
+	b.toolHandler = NewToolHandler(cfg.OrgID, cfg.CallerPhone, cfg.ToolDeps, logger)
 
 	// Connect to Nova Sonic sidecar
 	sidecar, err := DialSidecar(SidecarConfig{URL: cfg.SidecarURL}, logger)

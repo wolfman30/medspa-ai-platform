@@ -12,6 +12,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// CallContext carries caller metadata decoded from Telnyx client_state.
+type CallContext struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	OrgID string `json:"org_id"`
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Telnyx WebSocket media stream handler.
 //
@@ -79,7 +86,7 @@ type TelnyxWSHandler struct {
 }
 
 // BridgeFactory creates a new Bridge for each incoming call.
-type BridgeFactory func(logger *slog.Logger, callControlID string, mediaFormat TelnyxMediaFormat) (*Bridge, error)
+type BridgeFactory func(logger *slog.Logger, callControlID string, mediaFormat TelnyxMediaFormat, callCtx CallContext) (*Bridge, error)
 
 // NewTelnyxWSHandler creates the WebSocket handler.
 func NewTelnyxWSHandler(logger *slog.Logger, factory BridgeFactory) *TelnyxWSHandler {
@@ -187,14 +194,25 @@ func (s *telnyxSession) handleStart(event TelnyxEvent) error {
 		return fmt.Errorf("start event missing start payload")
 	}
 
+	// Decode caller context from client_state (base64 JSON)
+	var callCtx CallContext
+	if event.Start.ClientState != "" {
+		if decoded, err := base64.StdEncoding.DecodeString(event.Start.ClientState); err == nil {
+			_ = json.Unmarshal(decoded, &callCtx)
+		}
+	}
+
 	s.logger.Info("telnyx-ws: stream started",
 		"stream_id", event.Start.StreamID,
 		"call_control_id", event.Start.CallControlID,
 		"encoding", event.Start.MediaFormat.Encoding,
 		"sample_rate", event.Start.MediaFormat.SampleRate,
+		"caller_from", callCtx.From,
+		"caller_to", callCtx.To,
+		"org_id", callCtx.OrgID,
 	)
 
-	bridge, err := s.factory(s.logger, event.Start.CallControlID, event.Start.MediaFormat)
+	bridge, err := s.factory(s.logger, event.Start.CallControlID, event.Start.MediaFormat, callCtx)
 	if err != nil {
 		return fmt.Errorf("create bridge: %w", err)
 	}

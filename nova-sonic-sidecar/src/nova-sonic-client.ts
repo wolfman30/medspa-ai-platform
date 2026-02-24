@@ -152,41 +152,12 @@ export class NovaSonicClient {
   /** Send a tool result back to Nova Sonic. */
   sendToolResult(toolCallId: string, result: string): void {
     if (!this.isActive) return;
-
-    const toolResultContentId = randomUUID();
-
     this.addEvent({
       event: {
-        contentStart: {
+        toolResult: {
           promptName: this.promptName,
-          contentName: toolResultContentId,
-          type: "TOOL_RESULT",
-          interactive: false,
-          role: "TOOL",
-          toolResultInputConfiguration: {
-            toolUseId: toolCallId,
-            type: "TEXT",
-            textInputConfiguration: { mediaType: "text/plain" },
-          },
-        },
-      },
-    });
-
-    this.addEvent({
-      event: {
-        textInput: {
-          promptName: this.promptName,
-          contentName: toolResultContentId,
+          contentName: randomUUID(),
           content: result,
-        },
-      },
-    });
-
-    this.addEvent({
-      event: {
-        contentEnd: {
-          promptName: this.promptName,
-          contentName: toolResultContentId,
         },
       },
     });
@@ -302,12 +273,13 @@ export class NovaSonicClient {
       },
     };
 
-    // TODO: Re-enable tools after confirming basic audio works
-    // Nova Sonic tool format may differ from Converse API
-    // if (this.config.tools.length > 0) {
-    //   cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
-    //   cfg.toolConfiguration = { tools: this.config.tools };
-    // }
+    if (this.config.tools.length > 0) {
+      cfg.toolUseOutputConfiguration = { mediaType: "application/json" };
+      cfg.toolConfiguration = {
+        tools: this.config.tools,
+        toolChoice: { auto: {} },
+      };
+    }
 
     this.addEvent({ event: { promptStart: cfg } });
   }
