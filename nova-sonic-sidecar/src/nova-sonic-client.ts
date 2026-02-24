@@ -343,8 +343,9 @@ export class NovaSonicClient {
   }
 
   private enqueueGreetingTrigger(): void {
-    // Send a synthetic user text turn to trigger the AI to greet immediately
-    // without waiting for actual speech/VAD detection.
+    // Send a synthetic user text turn to trigger the AI to greet immediately.
+    // Using interactive:true + role:USER so Nova Sonic treats it as user input
+    // that requires an immediate response (greeting).
     const contentName = randomUUID();
     this.addEvent({
       event: {
@@ -363,7 +364,7 @@ export class NovaSonicClient {
         textInput: {
           promptName: this.promptName,
           contentName,
-          content: "[A caller has just connected to the phone line. Greet them now.]",
+          content: "Hello",
         },
       },
     });
@@ -519,10 +520,12 @@ export class NovaSonicClient {
         const role = textBuf.role === "user" ? "user" : "assistant";
         // Deduplicate — Nova Sonic sends each response as TEXT twice
         // (once as plan, once as spoken transcript)
-        const normalized = textBuf.text.trim();
-        if (normalized !== this.lastEmittedTranscript) {
+        const normalized = textBuf.text.trim().replace(/\s+/g, " ");
+        if (normalized && normalized !== this.lastEmittedTranscript) {
           this.callbacks.onTranscript(role, textBuf.text);
-          this.lastEmittedTranscript = normalized;
+          if (role === "assistant") {
+            this.lastEmittedTranscript = normalized;
+          }
         }
       }
       this.textContentBuffers.delete(contentName);
