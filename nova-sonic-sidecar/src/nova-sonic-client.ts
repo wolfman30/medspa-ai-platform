@@ -326,11 +326,10 @@ export class NovaSonicClient {
   }
 
   /**
-   * Ensure inputSchema.json is a JSON string (Nova Sonic v1 requirement).
-   * The Bedrock ToolSpec type declares json as Record, but Nova Sonic v1
-   * actually expects a stringified JSON schema — hence the cast.
+   * Sanitize tool specs for Nova Sonic. Ensure inputSchema.json is a
+   * proper object (parse if string, pass through if already object).
    */
-  private sanitizeToolSpecs(tools: ToolSpec[]): { toolSpec: { name: string; description: string; inputSchema: { json: string } } }[] {
+  private sanitizeToolSpecs(tools: ToolSpec[]): ToolSpec[] {
     return tools.map((t) => ({
       toolSpec: {
         name: t.toolSpec.name,
@@ -338,8 +337,8 @@ export class NovaSonicClient {
         inputSchema: {
           json:
             typeof t.toolSpec.inputSchema.json === "string"
-              ? (t.toolSpec.inputSchema.json as unknown as string)
-              : JSON.stringify(t.toolSpec.inputSchema.json),
+              ? JSON.parse(t.toolSpec.inputSchema.json as unknown as string)
+              : t.toolSpec.inputSchema.json,
         },
       },
     }));
