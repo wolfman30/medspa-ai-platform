@@ -350,9 +350,15 @@ func main() {
 		}
 
 		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {
+			// Pre-fetch availability for top services to inject into system prompt
+			availabilitySummary := ""
+			if voiceToolDeps.MoxieClient != nil {
+				availabilitySummary = voice.FetchAvailabilitySummary(l, voiceToolDeps.MoxieClient, voiceToolDeps.ClinicStore, callCtx.OrgID)
+			}
+
 			// Build system prompt for this call
 			systemPrompt := "You are a friendly and professional AI receptionist for a medical spa called Brilliant Aesthetics. " +
-				"When the caller says hello or the call starts, greet them warmly: " +
+				"IMMEDIATELY when the call starts, greet the caller warmly — do NOT wait for them to speak first: " +
 				"'Hi, thank you for calling Brilliant Aesthetics! How can I help you today?' " +
 				"Keep ALL responses brief — 1-2 sentences max. Be warm but efficient. " +
 				"When booking appointments, collect information in this order: " +
@@ -362,8 +368,15 @@ func main() {
 				"4) Their preferred DAYS and TIMES (not dates — say 'What days and times work best for you?'), " +
 				"5) If they have a provider preference. " +
 				"REMEMBER everything the caller tells you throughout the conversation. Do not ask for information they already provided. " +
-				"Do NOT say you'll text them — speak the information directly. " +
-				"If you don't know specific availability, say 'Let me check on that for you' and ask for their preferences."
+				"When the caller asks about availability or you have enough info to suggest times, " +
+				"SPEAK the available times directly — for example: 'I have openings on Tuesday at 2 PM, Wednesday at 10 AM, and Thursday at 4 PM. Which works best for you?' " +
+				"Be specific with days and times. Do NOT say 'let me check' — use the availability data below."
+
+			if availabilitySummary != "" {
+				systemPrompt += "\n\nCURRENT AVAILABILITY:\n" + availabilitySummary
+			} else {
+				systemPrompt += "\n\nNote: Availability data is not loaded. If asked about times, say 'I apologize, I'm having trouble accessing our schedule right now. Can I take your information and have someone call you back with available times?'"
+			}
 
 			return voice.NewBridge(
 				context.Background(),
