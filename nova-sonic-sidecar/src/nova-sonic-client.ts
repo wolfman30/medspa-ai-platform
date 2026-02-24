@@ -62,6 +62,7 @@ export class NovaSonicClient {
 
   // Track output audio state to hold input while assistant speaks
   private audioOutputActive = false;
+  private lastEmittedTranscript = "";
   private audioStateResolve: (() => void) | null = null;
 
   // Track text content for transcripts
@@ -104,6 +105,7 @@ export class NovaSonicClient {
     this.enqueueSessionStart();
     this.enqueuePromptStart();
     this.enqueueSystemPrompt();
+    this.enqueueGreetingTrigger();
     this.enqueueAudioContentStart();
 
     const asyncIterable = this.createAsyncIterable();
@@ -340,6 +342,38 @@ export class NovaSonicClient {
     });
   }
 
+  private enqueueGreetingTrigger(): void {
+    // Send a synthetic user text turn to trigger the AI to greet immediately
+    // without waiting for actual speech/VAD detection.
+    const contentName = randomUUID();
+    this.addEvent({
+      event: {
+        contentStart: {
+          promptName: this.promptName,
+          contentName,
+          type: "TEXT",
+          interactive: true,
+          role: "USER",
+          textInputConfiguration: { mediaType: "text/plain" },
+        },
+      },
+    });
+    this.addEvent({
+      event: {
+        textInput: {
+          promptName: this.promptName,
+          contentName,
+          content: "[A caller has just connected to the phone line. Greet them now.]",
+        },
+      },
+    });
+    this.addEvent({
+      event: {
+        contentEnd: { promptName: this.promptName, contentName },
+      },
+    });
+  }
+
   private enqueueAudioContentStart(): void {
     this.addEvent({
       event: {
@@ -483,7 +517,13 @@ export class NovaSonicClient {
       const textBuf = this.textContentBuffers.get(contentName);
       if (textBuf && textBuf.text) {
         const role = textBuf.role === "user" ? "user" : "assistant";
-        this.callbacks.onTranscript(role, textBuf.text);
+        // Deduplicate — Nova Sonic sends each response as TEXT twice
+        // (once as plan, once as spoken transcript)
+        const normalized = textBuf.text.trim();
+        if (normalized !== this.lastEmittedTranscript) {
+          this.callbacks.onTranscript(role, textBuf.text);
+          this.lastEmittedTranscript = normalized;
+        }
       }
       this.textContentBuffers.delete(contentName);
       this.pendingToolContentType.delete(contentName);
