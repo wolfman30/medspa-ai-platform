@@ -151,13 +151,16 @@ export class NovaSonicClient {
     this.enqueueSessionStart();
     this.enqueuePromptStart();
     this.enqueueSystemPrompt();
-    // CRITICAL: Audio stream MUST be open BEFORE any interactive text input.
-    // Nova Sonic requires an active audio stream to generate audio output (crossmodal).
-    // Without it, text input produces text-only responses (no audioOutput events).
-    // Order: system prompt → audio stream + silent frames → greeting text
+    // CRITICAL: Audio stream MUST be open and continuously active for Nova Sonic
+    // to generate audio output. The model requires real-time audio sampling cadence.
+    // Order: system prompt → audio stream + continuous silent frames → greeting text
     this.enqueueAudioContentStart();
-    this.enqueueSilentAudioFrames(5);
+    // Send enough silent frames to establish ~1 second of audio presence
+    // (32ms per frame × 30 frames ≈ 960ms)
+    this.enqueueSilentAudioFrames(30);
     this.enqueueGreetingTrigger();
+    // Start continuous silent audio keepalive in background
+    this.startSilentKeepalive();
 
     const response = await this.client.send(
       new InvokeModelWithBidirectionalStreamCommand({
@@ -413,6 +416,35 @@ export class NovaSonicClient {
         false  // control queue, NOT audio queue — must be sent before greeting text
       );
     }
+  }
+
+  /** Continuously send silent audio frames until real audio arrives from the caller.
+   *  Nova Sonic requires continuous audio sampling cadence (~32ms per frame). */
+  private startSilentKeepalive(): void {
+    const silentFrame = Buffer.alloc(1024).toString("base64");
+    const interval = setInterval(() => {
+      if (!this.isActive) {
+        clearInterval(interval);
+        return;
+      }
+      // Stop sending silent frames once real audio is flowing (chunk > 10)
+      if (this.audioChunkCount > 10) {
+        clearInterval(interval);
+        return;
+      }
+      this.addEvent(
+        {
+          event: {
+            audioInput: {
+              promptName: this.promptName,
+              contentName: this.audioContentId,
+              content: silentFrame,
+            },
+          },
+        },
+        true // OK to use audio queue now — real audio isn't flowing yet
+      );
+    }, 100); // every 100ms
   }
 
   // ── Response stream processing ─────────────────────────────────────
