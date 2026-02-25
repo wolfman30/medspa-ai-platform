@@ -151,8 +151,13 @@ export class NovaSonicClient {
     this.enqueueSessionStart();
     this.enqueuePromptStart();
     this.enqueueSystemPrompt();
-    this.enqueueGreetingTrigger();
+    // CRITICAL: Audio stream MUST be open BEFORE any interactive text input.
+    // Nova Sonic requires an active audio stream to generate audio output (crossmodal).
+    // Without it, text input produces text-only responses (no audioOutput events).
+    // Order: system prompt → audio stream + silent frames → greeting text
     this.enqueueAudioContentStart();
+    this.enqueueSilentAudioFrames(5);
+    this.enqueueGreetingTrigger();
 
     const response = await this.client.send(
       new InvokeModelWithBidirectionalStreamCommand({
@@ -387,6 +392,26 @@ export class NovaSonicClient {
         },
       },
     });
+  }
+
+  /** Send silent audio frames to establish the audio stream before text input.
+   *  Nova Sonic requires an active audio stream for crossmodal (text→audio) output. */
+  private enqueueSilentAudioFrames(count: number): void {
+    const silentFrame = Buffer.alloc(1024).toString("base64"); // 512 samples of silence at 16-bit
+    for (let i = 0; i < count; i++) {
+      this.addEvent(
+        {
+          event: {
+            audioInput: {
+              promptName: this.promptName,
+              contentName: this.audioContentId,
+              content: silentFrame,
+            },
+          },
+        },
+        true
+      );
+    }
   }
 
   // ── Response stream processing ─────────────────────────────────────
