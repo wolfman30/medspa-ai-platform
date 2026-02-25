@@ -395,7 +395,8 @@ export class NovaSonicClient {
   }
 
   /** Send silent audio frames to establish the audio stream before text input.
-   *  Nova Sonic requires an active audio stream for crossmodal (text→audio) output. */
+   *  Nova Sonic requires an active audio stream for crossmodal (text→audio) output.
+   *  These go to the CONTROL queue (isAudio=false) so they're sent before the greeting text. */
   private enqueueSilentAudioFrames(count: number): void {
     const silentFrame = Buffer.alloc(1024).toString("base64"); // 512 samples of silence at 16-bit
     for (let i = 0; i < count; i++) {
@@ -409,7 +410,7 @@ export class NovaSonicClient {
             },
           },
         },
-        true
+        false  // control queue, NOT audio queue — must be sent before greeting text
       );
     }
   }
