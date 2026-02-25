@@ -14,7 +14,7 @@ import (
 // FetchAvailabilitySummary pre-fetches available slots for the clinic's top services
 // and returns a human-readable summary for injection into the voice AI system prompt.
 func FetchAvailabilitySummary(l *slog.Logger, mc *moxieclient.Client, cs *clinic.Store, orgID string) string {
-	if orgID == "" {
+	if cs == nil || mc == nil || orgID == "" {
 		l.Warn("voice-availability: no org ID, skipping pre-fetch")
 		return ""
 	}
@@ -26,13 +26,13 @@ func FetchAvailabilitySummary(l *slog.Logger, mc *moxieclient.Client, cs *clinic
 		return ""
 	}
 
-	if cfg.MoxieConfig.MedspaID == "" {
+	if cfg.MoxieConfig == nil || cfg.MoxieConfig.MedspaID == "" {
 		l.Warn("voice-availability: no medspa_id configured", "org_id", orgID)
 		return ""
 	}
 
 	// Get service menu items (service name → moxie menu item ID)
-	if cfg.MoxieConfig == nil || cfg.MoxieConfig.MedspaID == "" || len(cfg.MoxieConfig.ServiceMenuItems) == 0 {
+	if len(cfg.MoxieConfig.ServiceMenuItems) == 0 {
 		l.Warn("voice-availability: no service menu items configured", "org_id", orgID)
 		return ""
 	}
