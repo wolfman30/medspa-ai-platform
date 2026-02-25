@@ -155,9 +155,9 @@ export class NovaSonicClient {
     // to generate audio output. The model requires real-time audio sampling cadence.
     // Order: system prompt → audio stream + continuous silent frames → greeting text
     this.enqueueAudioContentStart();
-    // Send enough silent frames to establish ~1 second of audio presence
-    // (32ms per frame × 30 frames ≈ 960ms)
-    this.enqueueSilentAudioFrames(30);
+    // Send enough silent frames to establish ~1.6 seconds of audio presence
+    // (32ms per frame × 50 frames ≈ 1600ms) — generous buffer for crossmodal readiness
+    this.enqueueSilentAudioFrames(50);
     this.enqueueGreetingTrigger();
     // Start continuous silent audio keepalive in background
     this.startSilentKeepalive();

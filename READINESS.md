@@ -1,27 +1,28 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-24 (07:30 UTC)
+Last updated: 2026-02-25 (07:30 UTC)
 
 ## Automated E2E Test Results (Live Dev API)
 
 **30 scenarios | 26 ✅ passing | 4 ❌ failing | 101/106 checks passed (95%)** *(last validated run — 65+ commits since)*
 
-### Recent Fixes (Feb 23-24):
+### Recent Fixes (Feb 24-25):
+- `b7be052` fix: continuous silent audio keepalive for Nova Sonic crossmodal
+- `a72b7f7` fix: silent audio frames sent to wrong queue + improve voice prompt
+- `09cf6f8` fix: Nova Sonic audio output requires audio stream before text input
+- `4f090ac` fix: nil pointer crash in voice availability pre-fetch
+- `5c1d1d2` feat: voice AI speaks available times + stronger auto-greeting
+- `26f520d` fix: disable Nova Sonic tools — causes text-only mode, no audio
+- `0c5dcde` chore: remove dead browser sidecar — 16,852 lines deleted
+- `2978f0b` feat: daily Moxie booking slot snapshot for sales intelligence
+- `425ee23` feat: Lead Leak Audit card on CEO Dashboard
+- *(23 commits in last 24h — voice AI stabilization + cleanup)*
+
+### Previous Fixes (Feb 23-24):
 - `87af1f2` fix: voice AI greeting, dedup, qualification flow, prompt overhaul
 - `57bfdc4` fix: auto-greeting trigger + deduplicate transcript responses
-- `39cf713` fix: output audio logging, busy-spin fix, auto-greeting prompt
 - `673b16c` fix: request L16 codec from Telnyx (Nova Sonic needs LPCM, not G722)
-- `86a8ece` fix: use async generator for Bedrock stream
-- `b712089` fix: add Nova Sonic model + bidirectional stream IAM
-- `4f96191` fix: use ECS container metadata for AWS creds in sidecar
-- `22fb639` feat: Call Control handler — answer calls + start media streaming
 - `16e05ff` feat: Nova Sonic voice AI sidecar integration + llm_service refactor
-- *(25 commits in last 24h — all voice AI sidecar work)*
-
-### Previous Fixes (Feb 22-23):
-- `20f5608` fix: clear stale lead preferences on new voice call
-- `566fbd9` feat: separate voice model for lower latency
-- `50226c3` fix: inject qualification state summary for voice (no re-asking)
 - `4641187` fix: use DefaultProviderID when noPreference returns empty
 
 ### Remaining Issues:
@@ -90,7 +91,7 @@ Last updated: 2026-02-24 (07:30 UTC)
 1. **4 E2E failures** — LLM sometimes doesn't recognize "fix my 11s" or "lip flip" as Botox/lip filler
 2. **Ack messages still double SMS costs** — Root cause known (`internal/messaging/ack.go`), not fixed
 3. **Not tested by a real med spa operator yet** — Only Andrew has tested
-4. **Voice AI is NEW and needs operator validation** — Core flow works, edge cases being ironed out
+4. **Voice AI stabilizing** — Nova Sonic crossmodal audio issues being resolved (silent keepalive, codec, tools disabled). Needs real-call validation.
 
 ### What would make it better (not blocking)
 - After-hours greeting logic untested (A3/A4)
