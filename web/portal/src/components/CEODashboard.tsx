@@ -4,6 +4,7 @@ import { ProspectDetail } from './ProspectDetail';
 import { Rule100Card } from './Rule100Card';
 import { TestingStatusCard } from './TestingStatusCard';
 import { LeadLeakAuditCard } from './LeadLeakAuditCard';
+import { SalesScriptsCard } from './SalesScriptsCard';
 
 interface ProspectEvent {
   id: number;
@@ -278,6 +279,9 @@ export function CEODashboard() {
             </div>
           ))}
         </div>
+
+        {/* Sales Call Scripts */}
+        <SalesScriptsCard />
 
         {/* Lead Leak Audits */}
         <LeadLeakAuditCard />

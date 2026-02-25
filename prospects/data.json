@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-24T20:00:00Z",
+  "lastUpdated": "2026-02-25T20:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -1185,6 +1185,53 @@
       "notes": "Wellness-heavy, no prominent phone number. Lower priority \u2014 Canton already saturated with prospects.",
       "timeline": [],
       "nextAction": "Low priority \u2014 revisit if Canton prospects dry up"
+    },
+    {
+      "id": "reverse-aesthetics-columbus",
+      "clinic": "Reverse Aesthetics",
+      "owner": "Dr. Petter Vaagenes & Kerie Vaagenes",
+      "title": "MD + RN \u2014 Co-Founders",
+      "location": "New Albany, OH",
+      "phone": "(614) 656-4000",
+      "email": "",
+      "website": "reverse-aesthetics.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "services": [
+        "Botox",
+        "Fillers",
+        "HRT",
+        "Weight Loss",
+        "CO2 Laser",
+        "Body Contouring",
+        "Hair Restoration"
+      ],
+      "timeline": [],
+      "nextAction": "Find email, send outreach",
+      "notes": "Physician-led husband-wife team. New Albany (affluent Columbus suburb). Opened 2023. Closes 6PM \u2014 strong after-hours gap. Loyalty program."
+    },
+    {
+      "id": "dose-aesthetics-bowling-green",
+      "clinic": "Dose Aesthetics",
+      "owner": "Samantha Champion",
+      "title": "FNP-BC, CANS \u2014 Owner/Master Injector",
+      "location": "Bowling Green, OH",
+      "phone": "",
+      "email": "",
+      "website": "rightdosenow.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "services": [
+        "Botox",
+        "Fillers",
+        "Sculptra",
+        "Laser",
+        "Hair Restoration",
+        "Tattoo Removal"
+      ],
+      "timeline": [],
+      "nextAction": "Find phone/email, send outreach",
+      "notes": "NP-owned, 2 locations (BG + Maumee). 4.8K IG followers, 5 providers. Strong social media presence. Serves NW Ohio."
     }
   ]
 }
