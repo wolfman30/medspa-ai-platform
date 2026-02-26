@@ -144,11 +144,6 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 			"call_control_id", callControlID,
 		)
 
-	case "streaming.started":
-		h.logger.Info("call-control: media streaming started",
-			"call_control_id", callControlID,
-		)
-
 	case "streaming.stopped":
 		h.logger.Info("call-control: media streaming stopped",
 			"call_control_id", callControlID,
