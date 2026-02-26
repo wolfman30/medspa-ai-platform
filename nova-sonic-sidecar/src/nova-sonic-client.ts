@@ -153,12 +153,10 @@ export class NovaSonicClient {
     this.enqueueSystemPrompt();
     // CRITICAL: Audio stream MUST be open and continuously active for Nova Sonic
     // to generate audio output. The model requires real-time audio sampling cadence.
-    // Order: system prompt → audio stream + continuous silent frames → greeting text
+    // Order: system prompt → audio stream start → greeting text (delayed)
     this.enqueueAudioContentStart();
-    // Send enough silent frames to establish ~1.6 seconds of audio presence
-    // (32ms per frame × 50 frames ≈ 1600ms) — generous buffer for crossmodal readiness
-    this.enqueueSilentAudioFrames(50);
-    this.enqueueGreetingTrigger();
+    // Send initial silent frames to start the audio stream
+    this.enqueueSilentAudioFrames(20);
     // Start continuous silent audio keepalive in background
     this.startSilentKeepalive();
 
@@ -170,6 +168,16 @@ export class NovaSonicClient {
     );
 
     this.log("info", "Bedrock stream established");
+
+    // DELAY greeting trigger: Wait for audio stream to be fully established
+    // before sending the text greeting. Nova Sonic needs continuous audio
+    // flowing for ~2 seconds before it can do crossmodal (text→audio) output.
+    setTimeout(() => {
+      if (this.isActive) {
+        this.log("info", "Sending delayed greeting trigger (2s after stream)");
+        this.enqueueGreetingTrigger();
+      }
+    }, 2000);
     this.scheduleRenewal();
     this.processResponseStream(response);
   }

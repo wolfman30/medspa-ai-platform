@@ -115,7 +115,9 @@ func buildDepositSection(cfg *clinic.Config) string {
 			"The deposit goes toward your treatment cost. "+
 			"If you cancel 24 hours or more in advance, you'll receive a full refund. "+
 			"If you don't show up, the deposit is forfeited. "+
-			"After the caller picks a time, inform them about the deposit and say you'll text them a secure payment link. ",
+			"After the caller picks a time, inform them about the deposit and tell them: "+
+			"'After we hang up, you'll receive a text message with a secure payment link to complete your deposit.' "+
+			"Do NOT say 'I'll send it right now' — the text is sent automatically after the call ends. ",
 		dollars)
 }
 

@@ -206,7 +206,7 @@ func (b *Bridge) processSidecarOutput(ctx context.Context) {
 
 func (b *Bridge) convertInputAudio(audio []byte) ([]byte, error) {
 	switch b.mediaFormat.Encoding {
-	case "audio/x-l16", "audio/x-linear16", "audio/lpcm":
+	case "audio/x-l16", "audio/x-linear16", "audio/lpcm", "L16", "l16":
 		return audio, nil
 	case "audio/x-mulaw":
 		return mulawToLinear16(audio), nil
@@ -218,7 +218,7 @@ func (b *Bridge) convertInputAudio(audio []byte) ([]byte, error) {
 
 func (b *Bridge) convertOutputAudio(audio []byte) ([]byte, error) {
 	switch b.mediaFormat.Encoding {
-	case "audio/x-l16", "audio/x-linear16", "audio/lpcm":
+	case "audio/x-l16", "audio/x-linear16", "audio/lpcm", "L16", "l16":
 		return audio, nil
 	case "audio/x-mulaw":
 		return linear16ToMulaw(audio), nil

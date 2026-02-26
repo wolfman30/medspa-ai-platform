@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-25T20:00:00Z",
+  "lastUpdated": "2026-02-25T23:00:00Z",
   "prospects": [
     {
       "id": "forever-22",
@@ -1232,6 +1232,73 @@
       "timeline": [],
       "nextAction": "Find phone/email, send outreach",
       "notes": "NP-owned, 2 locations (BG + Maumee). 4.8K IG followers, 5 providers. Strong social media presence. Serves NW Ohio."
+    },
+    {
+      "id": "chacing-beauty-dayton",
+      "clinic": "Chacing Beauty Med Spa",
+      "owner": "Tiara Williams",
+      "title": "BSN, RN \u2014 Founder",
+      "location": "Dayton, OH",
+      "phone": "",
+      "email": "",
+      "website": "chacingbeauty.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "services": [
+        "Botox/Xeomin",
+        "Dermal Fillers",
+        "Lipo-Dissolve",
+        "Chemical Peels",
+        "Microneedling",
+        "Weight Loss",
+        "IV Hydration"
+      ],
+      "notes": "Nurse-owned, single-provider. Growth-stage (GoFundMe). All-inclusive branding. No prominent phone number \u2014 may need DM outreach.",
+      "nextAction": "Find phone number or DM via Instagram/Facebook",
+      "addedDate": "2026-02-25"
+    },
+    {
+      "id": "pure-aesthetics-dayton",
+      "clinic": "Pure Aesthetics Medical Spa",
+      "owner": "Unknown",
+      "title": "",
+      "location": "Dayton, OH",
+      "phone": "(937) 545-8437",
+      "email": "",
+      "website": "pureaestheticsmedicalspa.com",
+      "emr": "Unknown",
+      "status": "researched",
+      "services": [
+        "Laser Treatments (Neo Elite)",
+        "Botox",
+        "Dermal Fillers",
+        "Kybella"
+      ],
+      "notes": "Independent single-location. Neo Elite laser investment. Small Facebook (190 likes). Phone number prominent. CareCredit accepted.",
+      "nextAction": "Send outreach email or call",
+      "addedDate": "2026-02-25"
+    },
+    {
+      "id": "house-of-restoration-dayton",
+      "clinic": "House of Restoration Mental and Medical Oasis",
+      "owner": "Ashley Yancy Robinson",
+      "title": "MSN, AGNP-C",
+      "location": "Dayton, OH",
+      "phone": "",
+      "email": "",
+      "website": "",
+      "emr": "Unknown",
+      "status": "researched",
+      "services": [
+        "Medical Aesthetics",
+        "Botox",
+        "Fillers",
+        "Mental Health",
+        "Day Spa"
+      ],
+      "notes": "NP-owned. Dual mental health + aesthetics. Affluent Centerville area. May be early-stage. No website found.",
+      "nextAction": "Find contact info via Alignable or wellness.com",
+      "addedDate": "2026-02-25"
     }
   ]
 }
