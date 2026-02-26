@@ -247,6 +247,51 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats> 
   return res.json();
 }
 
+export interface RevenueDashboardResponse {
+  org_id: string;
+  period: 'week' | 'month' | 'all';
+  revenue_recovered: number;
+  missed_calls_caught: number;
+  conversations_started: number;
+  appointments_booked: number;
+  deposits_collected: number;
+  avg_response_time_seconds: number;
+  roi_multiplier: number;
+  subscription_cost: number;
+  top_services: Array<{
+    service: string;
+    count: number;
+    revenue: number;
+  }>;
+  funnel: {
+    missed_calls: { count: number; percentage: number };
+    conversations: { count: number; percentage: number };
+    qualified: { count: number; percentage: number };
+    booked: { count: number; percentage: number };
+  };
+  daily_breakdown: Array<{
+    date: string;
+    conversations: number;
+    appointments_booked: number;
+    revenue_recovered: number;
+    deposits_collected: number;
+  }>;
+}
+
+export async function getRevenueDashboard(
+  orgId: string,
+  period: 'week' | 'month' | 'all' = 'month'
+): Promise<RevenueDashboardResponse> {
+  const params = new URLSearchParams({ org_id: orgId, period });
+  const res = await fetch(`${API_BASE}/api/dashboard/revenue?${params.toString()}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
 export async function getPortalOverview(
   orgId: string,
   options?: { start?: string; end?: string; phone?: string }

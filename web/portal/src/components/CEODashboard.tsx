@@ -5,6 +5,7 @@ import { Rule100Card } from './Rule100Card';
 import { TestingStatusCard } from './TestingStatusCard';
 import { LeadLeakAuditCard } from './LeadLeakAuditCard';
 import { SalesScriptsCard } from './SalesScriptsCard';
+import { RevenueAttributionCard } from './RevenueAttributionCard';
 
 interface ProspectEvent {
   id: number;
@@ -55,7 +56,7 @@ function generateMilestones(): Array<{ date: string; clients: number; mrr: numbe
   // Ensure final milestone
   const last = milestones[milestones.length - 1];
   if (last && last.clients < TARGET_CLIENTS) {
-    milestones.push({ date: 'May 2027', clients: TARGET_CLIENTS, mrr: TARGET_CLIENTS * PRICE_PER_CLIENT });
+    milestones.push({ date: 'May 2027', clients: TARGET_CLIENTS, mrr: TARGET_CLIENTS * AVG_CONTRACT_VALUE });
   }
   return milestones;
 }
@@ -297,6 +298,9 @@ export function CEODashboard() {
 
         {/* Rule of 100 Tracker */}
         <Rule100Card />
+
+        {/* Revenue Attribution (key $5K/mo proof) */}
+        <RevenueAttributionCard orgId={(prospects[0]?.orgId as string) || 'demo-org'} period="month" />
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Pipeline Funnel */}

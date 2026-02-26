@@ -239,12 +239,19 @@ func New(cfg *Config) http.Handler {
 
 	// Admin routes (protected by JWT - supports both legacy HMAC and Cognito RS256)
 	if cfg.AdminAuthSecret != "" || cfg.CognitoUserPoolID != "" {
+		cognitoCfg := httpmiddleware.CognitoConfig{
+			Region:     cfg.CognitoRegion,
+			UserPoolID: cfg.CognitoUserPoolID,
+			ClientID:   cfg.CognitoClientID,
+		}
+
+		// Revenue attribution dashboard endpoint requested by CEO dashboard.
+		if cfg.DB != nil {
+			revenueHandler := handlers.NewRevenueDashboardHandler(cfg.DB, cfg.ClinicStore, cfg.Logger)
+			r.With(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret)).Get("/api/dashboard/revenue", revenueHandler.GetRevenueDashboard)
+		}
+
 		r.Route("/admin", func(admin chi.Router) {
-			cognitoCfg := httpmiddleware.CognitoConfig{
-				Region:     cfg.CognitoRegion,
-				UserPoolID: cfg.CognitoUserPoolID,
-				ClientID:   cfg.CognitoClientID,
-			}
 			admin.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
 			if cfg.ConversationHandler != nil {
 			}
