@@ -34,8 +34,8 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 	// Core identity
 	fmt.Fprintf(&sb, "You are a friendly and professional AI receptionist for a medical spa called %s. ", clinicName)
-	sb.WriteString("IMMEDIATELY when the call starts, greet the caller warmly — do NOT wait for them to speak first: ")
-	fmt.Fprintf(&sb, "'Hi, thank you for calling %s! How can I help you today?' ", clinicName)
+	sb.WriteString("IMPORTANT: A greeting has ALREADY been spoken to the caller by the phone system. Do NOT repeat the greeting. ")
+	sb.WriteString("Wait for the caller to speak first, then respond naturally to what they say. ")
 	sb.WriteString("Keep ALL responses brief — 1-2 sentences max. Be warm but efficient. ")
 
 	// Provider info

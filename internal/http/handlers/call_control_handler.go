@@ -118,21 +118,20 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Speak a greeting first, then start streaming when speak finishes.
-		// Nova Sonic can't auto-greet (crossmodal text→audio doesn't work),
-		// so we use Telnyx TTS for the initial greeting.
+		// Start BOTH greeting and streaming in parallel.
+		// Previously we waited for speak.ended before starting streaming,
+		// which created a 2-5 second dead zone where Nova Sonic wasn't
+		// listening. Now streaming starts immediately so Nova Sonic is
+		// ready to hear the caller as soon as the greeting finishes.
 		h.speakGreeting(callControlID, from, to)
+		h.startStreaming(callControlID, from, to)
 
 	case "speak.ended":
-		// Greeting finished — extract caller context from client_state and start streaming
-		speakFrom, speakTo := h.extractCallerContext(event)
-		if speakFrom == "" {
-			speakFrom = from
-		}
-		if speakTo == "" {
-			speakTo = to
-		}
-		h.startStreaming(callControlID, speakFrom, speakTo)
+		// Greeting finished. Streaming is already active (started on call.answered).
+		// Nova Sonic is listening and ready to process caller's response.
+		h.logger.Info("call-control: greeting finished, streaming already active",
+			"call_control_id", callControlID,
+		)
 
 	case "streaming.started":
 		h.logger.Info("call-control: media streaming started",
@@ -226,7 +225,10 @@ func (h *CallControlHandler) speakGreeting(callControlID, from, to string) {
 		clinicName = orgIDToClinicName(orgID)
 	}
 
-	greeting := fmt.Sprintf("Hi, thank you for calling %s! How can I help you today?", clinicName)
+	greeting := fmt.Sprintf(
+		"Hi there! Thanks so much for calling %s. How can I help you today?",
+		clinicName,
+	)
 
 	h.logger.Info("call-control: speaking greeting",
 		"call_control_id", callControlID,
@@ -242,9 +244,12 @@ func (h *CallControlHandler) speakGreeting(callControlID, from, to string) {
 	})
 	clientState := base64.StdEncoding.EncodeToString(cs)
 
+	// Use Telnyx premium voice for natural-sounding greeting.
+	// "Polly.Joanna" = AWS Polly neural voice via Telnyx (warm, professional female).
+	// Other options: "Polly.Salli", "Polly.Kendra", "Polly.Ruth" (neural).
 	payload := map[string]interface{}{
 		"payload":      greeting,
-		"voice":        "female",
+		"voice":        "Polly.Ruth",
 		"language":     "en-US",
 		"client_state": clientState,
 	}
