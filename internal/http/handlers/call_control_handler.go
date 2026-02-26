@@ -118,18 +118,29 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Start BOTH greeting and streaming in parallel.
-		// Previously we waited for speak.ended before starting streaming,
-		// which created a 2-5 second dead zone where Nova Sonic wasn't
-		// listening. Now streaming starts immediately so Nova Sonic is
-		// ready to hear the caller as soon as the greeting finishes.
-		h.speakGreeting(callControlID, from, to)
+		// Step 1: Start streaming FIRST so Nova Sonic is ready before greeting.
+		// Using inbound_track ONLY to prevent TTS audio bleed into Nova Sonic
+		// (both_tracks would feed our own greeting back as "caller audio").
+		// Flow: call.answered → streaming_start → streaming.started → speak greeting
 		h.startStreaming(callControlID, from, to)
 
+	case "streaming.started":
+		// Step 2: Stream is live — NOW speak the greeting.
+		// Nova Sonic is already listening, so when the caller responds
+		// after the greeting, there's zero dead zone.
+		speakFrom, speakTo := h.extractCallerContext(event)
+		if speakFrom == "" {
+			speakFrom = from
+		}
+		if speakTo == "" {
+			speakTo = to
+		}
+		h.speakGreeting(callControlID, speakFrom, speakTo)
+
 	case "speak.ended":
-		// Greeting finished. Streaming is already active (started on call.answered).
-		// Nova Sonic is listening and ready to process caller's response.
-		h.logger.Info("call-control: greeting finished, streaming already active",
+		// Step 3: Greeting finished. Nova Sonic has been listening throughout.
+		// Caller can now speak and Nova Sonic will respond.
+		h.logger.Info("call-control: greeting finished, Nova Sonic ready",
 			"call_control_id", callControlID,
 		)
 
@@ -199,7 +210,7 @@ func (h *CallControlHandler) startStreaming(callControlID, from, to string) {
 
 	payload := map[string]interface{}{
 		"stream_url":                 h.streamURL,
-		"stream_track":               "both_tracks",
+		"stream_track":               "inbound_track",
 		"stream_bidirectional_mode":  "rtp",
 		"stream_bidirectional_codec": "L16",
 		"enable_dialogflow":          false,
