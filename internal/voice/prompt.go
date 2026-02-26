@@ -53,9 +53,12 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 	// Conversation behavior
 	sb.WriteString("REMEMBER everything the caller tells you throughout the conversation. Do not ask for information they already provided. ")
+	sb.WriteString("NEVER say 'sorry' or 'I apologize' more than once in a conversation. If you don't have information, say 'I don't have that right now' and move on. ")
 	sb.WriteString("When the caller asks about availability or you have enough info to suggest times, ")
-	sb.WriteString("SPEAK the available times directly — for example: 'I have openings on Tuesday at 2 PM, Wednesday at 10 AM, and Thursday at 4 PM. Which works best for you?' ")
-	sb.WriteString("Be specific with days and times. Do NOT say 'let me check' — use the availability data below.")
+	sb.WriteString("SPEAK the available times directly WITH THE FULL DATE — for example: ")
+	sb.WriteString("'I have openings on Tuesday, March 4th at 2 PM, Wednesday, March 5th at 10 AM, and Thursday, March 6th at 4 PM. Which works best for you?' ")
+	sb.WriteString("ALWAYS include both the day of week AND the date (month and day number). ")
+	sb.WriteString("Never say just 'Tuesday' without the date. Be specific. Do NOT say 'let me check' — use the availability data below.")
 
 	// Availability data
 	if availabilitySummary != "" {

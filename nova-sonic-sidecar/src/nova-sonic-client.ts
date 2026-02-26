@@ -169,15 +169,10 @@ export class NovaSonicClient {
 
     this.log("info", "Bedrock stream established");
 
-    // DELAY greeting trigger: Wait for audio stream to be fully established
-    // before sending the text greeting. Nova Sonic needs continuous audio
-    // flowing for ~2 seconds before it can do crossmodal (text→audio) output.
-    setTimeout(() => {
-      if (this.isActive) {
-        this.log("info", "Sending delayed greeting trigger (2s after stream)");
-        this.enqueueGreetingTrigger();
-      }
-    }, 2000);
+    // NOTE: Auto-greeting is handled by Telnyx TTS (speak command) BEFORE
+    // media streaming starts. Nova Sonic crossmodal (text→audio) doesn't work
+    // reliably, so we don't send a greeting trigger here. Nova Sonic only
+    // handles the conversation after the caller responds to the Telnyx greeting.
     this.scheduleRenewal();
     this.processResponseStream(response);
   }

@@ -60,8 +60,27 @@ type callControlEvent struct {
 			Direction     string `json:"direction"`
 			State         string `json:"state"`
 			StreamURL     string `json:"stream_url,omitempty"`
+			ClientState   string `json:"client_state,omitempty"`
 		} `json:"payload"`
 	} `json:"data"`
+}
+
+// extractCallerContext decodes from/to from the client_state passed through speak commands.
+func (h *CallControlHandler) extractCallerContext(event callControlEvent) (string, string) {
+	cs := event.Data.Payload.ClientState
+	if cs == "" {
+		return "", ""
+	}
+	decoded, err := base64.StdEncoding.DecodeString(cs)
+	if err != nil {
+		h.logger.Warn("call-control: decode client_state failed", "error", err)
+		return "", ""
+	}
+	var ctx map[string]string
+	if err := json.Unmarshal(decoded, &ctx); err != nil {
+		return "", ""
+	}
+	return ctx["from"], ctx["to"]
 }
 
 // HandleCallControl processes Call Control webhook events.
@@ -99,8 +118,21 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Call answered — start media streaming with caller context
-		h.startStreaming(callControlID, from, to)
+		// Speak a greeting first, then start streaming when speak finishes.
+		// Nova Sonic can't auto-greet (crossmodal text→audio doesn't work),
+		// so we use Telnyx TTS for the initial greeting.
+		h.speakGreeting(callControlID, from, to)
+
+	case "speak.ended":
+		// Greeting finished — extract caller context from client_state and start streaming
+		speakFrom, speakTo := h.extractCallerContext(event)
+		if speakFrom == "" {
+			speakFrom = from
+		}
+		if speakTo == "" {
+			speakTo = to
+		}
+		h.startStreaming(callControlID, speakFrom, speakTo)
 
 	case "streaming.started":
 		h.logger.Info("call-control: media streaming started",
@@ -175,6 +207,62 @@ func (h *CallControlHandler) startStreaming(callControlID, from, to string) {
 		"client_state":               clientState,
 	}
 	h.sendCallControlCommand(callControlID, "streaming_start", payload)
+}
+
+// speakGreeting uses Telnyx TTS to speak a greeting, then passes caller
+// context via client_state so startStreaming can pick it up on speak.ended.
+func (h *CallControlHandler) speakGreeting(callControlID, from, to string) {
+	// Resolve clinic name for a personalized greeting
+	clinicName := "our office"
+	orgID := ""
+	if h.orgResolver != nil {
+		if resolved, err := h.orgResolver.ResolveOrgID(context.Background(), to); err == nil {
+			orgID = resolved
+		}
+	}
+	// Try to get clinic name from org ID
+	if orgID != "" {
+		// Use a simple mapping for now — clinic names from known configs
+		clinicName = orgIDToClinicName(orgID)
+	}
+
+	greeting := fmt.Sprintf("Hi, thank you for calling %s! How can I help you today?", clinicName)
+
+	h.logger.Info("call-control: speaking greeting",
+		"call_control_id", callControlID,
+		"clinic", clinicName,
+		"org_id", orgID,
+	)
+
+	// Encode caller context in client_state so speak.ended can pass it to startStreaming
+	cs, _ := json.Marshal(map[string]string{
+		"from":   from,
+		"to":     to,
+		"org_id": orgID,
+	})
+	clientState := base64.StdEncoding.EncodeToString(cs)
+
+	payload := map[string]interface{}{
+		"payload":      greeting,
+		"voice":        "female",
+		"language":     "en-US",
+		"client_state": clientState,
+	}
+	h.sendCallControlCommand(callControlID, "speak", payload)
+}
+
+// orgIDToClinicName maps org IDs to display names for voice greetings.
+func orgIDToClinicName(orgID string) string {
+	names := map[string]string{
+		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": "Forever 22 Med Spa",
+		"brilliant-aesthetics":                 "Brilliant Aesthetics",
+		"lucys-laser-medspa":                   "Lucy's Laser and Med Spa",
+		"adela-medical-spa":                    "Adela Medical Spa",
+	}
+	if name, ok := names[orgID]; ok {
+		return name
+	}
+	return "our office"
 }
 
 // sendCallControlCommand sends a command to the Telnyx Call Control API.
