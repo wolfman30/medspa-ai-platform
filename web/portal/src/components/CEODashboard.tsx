@@ -29,10 +29,12 @@ interface Prospect {
   [key: string]: unknown;
 }
 
-// Revenue model constants
-const PRICE_PER_CLIENT = 497;
+// Revenue model constants — Enterprise whale strategy
+// Phase 1: $5K/mo per multi-location group (avg 8 locations)
+// Phase 2: Expand within accounts + add new groups
+const AVG_CONTRACT_VALUE = 5_000; // $/mo per enterprise client
 const TARGET_ARR = 5_000_000;
-const TARGET_CLIENTS = Math.ceil(TARGET_ARR / (PRICE_PER_CLIENT * 12));
+const TARGET_CLIENTS = Math.ceil(TARGET_ARR / (AVG_CONTRACT_VALUE * 12)); // ~84 enterprise accounts
 const TARGET_DATE = new Date('2027-05-01');
 
 function generateMilestones(): Array<{ date: string; clients: number; mrr: number }> {
@@ -47,7 +49,7 @@ function generateMilestones(): Array<{ date: string; clients: number; mrr: numbe
     milestones.push({
       date: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
       clients,
-      mrr: clients * PRICE_PER_CLIENT,
+      mrr: clients * AVG_CONTRACT_VALUE,
     });
   }
   // Ensure final milestone
@@ -61,30 +63,33 @@ function generateMilestones(): Array<{ date: string; clients: number; mrr: numbe
 const MILESTONES = generateMilestones();
 
 const FUNNEL_STAGES = [
-  { key: 'identified', label: 'Identified', color: 'bg-slate-500' },
+  { key: 'identified', label: 'Researched', color: 'bg-slate-500' },
   { key: 'outreach_sent', label: 'Outreach Sent', color: 'bg-yellow-500' },
-  { key: 'responded,testing', label: 'Demo / Trial', color: 'bg-blue-500' },
-  { key: 'converted', label: 'Paying', color: 'bg-green-500' },
-  { key: 'lost', label: 'Churned', color: 'bg-red-500' },
+  { key: 'responded', label: 'In Conversation', color: 'bg-orange-500' },
+  { key: 'testing', label: 'Free Pilot', color: 'bg-blue-500' },
+  { key: 'converted', label: 'Paying ($5K/mo)', color: 'bg-green-500' },
+  { key: 'lost', label: 'Lost', color: 'bg-red-500' },
 ];
 
 const ACTION_ITEMS = [
-  { text: 'Approve outreach templates for next batch', priority: 'high' },
-  { text: 'Refresh AWS credentials (expiring soon)', priority: 'high' },
-  { text: 'Review and approve Glow Medspa demo results', priority: 'medium' },
-  { text: 'Sign off on 10DLC campaign for new prospects', priority: 'medium' },
-  { text: 'Update investor deck with latest metrics', priority: 'low' },
+  { text: 'Contact Juvly Aesthetics (10 locations, Columbus/Cleveland) — #1 whale target', priority: 'high' },
+  { text: 'Build revenue attribution dashboard — key to justifying $5K/mo pricing', priority: 'high' },
+  { text: 'Finish voice AI deployment — competitive necessity (Weave GA H1 2026)', priority: 'high' },
+  { text: 'Update aiwolfsolutions.com pricing page — enterprise tiers', priority: 'medium' },
+  { text: 'Prepare free pilot proposal template for multi-location groups', priority: 'medium' },
 ];
 
-const WEEKLY_BRIEF = `## Weekly Brief — Feb 17, 2025
+const WEEKLY_BRIEF = `## Weekly Brief — Feb 26, 2026
 
-**Pipeline:** 12 prospects identified, 4 outreach emails sent, 1 demo scheduled.
+**Strategic Pivot:** Shifted from $497/mo single clinics to $5K/mo enterprise accounts (multi-location med spa groups). Tesla strategy — land a few whales first, then scale down.
 
-**Platform:** SMS routing stable. Telnyx numbers provisioned for 2 new clinics. 10DLC campaigns pending approval.
+**Whale Pipeline:** Juvly Aesthetics (10 locations, Columbus/Cleveland — #1 target), Ideal Image (157 locations, PE-backed), VIO Med Spa (expanding to Cincinnati), SEV Laser (50+ locations). Full research in whale-prospects doc.
 
-**Blockers:** AWS creds need rotation. Outreach templates need CEO sign-off before next batch.
+**Competitive Intel:** Nobody owns the $5K/mo premium tier. Podium/Weave/Zenoti fighting over $300-600/mo mid-market. Our lane: white-glove AI revenue engine for multi-location groups.
 
-**Next Week:** Target 10 new outreach emails. Follow up on Glow Medspa demo. Begin Stripe integration testing.`;
+**Platform:** Voice AI 90% done (Nova Sonic). SMS booking flow complete. Stripe payments live. Revenue attribution dashboard — next critical build.
+
+**This Week:** Juvly outreach, revenue attribution MVP, voice AI final fixes, website repositioned for enterprise.`;
 
 // Simple markdown → HTML converter (no external deps)
 function mdToHtml(md: string): string {
@@ -208,7 +213,8 @@ export function CEODashboard() {
   const configuredClinics = prospects.filter(p => p.configured).length;
   const smsWorking = prospects.filter(p => p.smsWorking).length;
   const payingClients = prospects.filter(p => p.status === 'converted').length;
-  const currentMRR = payingClients * PRICE_PER_CLIENT;
+  const whaleProspects = prospects.filter(p => (p as any).tier === 'enterprise' || (p as any).locations > 2).length;
+  const currentMRR = payingClients * AVG_CONTRACT_VALUE;
 
   // Funnel counts
   const funnelCounts = FUNNEL_STAGES.map(stage => {
@@ -251,7 +257,7 @@ export function CEODashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">CEO Dashboard</h1>
-            <p className="text-sm text-slate-400 mt-1">Medspa AI Platform — Road to $50M</p>
+            <p className="text-sm text-slate-400 mt-1">MedSpa Concierge — Enterprise Revenue Engine → $50M Exit</p>
           </div>
           <button onClick={refresh} className="text-sm text-violet-400 hover:text-violet-300 transition">
             ↻ Refresh
@@ -265,10 +271,10 @@ export function CEODashboard() {
         {/* Key Metrics Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total Prospects', value: totalProspects, icon: '🎯' },
+            { label: 'Total Pipeline', value: totalProspects, icon: '🎯' },
+            { label: 'Whale Targets', value: whaleProspects, icon: '🐋' },
             { label: 'Active Outreach', value: activeOutreach, icon: '📧' },
-            { label: 'Configured Clinics', value: configuredClinics, icon: '⚙️' },
-            { label: 'SMS Working', value: smsWorking, icon: '💬' },
+            { label: 'Paying Clients', value: payingClients, icon: '💰' },
           ].map(m => (
             <div key={m.label} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -317,7 +323,7 @@ export function CEODashboard() {
           {/* Revenue Tracker */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
             <h2 className="text-lg font-semibold mb-2">Revenue Tracker</h2>
-            <p className="text-xs text-slate-500 mb-4">$50M exit = ~10x revenue = $5M ARR = {TARGET_CLIENTS} clients @ ${PRICE_PER_CLIENT}/mo</p>
+            <p className="text-xs text-slate-500 mb-4">$50M exit = ~10x revenue = $5M ARR = {TARGET_CLIENTS} enterprise accounts @ ${AVG_CONTRACT_VALUE.toLocaleString()}/mo avg</p>
 
             <div className="flex items-baseline gap-3 mb-4">
               <div>
