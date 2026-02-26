@@ -211,8 +211,7 @@ export function CEODashboard() {
   // Compute metrics
   const totalProspects = prospects.length;
   const activeOutreach = prospects.filter(p => p.status === 'outreach_sent' || p.status === 'responded').length;
-  const configuredClinics = prospects.filter(p => p.configured).length;
-  const smsWorking = prospects.filter(p => p.smsWorking).length;
+  // configuredClinics and smsWorking removed — replaced by whaleProspects metric
   const payingClients = prospects.filter(p => p.status === 'converted').length;
   const whaleProspects = prospects.filter(p => (p as any).tier === 'enterprise' || (p as any).locations > 2).length;
   const currentMRR = payingClients * AVG_CONTRACT_VALUE;
