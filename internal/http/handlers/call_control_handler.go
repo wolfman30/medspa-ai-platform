@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -22,6 +23,7 @@ type CallControlHandler struct {
 	telnyxAPIKey string
 	streamURL    string // e.g. "wss://api-dev.aiwolfsolutions.com/ws/voice"
 	orgResolver  messaging.OrgResolver
+	clinicStore  *clinic.Store
 }
 
 // CallControlConfig configures the handler.
@@ -30,6 +32,7 @@ type CallControlConfig struct {
 	TelnyxAPIKey string
 	StreamURL    string
 	OrgResolver  messaging.OrgResolver
+	ClinicStore  *clinic.Store
 }
 
 // NewCallControlHandler creates a new Call Control webhook handler.
@@ -42,6 +45,7 @@ func NewCallControlHandler(cfg CallControlConfig) *CallControlHandler {
 		telnyxAPIKey: cfg.TelnyxAPIKey,
 		streamURL:    cfg.StreamURL,
 		orgResolver:  cfg.OrgResolver,
+		clinicStore:  cfg.ClinicStore,
 	}
 }
 
@@ -225,9 +229,14 @@ func (h *CallControlHandler) speakGreeting(callControlID, from, to string) {
 			orgID = resolved
 		}
 	}
-	// Try to get clinic name from org ID
-	if orgID != "" {
-		// Use a simple mapping for now — clinic names from known configs
+	// Try to get clinic name from clinic store (dynamic), fall back to hardcoded map.
+	if orgID != "" && h.clinicStore != nil {
+		if cfg, err := h.clinicStore.Get(context.Background(), orgID); err == nil && cfg != nil && cfg.Name != "" {
+			clinicName = cfg.Name
+		} else {
+			clinicName = orgIDToClinicName(orgID)
+		}
+	} else if orgID != "" {
 		clinicName = orgIDToClinicName(orgID)
 	}
 
