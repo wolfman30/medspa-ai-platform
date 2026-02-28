@@ -10,6 +10,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { KnowledgeSettings } from './components/KnowledgeSettings';
 import { ProspectTracker } from './components/ProspectTracker';
 import { CEODashboard } from './components/CEODashboard';
+import { StoriesBoard } from './components/StoriesBoard';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -29,7 +30,8 @@ type AppView =
   | 'deposit-detail'
   | 'settings'
   | 'knowledge'
-  | 'prospects';
+  | 'prospects'
+  | 'stories';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -410,6 +412,15 @@ function AuthenticatedApp() {
                     Prospects
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('stories')}
+                    aria-current={view === 'stories' ? 'page' : undefined}
+                    className={view === 'stories' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Stories
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -419,6 +430,8 @@ function AuthenticatedApp() {
       {isAdmin && orgId ? (
         view === 'ceo-dashboard' ? (
           <CEODashboard />
+        ) : view === 'stories' ? (
+          <StoriesBoard />
         ) : view === 'prospects' ? (
           <ProspectTracker />
         ) : view === 'conversation-detail' && selectedConversationId ? (

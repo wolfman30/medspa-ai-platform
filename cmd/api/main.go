@@ -48,6 +48,7 @@ import (
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
+	"github.com/wolfman30/medspa-ai-platform/internal/stories"
 	"github.com/wolfman30/medspa-ai-platform/internal/voice"
 	"github.com/wolfman30/medspa-ai-platform/migrations"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -583,6 +584,7 @@ func main() {
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
 		AdminBriefs:            newBriefsHandler(dbPool, logger),
 		ProspectsHandler:       newProspectsHandler(sqlDB),
+		StoriesHandler:         newStoriesHandler(sqlDB),
 		EvidenceS3Client:       evidenceS3,
 		EvidenceS3Bucket:       cfg.S3TrainingBucket,
 		EvidenceS3Region:       cfg.AWSRegion,
@@ -1048,6 +1050,10 @@ func newProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
 		}
 	}
 	return h
+}
+
+func newStoriesHandler(sqlDB *sql.DB) *stories.Handler {
+	return stories.NewHandler(stories.NewRepository(sqlDB))
 }
 
 func initializeLeadsRepository(dbPool *pgxpool.Pool) leads.Repository {

@@ -1200,3 +1200,89 @@ export async function updateTestResult(id: number, data: {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
+
+// ── Stories / Kanban Board ──────────────────────────────────────────
+
+export interface Story {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  labels: string[];
+  parentId: string | null;
+  assignedTo: string;
+  subTaskCount: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export async function listStories(params?: {
+  status?: string;
+  priority?: string;
+  label?: string;
+}): Promise<{ stories: Story[] }> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.priority) query.set('priority', params.priority);
+  if (params?.label) query.set('label', params.label);
+  const qs = query.toString();
+  const res = await fetch(`${API_BASE}/admin/stories${qs ? '?' + qs : ''}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getStory(id: string): Promise<{ story: Story; subTasks: Story[] }> {
+  const res = await fetch(`${API_BASE}/admin/stories/${id}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function createStory(data: {
+  title: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  labels?: string[];
+  parentId?: string;
+  assignedTo?: string;
+}): Promise<Story> {
+  const res = await fetch(`${API_BASE}/admin/stories`, {
+    method: 'POST',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function updateStory(id: string, data: {
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  labels?: string[];
+  parentId?: string;
+  assignedTo?: string;
+}): Promise<Story> {
+  const res = await fetch(`${API_BASE}/admin/stories/${id}`, {
+    method: 'PUT',
+    headers: await getHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function deleteStory(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/stories/${id}`, {
+    method: 'DELETE',
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
