@@ -275,6 +275,7 @@ func (h *CallControlHandler) speakGreeting(callControlID, from, to string) {
 func orgIDToClinicName(orgID string) string {
 	names := map[string]string{
 		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": "Forever 22 Med Spa",
+		"124a2e4a-74bd-4a3a-8f60-84444079a35a": "Brilliant Aesthetics",
 		"brilliant-aesthetics":                 "Brilliant Aesthetics",
 		"lucys-laser-medspa":                   "Lucy's Laser and Med Spa",
 		"adela-medical-spa":                    "Adela Medical Spa",
