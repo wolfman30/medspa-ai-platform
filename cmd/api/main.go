@@ -14,7 +14,6 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
-	"github.com/wolfman30/medspa-ai-platform/internal/messaging/compliance"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -89,33 +88,7 @@ func main() {
 	messagingHandler := messagingBoot.messagingHandler
 
 	telnyxClient := setupTelnyxClient(cfg, logger)
-
-	var quietHours compliance.QuietHours
-	quietHoursEnabled := false
-	if cfg.QuietHoursStart != "" && cfg.QuietHoursEnd != "" {
-		if parsed, err := compliance.ParseQuietHours(cfg.QuietHoursStart, cfg.QuietHoursEnd, cfg.QuietHoursTimezone); err != nil {
-			logger.Warn("invalid quiet hours configuration", "error", err)
-		} else {
-			quietHours = parsed
-			quietHoursEnabled = true
-		}
-	}
-
-	var adminMessagingHandler *handlers.AdminMessagingHandler
-	if msgStore != nil && telnyxClient != nil {
-		adminMessagingHandler = handlers.NewAdminMessagingHandler(handlers.AdminMessagingConfig{
-			Store:             msgStore,
-			Logger:            logger,
-			Telnyx:            telnyxClient,
-			QuietHours:        quietHours,
-			QuietHoursEnabled: quietHoursEnabled,
-			MessagingProfile:  cfg.TelnyxMessagingProfileID,
-			StopAck:           cfg.TelnyxStopReply,
-			HelpAck:           cfg.TelnyxHelpReply,
-			RetryBaseDelay:    cfg.TelnyxRetryBaseDelay,
-			Metrics:           messagingMetrics,
-		})
-	}
+	adminMessagingHandler := buildAdminMessagingHandler(cfg, logger, msgStore, telnyxClient, messagingMetrics)
 	var paymentsRepo *payments.Repository
 	var outboxStore *events.OutboxStore
 	var processedStore *events.ProcessedStore
@@ -216,38 +189,13 @@ func main() {
 	stripeWebhookHandler := paymentBoot.stripeWebhookHandler
 	stripeConnectHandler := paymentBoot.stripeConnectHandler
 
-	var telnyxWebhookHandler *handlers.TelnyxWebhookHandler
-	logger.Debug("checking telnyx webhook handler prerequisites",
-		"msgStore", msgStore != nil,
-		"telnyxClient", telnyxClient != nil,
-		"processedStore", processedStore != nil,
-	)
-	if msgStore != nil && telnyxClient != nil && processedStore != nil {
-		logger.Debug("creating telnyx webhook handler")
-		telnyxWebhookHandler = handlers.NewTelnyxWebhookHandler(handlers.TelnyxWebhookConfig{
-			Store:             msgStore,
-			Processed:         processedStore,
-			Telnyx:            telnyxClient,
-			Conversation:      conversationPublisher,
-			Leads:             leadsRepo,
-			Logger:            logger,
-			Transcript:        smsTranscript,
-			ConversationStore: conversationStore,
-			ClinicStore:       clinicStore,
-			MessagingProfile:  cfg.TelnyxMessagingProfileID,
-			StopAck:           cfg.TelnyxStopReply,
-			HelpAck:           cfg.TelnyxHelpReply,
-			StartAck:          cfg.TelnyxStartReply,
-			FirstContactAck:   cfg.TelnyxFirstContactReply,
-			VoiceAck:          cfg.TelnyxVoiceAckReply,
-			DemoMode:          cfg.DemoMode,
-			TrackJobs:         cfg.TelnyxTrackJobs,
-			Metrics:           messagingMetrics,
-		})
-		logger.Info("telnyx webhook handler initialized", "profile_id", cfg.TelnyxMessagingProfileID)
-	} else {
-		logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
-	}
+	telnyxWebhookHandler := buildTelnyxWebhookHandler(twDeps{
+		cfg: cfg, logger: logger, msgStore: msgStore, telnyxClient: telnyxClient,
+		processedStore: processedStore, conversationPub: conversationPublisher,
+		leadsRepo: leadsRepo, smsTranscript: smsTranscript,
+		conversationStore: conversationStore, clinicStore: clinicStore,
+		messagingMetrics: messagingMetrics,
+	})
 
 	// Wire missed-call text-back into call control handler
 	if callControlHandler != nil && telnyxWebhookHandler != nil {

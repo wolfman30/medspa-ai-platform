@@ -13,10 +13,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
-	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
-	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
-	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -100,23 +97,6 @@ func buildClinicHandlers(logger *logging.Logger, clinicStore *clinic.Store, dbPo
 		dashboard = clinic.NewDashboardHandler(clinic.NewDashboardRepository(dbPool), prometheus.DefaultGatherer, logger)
 	}
 	return ch, stats, dashboard
-}
-
-// telnyxWebhookDeps holds inputs for building the Telnyx webhook handler.
-type telnyxWebhookDeps struct {
-	cfg      *appconfig.Config
-	logger   *logging.Logger
-	msgStore interface {
-		IsHostedNumber(ctx context.Context, number string) bool
-	}
-	telnyxClient          *telnyxclient.Client
-	processedStore        interface{}
-	conversationPublisher *conversation.Publisher
-	leadsRepo             interface{}
-	smsTranscript         *conversation.SMSTranscriptStore
-	conversationStore     *conversation.ConversationStore
-	clinicStore           *clinic.Store
-	messagingMetrics      *observemetrics.MessagingMetrics
 }
 
 // buildEvidenceS3 creates the S3 client for evidence uploads.
