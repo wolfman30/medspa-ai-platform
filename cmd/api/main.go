@@ -7,13 +7,11 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
-	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
@@ -51,26 +49,19 @@ func main() {
 	appCtx, stop := context.WithCancel(context.Background())
 	defer stop()
 
-	dbPool := connectPostgresPool(appCtx, cfg.DatabaseURL, logger)
-	if dbPool != nil {
-		defer dbPool.Close()
+	db := bootstrapDB(appCtx, cfg, logger)
+	if db.pool != nil {
+		defer db.pool.Close()
 	}
-	sqlDB := connectSQLDB(dbPool, logger)
-	if sqlDB != nil {
-		defer sqlDB.Close()
-		runAutoMigrate(sqlDB, logger)
+	if db.sqlDB != nil {
+		defer db.sqlDB.Close()
 	}
-	conversationStore := appbootstrap.BuildConversationStore(sqlDB, cfg, logger, true)
-	var auditSvc *auditcompliance.AuditService
-	if sqlDB != nil {
-		auditSvc = auditcompliance.NewAuditService(sqlDB)
-	}
-
-	// Initialize repositories and services
-	leadsRepo := initializeLeadsRepository(dbPool)
-
-	msgStore := messaging.NewStore(dbPool)
-
+	dbPool := db.pool
+	sqlDB := db.sqlDB
+	conversationStore := db.conversationStore
+	auditSvc := db.auditSvc
+	leadsRepo := db.leadsRepo
+	msgStore := db.msgStore
 	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := setupConversation(appCtx, cfg, dbPool, logger)
 
 	// Clinic bootstrap (redis + clinic config stores)

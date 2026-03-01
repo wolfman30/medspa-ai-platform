@@ -16,11 +16,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
+	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/briefs"
+	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
+	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging/telnyxclient"
 	observemetrics "github.com/wolfman30/medspa-ai-platform/internal/observability/metrics"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
@@ -32,6 +35,38 @@ import (
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
+
+// dbResult holds the outputs from database bootstrapping.
+type dbResult struct {
+	pool              *pgxpool.Pool
+	sqlDB             *sql.DB
+	conversationStore *conversation.ConversationStore
+	auditSvc          *auditcompliance.AuditService
+	leadsRepo         leads.Repository
+	msgStore          *messaging.Store
+}
+
+// bootstrapDB connects to postgres, runs migrations, and initializes core DB-dependent services.
+func bootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) dbResult {
+	pool := connectPostgresPool(ctx, cfg.DatabaseURL, logger)
+	sqlDB := connectSQLDB(pool, logger)
+	if sqlDB != nil {
+		runAutoMigrate(sqlDB, logger)
+	}
+	convStore := appbootstrap.BuildConversationStore(sqlDB, cfg, logger, true)
+	var audit *auditcompliance.AuditService
+	if sqlDB != nil {
+		audit = auditcompliance.NewAuditService(sqlDB)
+	}
+	return dbResult{
+		pool:              pool,
+		sqlDB:             sqlDB,
+		conversationStore: convStore,
+		auditSvc:          audit,
+		leadsRepo:         initializeLeadsRepository(pool),
+		msgStore:          messaging.NewStore(pool),
+	}
+}
 
 func setupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
 	registry := prometheus.NewRegistry()
