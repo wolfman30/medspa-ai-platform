@@ -65,7 +65,7 @@ func TestBuildAvailableServicesSection(t *testing.T) {
 			MoxieConfig: &clinic.MoxieConfig{
 				ServiceMenuItems: map[string]string{
 					"wrinkle relaxers": "20424",
-					"lip filler":      "20425",
+					"lip filler":       "20425",
 				},
 			},
 		}
