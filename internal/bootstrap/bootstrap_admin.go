@@ -27,60 +27,83 @@ type AdminClinicDataDeps struct {
 	RedisClient *redis.Client
 }
 
+// AdminAssembler groups shared dependencies for admin handler assembly.
+type AdminAssembler struct {
+	appCtx      context.Context
+	cfg         *appconfig.Config
+	logger      *logging.Logger
+	dbPool      *pgxpool.Pool
+	redisClient *redis.Client
+}
+
+func NewAdminAssembler(deps AdminClinicDataDeps) *AdminAssembler {
+	return &AdminAssembler{
+		appCtx:      deps.AppCtx,
+		cfg:         deps.Cfg,
+		logger:      deps.Logger,
+		dbPool:      deps.DBPool,
+		redisClient: deps.RedisClient,
+	}
+}
+
 // BuildAdminClinicDataHandler constructs the clinic data admin handler with
 // S3 archiver and training archiver if configured.
 func BuildAdminClinicDataHandler(deps AdminClinicDataDeps) *handlers.AdminClinicDataHandler {
-	if deps.Cfg.Env == "production" || deps.DBPool == nil {
+	return NewAdminAssembler(deps).buildAdminClinicDataHandler()
+}
+
+func (a *AdminAssembler) buildAdminClinicDataHandler() *handlers.AdminClinicDataHandler {
+	if a.cfg.Env == "production" || a.dbPool == nil {
 		return nil
 	}
 
 	adminCfg := handlers.AdminClinicDataConfig{
-		DB:     deps.DBPool,
-		Redis:  deps.RedisClient,
-		Logger: deps.Logger,
+		DB:     a.dbPool,
+		Redis:  a.redisClient,
+		Logger: a.logger,
 	}
 
-	if deps.Cfg.S3ArchiveBucket != "" {
-		adminCfg.Archiver = buildS3Archiver(deps)
+	if a.cfg.S3ArchiveBucket != "" {
+		adminCfg.Archiver = a.buildS3Archiver()
 	}
-	if deps.Cfg.S3TrainingBucket != "" {
-		adminCfg.TrainingArchiver = buildTrainingArchiver(deps)
+	if a.cfg.S3TrainingBucket != "" {
+		adminCfg.TrainingArchiver = a.buildTrainingArchiver()
 	}
 
 	return handlers.NewAdminClinicDataHandler(adminCfg)
 }
 
 // buildS3Archiver creates the S3-backed conversation archiver.
-func buildS3Archiver(deps AdminClinicDataDeps) *clinicdata.Archiver {
-	awsCfg, err := mainconfig.LoadAWSConfig(deps.AppCtx, deps.Cfg)
+func (a *AdminAssembler) buildS3Archiver() *clinicdata.Archiver {
+	awsCfg, err := mainconfig.LoadAWSConfig(a.appCtx, a.cfg)
 	if err != nil {
-		deps.Logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
+		a.logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
 		return nil
 	}
 	s3Client := s3.NewFromConfig(awsCfg)
-	deps.Logger.Info("S3 archiver enabled", "bucket", deps.Cfg.S3ArchiveBucket)
+	a.logger.Info("S3 archiver enabled", "bucket", a.cfg.S3ArchiveBucket)
 	return clinicdata.NewArchiver(clinicdata.ArchiverConfig{
-		DB:       deps.DBPool,
+		DB:       a.dbPool,
 		S3:       s3Client,
-		Bucket:   deps.Cfg.S3ArchiveBucket,
-		KMSKeyID: deps.Cfg.S3ArchiveKMSKey,
-		Logger:   deps.Logger,
+		Bucket:   a.cfg.S3ArchiveBucket,
+		KMSKeyID: a.cfg.S3ArchiveKMSKey,
+		Logger:   a.logger,
 	})
 }
 
 // buildTrainingArchiver creates the training data archiver with LLM classifier.
-func buildTrainingArchiver(deps AdminClinicDataDeps) *archive.TrainingArchiver {
-	awsCfg, err := mainconfig.LoadAWSConfig(deps.AppCtx, deps.Cfg)
+func (a *AdminAssembler) buildTrainingArchiver() *archive.TrainingArchiver {
+	awsCfg, err := mainconfig.LoadAWSConfig(a.appCtx, a.cfg)
 	if err != nil {
-		deps.Logger.Warn("failed to load AWS config for training archiver", "error", err)
+		a.logger.Warn("failed to load AWS config for training archiver", "error", err)
 		return nil
 	}
 	trainingS3 := s3.NewFromConfig(awsCfg)
 	brClient := bedrockruntime.NewFromConfig(awsCfg)
-	trainingStore := archive.NewStore(trainingS3, deps.Cfg.S3TrainingBucket, deps.Logger.Logger)
-	classifier := archive.NewClassifier(brClient, deps.Cfg.ClassifierModelID, deps.Logger.Logger)
-	deps.Logger.Info("training archiver enabled", "bucket", deps.Cfg.S3TrainingBucket)
-	return archive.NewTrainingArchiver(trainingStore, classifier, deps.Logger.Logger)
+	trainingStore := archive.NewStore(trainingS3, a.cfg.S3TrainingBucket, a.logger.Logger)
+	classifier := archive.NewClassifier(brClient, a.cfg.ClassifierModelID, a.logger.Logger)
+	a.logger.Info("training archiver enabled", "bucket", a.cfg.S3TrainingBucket)
+	return archive.NewTrainingArchiver(trainingStore, classifier, a.logger.Logger)
 }
 
 // BuildClinicHandlers creates the clinic config, stats, and dashboard handlers.
