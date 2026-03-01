@@ -26,8 +26,8 @@ type AdminClinicDataDeps struct {
 	RedisClient *redis.Client
 }
 
-// AdminAssembler groups shared dependencies for admin handler assembly.
-type AdminAssembler struct {
+// AdminHandlerAssembler groups shared dependencies for admin handler assembly.
+type AdminHandlerAssembler struct {
 	appCtx      context.Context
 	cfg         *appconfig.Config
 	logger      *logging.Logger
@@ -35,8 +35,8 @@ type AdminAssembler struct {
 	redisClient *redis.Client
 }
 
-func NewAdminAssembler(deps AdminClinicDataDeps) *AdminAssembler {
-	return &AdminAssembler{
+func NewAdminHandlerAssembler(deps AdminClinicDataDeps) *AdminHandlerAssembler {
+	return &AdminHandlerAssembler{
 		appCtx:      deps.AppCtx,
 		cfg:         deps.Cfg,
 		logger:      deps.Logger,
@@ -48,10 +48,10 @@ func NewAdminAssembler(deps AdminClinicDataDeps) *AdminAssembler {
 // BuildAdminClinicDataHandler constructs the clinic data admin handler with
 // S3 archiver and training archiver if configured.
 func BuildAdminClinicDataHandler(deps AdminClinicDataDeps) *handlers.AdminClinicDataHandler {
-	return NewAdminAssembler(deps).buildAdminClinicDataHandler()
+	return NewAdminHandlerAssembler(deps).buildAdminClinicDataHandler()
 }
 
-func (a *AdminAssembler) buildAdminClinicDataHandler() *handlers.AdminClinicDataHandler {
+func (a *AdminHandlerAssembler) buildAdminClinicDataHandler() *handlers.AdminClinicDataHandler {
 	if a.cfg.Env == "production" || a.dbPool == nil {
 		return nil
 	}
@@ -73,7 +73,7 @@ func (a *AdminAssembler) buildAdminClinicDataHandler() *handlers.AdminClinicData
 }
 
 // buildS3Archiver creates the S3-backed conversation archiver.
-func (a *AdminAssembler) buildS3Archiver() *clinicdata.Archiver {
+func (a *AdminHandlerAssembler) buildS3Archiver() *clinicdata.Archiver {
 	awsCfg, err := mainconfig.LoadAWSConfig(a.appCtx, a.cfg)
 	if err != nil {
 		a.logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
@@ -91,7 +91,7 @@ func (a *AdminAssembler) buildS3Archiver() *clinicdata.Archiver {
 }
 
 // buildTrainingArchiver creates the training data archiver with LLM classifier.
-func (a *AdminAssembler) buildTrainingArchiver() *archive.TrainingArchiver {
+func (a *AdminHandlerAssembler) buildTrainingArchiver() *archive.TrainingArchiver {
 	awsCfg, err := mainconfig.LoadAWSConfig(a.appCtx, a.cfg)
 	if err != nil {
 		a.logger.Warn("failed to load AWS config for training archiver", "error", err)

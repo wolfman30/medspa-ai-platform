@@ -65,7 +65,7 @@ func main() {
 	auditSvc := db.AuditSvc
 	leadsRepo := db.LeadsRepo
 	msgStore := db.MsgStore
-	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := bootstrap.SetupConversation(appCtx, cfg, dbPool, logger)
+	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := bootstrap.SetupConversation(bootstrap.ConversationSetupDeps{Ctx: appCtx, Cfg: cfg, DBPool: dbPool, Logger: logger})
 
 	// Clinic bootstrap (redis + clinic config stores)
 	clinicBoot := bootstrap.BootstrapClinic(cfg, appCtx, logger)
@@ -75,14 +75,20 @@ func main() {
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
-	messagingBoot := bootstrap.BootstrapMessaging(cfg, logger, conversationPublisher, leadsRepo, msgStore, auditSvc, conversationStore, smsTranscript, clinicStore)
+	messagingBoot := bootstrap.BootstrapMessaging(bootstrap.MessagingDeps{
+		Cfg: cfg, Logger: logger, ConversationPublisher: conversationPublisher, LeadsRepo: leadsRepo,
+		MessageStore: msgStore, AuditService: auditSvc, ConversationStore: conversationStore,
+		SMSTranscriptStore: smsTranscript, ClinicStore: clinicStore,
+	})
 	resolver := messagingBoot.Resolver
 	webhookMessenger := messagingBoot.WebhookMessenger
 	webhookMessengerReason := messagingBoot.MessengerReason
 	messagingHandler := messagingBoot.MessagingHandler
 
 	telnyxClient := bootstrap.SetupTelnyxClient(cfg, logger)
-	adminMessagingHandler := bootstrap.BuildAdminMessagingHandler(cfg, logger, msgStore, telnyxClient, messagingMetrics)
+	adminMessagingHandler := bootstrap.BuildAdminMessagingHandler(bootstrap.AdminMessagingDeps{
+		Cfg: cfg, Logger: logger, MessageStore: msgStore, TelnyxClient: telnyxClient, MessagingMetrics: messagingMetrics,
+	})
 	var paymentsRepo *payments.Repository
 	var outboxStore *events.OutboxStore
 	var processedStore *events.ProcessedStore
@@ -183,7 +189,7 @@ func main() {
 	stripeWebhookHandler := paymentBoot.StripeWebhookHandler
 	stripeConnectHandler := paymentBoot.StripeConnectHandler
 
-	telnyxWebhookHandler := bootstrap.BuildTelnyxWebhookHandler(bootstrap.TwDeps{
+	telnyxWebhookHandler := bootstrap.BuildTelnyxWebhookHandler(bootstrap.TelnyxWebhookDeps{
 		Cfg: cfg, Logger: logger, MsgStore: msgStore, TelnyxClient: telnyxClient,
 		ProcessedStore: processedStore, ConversationPub: conversationPublisher,
 		LeadsRepo: leadsRepo, SMSTranscript: smsTranscript,

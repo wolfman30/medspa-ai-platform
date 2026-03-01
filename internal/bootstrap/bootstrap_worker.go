@@ -25,14 +25,14 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// DepositResult holds the outputs of buildDepositSender.
-type DepositResult struct {
+// DepositPipeline holds the outputs of buildDepositSender.
+type DepositPipeline struct {
 	Sender    conversation.DepositSender
 	Preloader *conversation.DepositPreloader
 }
 
-// WorkerAssembler groups shared dependencies for inline worker assembly.
-type WorkerAssembler struct {
+// ConversationWorkerAssembler groups shared dependencies for inline worker assembly.
+type ConversationWorkerAssembler struct {
 	ctx           context.Context
 	cfg           *appconfig.Config
 	logger        *logging.Logger
@@ -51,39 +51,42 @@ type WorkerAssembler struct {
 	convStore     *conversation.ConversationStore
 }
 
-func NewWorkerAssembler(
-	deps InlineWorkerDeps,
-	leadsRepo leads.Repository,
-	paymentRepo *payments.Repository,
-	clinicStore *clinic.Store,
-	convStore *conversation.ConversationStore,
-) *WorkerAssembler {
-	return &WorkerAssembler{
-		ctx:           deps.Ctx,
-		cfg:           deps.Cfg,
-		logger:        deps.Logger,
-		dbPool:        deps.DBPool,
-		sqlDB:         deps.SQLDB,
-		redisClient:   deps.RedisClient,
-		messenger:     deps.Messenger,
-		outboxStore:   deps.OutboxStore,
-		resolver:      deps.Resolver,
-		optOutChecker: deps.OptOutChecker,
-		supervisor:    deps.Supervisor,
-		smsTranscript: deps.SMSTranscript,
-		leadsRepo:     leadsRepo,
-		paymentRepo:   paymentRepo,
-		clinicStore:   clinicStore,
-		convStore:     convStore,
+type ConversationWorkerAssemblerDeps struct {
+	InlineWorkerDeps  InlineWorkerDeps
+	LeadsRepo         leads.Repository
+	PaymentRepo       *payments.Repository
+	ClinicStore       *clinic.Store
+	ConversationStore *conversation.ConversationStore
+}
+
+func NewConversationWorkerAssembler(deps ConversationWorkerAssemblerDeps) *ConversationWorkerAssembler {
+	inlineWorkerDeps := deps.InlineWorkerDeps
+	return &ConversationWorkerAssembler{
+		ctx:           inlineWorkerDeps.Ctx,
+		cfg:           inlineWorkerDeps.Cfg,
+		logger:        inlineWorkerDeps.Logger,
+		dbPool:        inlineWorkerDeps.DBPool,
+		sqlDB:         inlineWorkerDeps.SQLDB,
+		redisClient:   inlineWorkerDeps.RedisClient,
+		messenger:     inlineWorkerDeps.Messenger,
+		outboxStore:   inlineWorkerDeps.OutboxStore,
+		resolver:      inlineWorkerDeps.Resolver,
+		optOutChecker: inlineWorkerDeps.OptOutChecker,
+		supervisor:    inlineWorkerDeps.Supervisor,
+		smsTranscript: inlineWorkerDeps.SMSTranscript,
+		leadsRepo:     deps.LeadsRepo,
+		paymentRepo:   deps.PaymentRepo,
+		clinicStore:   deps.ClinicStore,
+		convStore:     deps.ConversationStore,
 	}
 }
 
 // buildDepositSender selects the correct payment provider (Fake, Stripe-only,
 // Square, or Multi) and wires the deposit dispatcher.
-func (a *WorkerAssembler) buildDepositSender() DepositResult {
+func (a *ConversationWorkerAssembler) buildDepositSender() DepositPipeline {
 	if a.dbPool == nil || a.outboxStore == nil || a.paymentRepo == nil {
 		a.logger.Warn("deposit sender NOT initialized — missing prerequisites")
-		return DepositResult{}
+		return DepositPipeline{}
 	}
 
 	numberResolver := a.resolver
@@ -95,7 +98,7 @@ func (a *WorkerAssembler) buildDepositSender() DepositResult {
 	if a.cfg.AllowFakePayments && !hasSquare {
 		fakeSvc := payments.NewFakeCheckoutService(a.cfg.PublicBaseURL, a.logger)
 		a.logger.Warn("deposit sender initialized in fake payments mode")
-		return DepositResult{
+		return DepositPipeline{
 			Sender: conversation.NewDepositDispatcher(a.paymentRepo, fakeSvc, a.outboxStore, a.messenger, numberResolver, a.leadsRepo, a.smsTranscript, a.convStore, a.logger, conversation.WithShortURLs(a.paymentRepo, a.cfg.PublicBaseURL)),
 		}
 	}
@@ -104,7 +107,7 @@ func (a *WorkerAssembler) buildDepositSender() DepositResult {
 	if !hasSquare && hasStripe {
 		stripeSvc := payments.NewStripeCheckoutService(a.cfg.StripeSecretKey, a.cfg.StripeSuccessURL, a.cfg.StripeCancelURL, a.logger)
 		a.logger.Info("deposit sender initialized (stripe only)")
-		return DepositResult{
+		return DepositPipeline{
 			Sender: conversation.NewDepositDispatcher(a.paymentRepo, stripeSvc, a.outboxStore, a.messenger, numberResolver, a.leadsRepo, a.smsTranscript, a.convStore, a.logger, conversation.WithShortURLs(a.paymentRepo, a.cfg.PublicBaseURL)),
 		}
 	}
@@ -112,7 +115,7 @@ func (a *WorkerAssembler) buildDepositSender() DepositResult {
 	// No provider at all
 	if !hasSquare && !hasStripe {
 		a.logger.Warn("deposit sender NOT initialized — no payment provider configured")
-		return DepositResult{}
+		return DepositPipeline{}
 	}
 
 	// Square (possibly with Stripe multi-checkout)
@@ -120,7 +123,7 @@ func (a *WorkerAssembler) buildDepositSender() DepositResult {
 }
 
 // buildSquareDepositSender handles the Square + optional Stripe multi-checkout path.
-func (a *WorkerAssembler) buildSquareDepositSender(numberResolver payments.OrgNumberResolver) DepositResult {
+func (a *ConversationWorkerAssembler) buildSquareDepositSender(numberResolver payments.OrgNumberResolver) DepositPipeline {
 	usePaymentLinks := payments.UsePaymentLinks(a.cfg.SquareCheckoutMode, a.cfg.SquareSandbox)
 	squareSvc := payments.NewSquareCheckoutService(a.cfg.SquareAccessToken, a.cfg.SquareLocationID, a.cfg.SquareSuccessURL, a.cfg.SquareCancelURL, a.logger).
 		WithBaseURL(a.cfg.SquareBaseURL).
@@ -153,14 +156,14 @@ func (a *WorkerAssembler) buildSquareDepositSender(numberResolver payments.OrgNu
 	preloader := conversation.NewDepositPreloader(squareSvc, 5000, a.logger)
 	a.logger.Info("deposit sender initialized", "square_location_id", a.cfg.SquareLocationID)
 
-	return DepositResult{
+	return DepositPipeline{
 		Sender:    conversation.NewDepositDispatcher(a.paymentRepo, checkoutSvc, a.outboxStore, a.messenger, numberResolver, a.leadsRepo, a.smsTranscript, a.convStore, a.logger, conversation.WithShortURLs(a.paymentRepo, a.cfg.PublicBaseURL)),
 		Preloader: preloader,
 	}
 }
 
 // buildNotificationService constructs the email + SMS notification pipeline.
-func (a *WorkerAssembler) buildNotificationService() conversation.PaymentNotifier {
+func (a *ConversationWorkerAssembler) buildNotificationService() conversation.PaymentNotifier {
 	if a.clinicStore == nil {
 		a.logger.Warn("notification service NOT initialized (redis not configured)")
 		return nil
@@ -175,7 +178,7 @@ func (a *WorkerAssembler) buildNotificationService() conversation.PaymentNotifie
 }
 
 // buildEmailSender picks SES → SendGrid → Stub in priority order.
-func (a *WorkerAssembler) buildEmailSender() notify.EmailSender {
+func (a *ConversationWorkerAssembler) buildEmailSender() notify.EmailSender {
 	if a.cfg.SESFromEmail != "" {
 		sesAwsCfg, err := mainconfig.LoadAWSConfig(a.ctx, a.cfg)
 		if err != nil {
@@ -204,7 +207,7 @@ func (a *WorkerAssembler) buildEmailSender() notify.EmailSender {
 }
 
 // buildSMSSender creates an operator SMS sender using the outbound messenger.
-func (a *WorkerAssembler) buildSMSSender() notify.SMSSender {
+func (a *ConversationWorkerAssembler) buildSMSSender() notify.SMSSender {
 	smsFromNumber := a.cfg.TelnyxFromNumber
 	if smsFromNumber == "" {
 		smsFromNumber = a.cfg.TwilioFromNumber
@@ -226,7 +229,7 @@ func (a *WorkerAssembler) buildSMSSender() notify.SMSSender {
 }
 
 // buildAutoPurger creates a sandbox auto-purger if configured.
-func (a *WorkerAssembler) buildAutoPurger() conversation.SandboxAutoPurger {
+func (a *ConversationWorkerAssembler) buildAutoPurger() conversation.SandboxAutoPurger {
 	if a.cfg.Env == "production" || !a.cfg.SquareSandbox || a.dbPool == nil {
 		return nil
 	}
@@ -245,14 +248,21 @@ func (a *WorkerAssembler) buildAutoPurger() conversation.SandboxAutoPurger {
 	}, a.logger)
 }
 
-// buildWorkerOptions assembles the worker option list.
-func (a *WorkerAssembler) buildWorkerOptions(
-	deposit DepositResult,
-	notifier conversation.PaymentNotifier,
-	autoPurger conversation.SandboxAutoPurger,
-	processedStore *events.ProcessedStore,
-	msgChecker conversation.ProviderMessageChecker,
-) []conversation.WorkerOption {
+// buildConversationWorkerOptions assembles the worker option list.
+func (a *ConversationWorkerAssembler) buildConversationWorkerOptions() []conversation.WorkerOption {
+	deposit := a.buildDepositSender()
+	notifier := a.buildNotificationService()
+	autoPurger := a.buildAutoPurger()
+	var processedStore *events.ProcessedStore
+	if a.dbPool != nil {
+		processedStore = events.NewProcessedStore(a.dbPool)
+	}
+	var msgChecker conversation.ProviderMessageChecker
+	if a.optOutChecker != nil {
+		if checker, ok := a.optOutChecker.(conversation.ProviderMessageChecker); ok {
+			msgChecker = checker
+		}
+	}
 	moxieDryRun := os.Getenv("MOXIE_DRY_RUN") == "true"
 	moxieAPIClient := moxieclient.NewClient(a.logger, moxieclient.WithDryRun(moxieDryRun))
 	if moxieDryRun {
@@ -341,24 +351,15 @@ func SetupInlineWorker(deps InlineWorkerDeps) (*conversation.Worker, conversatio
 		convStore = conversation.NewConversationStore(deps.SQLDB)
 	}
 
-	assembler := NewWorkerAssembler(deps, leadsRepo, paymentChecker, clinicStore, convStore)
-	deposit := assembler.buildDepositSender()
-	notifier := assembler.buildNotificationService()
-	autoPurger := assembler.buildAutoPurger()
+	assembler := NewConversationWorkerAssembler(ConversationWorkerAssemblerDeps{
+		InlineWorkerDeps:  deps,
+		LeadsRepo:         leadsRepo,
+		PaymentRepo:       paymentChecker,
+		ClinicStore:       clinicStore,
+		ConversationStore: convStore,
+	})
 
-	var processedStore *events.ProcessedStore
-	if deps.DBPool != nil {
-		processedStore = events.NewProcessedStore(deps.DBPool)
-	}
-
-	var msgChecker conversation.ProviderMessageChecker
-	if deps.OptOutChecker != nil {
-		if checker, ok := deps.OptOutChecker.(conversation.ProviderMessageChecker); ok {
-			msgChecker = checker
-		}
-	}
-
-	workerOpts := assembler.buildWorkerOptions(deposit, notifier, autoPurger, processedStore, msgChecker)
+	workerOpts := assembler.buildConversationWorkerOptions()
 
 	worker := conversation.NewWorker(processor, deps.MemoryQueue, deps.JobUpdater, deps.Messenger, bookingBridge, logger, workerOpts...)
 	worker.Start(deps.Ctx)

@@ -36,8 +36,8 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
-// DBResult holds the outputs from database bootstrapping.
-type DBResult struct {
+// DatabaseServices holds the outputs from database bootstrapping.
+type DatabaseServices struct {
 	Pool              *pgxpool.Pool
 	SQLDB             *sql.DB
 	ConversationStore *conversation.ConversationStore
@@ -47,7 +47,7 @@ type DBResult struct {
 }
 
 // BootstrapDB connects to postgres, runs migrations, and initializes core DB-dependent services.
-func BootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) DBResult {
+func BootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) DatabaseServices {
 	pool := ConnectPostgresPool(ctx, cfg.DatabaseURL, logger)
 	sqlDB := connectSQLDB(pool, logger)
 	if sqlDB != nil {
@@ -58,7 +58,7 @@ func BootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Log
 	if sqlDB != nil {
 		audit = auditcompliance.NewAuditService(sqlDB)
 	}
-	return DBResult{
+	return DatabaseServices{
 		Pool:              pool,
 		SQLDB:             sqlDB,
 		ConversationStore: convStore,
@@ -155,12 +155,18 @@ func initializeLeadsRepository(dbPool *pgxpool.Pool) leads.Repository {
 	return leads.NewInMemoryRepository()
 }
 
-func SetupConversation(
-	ctx context.Context,
-	cfg *appconfig.Config,
-	dbPool *pgxpool.Pool,
-	logger *logging.Logger,
-) (*conversation.Publisher, conversation.JobRecorder, conversation.JobUpdater, *conversation.MemoryQueue) {
+type ConversationSetupDeps struct {
+	Ctx    context.Context
+	Cfg    *appconfig.Config
+	DBPool *pgxpool.Pool
+	Logger *logging.Logger
+}
+
+func SetupConversation(deps ConversationSetupDeps) (*conversation.Publisher, conversation.JobRecorder, conversation.JobUpdater, *conversation.MemoryQueue) {
+	ctx := deps.Ctx
+	cfg := deps.Cfg
+	dbPool := deps.DBPool
+	logger := deps.Logger
 	if cfg.UseMemoryQueue {
 		if dbPool == nil {
 			logger.Error("USE_MEMORY_QUEUE requires DATABASE_URL for job persistence")

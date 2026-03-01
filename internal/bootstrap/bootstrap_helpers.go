@@ -37,6 +37,18 @@ func BootstrapClinic(cfg *appconfig.Config, appCtx context.Context, logger *logg
 	return ClinicBootstrap{RedisClient: redisClient, ClinicStore: clinicStore, SMSTranscript: smsTranscript}
 }
 
+type MessagingDeps struct {
+	Cfg                   *appconfig.Config
+	Logger                *logging.Logger
+	ConversationPublisher *conversation.Publisher
+	LeadsRepo             leads.Repository
+	MessageStore          *messaging.Store
+	AuditService          *auditcompliance.AuditService
+	ConversationStore     *conversation.ConversationStore
+	SMSTranscriptStore    *conversation.SMSTranscriptStore
+	ClinicStore           *clinic.Store
+}
+
 type MessagingBootstrap struct {
 	MessagingHandler *messaging.Handler
 	Resolver         *messaging.StaticOrgResolver
@@ -44,7 +56,16 @@ type MessagingBootstrap struct {
 	MessengerReason  string
 }
 
-func BootstrapMessaging(cfg *appconfig.Config, logger *logging.Logger, conversationPublisher *conversation.Publisher, leadsRepo leads.Repository, msgStore *messaging.Store, auditSvc *auditcompliance.AuditService, conversationStore *conversation.ConversationStore, smsTranscript *conversation.SMSTranscriptStore, clinicStore *clinic.Store) MessagingBootstrap {
+func BootstrapMessaging(deps MessagingDeps) MessagingBootstrap {
+	cfg := deps.Cfg
+	logger := deps.Logger
+	conversationPublisher := deps.ConversationPublisher
+	leadsRepo := deps.LeadsRepo
+	msgStore := deps.MessageStore
+	auditSvc := deps.AuditService
+	conversationStore := deps.ConversationStore
+	smsTranscript := deps.SMSTranscriptStore
+	clinicStore := deps.ClinicStore
 	orgRouting := map[string]string{}
 	if raw := strings.TrimSpace(cfg.TwilioOrgMapJSON); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &orgRouting); err != nil {

@@ -14,23 +14,25 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+type AdminMessagingDeps struct {
+	Cfg              *appconfig.Config
+	Logger           *logging.Logger
+	MessageStore     *messaging.Store
+	TelnyxClient     *telnyxclient.Client
+	MessagingMetrics *observemetrics.MessagingMetrics
+}
+
 // BuildAdminMessagingHandler creates the admin messaging handler with quiet hours.
-func BuildAdminMessagingHandler(
-	cfg *appconfig.Config,
-	logger *logging.Logger,
-	msgStore *messaging.Store,
-	telnyxClient *telnyxclient.Client,
-	messagingMetrics *observemetrics.MessagingMetrics,
-) *handlers.AdminMessagingHandler {
-	if msgStore == nil || telnyxClient == nil {
+func BuildAdminMessagingHandler(deps AdminMessagingDeps) *handlers.AdminMessagingHandler {
+	if deps.MessageStore == nil || deps.TelnyxClient == nil {
 		return nil
 	}
 
 	var quietHours compliance.QuietHours
 	quietHoursEnabled := false
-	if cfg.QuietHoursStart != "" && cfg.QuietHoursEnd != "" {
-		if parsed, err := compliance.ParseQuietHours(cfg.QuietHoursStart, cfg.QuietHoursEnd, cfg.QuietHoursTimezone); err != nil {
-			logger.Warn("invalid quiet hours configuration", "error", err)
+	if deps.Cfg.QuietHoursStart != "" && deps.Cfg.QuietHoursEnd != "" {
+		if parsed, err := compliance.ParseQuietHours(deps.Cfg.QuietHoursStart, deps.Cfg.QuietHoursEnd, deps.Cfg.QuietHoursTimezone); err != nil {
+			deps.Logger.Warn("invalid quiet hours configuration", "error", err)
 		} else {
 			quietHours = parsed
 			quietHoursEnabled = true
@@ -38,21 +40,21 @@ func BuildAdminMessagingHandler(
 	}
 
 	return handlers.NewAdminMessagingHandler(handlers.AdminMessagingConfig{
-		Store:             msgStore,
-		Logger:            logger,
-		Telnyx:            telnyxClient,
+		Store:             deps.MessageStore,
+		Logger:            deps.Logger,
+		Telnyx:            deps.TelnyxClient,
 		QuietHours:        quietHours,
 		QuietHoursEnabled: quietHoursEnabled,
-		MessagingProfile:  cfg.TelnyxMessagingProfileID,
-		StopAck:           cfg.TelnyxStopReply,
-		HelpAck:           cfg.TelnyxHelpReply,
-		RetryBaseDelay:    cfg.TelnyxRetryBaseDelay,
-		Metrics:           messagingMetrics,
+		MessagingProfile:  deps.Cfg.TelnyxMessagingProfileID,
+		StopAck:           deps.Cfg.TelnyxStopReply,
+		HelpAck:           deps.Cfg.TelnyxHelpReply,
+		RetryBaseDelay:    deps.Cfg.TelnyxRetryBaseDelay,
+		Metrics:           deps.MessagingMetrics,
 	})
 }
 
-// TwDeps holds inputs for building the Telnyx webhook handler.
-type TwDeps struct {
+// TelnyxWebhookDeps holds inputs for building the Telnyx webhook handler.
+type TelnyxWebhookDeps struct {
 	Cfg               *appconfig.Config
 	Logger            *logging.Logger
 	MsgStore          *messaging.Store
@@ -67,7 +69,7 @@ type TwDeps struct {
 }
 
 // BuildTelnyxWebhookHandler creates the Telnyx inbound webhook handler.
-func BuildTelnyxWebhookHandler(deps TwDeps) *handlers.TelnyxWebhookHandler {
+func BuildTelnyxWebhookHandler(deps TelnyxWebhookDeps) *handlers.TelnyxWebhookHandler {
 	if deps.MsgStore == nil || deps.TelnyxClient == nil || deps.ProcessedStore == nil {
 		deps.Logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
 		return nil

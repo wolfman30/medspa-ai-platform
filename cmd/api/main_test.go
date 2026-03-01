@@ -52,7 +52,12 @@ func TestSetupConversationSQSPath(t *testing.T) {
 	}
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 
-	pub, recorder, updater, memoryQueue := bootstrap.SetupConversation(context.Background(), cfg, nil, logger)
+	pub, recorder, updater, memoryQueue := bootstrap.SetupConversation(bootstrap.ConversationSetupDeps{
+		Ctx:    context.Background(),
+		Cfg:    cfg,
+		DBPool: nil,
+		Logger: logger,
+	})
 	if pub == nil {
 		t.Fatalf("expected publisher")
 	}
