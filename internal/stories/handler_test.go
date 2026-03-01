@@ -49,7 +49,9 @@ func TestHandler_List_SuccessAndFilterParams(t *testing.T) {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
 
-	var got struct{ Stories []Story `json:"stories"` }
+	var got struct {
+		Stories []Story `json:"stories"`
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -86,13 +88,17 @@ func TestHandler_Create_Cases(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		h.Create(rr, httptest.NewRequest(http.MethodPost, "/admin/stories", strings.NewReader("{")))
-		if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", rr.Code) }
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
 	})
 
 	t.Run("missing title", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		h.Create(rr, httptest.NewRequest(http.MethodPost, "/admin/stories", strings.NewReader(`{"description":"d"}`)))
-		if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", rr.Code) }
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
 	})
 
 	t.Run("success", func(t *testing.T) {
@@ -102,18 +108,26 @@ func TestHandler_Create_Cases(t *testing.T) {
 		mock.ExpectQuery("INSERT INTO stories").WithArgs("Title", "Desc", "backlog", "medium", sqlmock.AnyArg(), nil, "alice").WillReturnRows(rows)
 		rr := httptest.NewRecorder()
 		h.Create(rr, httptest.NewRequest(http.MethodPost, "/admin/stories", strings.NewReader(`{"title":"Title","description":"Desc","status":"backlog","priority":"medium","labels":["frontend"],"assignedTo":"alice"}`)))
-		if rr.Code != http.StatusCreated { t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String()) }
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
+		}
 	})
 
 	t.Run("repo error hidden", func(t *testing.T) {
 		mock.ExpectQuery("INSERT INTO stories").WillReturnError(errors.New("pq: duplicate key"))
 		rr := httptest.NewRecorder()
 		h.Create(rr, httptest.NewRequest(http.MethodPost, "/admin/stories", strings.NewReader(`{"title":"Title"}`)))
-		if rr.Code != http.StatusInternalServerError { t.Fatalf("expected 500, got %d", rr.Code) }
-		if strings.Contains(rr.Body.String(), "duplicate") { t.Fatalf("leak: %s", rr.Body.String()) }
+		if rr.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d", rr.Code)
+		}
+		if strings.Contains(rr.Body.String(), "duplicate") {
+			t.Fatalf("leak: %s", rr.Body.String())
+		}
 	})
 
-	if err := mock.ExpectationsWereMet(); err != nil { t.Fatalf("expectations: %v", err) }
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
 }
 
 func TestHandler_Update_Cases(t *testing.T) {
@@ -122,16 +136,22 @@ func TestHandler_Update_Cases(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	h.Update(rr, httptest.NewRequest(http.MethodPut, "/admin/stories/", strings.NewReader(`{}`)))
-	if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", rr.Code) }
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
 
 	rr = httptest.NewRecorder()
 	h.Update(rr, withChiID(httptest.NewRequest(http.MethodPut, "/admin/stories/s1", strings.NewReader("{")), "s1"))
-	if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", rr.Code) }
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
 
 	mock.ExpectQuery("SELECT s.id, s.title").WithArgs("s404").WillReturnError(sql.ErrNoRows)
 	rr = httptest.NewRecorder()
 	h.Update(rr, withChiID(httptest.NewRequest(http.MethodPut, "/admin/stories/s404", strings.NewReader(`{"title":"x"}`)), "s404"))
-	if rr.Code != http.StatusNotFound { t.Fatalf("expected 404, got %d", rr.Code) }
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
 
 	now := time.Now().UTC()
 	mock.ExpectQuery("SELECT s.id, s.title").WithArgs("s1").WillReturnRows(
@@ -144,15 +164,23 @@ func TestHandler_Update_Cases(t *testing.T) {
 	)
 	rr = httptest.NewRecorder()
 	h.Update(rr, withChiID(httptest.NewRequest(http.MethodPut, "/admin/stories/s1", strings.NewReader(`{"title":"New"}`)), "s1"))
-	if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String()) }
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
 
 	mock.ExpectQuery("SELECT s.id, s.title").WithArgs("s2").WillReturnError(errors.New("pq: connection refused"))
 	rr = httptest.NewRecorder()
 	h.Update(rr, withChiID(httptest.NewRequest(http.MethodPut, "/admin/stories/s2", strings.NewReader(`{"title":"New"}`)), "s2"))
-	if rr.Code != http.StatusInternalServerError { t.Fatalf("expected 500, got %d", rr.Code) }
-	if strings.Contains(rr.Body.String(), "connection refused") { t.Fatalf("leak: %s", rr.Body.String()) }
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), "connection refused") {
+		t.Fatalf("leak: %s", rr.Body.String())
+	}
 
-	if err := mock.ExpectationsWereMet(); err != nil { t.Fatalf("expectations: %v", err) }
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
 }
 
 func TestHandler_Delete_Cases(t *testing.T) {
@@ -161,20 +189,30 @@ func TestHandler_Delete_Cases(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	h.Delete(rr, httptest.NewRequest(http.MethodDelete, "/admin/stories/", nil))
-	if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", rr.Code) }
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
 
 	mock.ExpectExec("DELETE FROM stories").WithArgs("s1").WillReturnError(errors.New("pq: timeout"))
 	rr = httptest.NewRecorder()
 	h.Delete(rr, withChiID(httptest.NewRequest(http.MethodDelete, "/admin/stories/s1", nil), "s1"))
-	if rr.Code != http.StatusInternalServerError { t.Fatalf("expected 500, got %d", rr.Code) }
-	if strings.Contains(rr.Body.String(), "timeout") { t.Fatalf("leak: %s", rr.Body.String()) }
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), "timeout") {
+		t.Fatalf("leak: %s", rr.Body.String())
+	}
 
 	mock.ExpectExec("DELETE FROM stories").WithArgs("s2").WillReturnResult(sqlmock.NewResult(0, 1))
 	rr = httptest.NewRecorder()
 	h.Delete(rr, withChiID(httptest.NewRequest(http.MethodDelete, "/admin/stories/s2", nil), "s2"))
-	if rr.Code != http.StatusNoContent { t.Fatalf("expected 204, got %d", rr.Code) }
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rr.Code)
+	}
 
-	if err := mock.ExpectationsWereMet(); err != nil { t.Fatalf("expectations: %v", err) }
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
 }
 
 func TestHandler_Get_Cases(t *testing.T) {
@@ -183,12 +221,16 @@ func TestHandler_Get_Cases(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	h.Get(rr, httptest.NewRequest(http.MethodGet, "/admin/stories/", nil))
-	if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", rr.Code) }
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
 
 	mock.ExpectQuery("SELECT s.id, s.title").WithArgs("s404").WillReturnError(sql.ErrNoRows)
 	rr = httptest.NewRecorder()
 	h.Get(rr, withChiID(httptest.NewRequest(http.MethodGet, "/admin/stories/s404", nil), "s404"))
-	if rr.Code != http.StatusNotFound { t.Fatalf("expected 404, got %d", rr.Code) }
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
 
 	now := time.Now().UTC()
 	mock.ExpectQuery("SELECT s.id, s.title").WithArgs("s1").WillReturnRows(
@@ -198,8 +240,12 @@ func TestHandler_Get_Cases(t *testing.T) {
 	mock.ExpectQuery("FROM stories s WHERE s.parent_id = \\$1").WithArgs("s1").WillReturnError(errors.New("pq: relation missing"))
 	rr = httptest.NewRecorder()
 	h.Get(rr, withChiID(httptest.NewRequest(http.MethodGet, "/admin/stories/s1", nil), "s1"))
-	if rr.Code != http.StatusInternalServerError { t.Fatalf("expected 500, got %d", rr.Code) }
-	if strings.Contains(rr.Body.String(), "relation") { t.Fatalf("leak: %s", rr.Body.String()) }
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), "relation") {
+		t.Fatalf("leak: %s", rr.Body.String())
+	}
 
 	mock.ExpectQuery("SELECT s.id, s.title").WithArgs("s2").WillReturnRows(
 		sqlmock.NewRows([]string{"id", "title", "description", "status", "priority", "labels", "parent_id", "assigned_to", "created_at", "updated_at", "completed_at", "sub_task_count"}).
@@ -211,7 +257,11 @@ func TestHandler_Get_Cases(t *testing.T) {
 	)
 	rr = httptest.NewRecorder()
 	h.Get(rr, withChiID(httptest.NewRequest(http.MethodGet, "/admin/stories/s2", nil), "s2"))
-	if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String()) }
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
 
-	if err := mock.ExpectationsWereMet(); err != nil { t.Fatalf("expectations: %v", err) }
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
 }
