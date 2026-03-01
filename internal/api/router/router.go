@@ -262,6 +262,7 @@ func New(cfg *Config) http.Handler {
 			if cfg.AdminMessaging != nil {
 				admin.Post("/hosted/orders", cfg.AdminMessaging.StartHostedOrder)
 				admin.Post("/hosted/activate", cfg.AdminMessaging.ActivateHostedNumber)
+				admin.Post("/hosted/deactivate", cfg.AdminMessaging.DeactivateHostedNumber)
 				admin.Post("/10dlc/brands", cfg.AdminMessaging.CreateBrand)
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)

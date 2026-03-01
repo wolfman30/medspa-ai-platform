@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,7 +47,6 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
 	"github.com/wolfman30/medspa-ai-platform/internal/stories"
-	"github.com/wolfman30/medspa-ai-platform/internal/voice"
 	"github.com/wolfman30/medspa-ai-platform/migrations"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 
@@ -113,56 +110,19 @@ func main() {
 
 	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := setupConversation(appCtx, cfg, dbPool, logger)
 
-	// Create Redis client for knowledge repo and clinic config
-	redisClient := appbootstrap.BuildRedisClient(appCtx, cfg, logger, false)
-	clinicStore := appbootstrap.BuildClinicStore(redisClient)
-	smsTranscript := appbootstrap.BuildSMSTranscriptStore(redisClient)
+	// Clinic bootstrap (redis + clinic config stores)
+	clinicBoot := bootstrapClinic(cfg, appCtx, logger)
+	redisClient := clinicBoot.redisClient
+	clinicStore := clinicBoot.clinicStore
+	smsTranscript := clinicBoot.smsTranscript
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
-	orgRouting := map[string]string{}
-	if raw := strings.TrimSpace(cfg.TwilioOrgMapJSON); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &orgRouting); err != nil {
-			logger.Warn("failed to parse TWILIO_ORG_MAP_JSON", "error", err)
-		}
-	}
-	if len(orgRouting) == 0 {
-		logger.Warn("TWILIO_ORG_MAP_JSON empty; SMS webhooks will be rejected unless numbers are configured")
-	}
-	resolver := messaging.NewStaticOrgResolver(orgRouting)
-	twilioWebhookSecret := cfg.TwilioWebhookSecret
-	if twilioWebhookSecret == "" {
-		twilioWebhookSecret = cfg.TwilioAuthToken
-	}
-	webhookMessenger, webhookMessengerProvider, webhookMessengerReason := appbootstrap.BuildOutboundMessenger(
-		cfg,
-		logger,
-		msgStore,
-		auditSvc,
-		conversationStore,
-		smsTranscript,
-	)
-	if webhookMessenger != nil {
-		logger.Info("sms messenger initialized for webhooks",
-			"provider", webhookMessengerProvider,
-			"preference", cfg.SMSProvider,
-		)
-	} else {
-		logger.Warn("sms replies disabled for webhooks",
-			"preference", cfg.SMSProvider,
-			"reason", webhookMessengerReason,
-		)
-	}
-	messagingHandler := messaging.NewHandler(twilioWebhookSecret, conversationPublisher, resolver, webhookMessenger, leadsRepo, logger)
-	messagingHandler.SetConversationStore(conversationStore)
-	messagingHandler.SetClinicStore(clinicStore)
-	messagingHandler.SetPublicBaseURL(cfg.PublicBaseURL)
-	messagingHandler.SetSkipSignature(cfg.TwilioSkipSignature)
-
-	// Production safety check: warn loudly if signature validation is disabled
-	if cfg.TwilioSkipSignature && (cfg.Env == "production" || cfg.Env == "staging") {
-		logger.Error("SECURITY WARNING: TWILIO_SKIP_SIGNATURE is enabled in production/staging - this is a security risk!")
-	}
+	messagingBoot := bootstrapMessaging(cfg, logger, conversationPublisher, leadsRepo, msgStore, auditSvc, conversationStore, smsTranscript, clinicStore)
+	resolver := messagingBoot.resolver
+	webhookMessenger := messagingBoot.webhookMessenger
+	webhookMessengerReason := messagingBoot.messengerReason
+	messagingHandler := messagingBoot.messagingHandler
 
 	telnyxClient := setupTelnyxClient(cfg, logger)
 
@@ -317,174 +277,43 @@ func main() {
 		conversationHandler.SetService(conversationService)
 	}
 
-	// Voice AI handler (Telnyx AI Assistant webhook tool)
-	var voiceAIHandler *handlers.VoiceAIHandler
-	if msgStore != nil && clinicStore != nil {
-		voiceAIHandler = handlers.NewVoiceAIHandler(handlers.VoiceAIHandlerConfig{
-			Store:       msgStore,
-			Publisher:   conversationPublisher,
-			Processor:   conversationService,
-			ClinicStore: clinicStore,
-			ConvStore:   conversationStore,
-			Redis:       redisClient,
-			Logger:      logger,
-		})
-		logger.Info("voice AI handler initialized")
-	}
+	voiceBoot := bootstrapVoice(voiceDeps{
+		cfg:                   cfg,
+		logger:                logger,
+		msgStore:              msgStore,
+		clinicStore:           clinicStore,
+		conversationPublisher: conversationPublisher,
+		conversationService:   conversationService,
+		conversationStore:     conversationStore,
+		redisClient:           redisClient,
+		webhookMessenger:      webhookMessenger,
+		leadsRepo:             leadsRepo,
+		resolver:              resolver,
+	})
+	voiceAIHandler := voiceBoot.voiceAIHandler
+	voiceWSHandler := voiceBoot.voiceWSHandler
+	callControlHandler := voiceBoot.callControl
 
-	// Nova Sonic Voice AI WebSocket handler (bidirectional streaming)
-	var voiceWSHandler *voice.TelnyxWSHandler
-	if cfg.NovaSonicSidecarURL != "" {
-		sidecarURL := cfg.NovaSonicSidecarURL
-		novaSonicVoice := cfg.NovaSonicVoice
-
-		// Build shared tool dependencies for voice AI
-		voiceToolDeps := &voice.ToolDeps{
-			MoxieClient: func() *moxieclient.Client {
-				// Moxie client is created later in worker init; create one here too
-				moxieDryRun := os.Getenv("MOXIE_DRY_RUN") == "true"
-				return moxieclient.NewClient(logger, moxieclient.WithDryRun(moxieDryRun))
-			}(),
-			Messenger:   webhookMessenger,
-			ClinicStore: clinicStore,
-			LeadsRepo:   leadsRepo,
-		}
-
-		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {
-			// Pre-fetch availability for top services to inject into system prompt
-			availabilitySummary := ""
-			if voiceToolDeps.MoxieClient != nil {
-				availabilitySummary = voice.FetchAvailabilitySummary(l, voiceToolDeps.MoxieClient, voiceToolDeps.ClinicStore, callCtx.OrgID)
-			}
-
-			// Build dynamic system prompt from clinic config
-			systemPrompt := voice.BuildVoiceSystemPrompt(l, voiceToolDeps.ClinicStore, callCtx.OrgID, availabilitySummary)
-
-			return voice.NewBridge(
-				context.Background(),
-				voice.BridgeConfig{
-					SidecarURL:   sidecarURL,
-					SystemPrompt: systemPrompt,
-					Voice:        novaSonicVoice,
-					OrgID:        callCtx.OrgID,
-					CallerPhone:  callCtx.From,
-					ToolDeps:     voiceToolDeps,
-				},
-				callControlID,
-				mediaFormat,
-				l,
-			)
-		})
-		logger.Info("nova sonic voice WebSocket handler initialized", "sidecar_url", sidecarURL)
-	}
-
-	// Call Control handler — answers inbound calls and starts media streaming
-	var callControlHandler *handlers.CallControlHandler
-	if cfg.NovaSonicStreamURL != "" && cfg.TelnyxAPIKey != "" {
-		callControlHandler = handlers.NewCallControlHandler(handlers.CallControlConfig{
-			Logger:       logger,
-			TelnyxAPIKey: cfg.TelnyxAPIKey,
-			StreamURL:    cfg.NovaSonicStreamURL,
-			OrgResolver:  resolver,
-		})
-		logger.Info("call control handler initialized", "stream_url", cfg.NovaSonicStreamURL)
-	}
-
-	var checkoutHandler *payments.CheckoutHandler
-	var squareWebhookHandler *payments.SquareWebhookHandler
-	var squareOAuthHandler *payments.OAuthHandler
-	var fakePaymentsHandler *payments.FakePaymentsHandler
-	if paymentsRepo != nil && processedStore != nil && outboxStore != nil {
-		// Square OAuth service for per-clinic payment connections
-		var oauthSvc *payments.SquareOAuthService
-		// Number resolver for webhook handler - defaults to static, wrapped with DB lookup
-		var numberResolver payments.OrgNumberResolver = resolver
-		var orderClient interface {
-			FetchMetadata(ctx context.Context, orderID string) (map[string]string, error)
-		}
-		if strings.TrimSpace(cfg.SquareAccessToken) != "" {
-			orderClient = payments.NewSquareOrdersClient(cfg.SquareAccessToken, cfg.SquareBaseURL, logger)
-		}
-
-		if cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "" {
-			oauthSvc = payments.NewSquareOAuthService(
-				payments.SquareOAuthConfig{
-					ClientID:     cfg.SquareClientID,
-					ClientSecret: cfg.SquareClientSecret,
-					RedirectURI:  cfg.SquareOAuthRedirectURI,
-					Sandbox:      cfg.SquareSandbox,
-				},
-				dbPool,
-				logger,
-			)
-			squareOAuthHandler = payments.NewOAuthHandler(oauthSvc, cfg.SquareOAuthSuccessURL, logger)
-			logger.Info("square oauth handler initialized", "redirect_uri", cfg.SquareOAuthRedirectURI, "sandbox", cfg.SquareSandbox)
-
-			// Start token refresh worker
-			tokenRefreshWorker := payments.NewTokenRefreshWorker(oauthSvc, logger)
-			go tokenRefreshWorker.Start(appCtx)
-
-			// Wrap static resolver with DB lookup for phone numbers
-			numberResolver = payments.NewDBOrgNumberResolver(oauthSvc, resolver)
-		}
-		fallbackFromNumber := strings.TrimSpace(cfg.TelnyxFromNumber)
-		if fallbackFromNumber == "" {
-			fallbackFromNumber = strings.TrimSpace(cfg.TwilioFromNumber)
-		}
-		if fallbackFromNumber != "" {
-			numberResolver = payments.NewFallbackNumberResolver(numberResolver, fallbackFromNumber)
-		}
-
-		hasSquareProvider := strings.TrimSpace(cfg.SquareAccessToken) != "" || (cfg.SquareClientID != "" && cfg.SquareClientSecret != "" && cfg.SquareOAuthRedirectURI != "")
-		useFakePayments := cfg.AllowFakePayments && !hasSquareProvider
-		// Fake payments mode only when Square isn't configured (for testing when sandbox is broken)
-		if useFakePayments {
-			fakeSvc := payments.NewFakeCheckoutService(cfg.PublicBaseURL, logger)
-			checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, fakeSvc, logger, int32(cfg.DepositAmountCents))
-			fakePaymentsHandler = payments.NewFakePaymentsHandler(paymentsRepo, leadsRepo, processedStore, outboxStore, numberResolver, cfg.PublicBaseURL, logger)
-			logger.Warn("using fake payments mode (ALLOW_FAKE_PAYMENTS=true)")
-		} else {
-			usePaymentLinks := payments.UsePaymentLinks(cfg.SquareCheckoutMode, cfg.SquareSandbox)
-			logger.Info("square checkout mode configured", "mode", cfg.SquareCheckoutMode, "sandbox", cfg.SquareSandbox, "usePaymentLinks", usePaymentLinks)
-			squareSvc := payments.NewSquareCheckoutService(cfg.SquareAccessToken, cfg.SquareLocationID, cfg.SquareSuccessURL, cfg.SquareCancelURL, logger).
-				WithBaseURL(cfg.SquareBaseURL).
-				WithPaymentLinks(usePaymentLinks).
-				WithPaymentLinkFallback(cfg.SquareCheckoutAllowFallback)
-			if oauthSvc != nil {
-				squareSvc = squareSvc.WithCredentialsProvider(oauthSvc)
-			}
-			checkoutHandler = payments.NewCheckoutHandler(leadsRepo, paymentsRepo, squareSvc, logger, int32(cfg.DepositAmountCents))
-		}
-
-		squareWebhookHandler = payments.NewSquareWebhookHandler(cfg.SquareWebhookKey, paymentsRepo, leadsRepo, processedStore, outboxStore, numberResolver, orderClient, logger)
-		dispatcher := conversation.NewOutboxDispatcher(conversationPublisher)
-		deliverer := events.NewDeliverer(outboxStore, dispatcher, logger)
-		go deliverer.Start(appCtx)
-	}
-
-	// Initialize Stripe handlers
-	var stripeWebhookHandler *payments.StripeWebhookHandler
-	var stripeConnectHandler *payments.StripeConnectHandler
-	if cfg.StripeWebhookSecret != "" && paymentsRepo != nil && processedStore != nil && outboxStore != nil {
-		var stripeNumberResolver payments.OrgNumberResolver = resolver
-		fallbackFromNumber := strings.TrimSpace(cfg.TelnyxFromNumber)
-		if fallbackFromNumber == "" {
-			fallbackFromNumber = strings.TrimSpace(cfg.TwilioFromNumber)
-		}
-		if fallbackFromNumber != "" {
-			stripeNumberResolver = payments.NewFallbackNumberResolver(stripeNumberResolver, fallbackFromNumber)
-		}
-		stripeWebhookHandler = payments.NewStripeWebhookHandler(cfg.StripeWebhookSecret, paymentsRepo, leadsRepo, processedStore, outboxStore, stripeNumberResolver, logger)
-		logger.Info("stripe webhook handler initialized")
-	}
-	if cfg.StripeConnectClientID != "" && cfg.StripeSecretKey != "" && clinicStore != nil {
-		redirectURI := cfg.StripeConnectRedirect
-		if redirectURI == "" {
-			redirectURI = cfg.PublicBaseURL + "/stripe/connect/callback"
-		}
-		stripeConnectHandler = payments.NewStripeConnectHandler(cfg.StripeConnectClientID, cfg.StripeSecretKey, redirectURI, clinicStore, logger)
-		logger.Info("stripe connect handler initialized", "client_id_set", cfg.StripeConnectClientID != "", "redirect_uri", redirectURI)
-	}
+	paymentBoot := bootstrapPayments(paymentsDeps{
+		appCtx:                appCtx,
+		cfg:                   cfg,
+		logger:                logger,
+		dbPool:                dbPool,
+		leadsRepo:             leadsRepo,
+		redisClient:           redisClient,
+		outboxStore:           outboxStore,
+		processedStore:        processedStore,
+		resolver:              resolver,
+		paymentsRepo:          paymentsRepo,
+		clinicStore:           clinicStore,
+		conversationPublisher: conversationPublisher,
+	})
+	checkoutHandler := paymentBoot.checkoutHandler
+	squareWebhookHandler := paymentBoot.squareWebhookHandler
+	squareOAuthHandler := paymentBoot.squareOAuthHandler
+	fakePaymentsHandler := paymentBoot.fakePaymentsHandler
+	stripeWebhookHandler := paymentBoot.stripeWebhookHandler
+	stripeConnectHandler := paymentBoot.stripeConnectHandler
 
 	var telnyxWebhookHandler *handlers.TelnyxWebhookHandler
 	logger.Debug("checking telnyx webhook handler prerequisites",
@@ -519,6 +348,12 @@ func main() {
 		logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
 	}
 
+	// Wire missed-call text-back into call control handler
+	if callControlHandler != nil && telnyxWebhookHandler != nil {
+		callControlHandler.SetMissedCallTexter(telnyxWebhookHandler)
+		logger.Info("call control handler wired with missed-call text-back")
+	}
+
 	// Create booking callback handler for outcome notifications
 	var bookingCallbackHandler *conversation.BookingCallbackHandler
 	if leadsRepo != nil && webhookMessenger != nil {
@@ -535,15 +370,8 @@ func main() {
 		}
 	}
 
-	// GitHub workflow webhook notifications (to Andrew on Telegram)
-	var githubWebhookHandler *handlers.GitHubWebhookHandler
-	if cfg.GitHubWebhookSecret != "" {
-		githubNotifier := handlers.NewTelegramNotifier(cfg.TelegramBotToken, cfg.AndrewTelegramChatID, logger)
-		githubWebhookHandler = handlers.NewGitHubWebhookHandler(cfg.GitHubWebhookSecret, githubNotifier, logger)
-		logger.Info("github webhook handler initialized")
-	} else {
-		logger.Warn("github webhook handler not initialized (GITHUB_WEBHOOK_SECRET missing)")
-	}
+	// Notifications bootstrap
+	githubWebhookHandler := bootstrapNotifications(cfg, logger)
 
 	// Setup router
 	routerCfg := &router.Config{

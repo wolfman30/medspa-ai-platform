@@ -76,12 +76,22 @@ func (s *Store) UpsertHostedOrder(ctx context.Context, q Querier, record HostedO
 	return nil
 }
 
+// DeleteHostedOrderByClinic removes a hosted number entry for a specific clinic.
+func (s *Store) DeleteHostedOrderByClinic(ctx context.Context, clinicID uuid.UUID, number string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM hosted_number_orders WHERE clinic_id = $1 AND e164_number = $2`, clinicID, number)
+	if err != nil {
+		return fmt.Errorf("messaging: delete hosted order: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) LookupClinicByNumber(ctx context.Context, number string) (uuid.UUID, error) {
 	var clinicID uuid.UUID
 	query := `
 		SELECT clinic_id
 		FROM hosted_number_orders
 		WHERE e164_number = $1 AND status = 'activated'
+		ORDER BY updated_at DESC
 		LIMIT 1
 	`
 	if err := s.pool.QueryRow(ctx, query, number).Scan(&clinicID); err != nil {

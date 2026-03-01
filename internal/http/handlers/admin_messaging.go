@@ -437,3 +437,33 @@ func (h *AdminMessagingHandler) ActivateHostedNumber(w http.ResponseWriter, r *h
 		"status":       "activated",
 	})
 }
+
+// DeactivateHostedNumber removes a phone number entry for a specific clinic.
+func (h *AdminMessagingHandler) DeactivateHostedNumber(w http.ResponseWriter, r *http.Request) {
+	var req activateNumberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	clinicID, err := uuid.Parse(req.ClinicID)
+	if err != nil {
+		http.Error(w, "invalid clinic_id", http.StatusBadRequest)
+		return
+	}
+	normalized := messaging.NormalizeE164(req.PhoneNumber)
+	if normalized == "" {
+		http.Error(w, "invalid phone_number", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.DeleteHostedOrderByClinic(r.Context(), clinicID, normalized); err != nil {
+		h.logger.Error("delete hosted order failed", "error", err, "clinic_id", clinicID, "number", normalized)
+		http.Error(w, "failed to deactivate number", http.StatusInternalServerError)
+		return
+	}
+	h.logger.Info("deactivated hosted number", "clinic_id", clinicID, "number", normalized)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clinic_id":    clinicID.String(),
+		"phone_number": normalized,
+		"status":       "deactivated",
+	})
+}
