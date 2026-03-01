@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"context"
@@ -18,32 +18,32 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// adminClinicDataDeps holds inputs for building the admin clinic data handler.
-type adminClinicDataDeps struct {
-	appCtx      context.Context
-	cfg         *appconfig.Config
-	logger      *logging.Logger
-	dbPool      *pgxpool.Pool
-	redisClient *redis.Client
+// AdminClinicDataDeps holds inputs for building the admin clinic data handler.
+type AdminClinicDataDeps struct {
+	AppCtx      context.Context
+	Cfg         *appconfig.Config
+	Logger      *logging.Logger
+	DBPool      *pgxpool.Pool
+	RedisClient *redis.Client
 }
 
-// buildAdminClinicDataHandler constructs the clinic data admin handler with
+// BuildAdminClinicDataHandler constructs the clinic data admin handler with
 // S3 archiver and training archiver if configured.
-func buildAdminClinicDataHandler(deps adminClinicDataDeps) *handlers.AdminClinicDataHandler {
-	if deps.cfg.Env == "production" || deps.dbPool == nil {
+func BuildAdminClinicDataHandler(deps AdminClinicDataDeps) *handlers.AdminClinicDataHandler {
+	if deps.Cfg.Env == "production" || deps.DBPool == nil {
 		return nil
 	}
 
 	adminCfg := handlers.AdminClinicDataConfig{
-		DB:     deps.dbPool,
-		Redis:  deps.redisClient,
-		Logger: deps.logger,
+		DB:     deps.DBPool,
+		Redis:  deps.RedisClient,
+		Logger: deps.Logger,
 	}
 
-	if deps.cfg.S3ArchiveBucket != "" {
+	if deps.Cfg.S3ArchiveBucket != "" {
 		adminCfg.Archiver = buildS3Archiver(deps)
 	}
-	if deps.cfg.S3TrainingBucket != "" {
+	if deps.Cfg.S3TrainingBucket != "" {
 		adminCfg.TrainingArchiver = buildTrainingArchiver(deps)
 	}
 
@@ -51,40 +51,40 @@ func buildAdminClinicDataHandler(deps adminClinicDataDeps) *handlers.AdminClinic
 }
 
 // buildS3Archiver creates the S3-backed conversation archiver.
-func buildS3Archiver(deps adminClinicDataDeps) *clinicdata.Archiver {
-	awsCfg, err := mainconfig.LoadAWSConfig(deps.appCtx, deps.cfg)
+func buildS3Archiver(deps AdminClinicDataDeps) *clinicdata.Archiver {
+	awsCfg, err := mainconfig.LoadAWSConfig(deps.AppCtx, deps.Cfg)
 	if err != nil {
-		deps.logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
+		deps.Logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
 		return nil
 	}
 	s3Client := s3.NewFromConfig(awsCfg)
-	deps.logger.Info("S3 archiver enabled", "bucket", deps.cfg.S3ArchiveBucket)
+	deps.Logger.Info("S3 archiver enabled", "bucket", deps.Cfg.S3ArchiveBucket)
 	return clinicdata.NewArchiver(clinicdata.ArchiverConfig{
-		DB:       deps.dbPool,
+		DB:       deps.DBPool,
 		S3:       s3Client,
-		Bucket:   deps.cfg.S3ArchiveBucket,
-		KMSKeyID: deps.cfg.S3ArchiveKMSKey,
-		Logger:   deps.logger,
+		Bucket:   deps.Cfg.S3ArchiveBucket,
+		KMSKeyID: deps.Cfg.S3ArchiveKMSKey,
+		Logger:   deps.Logger,
 	})
 }
 
 // buildTrainingArchiver creates the training data archiver with LLM classifier.
-func buildTrainingArchiver(deps adminClinicDataDeps) *archive.TrainingArchiver {
-	awsCfg, err := mainconfig.LoadAWSConfig(deps.appCtx, deps.cfg)
+func buildTrainingArchiver(deps AdminClinicDataDeps) *archive.TrainingArchiver {
+	awsCfg, err := mainconfig.LoadAWSConfig(deps.AppCtx, deps.Cfg)
 	if err != nil {
-		deps.logger.Warn("failed to load AWS config for training archiver", "error", err)
+		deps.Logger.Warn("failed to load AWS config for training archiver", "error", err)
 		return nil
 	}
 	trainingS3 := s3.NewFromConfig(awsCfg)
 	brClient := bedrockruntime.NewFromConfig(awsCfg)
-	trainingStore := archive.NewStore(trainingS3, deps.cfg.S3TrainingBucket, deps.logger.Logger)
-	classifier := archive.NewClassifier(brClient, deps.cfg.ClassifierModelID, deps.logger.Logger)
-	deps.logger.Info("training archiver enabled", "bucket", deps.cfg.S3TrainingBucket)
-	return archive.NewTrainingArchiver(trainingStore, classifier, deps.logger.Logger)
+	trainingStore := archive.NewStore(trainingS3, deps.Cfg.S3TrainingBucket, deps.Logger.Logger)
+	classifier := archive.NewClassifier(brClient, deps.Cfg.ClassifierModelID, deps.Logger.Logger)
+	deps.Logger.Info("training archiver enabled", "bucket", deps.Cfg.S3TrainingBucket)
+	return archive.NewTrainingArchiver(trainingStore, classifier, deps.Logger.Logger)
 }
 
-// buildClinicHandlers creates the clinic config, stats, and dashboard handlers.
-func buildClinicHandlers(logger *logging.Logger, clinicStore *clinic.Store, dbPool *pgxpool.Pool) (*clinic.Handler, *clinic.StatsHandler, *clinic.DashboardHandler) {
+// BuildClinicHandlers creates the clinic config, stats, and dashboard handlers.
+func BuildClinicHandlers(logger *logging.Logger, clinicStore *clinic.Store, dbPool *pgxpool.Pool) (*clinic.Handler, *clinic.StatsHandler, *clinic.DashboardHandler) {
 	var ch *clinic.Handler
 	var stats *clinic.StatsHandler
 	var dashboard *clinic.DashboardHandler
@@ -99,8 +99,8 @@ func buildClinicHandlers(logger *logging.Logger, clinicStore *clinic.Store, dbPo
 	return ch, stats, dashboard
 }
 
-// buildEvidenceS3 creates the S3 client for evidence uploads.
-func buildEvidenceS3(appCtx context.Context, cfg *appconfig.Config, logger *logging.Logger) handlers.S3Uploader {
+// BuildEvidenceS3 creates the S3 client for evidence uploads.
+func BuildEvidenceS3(appCtx context.Context, cfg *appconfig.Config, logger *logging.Logger) handlers.S3Uploader {
 	if cfg.S3TrainingBucket == "" {
 		return nil
 	}

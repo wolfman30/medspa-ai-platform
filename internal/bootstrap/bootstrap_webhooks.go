@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
@@ -14,8 +14,8 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// buildAdminMessagingHandler creates the admin messaging handler with quiet hours.
-func buildAdminMessagingHandler(
+// BuildAdminMessagingHandler creates the admin messaging handler with quiet hours.
+func BuildAdminMessagingHandler(
 	cfg *appconfig.Config,
 	logger *logging.Logger,
 	msgStore *messaging.Store,
@@ -51,48 +51,48 @@ func buildAdminMessagingHandler(
 	})
 }
 
-// twDeps holds inputs for building the Telnyx webhook handler.
-type twDeps struct {
-	cfg               *appconfig.Config
-	logger            *logging.Logger
-	msgStore          *messaging.Store
-	telnyxClient      *telnyxclient.Client
-	processedStore    *events.ProcessedStore
-	conversationPub   *conversation.Publisher
-	leadsRepo         leads.Repository
-	smsTranscript     *conversation.SMSTranscriptStore
-	conversationStore *conversation.ConversationStore
-	clinicStore       *clinic.Store
-	messagingMetrics  *observemetrics.MessagingMetrics
+// TwDeps holds inputs for building the Telnyx webhook handler.
+type TwDeps struct {
+	Cfg               *appconfig.Config
+	Logger            *logging.Logger
+	MsgStore          *messaging.Store
+	TelnyxClient      *telnyxclient.Client
+	ProcessedStore    *events.ProcessedStore
+	ConversationPub   *conversation.Publisher
+	LeadsRepo         leads.Repository
+	SMSTranscript     *conversation.SMSTranscriptStore
+	ConversationStore *conversation.ConversationStore
+	ClinicStore       *clinic.Store
+	MessagingMetrics  *observemetrics.MessagingMetrics
 }
 
-// buildTelnyxWebhookHandler creates the Telnyx inbound webhook handler.
-func buildTelnyxWebhookHandler(deps twDeps) *handlers.TelnyxWebhookHandler {
-	if deps.msgStore == nil || deps.telnyxClient == nil || deps.processedStore == nil {
-		deps.logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
+// BuildTelnyxWebhookHandler creates the Telnyx inbound webhook handler.
+func BuildTelnyxWebhookHandler(deps TwDeps) *handlers.TelnyxWebhookHandler {
+	if deps.MsgStore == nil || deps.TelnyxClient == nil || deps.ProcessedStore == nil {
+		deps.Logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
 		return nil
 	}
 
 	h := handlers.NewTelnyxWebhookHandler(handlers.TelnyxWebhookConfig{
-		Store:             deps.msgStore,
-		Processed:         deps.processedStore,
-		Telnyx:            deps.telnyxClient,
-		Conversation:      deps.conversationPub,
-		Leads:             deps.leadsRepo,
-		Logger:            deps.logger,
-		Transcript:        deps.smsTranscript,
-		ConversationStore: deps.conversationStore,
-		ClinicStore:       deps.clinicStore,
-		MessagingProfile:  deps.cfg.TelnyxMessagingProfileID,
-		StopAck:           deps.cfg.TelnyxStopReply,
-		HelpAck:           deps.cfg.TelnyxHelpReply,
-		StartAck:          deps.cfg.TelnyxStartReply,
-		FirstContactAck:   deps.cfg.TelnyxFirstContactReply,
-		VoiceAck:          deps.cfg.TelnyxVoiceAckReply,
-		DemoMode:          deps.cfg.DemoMode,
-		TrackJobs:         deps.cfg.TelnyxTrackJobs,
-		Metrics:           deps.messagingMetrics,
+		Store:             deps.MsgStore,
+		Processed:         deps.ProcessedStore,
+		Telnyx:            deps.TelnyxClient,
+		Conversation:      deps.ConversationPub,
+		Leads:             deps.LeadsRepo,
+		Logger:            deps.Logger,
+		Transcript:        deps.SMSTranscript,
+		ConversationStore: deps.ConversationStore,
+		ClinicStore:       deps.ClinicStore,
+		MessagingProfile:  deps.Cfg.TelnyxMessagingProfileID,
+		StopAck:           deps.Cfg.TelnyxStopReply,
+		HelpAck:           deps.Cfg.TelnyxHelpReply,
+		StartAck:          deps.Cfg.TelnyxStartReply,
+		FirstContactAck:   deps.Cfg.TelnyxFirstContactReply,
+		VoiceAck:          deps.Cfg.TelnyxVoiceAckReply,
+		DemoMode:          deps.Cfg.DemoMode,
+		TrackJobs:         deps.Cfg.TelnyxTrackJobs,
+		Metrics:           deps.MessagingMetrics,
 	})
-	deps.logger.Info("telnyx webhook handler initialized", "profile_id", deps.cfg.TelnyxMessagingProfileID)
+	deps.Logger.Info("telnyx webhook handler initialized", "profile_id", deps.Cfg.TelnyxMessagingProfileID)
 	return h
 }

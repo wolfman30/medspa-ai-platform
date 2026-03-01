@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"context"
@@ -36,19 +36,19 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
-// dbResult holds the outputs from database bootstrapping.
-type dbResult struct {
-	pool              *pgxpool.Pool
-	sqlDB             *sql.DB
-	conversationStore *conversation.ConversationStore
-	auditSvc          *auditcompliance.AuditService
-	leadsRepo         leads.Repository
-	msgStore          *messaging.Store
+// DBResult holds the outputs from database bootstrapping.
+type DBResult struct {
+	Pool              *pgxpool.Pool
+	SQLDB             *sql.DB
+	ConversationStore *conversation.ConversationStore
+	AuditSvc          *auditcompliance.AuditService
+	LeadsRepo         leads.Repository
+	MsgStore          *messaging.Store
 }
 
-// bootstrapDB connects to postgres, runs migrations, and initializes core DB-dependent services.
-func bootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) dbResult {
-	pool := connectPostgresPool(ctx, cfg.DatabaseURL, logger)
+// BootstrapDB connects to postgres, runs migrations, and initializes core DB-dependent services.
+func BootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Logger) DBResult {
+	pool := ConnectPostgresPool(ctx, cfg.DatabaseURL, logger)
 	sqlDB := connectSQLDB(pool, logger)
 	if sqlDB != nil {
 		runAutoMigrate(sqlDB, logger)
@@ -58,17 +58,17 @@ func bootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Log
 	if sqlDB != nil {
 		audit = auditcompliance.NewAuditService(sqlDB)
 	}
-	return dbResult{
-		pool:              pool,
-		sqlDB:             sqlDB,
-		conversationStore: convStore,
-		auditSvc:          audit,
-		leadsRepo:         initializeLeadsRepository(pool),
-		msgStore:          messaging.NewStore(pool),
+	return DBResult{
+		Pool:              pool,
+		SQLDB:             sqlDB,
+		ConversationStore: convStore,
+		AuditSvc:          audit,
+		LeadsRepo:         initializeLeadsRepository(pool),
+		MsgStore:          messaging.NewStore(pool),
 	}
 }
 
-func setupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
+func SetupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
 	registry := prometheus.NewRegistry()
 	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
 	conversation.RegisterMetrics(registry)
@@ -76,7 +76,7 @@ func setupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
 	return metricsHandler, messagingMetrics
 }
 
-func connectPostgresPool(ctx context.Context, dbURL string, logger *logging.Logger) *pgxpool.Pool {
+func ConnectPostgresPool(ctx context.Context, dbURL string, logger *logging.Logger) *pgxpool.Pool {
 	if dbURL == "" {
 		return nil
 	}
@@ -130,7 +130,7 @@ func connectSQLDB(pool *pgxpool.Pool, logger *logging.Logger) *sql.DB {
 	return db
 }
 
-func setupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxclient.Client {
+func SetupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxclient.Client {
 	if cfg.TelnyxAPIKey == "" {
 		logger.Debug("telnyx client not created: API key empty")
 		return nil
@@ -155,7 +155,7 @@ func initializeLeadsRepository(dbPool *pgxpool.Pool) leads.Repository {
 	return leads.NewInMemoryRepository()
 }
 
-func setupConversation(
+func SetupConversation(
 	ctx context.Context,
 	cfg *appconfig.Config,
 	dbPool *pgxpool.Pool,
@@ -185,7 +185,7 @@ func setupConversation(
 	return publisher, store, store, nil
 }
 
-func waitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logger) {
+func WaitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logger) {
 	if inlineWorker == nil {
 		return
 	}
@@ -206,7 +206,7 @@ func waitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logg
 	}
 }
 
-func newBriefsHandler(pool *pgxpool.Pool, logger *logging.Logger) *handlers.AdminBriefsHandler {
+func NewBriefsHandler(pool *pgxpool.Pool, logger *logging.Logger) *handlers.AdminBriefsHandler {
 	abs, err := filepath.Abs("research")
 	if err != nil {
 		abs = ""
@@ -220,7 +220,7 @@ func newBriefsHandler(pool *pgxpool.Pool, logger *logging.Logger) *handlers.Admi
 	return h
 }
 
-func newProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
+func NewProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
 	h := prospects.NewHandler(prospects.NewRepository(sqlDB))
 	if abs, err := filepath.Abs("research"); err == nil {
 		if info, err := os.Stat(abs); err == nil && info.IsDir() {
@@ -230,6 +230,6 @@ func newProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
 	return h
 }
 
-func newStoriesHandler(sqlDB *sql.DB) *stories.Handler {
+func NewStoriesHandler(sqlDB *sql.DB) *stories.Handler {
 	return stories.NewHandler(stories.NewRepository(sqlDB))
 }

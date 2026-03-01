@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/wolfman30/medspa-ai-platform/internal/bootstrap"
 	"testing"
 
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
@@ -23,10 +24,10 @@ func TestBootstrapPayments_DoesNotPanicWithZeroValueDeps(t *testing.T) {
 	cfg := &appconfig.Config{}
 
 	mustNotPanic(t, func() {
-		_ = bootstrapPayments(paymentsDeps{
-			appCtx: context.Background(),
-			cfg:    cfg,
-			logger: logger,
+		_ = bootstrap.BootstrapPayments(bootstrap.PaymentsDeps{
+			AppCtx: context.Background(),
+			Cfg:    cfg,
+			Logger: logger,
 		})
 	})
 }
@@ -36,9 +37,9 @@ func TestBootstrapVoice_DoesNotPanicWithZeroValueDeps(t *testing.T) {
 	cfg := &appconfig.Config{}
 
 	mustNotPanic(t, func() {
-		_ = bootstrapVoice(voiceDeps{
-			cfg:    cfg,
-			logger: logger,
+		_ = bootstrap.BootstrapVoice(bootstrap.VoiceDeps{
+			Cfg:    cfg,
+			Logger: logger,
 		})
 	})
 }

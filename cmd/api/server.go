@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/wolfman30/medspa-ai-platform/internal/bootstrap"
 	"net/http"
 	"os"
 	"time"
@@ -41,7 +42,7 @@ func runServer(ctx context.Context, handler http.Handler, port string, logger *l
 		os.Exit(1)
 	}
 
-	waitForInlineWorker(inlineWorker, logger)
+	bootstrap.WaitForInlineWorker(inlineWorker, logger)
 
 	logger.Info("server stopped")
 	fmt.Println("Server exited gracefully")

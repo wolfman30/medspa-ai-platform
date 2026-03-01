@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
+	"github.com/wolfman30/medspa-ai-platform/internal/bootstrap"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -45,43 +46,43 @@ func main() {
 		"has_webhook_secret", cfg.TelnyxWebhookSecret != "",
 	)
 
-	metricsHandler, messagingMetrics := setupMessagingMetrics()
+	metricsHandler, messagingMetrics := bootstrap.SetupMessagingMetrics()
 
 	// Set up signal-aware context
 	appCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	db := bootstrapDB(appCtx, cfg, logger)
-	if db.pool != nil {
-		defer db.pool.Close()
+	db := bootstrap.BootstrapDB(appCtx, cfg, logger)
+	if db.Pool != nil {
+		defer db.Pool.Close()
 	}
-	if db.sqlDB != nil {
-		defer db.sqlDB.Close()
+	if db.SQLDB != nil {
+		defer db.SQLDB.Close()
 	}
-	dbPool := db.pool
-	sqlDB := db.sqlDB
-	conversationStore := db.conversationStore
-	auditSvc := db.auditSvc
-	leadsRepo := db.leadsRepo
-	msgStore := db.msgStore
-	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := setupConversation(appCtx, cfg, dbPool, logger)
+	dbPool := db.Pool
+	sqlDB := db.SQLDB
+	conversationStore := db.ConversationStore
+	auditSvc := db.AuditSvc
+	leadsRepo := db.LeadsRepo
+	msgStore := db.MsgStore
+	conversationPublisher, jobRecorder, jobUpdater, memoryQueue := bootstrap.SetupConversation(appCtx, cfg, dbPool, logger)
 
 	// Clinic bootstrap (redis + clinic config stores)
-	clinicBoot := bootstrapClinic(cfg, appCtx, logger)
-	redisClient := clinicBoot.redisClient
-	clinicStore := clinicBoot.clinicStore
-	smsTranscript := clinicBoot.smsTranscript
+	clinicBoot := bootstrap.BootstrapClinic(cfg, appCtx, logger)
+	redisClient := clinicBoot.RedisClient
+	clinicStore := clinicBoot.ClinicStore
+	smsTranscript := clinicBoot.SMSTranscript
 
 	// Initialize handlers
 	leadsHandler := leads.NewHandler(leadsRepo, logger)
-	messagingBoot := bootstrapMessaging(cfg, logger, conversationPublisher, leadsRepo, msgStore, auditSvc, conversationStore, smsTranscript, clinicStore)
-	resolver := messagingBoot.resolver
-	webhookMessenger := messagingBoot.webhookMessenger
-	webhookMessengerReason := messagingBoot.messengerReason
-	messagingHandler := messagingBoot.messagingHandler
+	messagingBoot := bootstrap.BootstrapMessaging(cfg, logger, conversationPublisher, leadsRepo, msgStore, auditSvc, conversationStore, smsTranscript, clinicStore)
+	resolver := messagingBoot.Resolver
+	webhookMessenger := messagingBoot.WebhookMessenger
+	webhookMessengerReason := messagingBoot.MessengerReason
+	messagingHandler := messagingBoot.MessagingHandler
 
-	telnyxClient := setupTelnyxClient(cfg, logger)
-	adminMessagingHandler := buildAdminMessagingHandler(cfg, logger, msgStore, telnyxClient, messagingMetrics)
+	telnyxClient := bootstrap.SetupTelnyxClient(cfg, logger)
+	adminMessagingHandler := bootstrap.BuildAdminMessagingHandler(cfg, logger, msgStore, telnyxClient, messagingMetrics)
 	var paymentsRepo *payments.Repository
 	var outboxStore *events.OutboxStore
 	var processedStore *events.ProcessedStore
@@ -91,10 +92,10 @@ func main() {
 		processedStore = events.NewProcessedStore(dbPool)
 	}
 
-	clinicHandler, clinicStatsHandler, clinicDashboardHandler := buildClinicHandlers(logger, clinicStore, dbPool)
+	clinicHandler, clinicStatsHandler, clinicDashboardHandler := bootstrap.BuildClinicHandlers(logger, clinicStore, dbPool)
 
-	adminClinicDataHandler := buildAdminClinicDataHandler(adminClinicDataDeps{
-		appCtx: appCtx, cfg: cfg, logger: logger, dbPool: dbPool, redisClient: redisClient,
+	adminClinicDataHandler := bootstrap.BuildAdminClinicDataHandler(bootstrap.AdminClinicDataDeps{
+		AppCtx: appCtx, Cfg: cfg, Logger: logger, DBPool: dbPool, RedisClient: redisClient,
 	})
 
 	var adminOnboardingHandler *handlers.AdminOnboardingHandler
@@ -122,72 +123,72 @@ func main() {
 		os.Exit(1)
 	}
 
-	inlineWorker, conversationService := setupInlineWorker(inlineWorkerDeps{
-		ctx:           appCtx,
-		cfg:           cfg,
-		logger:        logger,
-		messenger:     webhookMessenger,
-		messengerNote: webhookMessengerReason,
-		jobUpdater:    jobUpdater,
-		memoryQueue:   memoryQueue,
-		dbPool:        dbPool,
-		sqlDB:         sqlDB,
-		audit:         auditSvc,
-		outboxStore:   outboxStore,
-		resolver:      resolver,
-		optOutChecker: msgStore,
-		supervisor:    supervisor,
-		redisClient:   redisClient,
-		smsTranscript: smsTranscript,
+	inlineWorker, conversationService := bootstrap.SetupInlineWorker(bootstrap.InlineWorkerDeps{
+		Ctx:           appCtx,
+		Cfg:           cfg,
+		Logger:        logger,
+		Messenger:     webhookMessenger,
+		MessengerNote: webhookMessengerReason,
+		JobUpdater:    jobUpdater,
+		MemoryQueue:   memoryQueue,
+		DBPool:        dbPool,
+		SQLDB:         sqlDB,
+		Audit:         auditSvc,
+		OutboxStore:   outboxStore,
+		Resolver:      resolver,
+		OptOutChecker: msgStore,
+		Supervisor:    supervisor,
+		RedisClient:   redisClient,
+		SMSTranscript: smsTranscript,
 	})
 	if conversationService != nil {
 		conversationHandler.SetService(conversationService)
 	}
 
-	voiceBoot := bootstrapVoice(voiceDeps{
-		cfg:                   cfg,
-		logger:                logger,
-		msgStore:              msgStore,
-		clinicStore:           clinicStore,
-		conversationPublisher: conversationPublisher,
-		conversationService:   conversationService,
-		conversationStore:     conversationStore,
-		redisClient:           redisClient,
-		webhookMessenger:      webhookMessenger,
-		leadsRepo:             leadsRepo,
-		resolver:              resolver,
+	voiceBoot := bootstrap.BootstrapVoice(bootstrap.VoiceDeps{
+		Cfg:                   cfg,
+		Logger:                logger,
+		MsgStore:              msgStore,
+		ClinicStore:           clinicStore,
+		ConversationPublisher: conversationPublisher,
+		ConversationService:   conversationService,
+		ConversationStore:     conversationStore,
+		RedisClient:           redisClient,
+		WebhookMessenger:      webhookMessenger,
+		LeadsRepo:             leadsRepo,
+		Resolver:              resolver,
 	})
-	voiceAIHandler := voiceBoot.voiceAIHandler
-	voiceWSHandler := voiceBoot.voiceWSHandler
-	callControlHandler := voiceBoot.callControl
+	voiceAIHandler := voiceBoot.VoiceAIHandler
+	voiceWSHandler := voiceBoot.VoiceWSHandler
+	callControlHandler := voiceBoot.CallControl
 
-	paymentBoot := bootstrapPayments(paymentsDeps{
-		appCtx:                appCtx,
-		cfg:                   cfg,
-		logger:                logger,
-		dbPool:                dbPool,
-		leadsRepo:             leadsRepo,
-		redisClient:           redisClient,
-		outboxStore:           outboxStore,
-		processedStore:        processedStore,
-		resolver:              resolver,
-		paymentsRepo:          paymentsRepo,
-		clinicStore:           clinicStore,
-		conversationPublisher: conversationPublisher,
+	paymentBoot := bootstrap.BootstrapPayments(bootstrap.PaymentsDeps{
+		AppCtx:                appCtx,
+		Cfg:                   cfg,
+		Logger:                logger,
+		DBPool:                dbPool,
+		LeadsRepo:             leadsRepo,
+		RedisClient:           redisClient,
+		OutboxStore:           outboxStore,
+		ProcessedStore:        processedStore,
+		Resolver:              resolver,
+		PaymentsRepo:          paymentsRepo,
+		ClinicStore:           clinicStore,
+		ConversationPublisher: conversationPublisher,
 	})
-	checkoutHandler := paymentBoot.checkoutHandler
-	squareWebhookHandler := paymentBoot.squareWebhookHandler
-	squareOAuthHandler := paymentBoot.squareOAuthHandler
-	fakePaymentsHandler := paymentBoot.fakePaymentsHandler
-	stripeWebhookHandler := paymentBoot.stripeWebhookHandler
-	stripeConnectHandler := paymentBoot.stripeConnectHandler
+	checkoutHandler := paymentBoot.CheckoutHandler
+	squareWebhookHandler := paymentBoot.SquareWebhookHandler
+	squareOAuthHandler := paymentBoot.SquareOAuthHandler
+	fakePaymentsHandler := paymentBoot.FakePaymentsHandler
+	stripeWebhookHandler := paymentBoot.StripeWebhookHandler
+	stripeConnectHandler := paymentBoot.StripeConnectHandler
 
-	telnyxWebhookHandler := buildTelnyxWebhookHandler(twDeps{
-		cfg: cfg, logger: logger, msgStore: msgStore, telnyxClient: telnyxClient,
-		processedStore: processedStore, conversationPub: conversationPublisher,
-		leadsRepo: leadsRepo, smsTranscript: smsTranscript,
-		conversationStore: conversationStore, clinicStore: clinicStore,
-		messagingMetrics: messagingMetrics,
+	telnyxWebhookHandler := bootstrap.BuildTelnyxWebhookHandler(bootstrap.TwDeps{
+		Cfg: cfg, Logger: logger, MsgStore: msgStore, TelnyxClient: telnyxClient,
+		ProcessedStore: processedStore, ConversationPub: conversationPublisher,
+		LeadsRepo: leadsRepo, SMSTranscript: smsTranscript,
+		ConversationStore: conversationStore, ClinicStore: clinicStore,
+		MessagingMetrics: messagingMetrics,
 	})
 
 	// Wire missed-call text-back into call control handler
@@ -203,10 +204,10 @@ func main() {
 		logger.Info("booking callback handler initialized")
 	}
 
-	evidenceS3 := buildEvidenceS3(appCtx, cfg, logger)
+	evidenceS3 := bootstrap.BuildEvidenceS3(appCtx, cfg, logger)
 
 	// Notifications bootstrap
-	githubWebhookHandler := bootstrapNotifications(cfg, logger)
+	githubWebhookHandler := bootstrap.BootstrapNotifications(cfg, logger)
 
 	// Setup router
 	routerCfg := &router.Config{
@@ -245,9 +246,9 @@ func main() {
 		RedisClient:            redisClient,
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
-		AdminBriefs:            newBriefsHandler(dbPool, logger),
-		ProspectsHandler:       newProspectsHandler(sqlDB),
-		StoriesHandler:         newStoriesHandler(sqlDB),
+		AdminBriefs:            bootstrap.NewBriefsHandler(dbPool, logger),
+		ProspectsHandler:       bootstrap.NewProspectsHandler(sqlDB),
+		StoriesHandler:         bootstrap.NewStoriesHandler(sqlDB),
 		EvidenceS3Client:       evidenceS3,
 		EvidenceS3Bucket:       cfg.S3TrainingBucket,
 		EvidenceS3Region:       cfg.AWSRegion,
