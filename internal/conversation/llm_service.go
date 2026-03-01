@@ -96,18 +96,14 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	if isVoiceChannel(req.Channel) && s.voiceModel != "" {
 		ctx = context.WithValue(ctx, ctxKeyVoiceModel, s.voiceModel)
 	}
-	redactedIntro, sawPHI := RedactPHI(req.Intro)
-	medicalKeywords := []string(nil)
-	if !sawPHI {
-		medicalKeywords = detectMedicalAdvice(req.Intro)
-		if len(medicalKeywords) > 0 {
-			redactedIntro = "[REDACTED]"
-		}
-	}
+	filter := FilterInbound(req.Intro)
+	redactedIntro := filter.RedactedMsg
+	sawPHI := filter.SawPHI
+	medicalKeywords := filter.MedicalKW
 
 	// Prompt injection detection on first message.
-	injectionResult := ScanForPromptInjection(req.Intro)
-	if injectionResult.Blocked {
+	if filter.DeflectionMsg == blockedReply {
+		injectionResult := ScanForPromptInjection(req.Intro)
 		s.events.PromptInjectionDetected(ctx, req.ConversationID, req.OrgID, true, injectionResult.Score, injectionResult.Reasons)
 		s.logger.Warn("StartConversation: prompt injection BLOCKED",
 			"org_id", req.OrgID,
@@ -119,14 +115,15 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		}
 		return &Response{ConversationID: req.ConversationID, Message: blockedReply, Timestamp: time.Now().UTC()}, nil
 	}
-	if injectionResult.Score >= warnThreshold {
+	if filter.Sanitized != req.Intro {
+		injectionResult := ScanForPromptInjection(req.Intro)
 		s.events.PromptInjectionDetected(ctx, req.ConversationID, req.OrgID, false, injectionResult.Score, injectionResult.Reasons)
 		s.logger.Warn("StartConversation: prompt injection WARNING",
 			"org_id", req.OrgID,
 			"score", injectionResult.Score,
 			"reasons", injectionResult.Reasons,
 		)
-		req.Intro = SanitizeForLLM(req.Intro)
+		req.Intro = filter.Sanitized
 	}
 
 	s.events.ConversationStarted(ctx, req.ConversationID, req.OrgID, req.LeadID, req.From, string(req.Source))
@@ -465,20 +462,16 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	}
 
 	rawMessage := req.Message
-	redactedMessage, sawPHI := RedactPHI(rawMessage)
-	medicalKeywords := []string(nil)
-	if !sawPHI {
-		medicalKeywords = detectMedicalAdvice(rawMessage)
-		if len(medicalKeywords) > 0 {
-			redactedMessage = "[REDACTED]"
-		}
-	}
+	filter := FilterInbound(rawMessage)
+	redactedMessage := filter.RedactedMsg
+	sawPHI := filter.SawPHI
+	medicalKeywords := filter.MedicalKW
 
 	s.events.MessageReceived(ctx, req.ConversationID, req.OrgID, req.LeadID, rawMessage)
 
 	// Prompt injection detection — scan inbound messages before they reach the LLM.
-	injectionResult := ScanForPromptInjection(rawMessage)
-	if injectionResult.Blocked {
+	if filter.DeflectionMsg == blockedReply {
+		injectionResult := ScanForPromptInjection(rawMessage)
 		s.events.PromptInjectionDetected(ctx, req.ConversationID, req.OrgID, true, injectionResult.Score, injectionResult.Reasons)
 		s.logger.Warn("ProcessMessage: prompt injection BLOCKED",
 			"conversation_id", req.ConversationID,
@@ -491,14 +484,15 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 		return &Response{ConversationID: req.ConversationID, Message: blockedReply, Timestamp: time.Now().UTC()}, nil
 	}
-	if injectionResult.Score >= warnThreshold {
+	if filter.Sanitized != rawMessage {
+		injectionResult := ScanForPromptInjection(rawMessage)
 		s.logger.Warn("ProcessMessage: prompt injection WARNING",
 			"conversation_id", req.ConversationID,
 			"org_id", req.OrgID,
 			"score", injectionResult.Score,
 			"reasons", injectionResult.Reasons,
 		)
-		rawMessage = SanitizeForLLM(rawMessage)
+		rawMessage = filter.Sanitized
 	}
 
 	s.logger.Info("ProcessMessage called",
