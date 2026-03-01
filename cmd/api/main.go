@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
@@ -45,8 +47,8 @@ func main() {
 
 	metricsHandler, messagingMetrics := setupMessagingMetrics()
 
-	// Setup application context
-	appCtx, stop := context.WithCancel(context.Background())
+	// Set up signal-aware context
+	appCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	db := bootstrapDB(appCtx, cfg, logger)
@@ -260,5 +262,5 @@ func main() {
 		),
 	}
 	r := router.New(routerCfg)
-	runServer(r, cfg.Port, logger, inlineWorker, stop)
+	runServer(appCtx, r, cfg.Port, logger, inlineWorker)
 }

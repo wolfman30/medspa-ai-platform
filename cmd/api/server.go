@@ -5,17 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-// runServer starts the HTTP server, waits for a shutdown signal,
+// runServer starts the HTTP server, waits for context cancellation,
 // then gracefully drains connections and stops the inline worker.
-func runServer(handler http.Handler, port string, logger *logging.Logger, inlineWorker *conversation.Worker, stop context.CancelFunc) {
+func runServer(ctx context.Context, handler http.Handler, port string, logger *logging.Logger, inlineWorker *conversation.Worker) {
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      handler,
@@ -32,17 +30,13 @@ func runServer(handler http.Handler, port string, logger *logging.Logger, inline
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	stop()
+	<-ctx.Done()
 	logger.Info("shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
