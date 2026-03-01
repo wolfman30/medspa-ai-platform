@@ -385,6 +385,7 @@ func main() {
 			TelnyxAPIKey: cfg.TelnyxAPIKey,
 			StreamURL:    cfg.NovaSonicStreamURL,
 			OrgResolver:  resolver,
+			ClinicStore:  clinicStore,
 		})
 		logger.Info("call control handler initialized", "stream_url", cfg.NovaSonicStreamURL)
 	}
