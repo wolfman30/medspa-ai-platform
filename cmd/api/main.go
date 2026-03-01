@@ -4,17 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -24,10 +19,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/cmd/mainconfig"
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
-	"github.com/wolfman30/medspa-ai-platform/internal/archive"
 	"github.com/wolfman30/medspa-ai-platform/internal/briefs"
-	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
-	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
@@ -155,85 +147,22 @@ func main() {
 		processedStore = events.NewProcessedStore(dbPool)
 	}
 
-	var clinicHandler *clinic.Handler
-	var clinicStatsHandler *clinic.StatsHandler
-	var clinicDashboardHandler *clinic.DashboardHandler
-	if clinicStore != nil {
-		clinicHandler = clinic.NewHandler(clinicStore, logger)
-	}
-	if dbPool != nil {
-		statsRepo := clinic.NewStatsRepository(dbPool)
-		clinicStatsHandler = clinic.NewStatsHandler(statsRepo, logger)
+	clinicHandler, clinicStatsHandler, clinicDashboardHandler := buildClinicHandlers(logger, clinicStore, dbPool)
 
-		dashboardRepo := clinic.NewDashboardRepository(dbPool)
-		clinicDashboardHandler = clinic.NewDashboardHandler(dashboardRepo, prometheus.DefaultGatherer, logger)
-	}
+	adminClinicDataHandler := buildAdminClinicDataHandler(adminClinicDataDeps{
+		appCtx: appCtx, cfg: cfg, logger: logger, dbPool: dbPool, redisClient: redisClient,
+	})
 
-	var adminClinicDataHandler *handlers.AdminClinicDataHandler
-	if cfg.Env != "production" && dbPool != nil {
-		adminCfg := handlers.AdminClinicDataConfig{
-			DB:     dbPool,
-			Redis:  redisClient,
-			Logger: logger,
-		}
-		// Set up S3 archiver if bucket is configured
-		if cfg.S3ArchiveBucket != "" {
-			awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg)
-			if err != nil {
-				logger.Warn("failed to load AWS config for archiver, archiving disabled", "error", err)
-			} else {
-				s3Client := s3.NewFromConfig(awsCfg)
-				adminCfg.Archiver = clinicdata.NewArchiver(clinicdata.ArchiverConfig{
-					DB:       dbPool,
-					S3:       s3Client,
-					Bucket:   cfg.S3ArchiveBucket,
-					KMSKeyID: cfg.S3ArchiveKMSKey,
-					Logger:   logger,
-				})
-				logger.Info("S3 archiver enabled for admin purge operations",
-					"bucket", cfg.S3ArchiveBucket,
-					"kms_key", cfg.S3ArchiveKMSKey != "",
-				)
-			}
-		}
-		// Set up training archiver if training bucket is configured
-		if cfg.S3TrainingBucket != "" {
-			awsCfg, awsErr := mainconfig.LoadAWSConfig(appCtx, cfg)
-			if awsErr != nil {
-				logger.Warn("failed to load AWS config for training archiver", "error", awsErr)
-			} else {
-				trainingS3 := s3.NewFromConfig(awsCfg)
-				brClient := bedrockruntime.NewFromConfig(awsCfg)
-
-				trainingStore := archive.NewStore(trainingS3, cfg.S3TrainingBucket, logger.Logger)
-				classifier := archive.NewClassifier(brClient, cfg.ClassifierModelID, logger.Logger)
-				adminCfg.TrainingArchiver = archive.NewTrainingArchiver(trainingStore, classifier, logger.Logger)
-				logger.Info("training archiver enabled for purge operations",
-					"bucket", cfg.S3TrainingBucket,
-					"classifier_model", cfg.ClassifierModelID,
-				)
-			}
-		}
-		adminClinicDataHandler = handlers.NewAdminClinicDataHandler(adminCfg)
-	}
-
-	// Initialize onboarding handler
 	var adminOnboardingHandler *handlers.AdminOnboardingHandler
 	if clinicStore != nil {
 		adminOnboardingHandler = handlers.NewAdminOnboardingHandler(handlers.AdminOnboardingConfig{
-			DB:          dbPool,
-			Redis:       redisClient,
-			ClinicStore: clinicStore,
-			Logger:      logger,
+			DB: dbPool, Redis: redisClient, ClinicStore: clinicStore, Logger: logger,
 		})
-		logger.Info("onboarding handler initialized")
 	}
 
-	// Initialize client registration handler (for self-service registration)
 	var clientRegistrationHandler *handlers.ClientRegistrationHandler
 	if sqlDB != nil {
 		clientRegistrationHandler = handlers.NewClientRegistrationHandler(sqlDB, redisClient, logger)
-		logger.Info("client registration handler initialized")
 	}
 
 	var knowledgeRepo conversation.KnowledgeRepository
@@ -355,14 +284,7 @@ func main() {
 		logger.Info("booking callback handler initialized")
 	}
 
-	// Set up evidence upload S3 (reuse training bucket)
-	var evidenceS3 handlers.S3Uploader
-	if cfg.S3TrainingBucket != "" {
-		if awsCfg, err := mainconfig.LoadAWSConfig(appCtx, cfg); err == nil {
-			evidenceS3 = s3.NewFromConfig(awsCfg)
-			logger.Info("evidence upload S3 enabled", "bucket", cfg.S3TrainingBucket)
-		}
-	}
+	evidenceS3 := buildEvidenceS3(appCtx, cfg, logger)
 
 	// Notifications bootstrap
 	githubWebhookHandler := bootstrapNotifications(cfg, logger)
@@ -421,46 +343,7 @@ func main() {
 		),
 	}
 	r := router.New(routerCfg)
-
-	// Create HTTP server
-	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	// Start server in a goroutine
-	go func() {
-		logger.Info("server listening", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	stop()
-	logger.Info("shutting down server...")
-
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("server forced to shutdown", "error", err)
-		os.Exit(1)
-	}
-
-	waitForInlineWorker(inlineWorker, logger)
-
-	logger.Info("server stopped")
-	fmt.Println("Server exited gracefully")
+	runServer(r, cfg.Port, logger, inlineWorker, stop)
 }
 
 func setupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
