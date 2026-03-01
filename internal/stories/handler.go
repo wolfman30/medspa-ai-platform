@@ -7,6 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+const internalServerErrorMessage = "internal server error"
+
 type Handler struct {
 	repo *Repository
 }
@@ -23,7 +25,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	stories, err := h.repo.List(r.Context(), status, priority, label)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
 
@@ -45,7 +47,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	story, err := h.repo.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
 
@@ -70,7 +72,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	story, err := h.repo.Update(r.Context(), id, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
 	if story == nil {
@@ -91,7 +93,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
 
@@ -108,7 +110,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	story, err := h.repo.Get(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
 	if story == nil {
@@ -119,7 +121,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// Also fetch sub-tasks
 	subTasks, err := h.repo.GetSubTasks(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
 
