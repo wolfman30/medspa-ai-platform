@@ -338,6 +338,10 @@ func (s *stubMessagingStore) UpsertHostedOrder(ctx context.Context, q messaging.
 	return errNotImplemented
 }
 
+func (s *stubMessagingStore) DeleteHostedOrderByClinic(ctx context.Context, clinicID uuid.UUID, number string) error {
+	return errNotImplemented
+}
+
 func (s *stubMessagingStore) HasInboundMessage(ctx context.Context, clinicID uuid.UUID, from string, to string) (bool, error) {
 	return false, errNotImplemented
 }
