@@ -14,7 +14,6 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/clinicdata"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
-	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
@@ -133,9 +132,4 @@ func BuildEvidenceS3(appCtx context.Context, cfg *appconfig.Config, logger *logg
 	}
 	logger.Info("evidence upload S3 enabled", "bucket", cfg.S3TrainingBucket)
 	return s3.NewFromConfig(awsCfg)
-}
-
-// buildPaymentRedirect creates the short-URL payment redirect handler.
-func buildPaymentRedirect(paymentsRepo *payments.Repository, logger *logging.Logger) *payments.RedirectHandler {
-	return payments.NewRedirectHandler(paymentsRepo, logger)
 }
