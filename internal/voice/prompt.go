@@ -60,6 +60,15 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("ALWAYS include both the day of week AND the date (month and day number). ")
 	sb.WriteString("Never say just 'Tuesday' without the date. Be specific. Do NOT say 'let me check' — use the availability data below.")
 
+	// Service alias mappings and available services
+	if cs != nil && orgID != "" {
+		cfg, err := cs.Get(context.Background(), orgID)
+		if err == nil && cfg != nil {
+			sb.WriteString(buildAvailableServicesSection(cfg))
+			sb.WriteString(buildServiceAliasSection(cfg))
+		}
+	}
+
 	// Availability data
 	if availabilitySummary != "" {
 		sb.WriteString("\n\nCURRENT AVAILABILITY:\n")
@@ -130,6 +139,40 @@ func buildDefaultDepositSection() string {
 		"If you cancel 24 hours or more in advance, you'll receive a full refund. " +
 		"If you don't show up, the deposit is forfeited. " +
 		"After the caller picks a time, inform them about the deposit and say you'll text them a secure payment link. "
+}
+
+// buildServiceAliasSection generates prompt text that teaches the AI about service name mappings.
+// For example, if a patient says "Botox" but the booking system calls it "Wrinkle Relaxers",
+// this section tells the AI to use the correct name when calling tools.
+func buildServiceAliasSection(cfg *clinic.Config) string {
+	if cfg == nil || len(cfg.ServiceAliases) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n\nSERVICE NAME MAPPINGS (use the correct service name when calling tools):\n")
+	for alias, actual := range cfg.ServiceAliases {
+		fmt.Fprintf(&sb, "- When a patient says '%s', they mean '%s'. Use '%s' when calling tools.\n", alias, actual, actual)
+	}
+	return sb.String()
+}
+
+// buildAvailableServicesSection lists the bookable services from MoxieConfig so the AI knows what's available.
+func buildAvailableServicesSection(cfg *clinic.Config) string {
+	if cfg == nil || cfg.MoxieConfig == nil || len(cfg.MoxieConfig.ServiceMenuItems) == 0 {
+		return ""
+	}
+
+	names := make([]string, 0, len(cfg.MoxieConfig.ServiceMenuItems))
+	for name := range cfg.MoxieConfig.ServiceMenuItems {
+		names = append(names, name)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n\nAVAILABLE BOOKABLE SERVICES: ")
+	sb.WriteString(strings.Join(names, ", "))
+	sb.WriteString(". Only these services can be booked. If a patient asks for something not listed, let them know what's available.")
+	return sb.String()
 }
 
 // firstName extracts the first name from a full name.
