@@ -15,26 +15,33 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+// MissedCallTexter triggers the text-back flow for a missed call.
+type MissedCallTexter interface {
+	// HandleMissedCall triggers text-back for a missed call from `from` to `to`.
+	HandleMissedCall(ctx context.Context, from, to string) error
+}
+
 // CallControlHandler handles Telnyx Call Control webhook events.
 // When a call comes in, it checks if the clinic has voice AI enabled.
 // If yes, it answers and starts media streaming to Nova Sonic.
-// If no, it rejects the call so it falls through to the missed-call
-// text-back flow handled by TelnyxWebhookHandler.
+// If no, it rejects the call and triggers the missed-call text-back flow.
 type CallControlHandler struct {
-	logger       *logging.Logger
-	telnyxAPIKey string
-	streamURL    string // e.g. "wss://api-dev.aiwolfsolutions.com/ws/voice"
-	orgResolver  messaging.OrgResolver
-	clinicStore  *clinic.Store
+	logger           *logging.Logger
+	telnyxAPIKey     string
+	streamURL        string // e.g. "wss://api-dev.aiwolfsolutions.com/ws/voice"
+	orgResolver      messaging.OrgResolver
+	clinicStore      *clinic.Store
+	missedCallTexter MissedCallTexter
 }
 
 // CallControlConfig configures the handler.
 type CallControlConfig struct {
-	Logger       *logging.Logger
-	TelnyxAPIKey string
-	StreamURL    string
-	OrgResolver  messaging.OrgResolver
-	ClinicStore  *clinic.Store
+	Logger           *logging.Logger
+	TelnyxAPIKey     string
+	StreamURL        string
+	OrgResolver      messaging.OrgResolver
+	ClinicStore      *clinic.Store
+	MissedCallTexter MissedCallTexter
 }
 
 // NewCallControlHandler creates a new Call Control webhook handler.
@@ -43,12 +50,18 @@ func NewCallControlHandler(cfg CallControlConfig) *CallControlHandler {
 		cfg.Logger = logging.Default()
 	}
 	return &CallControlHandler{
-		logger:       cfg.Logger,
-		telnyxAPIKey: cfg.TelnyxAPIKey,
-		streamURL:    cfg.StreamURL,
-		orgResolver:  cfg.OrgResolver,
-		clinicStore:  cfg.ClinicStore,
+		logger:           cfg.Logger,
+		telnyxAPIKey:     cfg.TelnyxAPIKey,
+		streamURL:        cfg.StreamURL,
+		orgResolver:      cfg.OrgResolver,
+		clinicStore:      cfg.ClinicStore,
+		missedCallTexter: cfg.MissedCallTexter,
 	}
+}
+
+// SetMissedCallTexter sets the missed call handler after construction (for circular dependency resolution).
+func (h *CallControlHandler) SetMissedCallTexter(t MissedCallTexter) {
+	h.missedCallTexter = t
 }
 
 // callControlEvent represents a Telnyx Call Control webhook event.
@@ -126,6 +139,15 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 				h.logger.Info("call-control: voice AI not enabled for clinic, rejecting call for text-back flow",
 					"to", to, "from", from)
 				h.rejectCall(callControlID)
+				// Trigger text-back flow directly since the voice webhook
+				// won't receive events for Call Control-routed numbers.
+				if h.missedCallTexter != nil {
+					go func() {
+						if err := h.missedCallTexter.HandleMissedCall(context.Background(), from, to); err != nil {
+							h.logger.Error("call-control: failed to trigger text-back", "error", err, "from", from, "to", to)
+						}
+					}()
+				}
 				return
 			}
 			h.answerCall(callControlID)

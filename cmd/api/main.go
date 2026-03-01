@@ -519,6 +519,12 @@ func main() {
 		logger.Warn("telnyx webhook handler NOT created - missing prerequisites")
 	}
 
+	// Wire missed-call text-back into call control handler
+	if callControlHandler != nil && telnyxWebhookHandler != nil {
+		callControlHandler.SetMissedCallTexter(telnyxWebhookHandler)
+		logger.Info("call control handler wired with missed-call text-back")
+	}
+
 	// Create booking callback handler for outcome notifications
 	var bookingCallbackHandler *conversation.BookingCallbackHandler
 	if leadsRepo != nil && webhookMessenger != nil {

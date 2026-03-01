@@ -986,6 +986,68 @@ func (h *TelnyxWebhookHandler) handleVoice(ctx context.Context, evt telnyxEvent)
 	return nil
 }
 
+// HandleMissedCall implements MissedCallTexter. Triggers the text-back flow
+// for a missed call, used by CallControlHandler when voice AI is not enabled.
+func (h *TelnyxWebhookHandler) HandleMissedCall(ctx context.Context, from, to string) error {
+	h.logger.Info("missed-call-texter: triggered from call control", "from", from, "to", to)
+	clinicID, err := h.store.LookupClinicByNumber(ctx, to)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			h.logger.Warn("missed-call-texter: clinic not found for number", "to", to)
+			return fmt.Errorf("%w: %s", errClinicNotFound, to)
+		}
+		return fmt.Errorf("lookup clinic for %s: %w", to, err)
+	}
+	orgID := clinicID.String()
+	leadID := fmt.Sprintf("%s:%s", orgID, from)
+	if h.leads != nil {
+		lead, err := h.leads.GetOrCreateByPhone(ctx, orgID, from, "telnyx_voice", "")
+		if err != nil {
+			return fmt.Errorf("persist lead: %w", err)
+		}
+		if lead != nil && lead.ID != "" {
+			leadID = lead.ID
+		}
+	}
+	conversationID := telnyxConversationID(orgID, from)
+	ack := h.voiceAckMessage(ctx, orgID)
+	startReq := conversation.StartRequest{
+		OrgID:          orgID,
+		LeadID:         leadID,
+		ConversationID: conversationID,
+		Intro:          "We just missed your call. I can help you book an appointment or answer quick questions by text.",
+		Source:         "telnyx_voice",
+		ClinicID:       orgID,
+		Channel:        conversation.ChannelSMS,
+		From:           from,
+		To:             to,
+		Silent:         true,
+		AckMessage:     ack,
+		Metadata: map[string]string{
+			"call_control_reject": "true",
+		},
+	}
+	jobID := fmt.Sprintf("cc:missed:%s:%s", from, to)
+	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	opts := []conversation.PublishOption{conversation.WithoutJobTracking()}
+	if h.trackJobs {
+		opts = nil
+	}
+	if err := h.conversation.EnqueueStart(publishCtx, jobID, startReq, opts...); err != nil {
+		return fmt.Errorf("enqueue missed-call start: %w", err)
+	}
+	h.appendTranscript(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+		Role: "assistant",
+		From: to,
+		To:   from,
+		Body: ack,
+		Kind: "voice_ack",
+	})
+	h.sendAutoReply(context.Background(), to, from, ack)
+	return nil
+}
+
 func isTelnyxMissedCall(eventType, status, hangup string) bool {
 	status = strings.ToLower(status)
 	hangup = strings.ToLower(hangup)
