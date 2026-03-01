@@ -1,6 +1,6 @@
 # MedSpa Concierge — Readiness Tracker
 
-Last updated: 2026-02-25 (07:30 UTC)
+Last updated: 2026-03-01 (07:30 UTC)
 
 ## Automated E2E Test Results (Live Dev API)
 
@@ -71,32 +71,32 @@ Last updated: 2026-02-25 (07:30 UTC)
 
 ---
 
-## Readiness: Forever 22 Operator Testing
+## Readiness: Adela Medical Spa (Primary Target)
 
-**Can Brandi/Gale test today? ALMOST — 95% ready**
+**Can we demo to Adela? NOT YET — config untested**
 
 ### What works ✅
 - Full booking flow: missed call → AI qualification → Moxie availability → Stripe Checkout → Moxie booking
-- All 46 services configured with aliases
-- Both providers (Brandi Sesock, Gale Tesar) configured
-- Service variants (weight loss in-person/virtual) — now with LLM-powered classification
-- Booking policies (deposit, age, terms) shown pre-payment
-- Prompt injection defense (3-layer)
-- TCPA compliance (STOP/HELP/START)
+- Adela config complete (Moxie ID 1349, 71 services, 11 providers)
+- Telnyx number +13304600937 assigned
+- Voice AI gated per-clinic (non-voice clinics fall back to text-back)
+- Wrinkle/anti-aging → Botox mapping fixed
+- Booking policies, prompt injection defense, TCPA compliance all working
 - Admin portal: conversations, knowledge editor, Moxie sync
-- **10DLC registered & SMS delivery confirmed** on +14407448197
-- 26/30 E2E scenarios passing (101/106 checks)
+- Revenue attribution dashboard live
 
 ### What's blocking ❌
-1. **4 E2E failures** — LLM sometimes doesn't recognize "fix my 11s" or "lip flip" as Botox/lip filler
-2. **Ack messages still double SMS costs** — Root cause known (`internal/messaging/ack.go`), not fixed
-3. **Not tested by a real med spa operator yet** — Only Andrew has tested
-4. **Voice AI stabilizing** — Nova Sonic crossmodal audio issues being resolved (silent keepalive, codec, tools disabled). Needs real-call validation.
+1. **Adela config not tested against live API** — services/providers/availability unverified
+2. **10DLC not registered for Adela's number** — SMS will be blocked
+3. **4 E2E failures** — LLM vocab issues (stale — 40+ commits untested)
+4. **Voice AI not real-call tested** — Pipeline built but no live call validation
+5. **Forever 22 is dead** — Brandi ghosted, no operator testing done
 
 ### What would make it better (not blocking)
 - After-hours greeting logic untested (A3/A4)
 - Non-English message handling untested (E14)
 - Onboarding is manual (no self-serve)
+- Ack messages still double SMS costs
 
 ---
 
@@ -120,18 +120,19 @@ Last updated: 2026-02-25 (07:30 UTC)
 
 ### Distance to First Sale
 
-**Estimated: 2-4 weeks**
+**Estimated: 3-5 weeks** (revised up — Forever 22 pivot)
 
-1. **This week**: Fix 4 E2E failures, fix website, remove ack messages
-2. **Week 1-2**: Operator testing with Brandi/Gale at Forever 22
-3. **Week 2-3**: Iterate on feedback, fix issues
-4. **Week 3-4**: Close deal or expand outreach
+1. **Week 1**: Validate Adela config, fix E2E failures, run full test suite
+2. **Week 1-2**: 10DLC registration for Adela number
+3. **Week 2-3**: Demo to Adela or warmest pipeline prospects
+4. **Week 3-5**: Iterate on feedback → close
 
 ### Critical Path (shortest path to first sale)
-1. Fix remaining 4 E2E test failures (1-2 days)
-2. Fix website + add pricing + Calendly (2-3 days)
-3. Remove ack messages (1 day)
-4. Brandi tests → iterate → close
+1. Test Adela config against live dev API (1-2 days)
+2. 10DLC registration for new numbers (2-3 weeks — hard blocker)
+3. Fix website + add pricing + Calendly (2-3 days)
+4. Real-call voice AI test (1 day)
+5. Demo to prospect → iterate → close
 
 ---
 

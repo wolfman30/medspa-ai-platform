@@ -18,6 +18,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
 	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 	"github.com/wolfman30/medspa-ai-platform/internal/prospects"
+	"github.com/wolfman30/medspa-ai-platform/internal/stories"
 	"github.com/wolfman30/medspa-ai-platform/internal/voice"
 	"github.com/wolfman30/medspa-ai-platform/internal/webchat"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -82,6 +83,9 @@ type Config struct {
 
 	// Prospect tracker
 	ProspectsHandler *prospects.Handler
+
+	// Story board / Kanban
+	StoriesHandler *stories.Handler
 
 	// Voice AI handler (Telnyx AI Assistant webhook)
 	VoiceAIHandler *handlers.VoiceAIHandler
@@ -279,6 +283,14 @@ func New(cfg *Config) http.Handler {
 				admin.Post("/prospects/{prospectID}/events", cfg.ProspectsHandler.AddEvent)
 				admin.Get("/prospects/{prospectID}/outreach", cfg.ProspectsHandler.GetOutreach)
 				admin.Get("/rule100/today", cfg.ProspectsHandler.GetRule100Today)
+			}
+			// Stories / Kanban board
+			if cfg.StoriesHandler != nil {
+				admin.Get("/stories", cfg.StoriesHandler.List)
+				admin.Post("/stories", cfg.StoriesHandler.Create)
+				admin.Get("/stories/{id}", cfg.StoriesHandler.Get)
+				admin.Put("/stories/{id}", cfg.StoriesHandler.Update)
+				admin.Delete("/stories/{id}", cfg.StoriesHandler.Delete)
 			}
 			// Clinic onboarding endpoints
 			if cfg.AdminOnboarding != nil {
