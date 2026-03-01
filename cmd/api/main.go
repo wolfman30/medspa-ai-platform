@@ -276,12 +276,37 @@ func main() {
 		conversationHandler.SetService(conversationService)
 	}
 
-	voiceBoot := bootstrapVoice(cfg, logger, msgStore, clinicStore, conversationPublisher, conversationService, conversationStore, redisClient, webhookMessenger, leadsRepo, resolver)
+	voiceBoot := bootstrapVoice(voiceDeps{
+		cfg:                   cfg,
+		logger:                logger,
+		msgStore:              msgStore,
+		clinicStore:           clinicStore,
+		conversationPublisher: conversationPublisher,
+		conversationService:   conversationService,
+		conversationStore:     conversationStore,
+		redisClient:           redisClient,
+		webhookMessenger:      webhookMessenger,
+		leadsRepo:             leadsRepo,
+		resolver:              resolver,
+	})
 	voiceAIHandler := voiceBoot.voiceAIHandler
 	voiceWSHandler := voiceBoot.voiceWSHandler
 	callControlHandler := voiceBoot.callControl
 
-	paymentBoot := bootstrapPayments(appCtx, cfg, logger, dbPool, leadsRepo, redisClient, outboxStore, processedStore, resolver, paymentsRepo, clinicStore, conversationPublisher)
+	paymentBoot := bootstrapPayments(paymentsDeps{
+		appCtx:                appCtx,
+		cfg:                   cfg,
+		logger:                logger,
+		dbPool:                dbPool,
+		leadsRepo:             leadsRepo,
+		redisClient:           redisClient,
+		outboxStore:           outboxStore,
+		processedStore:        processedStore,
+		resolver:              resolver,
+		paymentsRepo:          paymentsRepo,
+		clinicStore:           clinicStore,
+		conversationPublisher: conversationPublisher,
+	})
 	checkoutHandler := paymentBoot.checkoutHandler
 	squareWebhookHandler := paymentBoot.squareWebhookHandler
 	squareOAuthHandler := paymentBoot.squareOAuthHandler

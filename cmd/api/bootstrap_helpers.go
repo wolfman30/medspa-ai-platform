@@ -100,7 +100,35 @@ type paymentsBootstrap struct {
 	stripeConnectHandler *payments.StripeConnectHandler
 }
 
-func bootstrapPayments(appCtx context.Context, cfg *appconfig.Config, logger *logging.Logger, dbPool *pgxpool.Pool, leadsRepo leads.Repository, redisClient *redis.Client, outboxStore *events.OutboxStore, processedStore *events.ProcessedStore, resolver payments.OrgNumberResolver, paymentsRepo *payments.Repository, clinicStore *clinic.Store, conversationPublisher *conversation.Publisher) paymentsBootstrap {
+type paymentsDeps struct {
+	appCtx                context.Context
+	cfg                   *appconfig.Config
+	logger                *logging.Logger
+	dbPool                *pgxpool.Pool
+	leadsRepo             leads.Repository
+	redisClient           *redis.Client
+	outboxStore           *events.OutboxStore
+	processedStore        *events.ProcessedStore
+	resolver              payments.OrgNumberResolver
+	paymentsRepo          *payments.Repository
+	clinicStore           *clinic.Store
+	conversationPublisher *conversation.Publisher
+}
+
+func bootstrapPayments(deps paymentsDeps) paymentsBootstrap {
+	appCtx := deps.appCtx
+	cfg := deps.cfg
+	logger := deps.logger
+	dbPool := deps.dbPool
+	leadsRepo := deps.leadsRepo
+	outboxStore := deps.outboxStore
+	processedStore := deps.processedStore
+	resolver := deps.resolver
+	paymentsRepo := deps.paymentsRepo
+	clinicStore := deps.clinicStore
+	conversationPublisher := deps.conversationPublisher
+	_ = deps.redisClient
+
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
 	var squareOAuthHandler *payments.OAuthHandler
@@ -202,12 +230,38 @@ func bootstrapPayments(appCtx context.Context, cfg *appconfig.Config, logger *lo
 }
 
 type voiceBootstrap struct {
-	voiceAIHandler    *handlers.VoiceAIHandler
-	voiceWSHandler    *voice.TelnyxWSHandler
-	callControl       *handlers.CallControlHandler
+	voiceAIHandler *handlers.VoiceAIHandler
+	voiceWSHandler *voice.TelnyxWSHandler
+	callControl    *handlers.CallControlHandler
 }
 
-func bootstrapVoice(cfg *appconfig.Config, logger *logging.Logger, msgStore *messaging.Store, clinicStore *clinic.Store, conversationPublisher *conversation.Publisher, conversationService conversation.Service, conversationStore *conversation.ConversationStore, redisClient *redis.Client, webhookMessenger conversation.ReplyMessenger, leadsRepo leads.Repository, resolver *messaging.StaticOrgResolver) voiceBootstrap {
+type voiceDeps struct {
+	cfg                   *appconfig.Config
+	logger                *logging.Logger
+	msgStore              *messaging.Store
+	clinicStore           *clinic.Store
+	conversationPublisher *conversation.Publisher
+	conversationService   conversation.Service
+	conversationStore     *conversation.ConversationStore
+	redisClient           *redis.Client
+	webhookMessenger      conversation.ReplyMessenger
+	leadsRepo             leads.Repository
+	resolver              *messaging.StaticOrgResolver
+}
+
+func bootstrapVoice(deps voiceDeps) voiceBootstrap {
+	cfg := deps.cfg
+	logger := deps.logger
+	msgStore := deps.msgStore
+	clinicStore := deps.clinicStore
+	conversationPublisher := deps.conversationPublisher
+	conversationService := deps.conversationService
+	conversationStore := deps.conversationStore
+	redisClient := deps.redisClient
+	webhookMessenger := deps.webhookMessenger
+	leadsRepo := deps.leadsRepo
+	resolver := deps.resolver
+
 	var voiceAIHandler *handlers.VoiceAIHandler
 	if msgStore != nil && clinicStore != nil {
 		voiceAIHandler = handlers.NewVoiceAIHandler(handlers.VoiceAIHandlerConfig{
