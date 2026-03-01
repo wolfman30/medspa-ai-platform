@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/wolfman30/medspa-ai-platform/internal/bootstrap"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestSetupMessagingMetricsExposesMetrics(t *testing.T) {
-	handler, metrics := setupMessagingMetrics()
+	handler, metrics := bootstrap.SetupMessagingMetrics()
 	if handler == nil || metrics == nil {
 		t.Fatalf("expected non-nil handler and metrics")
 	}
@@ -34,7 +35,7 @@ func TestSetupMessagingMetricsExposesMetrics(t *testing.T) {
 
 func TestConnectPostgresPoolEmptyURLReturnsNil(t *testing.T) {
 	logger := logging.New("error")
-	if pool := connectPostgresPool(context.Background(), "", logger); pool != nil {
+	if pool := bootstrap.ConnectPostgresPool(context.Background(), "", logger); pool != nil {
 		t.Fatalf("expected nil pool for empty URL")
 	}
 }
@@ -51,7 +52,12 @@ func TestSetupConversationSQSPath(t *testing.T) {
 	}
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 
-	pub, recorder, updater, memoryQueue := setupConversation(context.Background(), cfg, nil, logger)
+	pub, recorder, updater, memoryQueue := bootstrap.SetupConversation(bootstrap.ConversationSetupDeps{
+		Ctx:    context.Background(),
+		Cfg:    cfg,
+		DBPool: nil,
+		Logger: logger,
+	})
 	if pub == nil {
 		t.Fatalf("expected publisher")
 	}
@@ -67,7 +73,12 @@ func TestSetupInlineWorkerDisabled(t *testing.T) {
 	logger := logging.New("error")
 	cfg := &appconfig.Config{UseMemoryQueue: false}
 
-	worker, _ := setupInlineWorker(context.Background(), cfg, logger, nil, "none", stubJobUpdater{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	worker, _ := bootstrap.SetupInlineWorker(bootstrap.InlineWorkerDeps{
+		Ctx:        context.Background(),
+		Cfg:        cfg,
+		Logger:     logger,
+		JobUpdater: stubJobUpdater{},
+	})
 	if worker != nil {
 		t.Fatalf("expected no worker when memory queue is disabled")
 	}
@@ -84,13 +95,21 @@ func TestSetupInlineWorkerStartsAndStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	worker, _ := setupInlineWorker(ctx, cfg, logger, stubMessenger{}, "no credentials", stubJobUpdater{}, memoryQueue, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	worker, _ := bootstrap.SetupInlineWorker(bootstrap.InlineWorkerDeps{
+		Ctx:           ctx,
+		Cfg:           cfg,
+		Logger:        logger,
+		Messenger:     stubMessenger{},
+		MessengerNote: "no credentials",
+		JobUpdater:    stubJobUpdater{},
+		MemoryQueue:   memoryQueue,
+	})
 	if worker == nil {
 		t.Fatalf("expected worker when memory queue is enabled")
 	}
 
 	cancel()
-	waitForInlineWorker(worker, logger)
+	bootstrap.WaitForInlineWorker(worker, logger)
 }
 
 type stubJobUpdater struct{}

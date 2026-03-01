@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"context"
@@ -24,27 +24,48 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
-type clinicBootstrap struct {
-	redisClient   *redis.Client
-	clinicStore   *clinic.Store
-	smsTranscript *conversation.SMSTranscriptStore
+type ClinicBootstrap struct {
+	RedisClient   *redis.Client
+	ClinicStore   *clinic.Store
+	SMSTranscript *conversation.SMSTranscriptStore
 }
 
-func bootstrapClinic(cfg *appconfig.Config, appCtx context.Context, logger *logging.Logger) clinicBootstrap {
+func BootstrapClinic(cfg *appconfig.Config, appCtx context.Context, logger *logging.Logger) ClinicBootstrap {
 	redisClient := appbootstrap.BuildRedisClient(appCtx, cfg, logger, false)
 	clinicStore := appbootstrap.BuildClinicStore(redisClient)
 	smsTranscript := appbootstrap.BuildSMSTranscriptStore(redisClient)
-	return clinicBootstrap{redisClient: redisClient, clinicStore: clinicStore, smsTranscript: smsTranscript}
+	return ClinicBootstrap{RedisClient: redisClient, ClinicStore: clinicStore, SMSTranscript: smsTranscript}
 }
 
-type messagingBootstrap struct {
-	messagingHandler *messaging.Handler
-	resolver         *messaging.StaticOrgResolver
-	webhookMessenger conversation.ReplyMessenger
-	messengerReason  string
+type MessagingDeps struct {
+	Cfg                   *appconfig.Config
+	Logger                *logging.Logger
+	ConversationPublisher *conversation.Publisher
+	LeadsRepo             leads.Repository
+	MessageStore          *messaging.Store
+	AuditService          *auditcompliance.AuditService
+	ConversationStore     *conversation.ConversationStore
+	SMSTranscriptStore    *conversation.SMSTranscriptStore
+	ClinicStore           *clinic.Store
 }
 
-func bootstrapMessaging(cfg *appconfig.Config, logger *logging.Logger, conversationPublisher *conversation.Publisher, leadsRepo leads.Repository, msgStore *messaging.Store, auditSvc *auditcompliance.AuditService, conversationStore *conversation.ConversationStore, smsTranscript *conversation.SMSTranscriptStore, clinicStore *clinic.Store) messagingBootstrap {
+type MessagingBootstrap struct {
+	MessagingHandler *messaging.Handler
+	Resolver         *messaging.StaticOrgResolver
+	WebhookMessenger conversation.ReplyMessenger
+	MessengerReason  string
+}
+
+func BootstrapMessaging(deps MessagingDeps) MessagingBootstrap {
+	cfg := deps.Cfg
+	logger := deps.Logger
+	conversationPublisher := deps.ConversationPublisher
+	leadsRepo := deps.LeadsRepo
+	msgStore := deps.MessageStore
+	auditSvc := deps.AuditService
+	conversationStore := deps.ConversationStore
+	smsTranscript := deps.SMSTranscriptStore
+	clinicStore := deps.ClinicStore
 	orgRouting := map[string]string{}
 	if raw := strings.TrimSpace(cfg.TwilioOrgMapJSON); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &orgRouting); err != nil {
@@ -88,46 +109,46 @@ func bootstrapMessaging(cfg *appconfig.Config, logger *logging.Logger, conversat
 		logger.Error("SECURITY WARNING: TWILIO_SKIP_SIGNATURE is enabled in production/staging - this is a security risk!")
 	}
 
-	return messagingBootstrap{messagingHandler: messagingHandler, resolver: resolver, webhookMessenger: webhookMessenger, messengerReason: webhookMessengerReason}
+	return MessagingBootstrap{MessagingHandler: messagingHandler, Resolver: resolver, WebhookMessenger: webhookMessenger, MessengerReason: webhookMessengerReason}
 }
 
-type paymentsBootstrap struct {
-	checkoutHandler      *payments.CheckoutHandler
-	squareWebhookHandler *payments.SquareWebhookHandler
-	squareOAuthHandler   *payments.OAuthHandler
-	fakePaymentsHandler  *payments.FakePaymentsHandler
-	stripeWebhookHandler *payments.StripeWebhookHandler
-	stripeConnectHandler *payments.StripeConnectHandler
+type PaymentsBootstrap struct {
+	CheckoutHandler      *payments.CheckoutHandler
+	SquareWebhookHandler *payments.SquareWebhookHandler
+	SquareOAuthHandler   *payments.OAuthHandler
+	FakePaymentsHandler  *payments.FakePaymentsHandler
+	StripeWebhookHandler *payments.StripeWebhookHandler
+	StripeConnectHandler *payments.StripeConnectHandler
 }
 
-type paymentsDeps struct {
-	appCtx                context.Context
-	cfg                   *appconfig.Config
-	logger                *logging.Logger
-	dbPool                *pgxpool.Pool
-	leadsRepo             leads.Repository
-	redisClient           *redis.Client
-	outboxStore           *events.OutboxStore
-	processedStore        *events.ProcessedStore
-	resolver              payments.OrgNumberResolver
-	paymentsRepo          *payments.Repository
-	clinicStore           *clinic.Store
-	conversationPublisher *conversation.Publisher
+type PaymentsDeps struct {
+	AppCtx                context.Context
+	Cfg                   *appconfig.Config
+	Logger                *logging.Logger
+	DBPool                *pgxpool.Pool
+	LeadsRepo             leads.Repository
+	RedisClient           *redis.Client
+	OutboxStore           *events.OutboxStore
+	ProcessedStore        *events.ProcessedStore
+	Resolver              payments.OrgNumberResolver
+	PaymentsRepo          *payments.Repository
+	ClinicStore           *clinic.Store
+	ConversationPublisher *conversation.Publisher
 }
 
-func bootstrapPayments(deps paymentsDeps) paymentsBootstrap {
-	appCtx := deps.appCtx
-	cfg := deps.cfg
-	logger := deps.logger
-	dbPool := deps.dbPool
-	leadsRepo := deps.leadsRepo
-	outboxStore := deps.outboxStore
-	processedStore := deps.processedStore
-	resolver := deps.resolver
-	paymentsRepo := deps.paymentsRepo
-	clinicStore := deps.clinicStore
-	conversationPublisher := deps.conversationPublisher
-	_ = deps.redisClient
+func BootstrapPayments(deps PaymentsDeps) PaymentsBootstrap {
+	appCtx := deps.AppCtx
+	cfg := deps.Cfg
+	logger := deps.Logger
+	dbPool := deps.DBPool
+	leadsRepo := deps.LeadsRepo
+	outboxStore := deps.OutboxStore
+	processedStore := deps.ProcessedStore
+	resolver := deps.Resolver
+	paymentsRepo := deps.PaymentsRepo
+	clinicStore := deps.ClinicStore
+	conversationPublisher := deps.ConversationPublisher
+	_ = deps.RedisClient
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
@@ -219,48 +240,48 @@ func bootstrapPayments(deps paymentsDeps) paymentsBootstrap {
 		logger.Info("stripe connect handler initialized", "client_id_set", cfg.StripeConnectClientID != "", "redirect_uri", redirectURI)
 	}
 
-	return paymentsBootstrap{
-		checkoutHandler:      checkoutHandler,
-		squareWebhookHandler: squareWebhookHandler,
-		squareOAuthHandler:   squareOAuthHandler,
-		fakePaymentsHandler:  fakePaymentsHandler,
-		stripeWebhookHandler: stripeWebhookHandler,
-		stripeConnectHandler: stripeConnectHandler,
+	return PaymentsBootstrap{
+		CheckoutHandler:      checkoutHandler,
+		SquareWebhookHandler: squareWebhookHandler,
+		SquareOAuthHandler:   squareOAuthHandler,
+		FakePaymentsHandler:  fakePaymentsHandler,
+		StripeWebhookHandler: stripeWebhookHandler,
+		StripeConnectHandler: stripeConnectHandler,
 	}
 }
 
-type voiceBootstrap struct {
-	voiceAIHandler *handlers.VoiceAIHandler
-	voiceWSHandler *voice.TelnyxWSHandler
-	callControl    *handlers.CallControlHandler
+type VoiceBootstrap struct {
+	VoiceAIHandler *handlers.VoiceAIHandler
+	VoiceWSHandler *voice.TelnyxWSHandler
+	CallControl    *handlers.CallControlHandler
 }
 
-type voiceDeps struct {
-	cfg                   *appconfig.Config
-	logger                *logging.Logger
-	msgStore              *messaging.Store
-	clinicStore           *clinic.Store
-	conversationPublisher *conversation.Publisher
-	conversationService   conversation.Service
-	conversationStore     *conversation.ConversationStore
-	redisClient           *redis.Client
-	webhookMessenger      conversation.ReplyMessenger
-	leadsRepo             leads.Repository
-	resolver              *messaging.StaticOrgResolver
+type VoiceDeps struct {
+	Cfg                   *appconfig.Config
+	Logger                *logging.Logger
+	MsgStore              *messaging.Store
+	ClinicStore           *clinic.Store
+	ConversationPublisher *conversation.Publisher
+	ConversationService   conversation.Service
+	ConversationStore     *conversation.ConversationStore
+	RedisClient           *redis.Client
+	WebhookMessenger      conversation.ReplyMessenger
+	LeadsRepo             leads.Repository
+	Resolver              *messaging.StaticOrgResolver
 }
 
-func bootstrapVoice(deps voiceDeps) voiceBootstrap {
-	cfg := deps.cfg
-	logger := deps.logger
-	msgStore := deps.msgStore
-	clinicStore := deps.clinicStore
-	conversationPublisher := deps.conversationPublisher
-	conversationService := deps.conversationService
-	conversationStore := deps.conversationStore
-	redisClient := deps.redisClient
-	webhookMessenger := deps.webhookMessenger
-	leadsRepo := deps.leadsRepo
-	resolver := deps.resolver
+func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
+	cfg := deps.Cfg
+	logger := deps.Logger
+	msgStore := deps.MsgStore
+	clinicStore := deps.ClinicStore
+	conversationPublisher := deps.ConversationPublisher
+	conversationService := deps.ConversationService
+	conversationStore := deps.ConversationStore
+	redisClient := deps.RedisClient
+	webhookMessenger := deps.WebhookMessenger
+	leadsRepo := deps.LeadsRepo
+	resolver := deps.Resolver
 
 	var voiceAIHandler *handlers.VoiceAIHandler
 	if msgStore != nil && clinicStore != nil {
@@ -328,10 +349,10 @@ func bootstrapVoice(deps voiceDeps) voiceBootstrap {
 		logger.Info("call control handler initialized", "stream_url", cfg.NovaSonicStreamURL)
 	}
 
-	return voiceBootstrap{voiceAIHandler: voiceAIHandler, voiceWSHandler: voiceWSHandler, callControl: callControlHandler}
+	return VoiceBootstrap{VoiceAIHandler: voiceAIHandler, VoiceWSHandler: voiceWSHandler, CallControl: callControlHandler}
 }
 
-func bootstrapNotifications(cfg *appconfig.Config, logger *logging.Logger) *handlers.GitHubWebhookHandler {
+func BootstrapNotifications(cfg *appconfig.Config, logger *logging.Logger) *handlers.GitHubWebhookHandler {
 	var githubWebhookHandler *handlers.GitHubWebhookHandler
 	if cfg.GitHubWebhookSecret != "" {
 		githubNotifier := handlers.NewTelegramNotifier(cfg.TelegramBotToken, cfg.AndrewTelegramChatID, logger)
