@@ -414,7 +414,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		// SCHEDULE CHECK — if we have name + service + patient type but no schedule
 		// preferences, don't skip to availability. Let the normal flow ask about
 		// preferred days/times first (matches ProcessMessage guardrail).
-		if prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
+		if !hasSchedulePreferences(&prefs) {
 			s.logger.Info("StartConversation: skipping time selection — no schedule preferences yet",
 				"conversation_id", conversationID)
 			return resp, nil
@@ -1177,10 +1177,12 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	}
 
 	// SCHEDULE CHECK — defer availability fetch until we have schedule preferences.
-	// The LLM guardrail (above) will ask "What days and times work best?" first.
+	// Parse prefs once here; reused below in time selection to avoid redundant extraction.
+	var earlyPrefs *leads.SchedulingPreferences
 	if shouldTriggerTimeSelection && usesMoxie {
-		earlyPrefs, _ := extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
-		if earlyPrefs.PreferredDays == "" && earlyPrefs.PreferredTimes == "" {
+		p, _ := extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+		earlyPrefs = &p
+		if !hasSchedulePreferences(earlyPrefs) {
 			s.logger.Info("ProcessMessage: deferring time selection — no schedule preferences yet",
 				"conversation_id", req.ConversationID)
 			shouldTriggerTimeSelection = false
@@ -1204,8 +1206,13 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 
 		if bookingURL != "" {
-			// Extract service and time preferences
-			prefs, _ := extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+			// Reuse preferences parsed during schedule check (or parse now for non-Moxie).
+			var prefs leads.SchedulingPreferences
+			if earlyPrefs != nil {
+				prefs = *earlyPrefs
+			} else {
+				prefs, _ = extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+			}
 
 			// SERVICE VARIANT CHECK: resolve delivery variants (e.g. in-person vs virtual).
 			variantResp, variantErr := s.handleVariantResolution(ctx, clinicCfg, &prefs, history, rawMessage, req.ConversationID, req.OrgID)

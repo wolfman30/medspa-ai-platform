@@ -280,3 +280,10 @@ func (s *LLMService) handleDepositFlow(ctx context.Context, history []ChatMessag
 	s.logger.Debug("deposit: classifier skipped (no deposit context)")
 	return nil
 }
+
+// hasSchedulePreferences returns true when the patient has expressed any
+// day-of-week or time-of-day scheduling preference. Use this to gate
+// availability fetching so the LLM asks about schedule first.
+func hasSchedulePreferences(prefs *leads.SchedulingPreferences) bool {
+	return prefs.PreferredDays != "" || prefs.PreferredTimes != ""
+}
