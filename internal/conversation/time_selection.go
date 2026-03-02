@@ -111,19 +111,49 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 	providerID := cfg.ResolveProviderID(providerPreference)
 	noProviderPref := providerID == ""
 
-	// Moxie quirk: noPreference=true returns empty for some single-provider clinics.
-	// Fall back to DefaultProviderID when patient has no preference.
-	if noProviderPref && mc.DefaultProviderID != "" {
-		providerID = mc.DefaultProviderID
-		noProviderPref = false
+	// Try noPreference=true first for "no preference" patients.
+	// Moxie quirk: this returns empty for many clinics, so we fall back.
+	var result *moxieclient.AvailabilityResult
+	if noProviderPref {
+		r, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, true)
+		if err != nil {
+			return nil, fmt.Errorf("moxie availability query failed: %w", err)
+		}
+		if countMoxieSlots(r) > 0 {
+			result = r
+		}
 	}
 
-	result, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, noProviderPref, providerID)
-	if err != nil {
-		return nil, fmt.Errorf("moxie availability query failed: %w", err)
+	// If noPreference returned nothing (Moxie quirk) or patient chose a provider,
+	// query per-provider. Fan out to all providers for "no preference" patients.
+	if result == nil {
+		if noProviderPref && mc.ProviderNames != nil {
+			// Fan out: query each provider and merge results
+			result = &moxieclient.AvailabilityResult{}
+			for pid := range mc.ProviderNames {
+				r, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, false, pid)
+				if err != nil {
+					continue // skip failing providers
+				}
+				result.Dates = append(result.Dates, r.Dates...)
+			}
+		} else {
+			// Specific provider requested, or single-provider fallback
+			if noProviderPref && mc.DefaultProviderID != "" {
+				providerID = mc.DefaultProviderID
+			}
+			r, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, false, providerID)
+			if err != nil {
+				return nil, fmt.Errorf("moxie availability query failed: %w", err)
+			}
+			result = r
+		}
 	}
 
-	// Convert API response to PresentedSlots, filtering by preferences
+	// Convert API response to PresentedSlots, filtering by preferences.
+	// Deduplicate by start time (fan-out queries may return the same slot
+	// from multiple providers).
+	seen := make(map[int64]bool)
 	var allSlots []PresentedSlot
 	for _, dateSlots := range result.Dates {
 		if len(dateSlots.Slots) == 0 {
@@ -134,6 +164,11 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 			if err != nil {
 				continue
 			}
+			key := slotLocal.Unix()
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
 			if matchesTimePreferences(slotLocal, prefs) {
 				allSlots = append(allSlots, PresentedSlot{
 					DateTime:  slotLocal,
@@ -172,6 +207,18 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 		ExactMatch:   true,
 		SearchedDays: maxCalendarDays,
 	}, nil
+}
+
+// countMoxieSlots returns the total number of slots in a Moxie availability result.
+func countMoxieSlots(r *moxieclient.AvailabilityResult) int {
+	if r == nil {
+		return 0
+	}
+	n := 0
+	for _, d := range r.Dates {
+		n += len(d.Slots)
+	}
+	return n
 }
 
 // matchesTimePreferences checks if a slot time matches user preferences
