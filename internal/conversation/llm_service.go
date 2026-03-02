@@ -411,6 +411,15 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	if moxieAPIReady && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 
+		// SCHEDULE CHECK — if we have name + service + patient type but no schedule
+		// preferences, don't skip to availability. Let the normal flow ask about
+		// preferred days/times first (matches ProcessMessage guardrail).
+		if prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
+			s.logger.Info("StartConversation: skipping time selection — no schedule preferences yet",
+				"conversation_id", conversationID)
+			return resp, nil
+		}
+
 		// SERVICE VARIANT CHECK — resolve delivery variants (e.g. in-person vs virtual).
 		variantResp, variantErr := s.handleVariantResolution(ctx, startCfg, &prefs, history, "", conversationID, req.OrgID)
 		if variantErr != nil {
@@ -1165,6 +1174,17 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	} else {
 		// Square clinics: trigger time selection only when deposit intent exists
 		shouldTriggerTimeSelection = shouldTriggerTimeSelection && depositIntent != nil && qualificationsMet
+	}
+
+	// SCHEDULE CHECK — defer availability fetch until we have schedule preferences.
+	// The LLM guardrail (above) will ask "What days and times work best?" first.
+	if shouldTriggerTimeSelection && usesMoxie {
+		earlyPrefs, _ := extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+		if earlyPrefs.PreferredDays == "" && earlyPrefs.PreferredTimes == "" {
+			s.logger.Info("ProcessMessage: deferring time selection — no schedule preferences yet",
+				"conversation_id", req.ConversationID)
+			shouldTriggerTimeSelection = false
+		}
 	}
 
 	s.logger.Info("time selection trigger check",
