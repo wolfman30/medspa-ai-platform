@@ -411,6 +411,15 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	if moxieAPIReady && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 
+		// SCHEDULE CHECK — if we have name + service + patient type but no schedule
+		// preferences, don't skip to availability. Let the normal flow ask about
+		// preferred days/times first (matches ProcessMessage guardrail).
+		if !hasSchedulePreferences(&prefs) {
+			s.logger.Info("StartConversation: skipping time selection — no schedule preferences yet",
+				"conversation_id", conversationID)
+			return resp, nil
+		}
+
 		// SERVICE VARIANT CHECK — resolve delivery variants (e.g. in-person vs virtual).
 		variantResp, variantErr := s.handleVariantResolution(ctx, startCfg, &prefs, history, "", conversationID, req.OrgID)
 		if variantErr != nil {
@@ -1167,6 +1176,19 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		shouldTriggerTimeSelection = shouldTriggerTimeSelection && depositIntent != nil && qualificationsMet
 	}
 
+	// SCHEDULE CHECK — defer availability fetch until we have schedule preferences.
+	// Parse prefs once here; reused below in time selection to avoid redundant extraction.
+	var earlyPrefs *leads.SchedulingPreferences
+	if shouldTriggerTimeSelection && usesMoxie {
+		p, _ := extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+		earlyPrefs = &p
+		if !hasSchedulePreferences(earlyPrefs) {
+			s.logger.Info("ProcessMessage: deferring time selection — no schedule preferences yet",
+				"conversation_id", req.ConversationID)
+			shouldTriggerTimeSelection = false
+		}
+	}
+
 	s.logger.Info("time selection trigger check",
 		"conversation_id", req.ConversationID,
 		"moxie_api_ready", moxieAPIReady,
@@ -1184,8 +1206,13 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		}
 
 		if bookingURL != "" {
-			// Extract service and time preferences
-			prefs, _ := extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+			// Reuse preferences parsed during schedule check (or parse now for non-Moxie).
+			var prefs leads.SchedulingPreferences
+			if earlyPrefs != nil {
+				prefs = *earlyPrefs
+			} else {
+				prefs, _ = extractPreferences(history, serviceAliasesFromConfig(clinicCfg))
+			}
 
 			// SERVICE VARIANT CHECK: resolve delivery variants (e.g. in-person vs virtual).
 			variantResp, variantErr := s.handleVariantResolution(ctx, clinicCfg, &prefs, history, rawMessage, req.ConversationID, req.OrgID)
