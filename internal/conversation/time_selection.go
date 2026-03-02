@@ -422,6 +422,7 @@ func extractSpecificDates(msg string) []time.Time {
 	re := regexp.MustCompile(`(?i)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})`)
 	matches := re.FindAllStringSubmatch(msg, -1)
 
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var lastMonth time.Month
 	for _, m := range matches {
 		monthStr := strings.ToLower(m[1])
@@ -430,7 +431,7 @@ func extractSpecificDates(msg string) []time.Time {
 			if day >= 1 && day <= 31 {
 				year := now.Year()
 				d := time.Date(year, mon, day, 0, 0, 0, 0, now.Location())
-				if d.Before(now) {
+				if d.Before(today) {
 					d = d.AddDate(1, 0, 0)
 				}
 				dates = append(dates, d)
@@ -450,7 +451,7 @@ func extractSpecificDates(msg string) []time.Time {
 				// Check this date isn't already captured
 				year := now.Year()
 				d := time.Date(year, lastMonth, day, 0, 0, 0, 0, now.Location())
-				if d.Before(now) {
+				if d.Before(today) {
 					d = d.AddDate(1, 0, 0)
 				}
 				alreadyHave := false
