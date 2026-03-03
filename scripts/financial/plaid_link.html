@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Wolf — Connect Bank Account</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a0a;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: #1a1a2e;
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 440px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  h1 { font-size: 24px; margin-bottom: 8px; }
+  p { color: #9ca3af; font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
+  .btn {
+    display: inline-block;
+    padding: 14px 32px;
+    background: linear-gradient(135deg, #6366f1, #7c3aed);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .btn:hover { transform: scale(1.03); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .status { margin-top: 20px; font-size: 13px; color: #6b7280; }
+  .success { color: #10b981; font-weight: 600; }
+  .token-display {
+    margin-top: 16px;
+    padding: 12px;
+    background: #0f0f23;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+    color: #a5b4fc;
+    display: none;
+  }
+  .security-note {
+    margin-top: 20px;
+    padding: 12px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #818cf8;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🏦 Connect Your Bank</h1>
+  <p>Read-only access to your checking account for automated financial tracking. Powered by Plaid — your credentials are never shared with us.</p>
+  <button class="btn" id="linkBtn" onclick="openPlaidLink()">Connect Bank Account</button>
+  <div class="status" id="status"></div>
+  <div class="token-display" id="tokenDisplay"></div>
+  <div class="security-note">
+    🔒 Read-only access · No transactions initiated · Bank-level encryption · Revoke anytime from your Plaid dashboard
+  </div>
+</div>
+
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+<script>
+  // Configuration — set these before using
+  const PLAID_ENV = 'production';
+  let LINK_TOKEN = 'link-production-fdb31d35-3956-4569-b5f5-612cfb834669';
+
+  const statusEl = document.getElementById('status');
+  const tokenEl = document.getElementById('tokenDisplay');
+  const linkBtn = document.getElementById('linkBtn');
+
+  // On load, fetch link token from our local server
+  async function init() {
+    statusEl.textContent = 'Fetching link token...';
+    try {
+      const resp = await fetch('/api/plaid/link-token', { method: 'POST' });
+      const data = await resp.json();
+      LINK_TOKEN = data.link_token;
+      statusEl.textContent = 'Ready to connect.';
+      linkBtn.disabled = false;
+    } catch (e) {
+      // Fallback: check if link token is pre-set
+      if (!LINK_TOKEN) {
+        statusEl.textContent = 'Run create_link_token.py first, then paste the token below.';
+        // Show manual input
+        tokenEl.style.display = 'block';
+        tokenEl.innerHTML = '<input type="text" id="manualToken" placeholder="Paste link_token here" style="width:100%;padding:8px;background:#1a1a2e;border:1px solid #333;color:#fff;border-radius:4px;font-family:monospace;font-size:12px" /><br><button onclick="setManualToken()" style="margin-top:8px;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">Set Token</button>';
+      }
+    }
+  }
+
+  function setManualToken() {
+    LINK_TOKEN = document.getElementById('manualToken').value.trim();
+    if (LINK_TOKEN) {
+      tokenEl.style.display = 'none';
+      statusEl.textContent = 'Ready to connect.';
+      linkBtn.disabled = false;
+    }
+  }
+
+  function openPlaidLink() {
+    if (!LINK_TOKEN) {
+      statusEl.textContent = 'No link token. Run create_link_token.py first.';
+      return;
+    }
+
+    const handler = Plaid.create({
+      token: LINK_TOKEN,
+      onSuccess: async (publicToken, metadata) => {
+        statusEl.innerHTML = '<span class="success">✅ Bank connected!</span>';
+        
+        // Exchange public token for access token
+        try {
+          const resp = await fetch('/api/plaid/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ public_token: publicToken })
+          });
+          const data = await resp.json();
+          statusEl.innerHTML = '<span class="success">✅ Connected! Access token stored securely.</span>';
+        } catch (e) {
+          // Fallback: show the public token for manual exchange
+          tokenEl.style.display = 'block';
+          tokenEl.textContent = 'Public Token (give to Andre): ' + publicToken;
+          statusEl.innerHTML = '<span class="success">✅ Connected! Copy the public token above and send it to Andre.</span>';
+        }
+
+        console.log('Institution:', metadata.institution);
+        console.log('Accounts:', metadata.accounts);
+      },
+      onExit: (err, metadata) => {
+        if (err) {
+          statusEl.textContent = 'Connection cancelled: ' + (err.display_message || err.error_code);
+        } else {
+          statusEl.textContent = 'Connection cancelled.';
+        }
+      },
+      onEvent: (eventName, metadata) => {
+        console.log('Plaid event:', eventName, metadata);
+      }
+    });
+
+    handler.open();
+  }
+
+  init();
+</script>
+</body>
+</html>
