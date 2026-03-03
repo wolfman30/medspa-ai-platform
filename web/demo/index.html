@@ -426,23 +426,29 @@ function nextStep() {
   nextBtn.disabled = true;
   nextBtn.textContent = 'Playing...';
 
-  let delay = 0;
+  // Play messages sequentially — each waits for the previous to finish
+  let cumulative = 0;
   step.messages.forEach((msg, i) => {
-    delay = msg.delay;
+    cumulative += msg.delay;
+    const typingTime = (msg.type === 'incoming') ? 800 : 0;
+    const fireAt = cumulative;
+
     setTimeout(() => {
-      if (msg.type !== 'system' && msg.type !== 'outgoing') {
-        // Show typing indicator before incoming
+      if (msg.type === 'incoming') {
         showTyping();
         setTimeout(() => {
           hideTyping();
           addMessage(msg);
           if (i === step.messages.length - 1) enableNext();
-        }, 800);
+        }, typingTime);
       } else {
         addMessage(msg);
         if (i === step.messages.length - 1) enableNext();
       }
-    }, delay);
+    }, fireAt);
+
+    // Account for typing indicator time in the cumulative delay
+    cumulative += typingTime;
   });
 }
 
