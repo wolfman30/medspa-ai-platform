@@ -424,7 +424,7 @@ func TestProcessMessage_NewServiceAfterBookingResetsState(t *testing.T) {
 
 	// Set up state as if Botox was already booked
 	state := &TimeSelectionState{
-		Service:     "Botox",
+		Service:      "Botox",
 		SlotSelected: true,
 	}
 	store := newHistoryStore(ts.rdb, llmTracer)
