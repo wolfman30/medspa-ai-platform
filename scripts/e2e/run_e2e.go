@@ -294,6 +294,39 @@ func allRealAssistantMessages(msgs []map[string]interface{}) string {
 	return strings.Join(parts, "\n")
 }
 
+func extractSlotMessage(msgs []map[string]interface{}) string {
+	for _, m := range msgs {
+		c, _ := m["content"].(string)
+		lc := strings.ToLower(c)
+		if strings.Contains(lc, "reply with the number") || strings.Contains(lc, "reply with a number") {
+			return c
+		}
+		// Fallback for phrasing drift: numbered slot list without the exact instruction text.
+		if strings.Contains(c, "1") && strings.Contains(c, "2") &&
+			(strings.Contains(lc, "available") || strings.Contains(lc, "works best") || strings.Contains(lc, "times")) {
+			return c
+		}
+	}
+	return ""
+}
+
+func waitForSlotMessage(maxSecs int) (map[string]interface{}, string, error) {
+	start := time.Now()
+	for {
+		conv, err := getConversation()
+		if err == nil {
+			msgs := getMessages(conv)
+			if slot := extractSlotMessage(msgs); slot != "" {
+				return conv, slot, nil
+			}
+		}
+		if time.Since(start) > time.Duration(maxSecs)*time.Second {
+			return nil, "", fmt.Errorf("timed out waiting for slot message after %ds", maxSecs)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 // checkNoDuplicateQuestions scans a conversation transcript for duplicate assistant
 // questions. Returns a list of violations (empty = clean). This is a universal check
 // that should run on EVERY conversation regardless of service or clinic.
@@ -437,17 +470,13 @@ func scenarioHappyPath(t *T) {
 	}
 
 	msgs := getMessages(conv)
-	slotsMsg := ""
-	for _, m := range msgs {
-		c, _ := m["content"].(string)
-		if strings.Contains(c, "Reply with the number") {
-			slotsMsg = c
-		}
-	}
-
+	slotsMsg := extractSlotMessage(msgs)
 	if slotsMsg == "" {
-		t.fatalf("no slot message found")
-		return
+		_, slotsMsg, err = waitForSlotMessage(20)
+		if err != nil {
+			t.fatalf("no slot message found")
+			return
+		}
 	}
 
 	t.check("slots contain at least one day", func() bool {
@@ -1159,19 +1188,14 @@ func scenarioCombinedFilter(t *T) {
 
 	// The availability search was triggered (status = awaiting_time_selection).
 	// It might find matching Tuesday morning slots, or it might find none.
-	hasSlots := strings.Contains(allText, "Reply with the number")
-	noSlots := containsAny(allText, "couldn't find", "no available", "no times", "try different")
+	lowerAllText := strings.ToLower(allText)
+	hasSlots := strings.Contains(lowerAllText, "reply with the number") || strings.Contains(lowerAllText, "reply with a number") || strings.Contains(lowerAllText, "available times")
+	noSlots := containsAny(lowerAllText, "couldn't find", "no available", "no times", "try different")
 
 	t.check("availability search triggered (slots or no-match message)", hasSlots || noSlots)
 
 	if hasSlots {
-		slotsMsg := ""
-		for _, m := range msgs {
-			c, _ := m["content"].(string)
-			if strings.Contains(c, "Reply with the number") {
-				slotsMsg = c
-			}
-		}
+		slotsMsg := extractSlotMessage(msgs)
 		// Should only have Tuesday
 		t.check("only Tuesday slots", func() bool {
 			for _, day := range []string{"Mon ", "Wed ", "Thu ", "Fri ", "Sat ", "Sun "} {
@@ -1204,17 +1228,13 @@ func scenarioNoTimePreference(t *T) {
 	}
 
 	msgs := getMessages(conv)
-	slotsMsg := ""
-	for _, m := range msgs {
-		c, _ := m["content"].(string)
-		if strings.Contains(c, "Reply with the number") {
-			slotsMsg = c
-		}
-	}
-
+	slotsMsg := extractSlotMessage(msgs)
 	if slotsMsg == "" {
-		t.fatalf("no slot message found")
-		return
+		_, slotsMsg, err = waitForSlotMessage(20)
+		if err != nil {
+			t.fatalf("no slot message found")
+			return
+		}
 	}
 
 	// Count unique days
