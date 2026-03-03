@@ -310,8 +310,8 @@
   <div class="sms-header">
     <div class="avatar">✨</div>
     <div>
-      <div class="name">Glow Aesthetics</div>
-      <div class="number">+1 (330) 555-0199</div>
+      <div class="name">Adela Medical Spa</div>
+      <div class="number">+1 (234) 347-0170</div>
     </div>
   </div>
   <div class="progress-bar"><div class="fill" id="progress" style="width: 0%"></div></div>
@@ -336,21 +336,21 @@ const STEPS = [
     messages: [
       { type: 'system', text: '📞 Missed call from (330) 555-8472', delay: 500 },
       { type: 'system', text: 'AI responds in under 5 seconds', delay: 1500 },
-      { type: 'incoming', text: "Hey there! 👋 Thanks for calling Glow Aesthetics — sorry we missed you! I'm the clinic's AI assistant and I can help you right now. What were you calling about?", delay: 2500 },
+      { type: 'incoming', text: "Hey there! 👋 Thanks for calling Adela Medical Spa — sorry we missed you! I'm the clinic's AI assistant and I can help you right now. What were you calling about?", delay: 2500 },
     ]
   },
   // Step 1: Patient responds
   {
     label: "💬 Patient says what they want",
     messages: [
-      { type: 'outgoing', text: "Hi! I'm interested in getting Botox", delay: 300 },
+      { type: 'outgoing', text: "Hi! I'm interested in getting Dysport", delay: 300 },
     ]
   },
   // Step 2: AI qualifies — name
   {
     label: "🎯 AI qualifies the lead — Step 1: Name",
     messages: [
-      { type: 'incoming', text: "Great choice! Botox is one of our most popular treatments. May I have your full name to get started?", delay: 1200 },
+      { type: 'incoming', text: "Great choice! Dysport is one of our most popular treatments. May I have your full name to get started?", delay: 1200 },
       { type: 'outgoing', text: "Sarah Johnson", delay: 2000 },
     ]
   },
@@ -374,9 +374,9 @@ const STEPS = [
   {
     label: "⚡ AI checks REAL availability (Moxie API, ~1 second)",
     messages: [
-      { type: 'incoming', text: "Let me check what's available for Botox on weekdays after 3pm...", delay: 1000 },
+      { type: 'incoming', text: "Let me check what's available for Dysport on weekdays after 3pm...", delay: 1000 },
       { type: 'system', text: '🔍 Checking real-time availability via Moxie...', delay: 1800 },
-      { type: 'incoming', text: "Here are the next available times for Botox:\n\n1️⃣ Monday, Mar 10 at 3:30 PM\n2️⃣ Wednesday, Mar 12 at 4:00 PM\n3️⃣ Thursday, Mar 13 at 3:00 PM\n4️⃣ Friday, Mar 14 at 4:30 PM\n\nWhich works best for you? Reply with the number.", delay: 3000 },
+      { type: 'incoming', text: "Here are the next available times for Dysport:\n\n1️⃣ Monday, Mar 10 at 3:30 PM — with Tiffany Steineck\n2️⃣ Wednesday, Mar 12 at 4:00 PM — with Angela Solenthaler\n3️⃣ Thursday, Mar 13 at 3:00 PM — with Dr. Brady Steineck\n4️⃣ Friday, Mar 14 at 4:30 PM — with Paige Morse\n\nWhich works best for you? Reply with the number.", delay: 3000 },
     ]
   },
   // Step 6: Patient selects
@@ -399,7 +399,7 @@ const STEPS = [
     label: "✅ Booked! Appointment confirmed automatically",
     messages: [
       { type: 'system', text: '💳 Payment received via Stripe → Auto-booking on Moxie...', delay: 800 },
-      { type: 'incoming', text: "You're all set, Sarah! 🎉\n\n📅 Botox — Wed, March 12 at 4:00 PM\n📍 Glow Aesthetics\n👩‍⚕️ Dr. Emily Chen\n\nWe'll send a reminder 24 hours before. See you then!", delay: 2200 },
+      { type: 'incoming', text: "You're all set, Sarah! 🎉\n\n📅 Dysport — Wed, March 12 at 4:00 PM\n📍 Adela Medical Spa — 5562 Fulton Dr NW, Canton\n👩‍⚕️ Angela Solenthaler\n\nWe'll send a reminder 24 hours before. See you then!", delay: 2200 },
       { type: 'system', text: '✅ Lead recovered. $0 staff time. Under 3 minutes.', delay: 3500 },
     ]
   },
