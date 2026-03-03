@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -471,7 +472,7 @@ func TestExtractSpecificDates(t *testing.T) {
 	if targetMonth > 12 {
 		targetMonth -= 12
 	}
-	monthAbbrev := time.Date(2000, targetMonth, 1, 0, 0, 0, 0, time.UTC).Format("jan")
+	monthAbbrev := strings.ToLower(time.Date(2000, targetMonth, 1, 0, 0, 0, 0, time.UTC).Format("Jan"))
 
 	dates := extractSpecificDates("any later times on " + monthAbbrev + " 1 and 7th?")
 	require.Len(t, dates, 2, "should extract 2 dates")
