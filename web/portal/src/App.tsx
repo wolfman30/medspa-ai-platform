@@ -94,7 +94,7 @@ function ClinicSetupPrompt({ email, onComplete, onLogout }: ClinicSetupPromptPro
       <div className="w-full max-w-md">
         <div className="ui-card ui-card-solid p-8">
           <div className="flex items-center gap-3">
-            <div className="ui-brandmark" aria-hidden="true" />
+            <img src="/logo-wolf.jpg" alt="AI Wolf Solutions" style={{width:32,height:32,borderRadius:'50%'}} />
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-tight text-slate-900">
                 Set up your clinic
@@ -331,7 +331,7 @@ function AuthenticatedApp() {
           <div className="ui-container py-3 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3 min-w-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="ui-brandmark" aria-hidden="true" />
+                <img src="/logo-wolf.jpg" alt="AI Wolf Solutions" style={{width:28,height:28,borderRadius:'50%'}} />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold tracking-tight text-slate-900">
                     Medspa Concierge
