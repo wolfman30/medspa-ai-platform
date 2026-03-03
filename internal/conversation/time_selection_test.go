@@ -427,35 +427,36 @@ func TestDetectTimeSelection_MoreTimesRequest(t *testing.T) {
 }
 
 func TestBuildRefinedTimePreferences_LaterOnSpecificDates(t *testing.T) {
-	// Slots: Mon Mar 2 at 3:00 PM, Wed Mar 4 at 3:00 PM (among others)
+	// Use fixed far-future dates to avoid test flakiness as calendar advances.
+	// Jun 1, 2028 = Thursday (day 4), Jun 7, 2028 = Wednesday (day 3)
 	slots := []PresentedSlot{
-		{Index: 1, DateTime: time.Date(2026, 2, 13, 20, 30, 0, 0, time.Local), TimeStr: "Fri Feb 13 at 8:30 PM"},
-		{Index: 4, DateTime: time.Date(2026, 3, 2, 15, 0, 0, 0, time.Local), TimeStr: "Mon Mar 2 at 3:00 PM"},
-		{Index: 5, DateTime: time.Date(2026, 3, 4, 15, 0, 0, 0, time.Local), TimeStr: "Wed Mar 4 at 3:00 PM"},
+		{Index: 1, DateTime: time.Date(2028, 5, 20, 20, 30, 0, 0, time.Local), TimeStr: "Sat May 20 at 8:30 PM"},
+		{Index: 4, DateTime: time.Date(2028, 6, 1, 15, 0, 0, 0, time.Local), TimeStr: "Thu Jun 1 at 3:00 PM"},
+		{Index: 5, DateTime: time.Date(2028, 6, 7, 15, 0, 0, 0, time.Local), TimeStr: "Wed Jun 7 at 3:00 PM"},
 	}
 
 	prefs := leads.SchedulingPreferences{
-		PreferredDays:  "mondays wednesdays",
+		PreferredDays:  "thursdays wednesdays",
 		PreferredTimes: "after 3pm",
 	}
 
-	refined := buildRefinedTimePreferences("Any later times on Mar 2 and 4th?", prefs, slots)
+	refined := buildRefinedTimePreferences("Any later times on Jun 1 and 7th?", prefs, slots)
 
 	// Should have shifted AfterTime past 3:00 PM (15:00 → 15:01)
 	assert.Equal(t, "15:01", refined.AfterTime, "should shift after-time past the latest shown slot on those dates")
 
-	// Should have days of week for Mon (1) and Wed (3) from the specific dates
-	assert.Contains(t, refined.DaysOfWeek, 1, "should include Monday")
+	// Should have days of week for Thu (4) and Wed (3) from the specific dates
+	assert.Contains(t, refined.DaysOfWeek, 4, "should include Thursday")
 	assert.Contains(t, refined.DaysOfWeek, 3, "should include Wednesday")
 }
 
 func TestExtractSpecificDates(t *testing.T) {
-	dates := extractSpecificDates("any later times on mar 2 and 4th?")
+	dates := extractSpecificDates("any later times on jun 1 and 7th?")
 	require.Len(t, dates, 2, "should extract 2 dates")
-	assert.Equal(t, time.March, dates[0].Month())
-	assert.Equal(t, 2, dates[0].Day())
-	assert.Equal(t, time.March, dates[1].Month())
-	assert.Equal(t, 4, dates[1].Day())
+	assert.Equal(t, time.June, dates[0].Month())
+	assert.Equal(t, 1, dates[0].Day())
+	assert.Equal(t, time.June, dates[1].Month())
+	assert.Equal(t, 7, dates[1].Day())
 }
 
 func TestFilterOutPreviousSlots(t *testing.T) {
