@@ -52,8 +52,8 @@ func TestMatchService(t *testing.T) {
 		want    string
 	}{
 		{"botox from universal", "i want botox", nil, "Botox"},
-		{"config alias", "i want tox", map[string]string{"tox": "Botox Treatment"}, "Botox Treatment"},
-		{"config takes priority", "i want botox", map[string]string{"botox": "Neuromodulator"}, "Neuromodulator"},
+		{"config alias returns patient term", "i want tox", map[string]string{"tox": "Botox Treatment"}, "Tox"},
+		{"config alias returns patient term 2", "i want botox", map[string]string{"botox": "Neuromodulator"}, "Botox"},
 		{"fallback when no alias match", "i want hydrafacial", map[string]string{"tox": "Botox"}, "HydraFacial"},
 		{"lip filler", "interested in lip filler", nil, "lip filler"},
 		{"consultation", "just a consultation", nil, "consultation"},
@@ -62,7 +62,7 @@ func TestMatchService(t *testing.T) {
 			"lip filler": "Lip Augmentation",
 			"lip":        "Lip Treatment",
 			"filler":     "Dermal Filler",
-		}, "Lip Augmentation"},
+		}, "Lip Filler"},
 	}
 
 	for _, tt := range tests {

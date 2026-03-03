@@ -197,7 +197,10 @@ func matchService(text string, serviceAliases map[string]string) string {
 		}
 		for _, p := range pairs {
 			if strings.Contains(text, p.pattern) {
-				return p.name
+				// Return the alias key (patient-facing term) with title case,
+				// not the resolved Moxie service name. ResolveServiceName()
+				// handles the Moxie lookup downstream.
+				return strings.Title(p.pattern) //nolint:staticcheck
 			}
 		}
 	}
