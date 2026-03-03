@@ -427,35 +427,57 @@ func TestDetectTimeSelection_MoreTimesRequest(t *testing.T) {
 }
 
 func TestBuildRefinedTimePreferences_LaterOnSpecificDates(t *testing.T) {
-	// Use fixed far-future dates to avoid test flakiness as calendar advances.
-	// Jun 1, 2028 = Thursday (day 4), Jun 7, 2028 = Wednesday (day 3)
+	// Use dates far enough in the future that extractSpecificDates resolves them
+	// to the current year (no year-bump). We compute expected day-of-week dynamically
+	// so the test never goes stale.
+	now := time.Now()
+	// Pick month 4 months from now to guarantee future dates
+	targetMonth := now.Month() + 4
+	targetYear := now.Year()
+	if targetMonth > 12 {
+		targetMonth -= 12
+		targetYear++
+	}
+	date1 := time.Date(targetYear, targetMonth, 1, 15, 0, 0, 0, time.Local)
+	date7 := time.Date(targetYear, targetMonth, 7, 15, 0, 0, 0, time.Local)
+	monthAbbrev := date1.Format("Jan") // e.g. "Jul"
+
 	slots := []PresentedSlot{
-		{Index: 1, DateTime: time.Date(2028, 5, 20, 20, 30, 0, 0, time.Local), TimeStr: "Sat May 20 at 8:30 PM"},
-		{Index: 4, DateTime: time.Date(2028, 6, 1, 15, 0, 0, 0, time.Local), TimeStr: "Thu Jun 1 at 3:00 PM"},
-		{Index: 5, DateTime: time.Date(2028, 6, 7, 15, 0, 0, 0, time.Local), TimeStr: "Wed Jun 7 at 3:00 PM"},
+		{Index: 1, DateTime: date1.Add(-15 * 24 * time.Hour), TimeStr: "earlier slot"},
+		{Index: 4, DateTime: date1, TimeStr: date1.Format("Mon Jan 2") + " at 3:00 PM"},
+		{Index: 5, DateTime: date7, TimeStr: date7.Format("Mon Jan 2") + " at 3:00 PM"},
 	}
 
 	prefs := leads.SchedulingPreferences{
-		PreferredDays:  "thursdays wednesdays",
+		PreferredDays:  "any",
 		PreferredTimes: "after 3pm",
 	}
 
-	refined := buildRefinedTimePreferences("Any later times on Jun 1 and 7th?", prefs, slots)
+	msg := "Any later times on " + monthAbbrev + " 1 and 7th?"
+	refined := buildRefinedTimePreferences(msg, prefs, slots)
 
 	// Should have shifted AfterTime past 3:00 PM (15:00 → 15:01)
 	assert.Equal(t, "15:01", refined.AfterTime, "should shift after-time past the latest shown slot on those dates")
 
-	// Should have days of week for Thu (4) and Wed (3) from the specific dates
-	assert.Contains(t, refined.DaysOfWeek, 4, "should include Thursday")
-	assert.Contains(t, refined.DaysOfWeek, 3, "should include Wednesday")
+	// Days of week should match the actual calendar days
+	assert.Contains(t, refined.DaysOfWeek, int(date1.Weekday()), "should include day-of-week for the 1st")
+	assert.Contains(t, refined.DaysOfWeek, int(date7.Weekday()), "should include day-of-week for the 7th")
 }
 
 func TestExtractSpecificDates(t *testing.T) {
-	dates := extractSpecificDates("any later times on jun 1 and 7th?")
+	// Use a month 4 months from now to guarantee future dates
+	now := time.Now()
+	targetMonth := now.Month() + 4
+	if targetMonth > 12 {
+		targetMonth -= 12
+	}
+	monthAbbrev := time.Date(2000, targetMonth, 1, 0, 0, 0, 0, time.UTC).Format("jan")
+
+	dates := extractSpecificDates("any later times on " + monthAbbrev + " 1 and 7th?")
 	require.Len(t, dates, 2, "should extract 2 dates")
-	assert.Equal(t, time.June, dates[0].Month())
+	assert.Equal(t, targetMonth, dates[0].Month())
 	assert.Equal(t, 1, dates[0].Day())
-	assert.Equal(t, time.June, dates[1].Month())
+	assert.Equal(t, targetMonth, dates[1].Month())
 	assert.Equal(t, 7, dates[1].Day())
 }
 
