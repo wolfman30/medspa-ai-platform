@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MedSpa Concierge — Live Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a0a;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 40px 20px 20px;
+    max-width: 600px;
+  }
+  .hero .badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+  }
+  .hero h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    color: #9ca3af;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* Phone frame */
+  .phone-frame {
+    width: 375px;
+    max-width: 95vw;
+    background: #1a1a2e;
+    border-radius: 40px;
+    border: 3px solid #2a2a4a;
+    overflow: hidden;
+    margin: 20px auto;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+  }
+  .phone-notch {
+    height: 44px;
+    background: #1a1a2e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .phone-notch .island {
+    width: 120px;
+    height: 28px;
+    background: #000;
+    border-radius: 20px;
+  }
+  .sms-header {
+    background: #1e1e3a;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #2a2a4a;
+  }
+  .sms-header .avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .sms-header .name {
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .sms-header .number {
+    font-size: 12px;
+    color: #9ca3af;
+  }
+
+  /* Chat area */
+  .chat-area {
+    height: 520px;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scroll-behavior: smooth;
+  }
+  .chat-area::-webkit-scrollbar { width: 0; }
+
+  .msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 15px;
+    line-height: 1.4;
+    animation: msgIn 0.3s ease-out;
+    word-wrap: break-word;
+  }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg.incoming {
+    background: #2a2a4a;
+    color: #e5e7eb;
+    align-self: flex-start;
+    border-bottom-left-radius: 6px;
+  }
+  .msg.outgoing {
+    background: linear-gradient(135deg, #6366f1, #7c3aed);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 6px;
+  }
+  .msg.system {
+    align-self: center;
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5b4fc;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 12px;
+    max-width: 90%;
+    text-align: center;
+  }
+
+  .typing {
+    align-self: flex-start;
+    display: flex;
+    gap: 4px;
+    padding: 12px 18px;
+    background: #2a2a4a;
+    border-radius: 18px;
+    border-bottom-left-radius: 6px;
+  }
+  .typing span {
+    width: 8px;
+    height: 8px;
+    background: #6b7280;
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Stripe-like payment link */
+  .payment-link {
+    display: block;
+    margin: 4px 0;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: #fff;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .payment-link:hover { opacity: 0.9; }
+
+  /* Bottom controls */
+  .controls {
+    padding: 12px 16px 28px;
+    background: #1e1e3a;
+    border-top: 1px solid #2a2a4a;
+    display: flex;
+    gap: 8px;
+  }
+  .controls button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-next {
+    background: linear-gradient(135deg, #6366f1, #7c3aed);
+    color: #fff;
+  }
+  .btn-next:hover { transform: scale(1.02); }
+  .btn-next:disabled {
+    background: #374151;
+    color: #6b7280;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .btn-reset {
+    background: #2a2a4a;
+    color: #9ca3af;
+    flex: 0.4;
+  }
+  .btn-reset:hover { background: #374151; }
+
+  /* Progress bar */
+  .progress-bar {
+    width: 100%;
+    height: 3px;
+    background: #2a2a4a;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    transition: width 0.5s ease;
+  }
+
+  /* Stats */
+  .stats {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    max-width: 600px;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat .value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #8b5cf6;
+  }
+  .stat .label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  /* Footer CTA */
+  .cta {
+    text-align: center;
+    padding: 20px;
+    max-width: 600px;
+  }
+  .cta a {
+    display: inline-block;
+    padding: 14px 32px;
+    background: linear-gradient(135deg, #6366f1, #7c3aed);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 16px;
+    transition: transform 0.2s;
+  }
+  .cta a:hover { transform: scale(1.05); }
+  .cta p {
+    color: #6b7280;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  .step-label {
+    text-align: center;
+    color: #6b7280;
+    font-size: 12px;
+    padding: 4px 0;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="badge">LIVE DEMO</div>
+  <h1>MedSpa Concierge</h1>
+  <p>See how your med spa recovers missed calls and books appointments automatically — 24/7, no staff needed.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="value">&lt;5s</div><div class="label">Response Time</div></div>
+  <div class="stat"><div class="value">24/7</div><div class="label">Always On</div></div>
+  <div class="stat"><div class="value">~40%</div><div class="label">Lead Recovery</div></div>
+</div>
+
+<div class="phone-frame">
+  <div class="phone-notch"><div class="island"></div></div>
+  <div class="sms-header">
+    <div class="avatar">✨</div>
+    <div>
+      <div class="name">Glow Aesthetics</div>
+      <div class="number">+1 (330) 555-0199</div>
+    </div>
+  </div>
+  <div class="progress-bar"><div class="fill" id="progress" style="width: 0%"></div></div>
+  <div class="step-label" id="stepLabel">Tap "Next" to start the demo</div>
+  <div class="chat-area" id="chat"></div>
+  <div class="controls">
+    <button class="btn-reset" onclick="resetDemo()">↺ Reset</button>
+    <button class="btn-next" id="nextBtn" onclick="nextStep()">Start Demo →</button>
+  </div>
+</div>
+
+<div class="cta">
+  <a href="https://aiwolfsolutions.com" target="_blank">Get MedSpa Concierge →</a>
+  <p>$1,000/mo · Setup waived for founding clients</p>
+</div>
+
+<script>
+const STEPS = [
+  // Step 0: Missed call trigger
+  {
+    label: "📞 Patient calls, nobody picks up...",
+    messages: [
+      { type: 'system', text: '📞 Missed call from (330) 555-8472', delay: 500 },
+      { type: 'system', text: 'AI responds in under 5 seconds', delay: 1500 },
+      { type: 'incoming', text: "Hey there! 👋 Thanks for calling Glow Aesthetics — sorry we missed you! I'm the clinic's AI assistant and I can help you right now. What were you calling about?", delay: 2500 },
+    ]
+  },
+  // Step 1: Patient responds
+  {
+    label: "💬 Patient says what they want",
+    messages: [
+      { type: 'outgoing', text: "Hi! I'm interested in getting Botox", delay: 300 },
+    ]
+  },
+  // Step 2: AI qualifies — name
+  {
+    label: "🎯 AI qualifies the lead — Step 1: Name",
+    messages: [
+      { type: 'incoming', text: "Great choice! Botox is one of our most popular treatments. May I have your full name to get started?", delay: 1200 },
+      { type: 'outgoing', text: "Sarah Johnson", delay: 2000 },
+    ]
+  },
+  // Step 3: Patient type
+  {
+    label: "🎯 AI qualifies — Step 2: New or Returning",
+    messages: [
+      { type: 'incoming', text: "Nice to meet you, Sarah! Have you visited us before, or would this be your first time?", delay: 1200 },
+      { type: 'outgoing', text: "First time!", delay: 2000 },
+    ]
+  },
+  // Step 4: Schedule preference
+  {
+    label: "🎯 AI qualifies — Step 3: Schedule",
+    messages: [
+      { type: 'incoming', text: "Welcome! We'd love to have you. What days and times work best for you?", delay: 1200 },
+      { type: 'outgoing', text: "Weekdays after 3pm would be ideal", delay: 2000 },
+    ]
+  },
+  // Step 5: Real-time availability
+  {
+    label: "⚡ AI checks REAL availability (Moxie API, ~1 second)",
+    messages: [
+      { type: 'incoming', text: "Let me check what's available for Botox on weekdays after 3pm...", delay: 1000 },
+      { type: 'system', text: '🔍 Checking real-time availability via Moxie...', delay: 1800 },
+      { type: 'incoming', text: "Here are the next available times for Botox:\n\n1️⃣ Monday, Mar 10 at 3:30 PM\n2️⃣ Wednesday, Mar 12 at 4:00 PM\n3️⃣ Thursday, Mar 13 at 3:00 PM\n4️⃣ Friday, Mar 14 at 4:30 PM\n\nWhich works best for you? Reply with the number.", delay: 3000 },
+    ]
+  },
+  // Step 6: Patient selects
+  {
+    label: "📅 Patient picks a time",
+    messages: [
+      { type: 'outgoing', text: "2", delay: 300 },
+    ]
+  },
+  // Step 7: Deposit collection
+  {
+    label: "💳 Secure deposit via Stripe (mobile-optimized)",
+    messages: [
+      { type: 'incoming', text: "Wednesday, March 12 at 4:00 PM — great pick! ✨\n\nTo confirm your booking, there's a $50 refundable deposit that goes toward your treatment.\n\nBooking policies:\n☑️ 24-hour cancellation policy\n☑️ Deposit applied to treatment cost\n☑️ Photo ID required at visit", delay: 1500 },
+      { type: 'incoming', text: "Tap below to secure your spot:", delay: 2500, hasPayment: true },
+    ]
+  },
+  // Step 8: Confirmation
+  {
+    label: "✅ Booked! Appointment confirmed automatically",
+    messages: [
+      { type: 'system', text: '💳 Payment received via Stripe → Auto-booking on Moxie...', delay: 800 },
+      { type: 'incoming', text: "You're all set, Sarah! 🎉\n\n📅 Botox — Wed, March 12 at 4:00 PM\n📍 Glow Aesthetics\n👩‍⚕️ Dr. Emily Chen\n\nWe'll send a reminder 24 hours before. See you then!", delay: 2200 },
+      { type: 'system', text: '✅ Lead recovered. $0 staff time. Under 3 minutes.', delay: 3500 },
+    ]
+  },
+];
+
+let currentStep = -1;
+const chat = document.getElementById('chat');
+const nextBtn = document.getElementById('nextBtn');
+const progressEl = document.getElementById('progress');
+const stepLabel = document.getElementById('stepLabel');
+
+function nextStep() {
+  currentStep++;
+  if (currentStep >= STEPS.length) {
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Demo Complete ✓';
+    return;
+  }
+
+  const step = STEPS[currentStep];
+  stepLabel.textContent = step.label;
+  progressEl.style.width = ((currentStep + 1) / STEPS.length * 100) + '%';
+
+  nextBtn.disabled = true;
+  nextBtn.textContent = 'Playing...';
+
+  let delay = 0;
+  step.messages.forEach((msg, i) => {
+    delay = msg.delay;
+    setTimeout(() => {
+      if (msg.type !== 'system' && msg.type !== 'outgoing') {
+        // Show typing indicator before incoming
+        showTyping();
+        setTimeout(() => {
+          hideTyping();
+          addMessage(msg);
+          if (i === step.messages.length - 1) enableNext();
+        }, 800);
+      } else {
+        addMessage(msg);
+        if (i === step.messages.length - 1) enableNext();
+      }
+    }, delay);
+  });
+}
+
+function enableNext() {
+  setTimeout(() => {
+    if (currentStep < STEPS.length - 1) {
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Next →';
+    } else {
+      nextBtn.disabled = true;
+      nextBtn.textContent = 'Demo Complete ✓';
+    }
+  }, 400);
+}
+
+function addMessage(msg) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + msg.type;
+  el.textContent = msg.text;
+  chat.appendChild(el);
+
+  if (msg.hasPayment) {
+    const link = document.createElement('a');
+    link.className = 'payment-link';
+    link.textContent = '💳 Pay $50 Deposit — Secure Checkout';
+    link.href = '#';
+    link.onclick = (e) => { e.preventDefault(); nextStep(); };
+    chat.appendChild(link);
+  }
+
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function showTyping() {
+  const el = document.createElement('div');
+  el.className = 'typing';
+  el.id = 'typingIndicator';
+  el.innerHTML = '<span></span><span></span><span></span>';
+  chat.appendChild(el);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function hideTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
+
+function resetDemo() {
+  currentStep = -1;
+  chat.innerHTML = '';
+  nextBtn.disabled = false;
+  nextBtn.textContent = 'Start Demo →';
+  progressEl.style.width = '0%';
+  stepLabel.textContent = 'Tap "Next" to start the demo';
+}
+</script>
+</body>
+</html>
