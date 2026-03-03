@@ -81,6 +81,9 @@ type Config struct {
 	// Morning briefs handler
 	AdminBriefs *handlers.AdminBriefsHandler
 
+	// Finance dashboard (Plaid + budget)
+	AdminFinance *handlers.AdminFinanceHandler
+
 	// Prospect tracker
 	ProspectsHandler *prospects.Handler
 
@@ -273,6 +276,12 @@ func New(cfg *Config) http.Handler {
 				admin.Get("/briefs/{date}", cfg.AdminBriefs.GetBrief)
 				admin.Post("/briefs", cfg.AdminBriefs.CreateBrief)
 				admin.Put("/briefs/seed", cfg.AdminBriefs.SeedBriefs)
+			}
+			if cfg.AdminFinance != nil {
+				admin.Get("/finance/balances", cfg.AdminFinance.GetBalances)
+				admin.Get("/finance/transactions", cfg.AdminFinance.GetTransactions)
+				admin.Get("/finance/budget", cfg.AdminFinance.GetBudget)
+				admin.Put("/finance/budget", cfg.AdminFinance.PutBudget)
 			}
 			// Prospect tracker
 			if cfg.ProspectsHandler != nil {

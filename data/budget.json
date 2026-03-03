@@ -1,0 +1,13 @@
+{
+  "month": "2026-03",
+  "categories": {
+    "FOOD_AND_DRINK": { "label": "Food & Groceries", "allocated": 800 },
+    "TRANSPORTATION": { "label": "Gas & Transport", "allocated": 150 },
+    "GENERAL_SERVICES": { "label": "Business & Services", "allocated": 400 },
+    "ENTERTAINMENT": { "label": "Entertainment", "allocated": 100 },
+    "GENERAL_MERCHANDISE": { "label": "Shopping", "allocated": 200 },
+    "PERSONAL_CARE": { "label": "Personal Care", "allocated": 50 },
+    "LOAN_PAYMENTS": { "label": "Debt Payments", "allocated": 3500 },
+    "RENT_AND_UTILITIES": { "label": "Rent & Utilities", "allocated": 2000 }
+  }
+}

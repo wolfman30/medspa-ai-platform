@@ -239,3 +239,11 @@ func NewProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
 func NewStoriesHandler(sqlDB *sql.DB) *stories.Handler {
 	return stories.NewHandler(stories.NewRepository(sqlDB))
 }
+
+func NewFinanceHandler(logger *logging.Logger) *handlers.AdminFinanceHandler {
+	abs, err := filepath.Abs(filepath.Join("data", "budget.json"))
+	if err != nil {
+		abs = filepath.Join("data", "budget.json")
+	}
+	return handlers.NewAdminFinanceHandler(logger, abs)
+}

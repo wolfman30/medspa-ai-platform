@@ -1288,3 +1288,84 @@ export async function deleteStory(id: string): Promise<void> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
+
+// ── Finance Dashboard (Plaid-backed) ───────────────────────────────
+
+export interface FinanceAccount {
+  account_id: string;
+  name: string;
+  subtype: string;
+  type: string;
+  balances: {
+    available?: number;
+    current?: number;
+    iso_currency_code?: string;
+  };
+}
+
+export interface FinanceTransaction {
+  transaction_id: string;
+  name: string;
+  amount: number;
+  date: string;
+  personal_finance_category?: {
+    primary?: string;
+  };
+}
+
+export interface FinanceBudgetCategory {
+  label: string;
+  allocated: number;
+  spent: number;
+  remaining: number;
+}
+
+export interface FinanceBudgetResponse {
+  month: string;
+  totals: {
+    allocated: number;
+    spent: number;
+    remaining: number;
+  };
+  categories: Record<string, FinanceBudgetCategory>;
+}
+
+export async function getBalances(): Promise<{ accounts: FinanceAccount[] }> {
+  const res = await fetch(`${API_BASE}/admin/finance/balances`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
+export async function getTransactions(days = 30): Promise<{
+  days: number;
+  transactions: FinanceTransaction[];
+  spent_by_category: Record<string, number>;
+}> {
+  const res = await fetch(`${API_BASE}/admin/finance/transactions?days=${days}`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
+export async function getBudget(): Promise<FinanceBudgetResponse> {
+  const res = await fetch(`${API_BASE}/admin/finance/budget`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
+export async function updateBudget(
+  categories: Record<string, { label: string; allocated: number }>,
+  month?: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/finance/budget`, {
+    method: 'PUT',
+    headers: await getHeaders(),
+    body: JSON.stringify({ month, categories }),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+}
