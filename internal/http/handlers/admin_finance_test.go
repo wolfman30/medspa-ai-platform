@@ -166,7 +166,7 @@ func TestFinance_SpendingAggregation(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, txs, 4)
-	assert.Equal(t, 50.0, spent["FOOD"])      // negative amount excluded
+	assert.Equal(t, 50.0, spent["FOOD"]) // negative amount excluded
 	assert.Equal(t, 25.0, spent["TRANSPORT"])
 	assert.Equal(t, 30.0, spent["UNCATEGORIZED"])
 }
