@@ -24,7 +24,7 @@ function mdToHtml(md: string): string {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/^#### (.+)$/gm, '<h4 class="text-sm font-semibold text-slate-200 mt-3 mb-1">$1</h4>')
     .replace(/^### (.+)$/gm, '<h3 class="text-sm font-semibold text-slate-100 mt-4 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-base font-semibold text-slate-100 mt-4 mb-2">$2</h2>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-base font-semibold text-slate-100 mt-4 mb-2">$1</h2>')
     .replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold text-slate-100 mt-4 mb-2">$1</h1>')
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-violet-400">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -63,7 +63,7 @@ function DocCard({ doc, onExpand }: { doc: ResearchDoc; onExpand: () => void }) 
         <p className="mt-2 text-xs text-slate-400 line-clamp-2">{doc.summary}</p>
       )}
       <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
-        <span>{new Date(doc.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+        <span>{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}</span>
         {doc.tags?.map(tag => (
           <span key={tag} className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">{tag}</span>
         ))}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -145,7 +146,7 @@ func (h *AdminResearchHandler) writeIndex(ctx context.Context, idx *ResearchInde
 	_, err = h.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(h.bucket),
 		Key:         aws.String(researchIndexKey),
-		Body:        strings.NewReader(string(data)),
+		Body:        bytes.NewReader(data),
 		ContentType: aws.String("application/json"),
 	})
 	return err
