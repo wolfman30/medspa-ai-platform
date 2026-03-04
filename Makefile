@@ -69,3 +69,11 @@ test-services:
 e2e-dev:
 	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
 	API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/run_e2e.go
+
+e2e-adela:
+	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
+	ADMIN_JWT_SECRET=$(ADMIN_JWT_SECRET) API_BASE_URL=$(API_BASE_URL) go run scripts/e2e/adela_e2e.go $(filter-out $@,$(MAKECMDGOALS))
+
+e2e-adela-dev:
+	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
+	API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/adela_e2e.go $(filter-out $@,$(MAKECMDGOALS))
