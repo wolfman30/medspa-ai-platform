@@ -15,10 +15,19 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+type PlaidConfig struct {
+	BaseURL     string
+	ClientID    string
+	Secret      string
+	AccessToken string
+}
+
 type AdminFinanceHandler struct {
 	logger      *logging.Logger
 	httpClient  *http.Client
 	plaidURL    string
+	clientID    string
+	secret      string
 	accessToken string
 	budgetPath  string
 }
@@ -40,16 +49,12 @@ type BudgetCategorySummary struct {
 	Remaining float64 `json:"remaining"`
 }
 
-func NewAdminFinanceHandler(logger *logging.Logger, budgetPath string) *AdminFinanceHandler {
+func NewAdminFinanceHandler(logger *logging.Logger, budgetPath string, plaid PlaidConfig) *AdminFinanceHandler {
 	if logger == nil {
 		logger = logging.Default()
 	}
-	env := strings.ToLower(strings.TrimSpace(os.Getenv("PLAID_ENV")))
-	baseURL := "https://production.plaid.com"
-	if env == "sandbox" {
-		baseURL = "https://sandbox.plaid.com"
-	} else if env == "development" {
-		baseURL = "https://development.plaid.com"
+	if plaid.BaseURL == "" {
+		plaid.BaseURL = "https://production.plaid.com"
 	}
 	if budgetPath == "" {
 		budgetPath = filepath.Join("data", "budget.json")
@@ -58,8 +63,10 @@ func NewAdminFinanceHandler(logger *logging.Logger, budgetPath string) *AdminFin
 	return &AdminFinanceHandler{
 		logger:      logger,
 		httpClient:  &http.Client{Timeout: 20 * time.Second},
-		plaidURL:    baseURL,
-		accessToken: strings.TrimSpace(os.Getenv("PLAID_ACCESS_TOKEN")),
+		plaidURL:    plaid.BaseURL,
+		clientID:    plaid.ClientID,
+		secret:      plaid.Secret,
+		accessToken: plaid.AccessToken,
 		budgetPath:  budgetPath,
 	}
 }
@@ -190,7 +197,25 @@ func (h *AdminFinanceHandler) PutBudget(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, days int) ([]map[string]any, map[string]float64, error) {
+type plaidTransaction struct {
+	TransactionID            string                    `json:"transaction_id"`
+	Date                     string                    `json:"date"`
+	Amount                   float64                   `json:"amount"`
+	Name                     string                    `json:"name"`
+	PersonalFinanceCategory  *plaidFinanceCategory     `json:"personal_finance_category,omitempty"`
+}
+
+type plaidFinanceCategory struct {
+	Primary  string `json:"primary"`
+	Detailed string `json:"detailed"`
+}
+
+type plaidTransactionsResponse struct {
+	Transactions []plaidTransaction `json:"transactions"`
+	Total        int                `json:"total_transactions"`
+}
+
+func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, days int) ([]plaidTransaction, map[string]float64, error) {
 	if h.accessToken == "" {
 		return nil, nil, fmt.Errorf("plaid access token not configured")
 	}
@@ -199,15 +224,12 @@ func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, days in
 	start := end.AddDate(0, 0, -days)
 	monthStart := time.Date(end.Year(), end.Month(), 1, 0, 0, 0, 0, time.UTC)
 
-	all := make([]map[string]any, 0)
+	all := make([]plaidTransaction, 0)
 	offset := 0
 	count := 200
 	total := 0
 	for {
-		var plaidResp struct {
-			Transactions []map[string]any `json:"transactions"`
-			Total        int              `json:"total_transactions"`
-		}
+		var plaidResp plaidTransactionsResponse
 		err := h.plaidPost(r, "/transactions/get", map[string]any{
 			"access_token": h.accessToken,
 			"start_date":   start.Format("2006-01-02"),
@@ -231,22 +253,18 @@ func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, days in
 	spentByCategory := map[string]float64{}
 	for _, tx := range all {
 		cat := "UNCATEGORIZED"
-		if pfc, ok := tx["personal_finance_category"].(map[string]any); ok {
-			if primary, ok := pfc["primary"].(string); ok && strings.TrimSpace(primary) != "" {
-				cat = primary
-			}
+		if tx.PersonalFinanceCategory != nil && strings.TrimSpace(tx.PersonalFinanceCategory.Primary) != "" {
+			cat = tx.PersonalFinanceCategory.Primary
 		}
-		amount, _ := tx["amount"].(float64)
-		dateStr, _ := tx["date"].(string)
-		txDate, err := time.Parse("2006-01-02", dateStr)
+		txDate, err := time.Parse("2006-01-02", tx.Date)
 		if err != nil {
 			continue
 		}
 		if txDate.Before(monthStart) {
 			continue
 		}
-		if amount > 0 {
-			spentByCategory[cat] += amount
+		if tx.Amount > 0 {
+			spentByCategory[cat] += tx.Amount
 		}
 	}
 
@@ -263,8 +281,8 @@ func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[s
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("PLAID-CLIENT-ID", strings.TrimSpace(os.Getenv("PLAID_CLIENT_ID")))
-	req.Header.Set("PLAID-SECRET", strings.TrimSpace(os.Getenv("PLAID_SECRET")))
+	req.Header.Set("PLAID-CLIENT-ID", h.clientID)
+	req.Header.Set("PLAID-SECRET", h.secret)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -318,7 +336,7 @@ func (h *AdminFinanceHandler) writeBudget(budget BudgetFile) error {
 
 func defaultBudgetFile() BudgetFile {
 	return BudgetFile{
-		Month: "2026-03",
+		Month: time.Now().UTC().Format("2006-01"),
 		Categories: map[string]BudgetCategory{
 			"FOOD_AND_DRINK":      {Label: "Food & Groceries", Allocated: 800},
 			"TRANSPORTATION":      {Label: "Gas & Transport", Allocated: 150},

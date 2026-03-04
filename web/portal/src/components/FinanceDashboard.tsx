@@ -64,6 +64,8 @@ export function FinanceDashboard() {
   const checking = balances.find(a => a.subtype?.toLowerCase().includes('checking'));
   const savings = balances.find(a => a.subtype?.toLowerCase().includes('savings'));
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const saveBudget = async () => {
     if (!budget) return;
     const categories = Object.fromEntries(
@@ -72,9 +74,14 @@ export function FinanceDashboard() {
         { label: value.label, allocated: Number(draft[key] ?? value.allocated) },
       ])
     );
-    await updateBudget(categories, budget.month);
-    setEditing(false);
-    await refresh();
+    try {
+      setSaveError(null);
+      await updateBudget(categories, budget.month);
+      setEditing(false);
+      await refresh();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save budget');
+    }
   };
 
   if (loading) {
@@ -98,6 +105,7 @@ export function FinanceDashboard() {
               <>
                 <button className="ui-btn ui-btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
                 <button className="ui-btn ui-btn-primary" onClick={saveBudget}>Save</button>
+                {saveError && <span className="text-red-600 text-sm self-center">{saveError}</span>}
               </>
             )}
           </div>
@@ -136,7 +144,7 @@ export function FinanceDashboard() {
                         type="number"
                         className="ui-input mt-1"
                         value={draft[key] ?? cat.allocated}
-                        onChange={e => setDraft(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                        onChange={e => { const v = Number(e.target.value); setDraft(prev => ({ ...prev, [key]: Number.isNaN(v) ? 0 : v })); }}
                       />
                     </div>
                   )}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -245,5 +246,19 @@ func NewFinanceHandler(logger *logging.Logger) *handlers.AdminFinanceHandler {
 	if err != nil {
 		abs = filepath.Join("data", "budget.json")
 	}
-	return handlers.NewAdminFinanceHandler(logger, abs)
+
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("PLAID_ENV")))
+	baseURL := "https://production.plaid.com"
+	if env == "sandbox" {
+		baseURL = "https://sandbox.plaid.com"
+	} else if env == "development" {
+		baseURL = "https://development.plaid.com"
+	}
+
+	return handlers.NewAdminFinanceHandler(logger, abs, handlers.PlaidConfig{
+		BaseURL:     baseURL,
+		ClientID:    strings.TrimSpace(os.Getenv("PLAID_CLIENT_ID")),
+		Secret:      strings.TrimSpace(os.Getenv("PLAID_SECRET")),
+		AccessToken: strings.TrimSpace(os.Getenv("PLAID_ACCESS_TOKEN")),
+	})
 }
