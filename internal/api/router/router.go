@@ -84,6 +84,9 @@ type Config struct {
 	// Finance dashboard (Plaid + budget)
 	AdminFinance *handlers.AdminFinanceHandler
 
+	// Research intelligence
+	AdminResearch *handlers.AdminResearchHandler
+
 	// Prospect tracker
 	ProspectsHandler *prospects.Handler
 
@@ -285,6 +288,12 @@ func New(cfg *Config) http.Handler {
 				admin.Get("/finance/transactions", cfg.AdminFinance.GetTransactions)
 				admin.Get("/finance/budget", cfg.AdminFinance.GetBudget)
 				admin.Put("/finance/budget", cfg.AdminFinance.PutBudget)
+
+				// Research intelligence
+				if cfg.AdminResearch != nil {
+					admin.Get("/research", cfg.AdminResearch.ListDocs)
+					admin.Put("/research", cfg.AdminResearch.PutDoc)
+				}
 			}
 			// Prospect tracker
 			if cfg.ProspectsHandler != nil {

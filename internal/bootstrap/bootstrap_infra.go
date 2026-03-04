@@ -271,3 +271,21 @@ func NewFinanceHandler(appCtx context.Context, appCfg *appconfig.Config, logger 
 		AccessToken: strings.TrimSpace(os.Getenv("PLAID_ACCESS_TOKEN")),
 	})
 }
+
+// NewResearchHandler creates the research intelligence handler backed by S3.
+func NewResearchHandler(appCtx context.Context, appCfg *appconfig.Config, logger *logging.Logger) *handlers.AdminResearchHandler {
+	var s3Client handlers.S3Client
+	awsCfg, err := mainconfig.LoadAWSConfig(appCtx, appCfg)
+	if err != nil {
+		logger.Error("failed to load AWS config for research S3", "error", err)
+	} else {
+		s3Client = s3.NewFromConfig(awsCfg)
+	}
+
+	s3Bucket := strings.TrimSpace(os.Getenv("FINANCE_S3_BUCKET"))
+	if s3Bucket == "" {
+		s3Bucket = "aiwolf-training-data-development"
+	}
+
+	return handlers.NewAdminResearchHandler(s3Client, s3Bucket)
+}
