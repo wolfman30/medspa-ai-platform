@@ -1049,6 +1049,8 @@ export async function upsertProspect(id: string, data: Record<string, unknown>):
 }
 
 export interface ProspectOutreach {
+  dmSequence: string;
+  dmExists: boolean;
   draft: string;
   research: string;
   draftExists: boolean;

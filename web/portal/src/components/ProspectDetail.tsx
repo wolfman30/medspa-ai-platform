@@ -89,8 +89,9 @@ export function ProspectDetail({ prospect: p, onBack, onRefresh, dark = false }:
   const [saving, setSaving] = useState(false);
   const [outreach, setOutreach] = useState<ProspectOutreach | null>(null);
   const [outreachLoading, setOutreachLoading] = useState(true);
-  const [copied, setCopied] = useState<'draft' | 'research' | null>(null);
+  const [copied, setCopied] = useState<'draft' | 'research' | 'dm' | null>(null);
   const [researchOpen, setResearchOpen] = useState(false);
+  const [dmOpen, setDmOpen] = useState(false);
 
   useEffect(() => {
     setOutreachLoading(true);
@@ -100,7 +101,7 @@ export function ProspectDetail({ prospect: p, onBack, onRefresh, dark = false }:
       .finally(() => setOutreachLoading(false));
   }, [p.id]);
 
-  const handleCopy = async (text: string, which: 'draft' | 'research') => {
+  const handleCopy = async (text: string, which: 'draft' | 'research' | 'dm') => {
     await navigator.clipboard.writeText(text);
     setCopied(which);
     setTimeout(() => setCopied(null), 2000);
@@ -291,6 +292,38 @@ export function ProspectDetail({ prospect: p, onBack, onRefresh, dark = false }:
             </div>
           ) : (
             <p className="text-sm text-slate-500">No outreach draft yet</p>
+          )}
+        </div>
+
+        {/* IG DM Sequence */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setDmOpen(!dmOpen)}
+              className="flex items-center gap-2"
+            >
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">💬 IG DM Sequence</h2>
+              <span className="text-slate-600 text-xs">{dmOpen ? '▼' : '▶'}</span>
+            </button>
+            {outreach?.dmExists && (
+              <button
+                onClick={() => handleCopy(outreach.dmSequence, 'dm')}
+                className="px-3 py-1.5 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-xs font-medium transition"
+              >
+                {copied === 'dm' ? '✓ Copied!' : '📋 Copy DMs'}
+              </button>
+            )}
+          </div>
+          {dmOpen && (
+            outreachLoading ? (
+              <p className="text-sm text-slate-500">Loading...</p>
+            ) : outreach?.dmExists ? (
+              <div className="bg-slate-950 rounded-lg border border-slate-700 p-4 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+                {outreach.dmSequence}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No DM sequence yet</p>
+            )
           )}
         </div>
 

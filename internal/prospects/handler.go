@@ -34,8 +34,10 @@ func (h *Handler) GetOutreach(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
 		"draft":          "",
 		"research":       "",
+		"dmSequence":     "",
 		"draftExists":    false,
 		"researchExists": false,
+		"dmExists":       false,
 	}
 
 	if h.researchDir != "" {
@@ -43,6 +45,12 @@ func (h *Handler) GetOutreach(w http.ResponseWriter, r *http.Request) {
 		if data, err := os.ReadFile(draftPath); err == nil {
 			resp["draft"] = string(data)
 			resp["draftExists"] = true
+		}
+
+		dmPath := filepath.Join(h.researchDir, "outreach", id+"-dm.md")
+		if data, err := os.ReadFile(dmPath); err == nil {
+			resp["dmSequence"] = string(data)
+			resp["dmExists"] = true
 		}
 
 		researchPath := filepath.Join(h.researchDir, "leads", id+".md")
