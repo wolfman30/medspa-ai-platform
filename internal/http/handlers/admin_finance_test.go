@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func (m *mockS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*
 	key := *in.Key
 	b, ok := m.data[key]
 	if !ok {
-		return nil, fmt.Errorf("NoSuchKey: %s", key)
+		return nil, &s3types.NoSuchKey{Message: &key}
 	}
 	return &s3.GetObjectOutput{
 		Body: io.NopCloser(bytes.NewReader(b)),
