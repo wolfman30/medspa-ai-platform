@@ -495,7 +495,11 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 	pc.span = span
 
 	// Phase 2: Load conversation history (or bootstrap a new conversation)
-	if resp := s.loadHistory(ctx, pc); resp != nil {
+	resp, histErr := s.loadHistory(ctx, pc)
+	if histErr != nil {
+		return nil, histErr
+	}
+	if resp != nil {
 		// loadHistory returns a deflection response for PHI/medical on new conversations.
 		// For the "unknown conversation + clean message" case, it returns nil and we
 		// need to check if history is still empty (meaning StartConversation is needed).
@@ -579,6 +583,7 @@ func (s *LLMService) ProcessMessage(ctx context.Context, req MessageRequest) (*R
 		DepositIntent:         pc.depositIntent,
 		TimeSelectionResponse: pc.timeSelectionResponse,
 		BookingRequest:        pc.bookingRequest,
+		AsyncAvailability:     pc.asyncAvailability,
 	}, nil
 }
 

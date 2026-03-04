@@ -36,6 +36,7 @@ type processContext struct {
 	selectedSlot          *PresentedSlot
 	depositIntent         *DepositIntent
 	bookingRequest        *BookingRequest
+	asyncAvailability     *AsyncAvailabilityRequest
 	reply                 string
 }
 
@@ -88,7 +89,7 @@ func (s *LLMService) newProcessContext(ctx context.Context, req MessageRequest) 
 // loadHistory loads the conversation history from Redis. If the conversation
 // does not exist, it bootstraps a new one (handling PHI/medical deflections).
 // Returns a *Response for early exit, or nil to continue processing.
-func (s *LLMService) loadHistory(ctx context.Context, pc *processContext) *Response {
+func (s *LLMService) loadHistory(ctx context.Context, pc *processContext) (*Response, error) {
 	history, err := s.history.Load(ctx, pc.req.ConversationID)
 
 	// Trim voice history more aggressively for lower latency
@@ -102,10 +103,10 @@ func (s *LLMService) loadHistory(ctx context.Context, pc *processContext) *Respo
 				"conversation_id", pc.req.ConversationID,
 				"message", pc.redactedMessage,
 			)
-			return s.bootstrapNewConversation(ctx, pc)
+			return s.bootstrapNewConversation(ctx, pc), nil
 		}
 		pc.span.RecordError(err)
-		return nil // will be handled as error in caller — but we need to propagate
+		return nil, fmt.Errorf("loading conversation history: %w", err)
 	}
 
 	pc.history = history
@@ -113,7 +114,7 @@ func (s *LLMService) loadHistory(ctx context.Context, pc *processContext) *Respo
 		"conversation_id", pc.req.ConversationID,
 		"history_length", len(history),
 	)
-	return nil
+	return nil, nil
 }
 
 // bootstrapNewConversation handles the case where ProcessMessage is called for
@@ -682,7 +683,7 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 	}
 
 	// Time selection triggering
-	s.maybeTriggertimeSelection(ctx, pc, clinicCfg, usesMoxie)
+	s.maybeTriggerTimeSelection(ctx, pc, clinicCfg, usesMoxie)
 
 	// Replace LLM reply in history when time selection takes over
 	if pc.timeSelectionResponse != nil && pc.timeSelectionResponse.SMSMessage != "" {
@@ -708,8 +709,8 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 	s.assembleBookingRequest(ctx, pc, clinicCfg, usesMoxie)
 }
 
-// maybeTriggertimeSelection checks whether to fetch and present available time slots.
-func (s *LLMService) maybeTriggertimeSelection(ctx context.Context, pc *processContext, clinicCfg *clinic.Config, usesMoxie bool) {
+// maybeTriggerTimeSelection checks whether to fetch and present available time slots.
+func (s *LLMService) maybeTriggerTimeSelection(ctx context.Context, pc *processContext, clinicCfg *clinic.Config, usesMoxie bool) {
 	moxieAPIReady := s.moxieClient != nil && clinicCfg != nil && clinicCfg.MoxieConfig != nil
 	qualificationsMet := ShouldFetchAvailabilityWithConfig(pc.history, nil, clinicCfg)
 	shouldTrigger := moxieAPIReady && pc.timeSelectionState == nil
@@ -785,6 +786,14 @@ func (s *LLMService) maybeTriggertimeSelection(ctx context.Context, pc *processC
 			"service", prefs.ServiceInterest,
 		)
 		pc.reply = fmt.Sprintf("Let me check what's available for %s. I'll text you the options in just a moment so you can pick the best time.", prefs.ServiceInterest)
+		pc.asyncAvailability = &AsyncAvailabilityRequest{
+			OrgID:           pc.req.OrgID,
+			ConversationID:  pc.req.ConversationID,
+			From:            pc.req.From,
+			To:              pc.req.To,
+			BookingURL:      bookingURL,
+			ServiceInterest: prefs.ServiceInterest,
+		}
 		return
 	}
 
@@ -849,8 +858,12 @@ func (s *LLMService) assembleBookingRequest(ctx context.Context, pc *processCont
 		s.logger.Warn("booking blocked: no email for Moxie booking", "lead_id", pc.req.LeadID)
 		if pc.selectedSlot != nil {
 			slotTime := pc.selectedSlot.DateTime
+			serviceName := ""
+			if pc.timeSelectionState != nil {
+				serviceName = pc.timeSelectionState.Service
+			}
 			pc.reply = fmt.Sprintf("Great choice! I've got %s for %s. To complete your booking, I just need your email address. What's the best email for you?",
-				slotTime.Format("Monday, January 2 at 3:04 PM"), pc.timeSelectionState.Service)
+				slotTime.Format("Monday, January 2 at 3:04 PM"), serviceName)
 			for i := len(pc.history) - 1; i >= 0; i-- {
 				if pc.history[i].Role == ChatRoleAssistant {
 					pc.history[i].Content = pc.reply
@@ -871,7 +884,7 @@ func (s *LLMService) assembleBookingRequest(ctx context.Context, pc *processCont
 		if pc.timeSelectionState != nil {
 			slotService = pc.timeSelectionState.Service
 		}
-	} else {
+	} else if previouslySelectedDateTime != nil {
 		slotDateTime = *previouslySelectedDateTime
 		slotService = previouslySelectedService
 	}
