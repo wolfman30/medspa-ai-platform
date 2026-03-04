@@ -198,11 +198,11 @@ func (h *AdminFinanceHandler) PutBudget(w http.ResponseWriter, r *http.Request) 
 }
 
 type plaidTransaction struct {
-	TransactionID            string                    `json:"transaction_id"`
-	Date                     string                    `json:"date"`
-	Amount                   float64                   `json:"amount"`
-	Name                     string                    `json:"name"`
-	PersonalFinanceCategory  *plaidFinanceCategory     `json:"personal_finance_category,omitempty"`
+	TransactionID           string                `json:"transaction_id"`
+	Date                    string                `json:"date"`
+	Amount                  float64               `json:"amount"`
+	Name                    string                `json:"name"`
+	PersonalFinanceCategory *plaidFinanceCategory `json:"personal_finance_category,omitempty"`
 }
 
 type plaidFinanceCategory struct {
