@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -385,7 +386,7 @@ func (h *AdminFinanceHandler) readBudget(ctx context.Context) (BudgetFile, error
 	if err != nil {
 		// If not found, create default
 		var nsk *s3types.NoSuchKey
-		if isS3NotFound(err, nsk) {
+		if errors.As(err, &nsk) {
 			defaultBudget := defaultBudgetFile()
 			if wErr := h.writeBudget(ctx, defaultBudget); wErr != nil {
 				return BudgetFile{}, wErr
@@ -407,13 +408,9 @@ func (h *AdminFinanceHandler) readBudget(ctx context.Context) (BudgetFile, error
 }
 
 // isS3NotFound checks if the error indicates the object doesn't exist.
-func isS3NotFound(err error, _ *s3types.NoSuchKey) bool {
-	if err == nil {
-		return false
-	}
-	// Check for NoSuchKey or NotFound in the error string
-	errStr := err.Error()
-	return strings.Contains(errStr, "NoSuchKey") || strings.Contains(errStr, "StatusCode: 404") || strings.Contains(errStr, "not found")
+func isS3NotFound(err error) bool {
+	var nsk *s3types.NoSuchKey
+	return errors.As(err, &nsk)
 }
 
 func (h *AdminFinanceHandler) writeBudget(ctx context.Context, budget BudgetFile) error {

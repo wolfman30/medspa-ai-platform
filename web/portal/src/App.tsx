@@ -34,7 +34,7 @@ type AppView =
   | 'knowledge'
   | 'prospects'
   | 'stories'
-  | 'content';
+  | 'content'
   | 'finances';
 
 // Admin users can view all orgs
@@ -432,6 +432,10 @@ function AuthenticatedApp() {
                     className={view === 'content' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
                   >
                     Content
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
                     onClick={() => setView('finances')}
                     aria-current={view === 'finances' ? 'page' : undefined}
                     className={view === 'finances' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
