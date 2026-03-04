@@ -2,18 +2,70 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
+
+// ---------------------------------------------------------------------------
+// S3 abstraction (enables testing with a mock)
+// ---------------------------------------------------------------------------
+
+// S3Client is the subset of the S3 API we need.
+type S3Client interface {
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+}
+
+// ---------------------------------------------------------------------------
+// In-memory TTL cache for Plaid responses
+// ---------------------------------------------------------------------------
+
+type cacheEntry struct {
+	data      any
+	expiresAt time.Time
+}
+
+type plaidCache struct {
+	mu      sync.RWMutex
+	entries map[string]cacheEntry
+	ttl     time.Duration
+}
+
+func newPlaidCache(ttl time.Duration) *plaidCache {
+	return &plaidCache{entries: make(map[string]cacheEntry), ttl: ttl}
+}
+
+func (c *plaidCache) get(key string) (any, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	e, ok := c.entries[key]
+	if !ok || time.Now().After(e.expiresAt) {
+		return nil, false
+	}
+	return e.data, true
+}
+
+func (c *plaidCache) set(key string, data any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[key] = cacheEntry{data: data, expiresAt: time.Now().Add(c.ttl)}
+}
+
+// ---------------------------------------------------------------------------
+// Config & handler
+// ---------------------------------------------------------------------------
 
 type PlaidConfig struct {
 	BaseURL     string
@@ -29,7 +81,10 @@ type AdminFinanceHandler struct {
 	clientID    string
 	secret      string
 	accessToken string
-	budgetPath  string
+	s3Client    S3Client
+	s3Bucket    string
+	s3Key       string
+	cache       *plaidCache
 }
 
 type BudgetCategory struct {
@@ -49,15 +104,15 @@ type BudgetCategorySummary struct {
 	Remaining float64 `json:"remaining"`
 }
 
-func NewAdminFinanceHandler(logger *logging.Logger, budgetPath string, plaid PlaidConfig) *AdminFinanceHandler {
+func NewAdminFinanceHandler(logger *logging.Logger, s3Client S3Client, s3Bucket string, plaid PlaidConfig) *AdminFinanceHandler {
 	if logger == nil {
 		logger = logging.Default()
 	}
 	if plaid.BaseURL == "" {
 		plaid.BaseURL = "https://production.plaid.com"
 	}
-	if budgetPath == "" {
-		budgetPath = filepath.Join("data", "budget.json")
+	if s3Bucket == "" {
+		s3Bucket = "aiwolf-training-data-development"
 	}
 
 	return &AdminFinanceHandler{
@@ -67,13 +122,22 @@ func NewAdminFinanceHandler(logger *logging.Logger, budgetPath string, plaid Pla
 		clientID:    plaid.ClientID,
 		secret:      plaid.Secret,
 		accessToken: plaid.AccessToken,
-		budgetPath:  budgetPath,
+		s3Client:    s3Client,
+		s3Bucket:    s3Bucket,
+		s3Key:       "finance/budget.json",
+		cache:       newPlaidCache(5 * time.Minute),
 	}
 }
 
 func (h *AdminFinanceHandler) GetBalances(w http.ResponseWriter, r *http.Request) {
 	if h.accessToken == "" {
 		h.writeError(w, http.StatusServiceUnavailable, "PLAID_ACCESS_TOKEN not configured")
+		return
+	}
+
+	// Check cache
+	if cached, ok := h.cache.get("balances"); ok {
+		writeJSON(w, http.StatusOK, cached)
 		return
 	}
 
@@ -98,7 +162,9 @@ func (h *AdminFinanceHandler) GetBalances(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"accounts": plaidResp.Accounts})
+	result := map[string]any{"accounts": plaidResp.Accounts}
+	h.cache.set("balances", result)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *AdminFinanceHandler) GetTransactions(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +175,10 @@ func (h *AdminFinanceHandler) GetTransactions(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	transactions, spentByCategory, err := h.fetchTransactionsAndSpent(r, days)
+	end := time.Now().UTC()
+	start := end.AddDate(0, 0, -days)
+
+	transactions, spentByCategory, err := h.fetchTransactionsAndSpent(r, start, end)
 	if err != nil {
 		h.writeError(w, http.StatusBadGateway, "failed to fetch transactions")
 		return
@@ -123,13 +192,18 @@ func (h *AdminFinanceHandler) GetTransactions(w http.ResponseWriter, r *http.Req
 }
 
 func (h *AdminFinanceHandler) GetBudget(w http.ResponseWriter, r *http.Request) {
-	budget, err := h.readBudget()
+	budget, err := h.readBudget(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "failed to read budget")
 		return
 	}
 
-	_, spentByCategory, err := h.fetchTransactionsAndSpent(r, 90)
+	// For budget, only fetch current month transactions
+	now := time.Now().UTC()
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	end := now
+
+	_, spentByCategory, err := h.fetchTransactionsAndSpent(r, monthStart, end)
 	if err != nil {
 		h.writeError(w, http.StatusBadGateway, "failed to fetch transactions")
 		return
@@ -189,7 +263,7 @@ func (h *AdminFinanceHandler) PutBudget(w http.ResponseWriter, r *http.Request) 
 		budget.Categories[key] = BudgetCategory{Label: cat.Label, Allocated: cat.Allocated}
 	}
 
-	if err := h.writeBudget(budget); err != nil {
+	if err := h.writeBudget(r.Context(), budget); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "failed to save budget")
 		return
 	}
@@ -215,14 +289,16 @@ type plaidTransactionsResponse struct {
 	Total        int                `json:"total_transactions"`
 }
 
-func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, days int) ([]plaidTransaction, map[string]float64, error) {
+func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, start, end time.Time) ([]plaidTransaction, map[string]float64, error) {
 	if h.accessToken == "" {
 		return nil, nil, fmt.Errorf("plaid access token not configured")
 	}
 
-	end := time.Now().UTC()
-	start := end.AddDate(0, 0, -days)
-	monthStart := time.Date(end.Year(), end.Month(), 1, 0, 0, 0, 0, time.UTC)
+	cacheKey := fmt.Sprintf("transactions:%s:%s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	if cached, ok := h.cache.get(cacheKey); ok {
+		entry := cached.(cachedTransactions)
+		return entry.transactions, entry.spent, nil
+	}
 
 	all := make([]plaidTransaction, 0)
 	offset := 0
@@ -256,22 +332,25 @@ func (h *AdminFinanceHandler) fetchTransactionsAndSpent(r *http.Request, days in
 		if tx.PersonalFinanceCategory != nil && strings.TrimSpace(tx.PersonalFinanceCategory.Primary) != "" {
 			cat = tx.PersonalFinanceCategory.Primary
 		}
-		txDate, err := time.Parse("2006-01-02", tx.Date)
-		if err != nil {
-			continue
-		}
-		if txDate.Before(monthStart) {
-			continue
-		}
 		if tx.Amount > 0 {
 			spentByCategory[cat] += tx.Amount
 		}
 	}
 
+	h.cache.set(cacheKey, cachedTransactions{transactions: all, spent: spentByCategory})
 	return all, spentByCategory, nil
 }
 
+type cachedTransactions struct {
+	transactions []plaidTransaction
+	spent        map[string]float64
+}
+
 func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[string]any, out any) error {
+	// Plaid docs: client_id and secret go in the request body
+	body["client_id"] = h.clientID
+	body["secret"] = h.secret
+
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -281,8 +360,6 @@ func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[s
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("PLAID-CLIENT-ID", h.clientID)
-	req.Header.Set("PLAID-SECRET", h.secret)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -300,21 +377,27 @@ func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[s
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func (h *AdminFinanceHandler) readBudget() (BudgetFile, error) {
-	if _, err := os.Stat(h.budgetPath); os.IsNotExist(err) {
-		defaultBudget := defaultBudgetFile()
-		if err := h.writeBudget(defaultBudget); err != nil {
-			return BudgetFile{}, err
-		}
-		return defaultBudget, nil
-	}
-
-	b, err := os.ReadFile(h.budgetPath)
+func (h *AdminFinanceHandler) readBudget(ctx context.Context) (BudgetFile, error) {
+	out, err := h.s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(h.s3Bucket),
+		Key:    aws.String(h.s3Key),
+	})
 	if err != nil {
+		// If not found, create default
+		var nsk *s3types.NoSuchKey
+		if isS3NotFound(err, nsk) {
+			defaultBudget := defaultBudgetFile()
+			if wErr := h.writeBudget(ctx, defaultBudget); wErr != nil {
+				return BudgetFile{}, wErr
+			}
+			return defaultBudget, nil
+		}
 		return BudgetFile{}, err
 	}
+	defer out.Body.Close()
+
 	var budget BudgetFile
-	if err := json.Unmarshal(b, &budget); err != nil {
+	if err := json.NewDecoder(out.Body).Decode(&budget); err != nil {
 		return BudgetFile{}, err
 	}
 	if budget.Categories == nil {
@@ -323,15 +406,28 @@ func (h *AdminFinanceHandler) readBudget() (BudgetFile, error) {
 	return budget, nil
 }
 
-func (h *AdminFinanceHandler) writeBudget(budget BudgetFile) error {
-	if err := os.MkdirAll(filepath.Dir(h.budgetPath), 0o755); err != nil {
-		return err
+// isS3NotFound checks if the error indicates the object doesn't exist.
+func isS3NotFound(err error, _ *s3types.NoSuchKey) bool {
+	if err == nil {
+		return false
 	}
+	// Check for NoSuchKey or NotFound in the error string
+	errStr := err.Error()
+	return strings.Contains(errStr, "NoSuchKey") || strings.Contains(errStr, "StatusCode: 404") || strings.Contains(errStr, "not found")
+}
+
+func (h *AdminFinanceHandler) writeBudget(ctx context.Context, budget BudgetFile) error {
 	b, err := json.MarshalIndent(budget, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(h.budgetPath, append(b, '\n'), 0o644)
+	_, err = h.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(h.s3Bucket),
+		Key:         aws.String(h.s3Key),
+		Body:        bytes.NewReader(b),
+		ContentType: aws.String("application/json"),
+	})
+	return err
 }
 
 func defaultBudgetFile() BudgetFile {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -241,12 +242,7 @@ func NewStoriesHandler(sqlDB *sql.DB) *stories.Handler {
 	return stories.NewHandler(stories.NewRepository(sqlDB))
 }
 
-func NewFinanceHandler(logger *logging.Logger) *handlers.AdminFinanceHandler {
-	abs, err := filepath.Abs(filepath.Join("data", "budget.json"))
-	if err != nil {
-		abs = filepath.Join("data", "budget.json")
-	}
-
+func NewFinanceHandler(appCtx context.Context, appCfg *appconfig.Config, logger *logging.Logger) *handlers.AdminFinanceHandler {
 	env := strings.ToLower(strings.TrimSpace(os.Getenv("PLAID_ENV")))
 	baseURL := "https://production.plaid.com"
 	if env == "sandbox" {
@@ -255,7 +251,20 @@ func NewFinanceHandler(logger *logging.Logger) *handlers.AdminFinanceHandler {
 		baseURL = "https://development.plaid.com"
 	}
 
-	return handlers.NewAdminFinanceHandler(logger, abs, handlers.PlaidConfig{
+	var s3Client handlers.S3Client
+	awsCfg, err := mainconfig.LoadAWSConfig(appCtx, appCfg)
+	if err != nil {
+		logger.Error("failed to load AWS config for finance S3", "error", err)
+	} else {
+		s3Client = s3.NewFromConfig(awsCfg)
+	}
+
+	s3Bucket := strings.TrimSpace(os.Getenv("FINANCE_S3_BUCKET"))
+	if s3Bucket == "" {
+		s3Bucket = "aiwolf-training-data-development"
+	}
+
+	return handlers.NewAdminFinanceHandler(logger, s3Client, s3Bucket, handlers.PlaidConfig{
 		BaseURL:     baseURL,
 		ClientID:    strings.TrimSpace(os.Getenv("PLAID_CLIENT_ID")),
 		Secret:      strings.TrimSpace(os.Getenv("PLAID_SECRET")),

@@ -253,7 +253,7 @@ func main() {
 		HasSMSProvider:         len(cfg.SMSProviderIssues()) == 0,
 		PaymentRedirect:        payments.NewRedirectHandler(paymentsRepo, logger),
 		AdminBriefs:            bootstrap.NewBriefsHandler(dbPool, logger),
-		AdminFinance:           bootstrap.NewFinanceHandler(logger),
+		AdminFinance:           bootstrap.NewFinanceHandler(appCtx, cfg, logger),
 		ProspectsHandler:       bootstrap.NewProspectsHandler(sqlDB),
 		StoriesHandler:         bootstrap.NewStoriesHandler(sqlDB),
 		EvidenceS3Client:       evidenceS3,

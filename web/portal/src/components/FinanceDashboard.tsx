@@ -143,8 +143,9 @@ export function FinanceDashboard() {
                       <input
                         type="number"
                         className="ui-input mt-1"
+                        min={0}
                         value={draft[key] ?? cat.allocated}
-                        onChange={e => { const v = Number(e.target.value); setDraft(prev => ({ ...prev, [key]: Number.isNaN(v) ? 0 : v })); }}
+                        onChange={e => { const v = Number(e.target.value); setDraft(prev => ({ ...prev, [key]: Number.isNaN(v) ? 0 : Math.max(0, v) })); }}
                       />
                     </div>
                   )}
