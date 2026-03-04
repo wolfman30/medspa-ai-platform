@@ -58,17 +58,16 @@ func DeriveConfigFromKnowledge(sk *StructuredKnowledge, cfg *clinic.Config) {
 	for _, svc := range sk.Sections.Services.Items {
 		if svc.BookingID != "" {
 			menuItems[strings.ToLower(svc.Name)] = svc.BookingID
-			providerCount[svc.BookingID] = len(svc.ProviderIDs)
-			if len(svc.ProviderIDs) > 0 {
-				ids := make([]string, 0, len(svc.ProviderIDs))
-				for _, id := range svc.ProviderIDs {
-					if strings.TrimSpace(id) != "" {
-						ids = append(ids, id)
-					}
+			// Filter blank IDs first, then derive both count and mapping from the same set.
+			ids := make([]string, 0, len(svc.ProviderIDs))
+			for _, id := range svc.ProviderIDs {
+				if strings.TrimSpace(id) != "" {
+					ids = append(ids, id)
 				}
-				if len(ids) > 0 {
-					serviceProviders[svc.BookingID] = ids
-				}
+			}
+			providerCount[svc.BookingID] = len(ids)
+			if len(ids) > 0 {
+				serviceProviders[svc.BookingID] = ids
 			}
 		}
 	}

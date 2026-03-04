@@ -71,7 +71,8 @@ func (s *LLMService) handleProviderPreference(
 		return nil
 	}
 	providerNames := cfg.ProviderNamesForService(resolved)
-	var providerList string
+	providerList := buildProviderGuardrailList(cfg, resolved)
+	// Rewrite for patient-facing tone if we have names.
 	if len(providerNames) > 0 {
 		providerList = " We have " + strings.Join(providerNames, ", ") + "."
 	}

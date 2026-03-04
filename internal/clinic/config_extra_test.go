@@ -116,11 +116,14 @@ func TestProviderNamesForService(t *testing.T) {
 		}
 	})
 
-	t.Run("no service mapping returns empty list", func(t *testing.T) {
+	t.Run("no service mapping returns non-nil empty slice", func(t *testing.T) {
 		cfg2 := &Config{MoxieConfig: &MoxieConfig{ProviderNames: cfg.MoxieConfig.ProviderNames}}
 		got := cfg2.ProviderNamesForService("Unknown")
+		if got == nil {
+			t.Fatal("expected non-nil empty slice, got nil")
+		}
 		if len(got) != 0 {
-			t.Fatalf("expected no provider names without service mapping, got %v", got)
+			t.Fatalf("expected empty slice, got %v", got)
 		}
 	})
 }

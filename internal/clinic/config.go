@@ -282,19 +282,21 @@ func (c *Config) ServiceMenuItemID(serviceName string) string {
 }
 
 // ProviderNamesForService returns deterministic provider display names for a service.
-// Returns nil unless we have an explicit service->provider mapping.
+// Returns an empty (non-nil) slice unless we have an explicit service->provider mapping
+// with resolvable names.
 func (c *Config) ProviderNamesForService(serviceName string) []string {
+	empty := []string{}
 	if c.MoxieConfig == nil || c.MoxieConfig.ProviderNames == nil || c.MoxieConfig.ServiceProviders == nil {
-		return nil
+		return empty
 	}
 
 	itemID := c.ServiceMenuItemID(serviceName)
 	if itemID == "" {
-		return nil
+		return empty
 	}
 	ids := c.MoxieConfig.ServiceProviders[itemID]
 	if len(ids) == 0 {
-		return nil
+		return empty
 	}
 
 	names := make([]string, 0, len(ids))
