@@ -1,3 +1,6 @@
+# Data directory (ephemeral, stored in S3)
+data/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

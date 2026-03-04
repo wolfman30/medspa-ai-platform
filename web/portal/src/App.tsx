@@ -12,6 +12,7 @@ import { ProspectTracker } from './components/ProspectTracker';
 import { CEODashboard } from './components/CEODashboard';
 import { StoriesBoard } from './components/StoriesBoard';
 import { ContentCalendar } from './components/ContentCalendar';
+import { FinanceDashboard } from './components/FinanceDashboard';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -33,7 +34,8 @@ type AppView =
   | 'knowledge'
   | 'prospects'
   | 'stories'
-  | 'content';
+  | 'content'
+  | 'finances';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -432,6 +434,15 @@ function AuthenticatedApp() {
                     Content
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('finances')}
+                    aria-current={view === 'finances' ? 'page' : undefined}
+                    className={view === 'finances' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Finances
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -445,6 +456,8 @@ function AuthenticatedApp() {
           <ContentCalendar />
         ) : view === 'stories' ? (
           <StoriesBoard />
+        ) : view === 'finances' ? (
+          <FinanceDashboard />
         ) : view === 'prospects' ? (
           <ProspectTracker />
         ) : view === 'conversation-detail' && selectedConversationId ? (
