@@ -70,19 +70,18 @@ func (s *LLMService) handleProviderPreference(
 	if prefs.ProviderPreference != "" || cfg == nil || !cfg.ServiceNeedsProviderPreference(resolved) {
 		return nil
 	}
-	providerNames := make([]string, 0)
-	if cfg.MoxieConfig != nil {
-		for _, name := range cfg.MoxieConfig.ProviderNames {
-			providerNames = append(providerNames, name)
-		}
-	}
-	var providerList string
+	providerNames := cfg.ProviderNamesForService(resolved)
+	providerList := buildProviderGuardrailList(cfg, resolved)
+	// Rewrite for patient-facing tone if we have names.
 	if len(providerNames) > 0 {
-		providerList = " We have " + strings.Join(providerNames, " and ") + "."
+		providerList = " We have " + strings.Join(providerNames, ", ") + "."
 	}
 	s.logger.Info("asking provider preference after variant resolution",
 		"conversation_id", conversationID,
 		"resolved_service", resolved,
+		"service_menu_item_id", cfg.ServiceMenuItemID(resolved),
+		"provider_count", len(providerNames),
+		"providers", strings.Join(providerNames, ", "),
 	)
 	return &Response{
 		Message:        fmt.Sprintf("Great choice — %s!%s Do you have a provider preference, or would you like the first available appointment?", resolved, providerList),

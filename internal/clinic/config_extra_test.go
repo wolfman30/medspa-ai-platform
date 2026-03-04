@@ -91,6 +91,43 @@ func TestServiceNeedsProviderPreference(t *testing.T) {
 	}
 }
 
+func TestProviderNamesForService(t *testing.T) {
+	cfg := &Config{
+		ServiceAliases: map[string]string{"botox": "Tox"},
+		MoxieConfig: &MoxieConfig{
+			ServiceMenuItems: map[string]string{"tox": "38140"},
+			ProviderNames: map[string]string{
+				"34577": "Angela Solenthaler",
+				"34572": "Brady Steineck",
+				"34579": "Brandy Roberts",
+				"34575": "McKenna Zehnder",
+			},
+			ServiceProviders: map[string][]string{
+				"38140": {"34579", "34577", "34572"},
+			},
+		},
+	}
+
+	t.Run("service-specific list from alias", func(t *testing.T) {
+		got := cfg.ProviderNamesForService("Botox")
+		want := []string{"Angela Solenthaler", "Brady Steineck", "Brandy Roberts"}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("ProviderNamesForService(Botox) = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("no service mapping returns non-nil empty slice", func(t *testing.T) {
+		cfg2 := &Config{MoxieConfig: &MoxieConfig{ProviderNames: cfg.MoxieConfig.ProviderNames}}
+		got := cfg2.ProviderNamesForService("Unknown")
+		if got == nil {
+			t.Fatal("expected non-nil empty slice, got nil")
+		}
+		if len(got) != 0 {
+			t.Fatalf("expected empty slice, got %v", got)
+		}
+	})
+}
+
 func TestGetServiceVariants(t *testing.T) {
 	cfg := &Config{
 		ServiceVariants: map[string][]string{

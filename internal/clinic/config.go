@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -223,6 +224,9 @@ type MoxieConfig struct {
 	ServiceProviderCount map[string]int `json:"service_provider_count,omitempty"`
 	// ProviderNames maps provider IDs to display names (e.g., {"33150": "Brandi Sesock"}).
 	ProviderNames map[string]string `json:"provider_names,omitempty"`
+	// ServiceProviders maps service menu item IDs to eligible provider IDs for that specific service.
+	// e.g., {"18430": ["33150", "33151"]}
+	ServiceProviders map[string][]string `json:"service_providers,omitempty"`
 }
 
 // ResolveProviderID returns the Moxie userMedspaId for a provider name (case-insensitive partial match).
@@ -254,18 +258,62 @@ func (c *Config) ResolveProviderID(providerName string) string {
 // ServiceNeedsProviderPreference returns true if the given service (by normalized name)
 // has more than one eligible provider.
 func (c *Config) ServiceNeedsProviderPreference(serviceName string) bool {
-	if c.MoxieConfig == nil || c.MoxieConfig.ServiceProviderCount == nil || c.MoxieConfig.ServiceMenuItems == nil {
+	if c.MoxieConfig == nil || c.MoxieConfig.ServiceProviderCount == nil {
 		return false
+	}
+	itemID := c.ServiceMenuItemID(serviceName)
+	if itemID == "" {
+		return false
+	}
+	return c.MoxieConfig.ServiceProviderCount[itemID] > 1
+}
+
+// ServiceMenuItemID resolves a patient-facing service name to a Moxie serviceMenuItemId.
+func (c *Config) ServiceMenuItemID(serviceName string) string {
+	if c.MoxieConfig == nil || c.MoxieConfig.ServiceMenuItems == nil {
+		return ""
 	}
 	resolved := c.ResolveServiceName(serviceName)
 	itemID := c.MoxieConfig.ServiceMenuItems[strings.ToLower(resolved)]
 	if itemID == "" {
 		itemID = c.MoxieConfig.ServiceMenuItems[strings.ToLower(serviceName)]
 	}
-	if itemID == "" {
-		return false
+	return itemID
+}
+
+// ProviderNamesForService returns deterministic provider display names for a service.
+// Returns an empty (non-nil) slice unless we have an explicit service->provider mapping
+// with resolvable names.
+func (c *Config) ProviderNamesForService(serviceName string) []string {
+	empty := []string{}
+	if c.MoxieConfig == nil || c.MoxieConfig.ProviderNames == nil || c.MoxieConfig.ServiceProviders == nil {
+		return empty
 	}
-	return c.MoxieConfig.ServiceProviderCount[itemID] > 1
+
+	itemID := c.ServiceMenuItemID(serviceName)
+	if itemID == "" {
+		return empty
+	}
+	ids := c.MoxieConfig.ServiceProviders[itemID]
+	if len(ids) == 0 {
+		return empty
+	}
+
+	names := make([]string, 0, len(ids))
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		name := strings.TrimSpace(c.MoxieConfig.ProviderNames[id])
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // DefaultBookingURL is the default test booking page for development/demo purposes.
