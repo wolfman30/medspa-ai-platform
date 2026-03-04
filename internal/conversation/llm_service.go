@@ -321,16 +321,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 			(prefs.PreferredDays != "" || prefs.PreferredTimes != "") {
 			resolvedService := startCfg.ResolveServiceName(prefs.ServiceInterest)
 			if startCfg.ServiceNeedsProviderPreference(resolvedService) {
-				providerNames := make([]string, 0)
-				if startCfg.MoxieConfig != nil {
-					for _, name := range startCfg.MoxieConfig.ProviderNames {
-						providerNames = append(providerNames, name)
-					}
-				}
-				var providerList string
-				if len(providerNames) > 0 {
-					providerList = fmt.Sprintf(" Available providers: %s.", strings.Join(providerNames, ", "))
-				}
+				providerList := buildProviderGuardrailList(startCfg, resolvedService)
 				history = append(history, ChatMessage{
 					Role: ChatRoleSystem,
 					Content: fmt.Sprintf("[SYSTEM GUARDRAIL] The patient wants %s which has multiple providers.%s "+
@@ -692,6 +683,17 @@ func (s *LLMService) AppendAssistantMessage(ctx context.Context, conversationID,
 		Content: message,
 	})
 	return s.history.Save(ctx, conversationID, history)
+}
+
+func buildProviderGuardrailList(cfg *clinic.Config, resolvedService string) string {
+	if cfg == nil {
+		return ""
+	}
+	providerNames := cfg.ProviderNamesForService(resolvedService)
+	if len(providerNames) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" Available providers for %s: %s.", resolvedService, strings.Join(providerNames, ", "))
 }
 
 // ClearLeadPreferences resets scheduling preferences for a lead identified by
