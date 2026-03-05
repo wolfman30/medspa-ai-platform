@@ -195,7 +195,7 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if req.AIPersona != nil {
 		cfg.AIPersona = *req.AIPersona
 	}
-	if req.ServiceAliases != nil {
+	if len(req.ServiceAliases) > 0 {
 		cfg.ServiceAliases = req.ServiceAliases
 	}
 	if req.MoxieConfig != nil {
@@ -213,16 +213,16 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			if mc.DefaultProviderID != "" {
 				cfg.MoxieConfig.DefaultProviderID = mc.DefaultProviderID
 			}
-			if mc.ProviderNames != nil {
+			if len(mc.ProviderNames) > 0 {
 				cfg.MoxieConfig.ProviderNames = mc.ProviderNames
 			}
-			if mc.ServiceMenuItems != nil {
+			if len(mc.ServiceMenuItems) > 0 {
 				cfg.MoxieConfig.ServiceMenuItems = mc.ServiceMenuItems
 			}
-			if mc.ServiceProviders != nil {
+			if len(mc.ServiceProviders) > 0 {
 				cfg.MoxieConfig.ServiceProviders = mc.ServiceProviders
 			}
-			if mc.ServiceProviderCount != nil {
+			if len(mc.ServiceProviderCount) > 0 {
 				cfg.MoxieConfig.ServiceProviderCount = mc.ServiceProviderCount
 			}
 		}
@@ -233,16 +233,16 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if req.StripeAccountID != "" {
 		cfg.StripeAccountID = req.StripeAccountID
 	}
-	if req.BookingPolicies != nil {
+	if len(req.BookingPolicies) > 0 {
 		cfg.BookingPolicies = req.BookingPolicies
 	}
-	if req.ServicePriceText != nil {
+	if len(req.ServicePriceText) > 0 {
 		cfg.ServicePriceText = req.ServicePriceText
 	}
-	if req.ServiceDepositAmountCents != nil {
+	if len(req.ServiceDepositAmountCents) > 0 {
 		cfg.ServiceDepositAmountCents = req.ServiceDepositAmountCents
 	}
-	if req.ServiceVariants != nil {
+	if len(req.ServiceVariants) > 0 {
 		cfg.ServiceVariants = req.ServiceVariants
 	}
 	if req.VoiceAIEnabled != nil {
