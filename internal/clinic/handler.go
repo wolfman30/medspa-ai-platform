@@ -198,7 +198,33 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.ServiceAliases = req.ServiceAliases
 	}
 	if req.MoxieConfig != nil {
-		cfg.MoxieConfig = req.MoxieConfig
+		if cfg.MoxieConfig == nil {
+			cfg.MoxieConfig = req.MoxieConfig
+		} else {
+			// Merge MoxieConfig fields — only overwrite non-zero values
+			mc := req.MoxieConfig
+			if mc.MedspaID != "" {
+				cfg.MoxieConfig.MedspaID = mc.MedspaID
+			}
+			if mc.MedspaSlug != "" {
+				cfg.MoxieConfig.MedspaSlug = mc.MedspaSlug
+			}
+			if mc.DefaultProviderID != "" {
+				cfg.MoxieConfig.DefaultProviderID = mc.DefaultProviderID
+			}
+			if mc.ProviderNames != nil {
+				cfg.MoxieConfig.ProviderNames = mc.ProviderNames
+			}
+			if mc.ServiceMenuItems != nil {
+				cfg.MoxieConfig.ServiceMenuItems = mc.ServiceMenuItems
+			}
+			if mc.ServiceProviders != nil {
+				cfg.MoxieConfig.ServiceProviders = mc.ServiceProviders
+			}
+			if mc.ServiceProviderCount != nil {
+				cfg.MoxieConfig.ServiceProviderCount = mc.ServiceProviderCount
+			}
+		}
 	}
 	if req.PaymentProvider != "" {
 		cfg.PaymentProvider = req.PaymentProvider
