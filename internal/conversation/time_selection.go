@@ -127,14 +127,28 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 	// If noPreference returned nothing (Moxie quirk) or patient chose a provider,
 	// query per-provider. Fan out to all providers for "no preference" patients.
 	if result == nil {
-		if noProviderPref && mc.ProviderNames != nil {
-			// Fan out: query each provider and merge results
+		log.Printf("[DEBUG] fan-out check: noProviderPref=%v providerNames=%d serviceProviders=%d serviceMenuItemID=%s",
+			noProviderPref, len(mc.ProviderNames), len(mc.ServiceProviders), serviceMenuItemID)
+		if noProviderPref && mc.ProviderNames != nil && len(mc.ProviderNames) > 0 {
+			// Fan out: prefer service-specific providers if available
+			providerIDs := mc.ServiceProviders[serviceMenuItemID]
+			if len(providerIDs) == 0 {
+				// Fall back to all providers
+				providerIDs = make([]string, 0, len(mc.ProviderNames))
+				for pid := range mc.ProviderNames {
+					providerIDs = append(providerIDs, pid)
+				}
+			}
+			log.Printf("[DEBUG] fan-out: querying %d providers for service %s", len(providerIDs), serviceMenuItemID)
 			result = &moxieclient.AvailabilityResult{}
-			for pid := range mc.ProviderNames {
+			for _, pid := range providerIDs {
 				r, err := moxie.GetAvailableSlots(ctx, mc.MedspaID, startDate, endDate, serviceMenuItemID, false, pid)
 				if err != nil {
+					log.Printf("[DEBUG] fan-out: provider %s error: %v", pid, err)
 					continue // skip failing providers
 				}
+				slotCount := countMoxieSlots(r)
+				log.Printf("[DEBUG] fan-out: provider %s returned %d slots", pid, slotCount)
 				result.Dates = append(result.Dates, r.Dates...)
 			}
 		} else {
