@@ -1369,3 +1369,25 @@ export async function updateBudget(
   });
   if (!res.ok) throw new Error(await readErrorMessage(res));
 }
+
+
+// ---------- Agent Team ----------
+
+export interface AgentStatus {
+  id: string;
+  name: string;
+  emoji: string;
+  role: string;
+  goals: string[];
+  skills: string[];
+  schedule: string;
+  enabled: boolean;
+}
+
+export async function listAgents(): Promise<{ agents: AgentStatus[] }> {
+  const res = await fetch(`${API_BASE}/admin/agents/status`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}

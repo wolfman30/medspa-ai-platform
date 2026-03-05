@@ -270,6 +270,9 @@ func New(cfg *Config) http.Handler {
 				admin.Post("/10dlc/campaigns", cfg.AdminMessaging.CreateCampaign)
 				admin.Post("/messages:send", cfg.AdminMessaging.SendMessage)
 			}
+			// Agent team status
+			admin.Get("/agents/status", handlers.HandleAgentsStatus)
+
 			// Morning briefs
 			if cfg.AdminBriefs != nil {
 				admin.Get("/briefs", cfg.AdminBriefs.ListBriefs)
