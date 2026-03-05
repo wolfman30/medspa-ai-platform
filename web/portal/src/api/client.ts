@@ -1413,3 +1413,53 @@ export async function getResearchDocs(): Promise<{ docs: ResearchDoc[] }> {
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
+
+// --- Leads API ---
+
+export interface Lead {
+  id: string;
+  org_id: string;
+  phone: string;
+  name?: string;
+  email?: string;
+  status: string;
+  source?: string;
+  interested_services?: string[];
+  last_contact_at?: string;
+  conversation_job_count: number;
+  payment_total_cents: number;
+  booking_count: number;
+  tags?: string[];
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeadsListResponse {
+  leads: Lead[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export async function listLeads(
+  orgId: string,
+  params?: { page?: number; page_size?: number; status?: string; search?: string; sort_by?: string; sort_order?: string },
+  scope: ApiScope = 'admin',
+): Promise<LeadsListResponse> {
+  void scope;
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.page_size) qs.set('page_size', String(params.page_size));
+  if (params?.status) qs.set('status', params.status);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.sort_by) qs.set('sort_by', params.sort_by);
+  if (params?.sort_order) qs.set('sort_order', params.sort_order);
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  // Leads endpoint is currently admin-only; portal scope falls back to admin path
+  const url = `${API_BASE}/admin/clinics/${orgId}/leads${query}`;
+  const res = await fetch(url, { headers: await getHeaders() });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}

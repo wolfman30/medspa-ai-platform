@@ -12,6 +12,7 @@ import { ProspectTracker } from './components/ProspectTracker';
 import { CEODashboard } from './components/CEODashboard';
 import { StoriesBoard } from './components/StoriesBoard';
 import { ContentCalendar } from './components/ContentCalendar';
+import { LeadsList } from './components/LeadsList';
 import { FinanceDashboard } from './components/FinanceDashboard';
 import { AgentTeamCard } from './components/AgentTeamCard';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
@@ -37,7 +38,8 @@ type AppView =
   | 'stories'
   | 'content'
   | 'finances'
-  | 'agents';
+  | 'agents'
+  | 'leads';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -396,6 +398,13 @@ function AuthenticatedApp() {
                   Deposits
                 </button>
                 <button
+                  onClick={() => setView('leads')}
+                  aria-current={view === 'leads' ? 'page' : undefined}
+                  className={view === 'leads' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                >
+                  Leads
+                </button>
+                <button
                   onClick={() => setView('settings')}
                   aria-current={view === 'settings' ? 'page' : undefined}
                   className={view === 'settings' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
@@ -471,6 +480,11 @@ function AuthenticatedApp() {
           <AgentTeamCard />
         ) : view === 'finances' ? (
           <FinanceDashboard />
+        ) : view === 'leads' ? (
+          <LeadsList
+            orgId={orgId}
+            scope={dataScope}
+          />
         ) : view === 'prospects' ? (
           <ProspectTracker />
         ) : view === 'conversation-detail' && selectedConversationId ? (
@@ -549,6 +563,11 @@ function AuthenticatedApp() {
           <DepositList
             orgId={orgId}
             onSelect={(id) => { setSelectedDepositId(id); setView('deposit-detail'); }}
+            scope={dataScope}
+          />
+        ) : view === 'leads' ? (
+          <LeadsList
+            orgId={orgId}
             scope={dataScope}
           />
         ) : view === 'conversations' ? (

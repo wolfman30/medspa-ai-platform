@@ -156,6 +156,14 @@ type Config struct {
 	NovaSonicVoice      string // Nova Sonic voice ID (tiffany, matthew, amy)
 	NovaSonicStreamURL  string // Public WSS URL for Telnyx media streaming, e.g. "wss://api-dev.example.com/ws/voice"
 
+	// ElevenLabs TTS Configuration (opt-in: only active when API key is set)
+	ElevenLabsAPIKey     string // from ELEVENLABS_API_KEY
+	ElevenLabsVoiceID    string // default: Lauren B (l4Coq6695JDX9xtLqXDE)
+	ElevenLabsModelID    string // default: eleven_flash_v2_5
+	ElevenLabsStability  float64
+	ElevenLabsSimilarity float64
+	ElevenLabsSpeed      float64
+
 	// Instagram DM Channel Configuration
 	InstagramPageAccessToken string // Meta Page Access Token for sending messages
 	InstagramAppSecret       string // Meta App Secret for webhook signature verification
@@ -374,6 +382,14 @@ func Load() *Config {
 		NovaSonicVoice:      getEnv("NOVA_SONIC_VOICE", "tiffany"),
 		NovaSonicStreamURL:  getEnv("NOVA_SONIC_STREAM_URL", ""),
 
+		// ElevenLabs TTS
+		ElevenLabsAPIKey:     getEnv("ELEVENLABS_API_KEY", ""),
+		ElevenLabsVoiceID:    getEnv("ELEVENLABS_VOICE_ID", "l4Coq6695JDX9xtLqXDE"),
+		ElevenLabsModelID:    getEnv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"),
+		ElevenLabsStability:  getEnvAsFloat("ELEVENLABS_STABILITY", 0.5),
+		ElevenLabsSimilarity: getEnvAsFloat("ELEVENLABS_SIMILARITY", 0.75),
+		ElevenLabsSpeed:      getEnvAsFloat("ELEVENLABS_SPEED", 1.0),
+
 		// Instagram DM
 		InstagramPageAccessToken: getEnv("INSTAGRAM_PAGE_ACCESS_TOKEN", ""),
 		InstagramAppSecret:       getEnv("INSTAGRAM_APP_SECRET", ""),
@@ -424,6 +440,14 @@ func getEnvAsInt(key string, defaultValue int) int {
 func getEnvAsBool(key string, defaultValue bool) bool {
 	valueStr := getEnv(key, "")
 	if value, err := strconv.ParseBool(valueStr); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsFloat(key string, defaultValue float64) float64 {
+	valueStr := getEnv(key, "")
+	if value, err := strconv.ParseFloat(valueStr, 64); err == nil {
 		return value
 	}
 	return defaultValue
