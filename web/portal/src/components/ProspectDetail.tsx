@@ -203,12 +203,43 @@ export function ProspectDetail({ prospect: p, onBack, onRefresh, dark = false }:
               <StatusIndicator on={p['10dlc']} label="10DLC Approved" />
               <StatusIndicator on={p.smsWorking} label="SMS Working" />
             </div>
-            {p.notes && (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <div className="text-xs text-slate-500">Notes</div>
-                <p className="text-sm text-slate-300 mt-1">{p.notes}</p>
-              </div>
-            )}
+            {p.notes && (() => {
+              const scriptMarker = '--- OUTREACH SCRIPT';
+              const idx = p.notes.indexOf(scriptMarker);
+              const generalNotes = idx >= 0 ? p.notes.slice(0, idx).trim() : p.notes;
+              const scriptRaw = idx >= 0 ? p.notes.slice(p.notes.indexOf('---', idx + 3) + 3).trim() : '';
+              return (
+                <>
+                  {generalNotes && (
+                    <div className="mt-4 pt-4 border-t border-slate-800">
+                      <div className="text-xs text-slate-500">Notes</div>
+                      <p className="text-sm text-slate-300 mt-1 whitespace-pre-wrap">{generalNotes}</p>
+                    </div>
+                  )}
+                  {scriptRaw && (
+                    <div className="mt-4 pt-4 border-t border-slate-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs text-slate-500">📋 Outreach Script</div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(scriptRaw);
+                            const btn = document.getElementById('copy-script-btn');
+                            if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000); }
+                          }}
+                          id="copy-script-btn"
+                          className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
+                        >
+                          📋 Copy
+                        </button>
+                      </div>
+                      <pre className="text-sm text-slate-200 bg-slate-900/80 border border-slate-700 rounded-lg p-4 whitespace-pre-wrap font-sans leading-relaxed max-h-96 overflow-y-auto">
+                        {scriptRaw}
+                      </pre>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
 
