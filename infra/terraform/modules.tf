@@ -140,6 +140,10 @@ module "ecs_fargate" {
     GITHUB_WEBHOOK_SECRET   = "${module.secrets.secret_arn}:GITHUB_WEBHOOK_SECRET::"
     TELEGRAM_BOT_TOKEN      = "${module.secrets.secret_arn}:TELEGRAM_BOT_TOKEN::"
     ANDREW_TELEGRAM_CHAT_ID = "${module.secrets.secret_arn}:ANDREW_TELEGRAM_CHAT_ID::"
+    PLAID_CLIENT_ID         = "${module.secrets.secret_arn}:PLAID_CLIENT_ID::"
+    PLAID_SECRET            = "${module.secrets.secret_arn}:PLAID_SECRET::"
+    PLAID_ACCESS_TOKEN      = "${module.secrets.secret_arn}:PLAID_ACCESS_TOKEN::"
+    PLAID_ENV               = "${module.secrets.secret_arn}:PLAID_ENV::"
   }
 
   secret_arns = [module.secrets.secret_arn, module.redis.auth_token_secret_arn]
