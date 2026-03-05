@@ -1,7 +1,9 @@
 package conversation
 
 import (
+	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
@@ -238,6 +240,30 @@ func extractPreferences(history []ChatMessage, serviceAliases map[string]string)
 				}
 				timeStr += ampm
 				times = append(times, timeStr)
+			}
+			if len(times) > 0 {
+				prefs.PreferredTimes = strings.Join(times, ", ")
+				hasPreferences = true
+			}
+		}
+	}
+
+	// Bare number fallback: "after 3", "before 5" (no am/pm — assume PM for 1-7)
+	if !hasPreferences || prefs.PreferredTimes == "" {
+		bareTimeRE := regexp.MustCompile(`(?i)(after|before)\s+(\d{1,2})(?:\s|,|$)`)
+		if matches := bareTimeRE.FindAllStringSubmatch(userMessages, -1); len(matches) > 0 {
+			times := []string{}
+			for _, match := range matches {
+				qualifier := strings.ToLower(match[1])
+				hour, _ := strconv.Atoi(match[2])
+				// Assume PM for ambiguous hours 1-7
+				ampm := "pm"
+				if hour >= 8 && hour <= 11 {
+					ampm = "am"
+				} else if hour == 12 {
+					ampm = "pm"
+				}
+				times = append(times, fmt.Sprintf("%s %d%s", qualifier, hour, ampm))
 			}
 			if len(times) > 0 {
 				prefs.PreferredTimes = strings.Join(times, ", ")
