@@ -30,8 +30,8 @@ const (
 	elevenLabsReadTimeout   = 30 * time.Second
 
 	DefaultVoiceID    = "l4Coq6695JDX9xtLqXDE" // Lauren B
-	DefaultModelID    = "eleven_flash_v2_5"
-	DefaultStability  = 0.5
+	DefaultModelID    = "eleven_v3"
+	DefaultStability  = 0.5 // "Natural" — balanced, closest to original voice
 	DefaultSimilarity = 0.75
 	DefaultSpeed      = 1.0
 )
