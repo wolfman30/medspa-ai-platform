@@ -94,6 +94,7 @@ func (h *StripeWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	} else if processed {
+		h.logger.Info("stripe webhook: already processed", "event_id", evt.ID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -109,6 +110,16 @@ func (h *StripeWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if providerRef == "" {
 		providerRef = session.ID
 	}
+
+	h.logger.Info("stripe webhook: processing checkout",
+		"event_id", evt.ID,
+		"org_id", orgID,
+		"lead_id", leadID,
+		"intent_id", intentID,
+		"from_number", fromNumber,
+		"scheduled_for", scheduledStr,
+		"provider_ref", providerRef,
+	)
 
 	if orgID == "" || leadID == "" || intentID == "" {
 		h.logger.Warn("stripe webhook missing required metadata", "event_id", evt.ID, "metadata", metadata)
