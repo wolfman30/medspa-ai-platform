@@ -321,7 +321,7 @@ func (h *CallControlHandler) speakGreeting(callControlID, from, to string) {
 	// Other options: "Polly.Salli", "Polly.Kendra", "Polly.Ruth" (neural).
 	payload := map[string]interface{}{
 		"payload":      greeting,
-		"voice":        "Polly.Ruth",
+		"voice":        "Polly.Joanna",
 		"language":     "en-US",
 		"client_state": clientState,
 	}
