@@ -38,13 +38,13 @@ const (
 
 // ElevenLabsConfig configures the ElevenLabs TTS client.
 type ElevenLabsConfig struct {
-	APIKey          string
-	VoiceID         string  // default: Lauren B
-	ModelID         string  // default: eleven_flash_v2_5
-	Stability       float64 // 0.0–1.0
-	SimilarityBoost float64 // 0.0–1.0
-	Speed           float64 // 0.5–2.0
-	OutputSampleRate int    // target sample rate (default 8000 for Telnyx)
+	APIKey           string
+	VoiceID          string  // default: Lauren B
+	ModelID          string  // default: eleven_flash_v2_5
+	Stability        float64 // 0.0–1.0
+	SimilarityBoost  float64 // 0.0–1.0
+	Speed            float64 // 0.5–2.0
+	OutputSampleRate int     // target sample rate (default 8000 for Telnyx)
 }
 
 func (c *ElevenLabsConfig) applyDefaults() {
@@ -103,10 +103,10 @@ type ElevenLabsSession struct {
 
 // elevenLabsBOSMessage is the Beginning-of-Stream message.
 type elevenLabsBOSMessage struct {
-	Text                string                    `json:"text"`
-	VoiceSettings       *elevenLabsVoiceSettings  `json:"voice_settings"`
-	GenerationConfig    *elevenLabsGenerationCfg  `json:"generation_config,omitempty"`
-	XIAPIKey            string                    `json:"xi_api_key"`
+	Text             string                   `json:"text"`
+	VoiceSettings    *elevenLabsVoiceSettings `json:"voice_settings"`
+	GenerationConfig *elevenLabsGenerationCfg `json:"generation_config,omitempty"`
+	XIAPIKey         string                   `json:"xi_api_key"`
 }
 
 type elevenLabsVoiceSettings struct {
@@ -131,10 +131,10 @@ type elevenLabsEOSMessage struct {
 
 // elevenLabsResponse is a response from the ElevenLabs WebSocket.
 type elevenLabsResponse struct {
-	Audio         *string `json:"audio"`          // base64 MP3 or PCM
-	IsFinal       bool    `json:"isFinal"`
+	Audio               *string          `json:"audio"` // base64 MP3 or PCM
+	IsFinal             bool             `json:"isFinal"`
 	NormalizedAlignment *json.RawMessage `json:"normalizedAlignment,omitempty"`
-	Error         *struct {
+	Error               *struct {
 		Message string `json:"message"`
 		Code    string `json:"code,omitempty"`
 	} `json:"error,omitempty"`
@@ -342,8 +342,8 @@ func (s *ElevenLabsSession) isClosed() bool {
 // ──────────────────────────────────────────────────────────────────────────────
 
 var (
-	dollarPattern = regexp.MustCompile(`\$(\d+(?:,\d{3})*(?:\.\d{2})?)`)
-	timePattern   = regexp.MustCompile(`(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)`)
+	dollarPattern  = regexp.MustCompile(`\$(\d+(?:,\d{3})*(?:\.\d{2})?)`)
+	timePattern    = regexp.MustCompile(`(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)`)
 	percentPattern = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 )
 

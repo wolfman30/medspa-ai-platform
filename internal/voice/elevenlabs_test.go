@@ -55,12 +55,12 @@ func TestElevenLabsConfigDefaults(t *testing.T) {
 
 func TestElevenLabsConfigPreserved(t *testing.T) {
 	cfg := ElevenLabsConfig{
-		APIKey:          "key",
-		VoiceID:         "custom-voice",
-		ModelID:         "eleven_v3",
-		Stability:       0.8,
-		SimilarityBoost: 0.9,
-		Speed:           1.5,
+		APIKey:           "key",
+		VoiceID:          "custom-voice",
+		ModelID:          "eleven_v3",
+		Stability:        0.8,
+		SimilarityBoost:  0.9,
+		Speed:            1.5,
 		OutputSampleRate: 16000,
 	}
 	cfg.applyDefaults()
