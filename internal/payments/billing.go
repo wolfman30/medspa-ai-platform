@@ -21,7 +21,7 @@ import (
 // This is for AI Wolf Solutions' own billing, NOT Stripe Connect.
 type BillingHandler struct {
 	secretKey  string
-	priceID    string // Stripe Price ID for $497/mo
+	priceID    string // Stripe Price ID for $500/mo (text-back) or $1000/mo (text+voice)
 	successURL string
 	cancelURL  string
 	httpClient *http.Client
@@ -32,7 +32,7 @@ type BillingHandler struct {
 // BillingConfig holds configuration for the billing handler.
 type BillingConfig struct {
 	StripeSecretKey string
-	StripePriceID   string // pre-created Price for $497/mo recurring
+	StripePriceID   string // pre-created Price for $500/mo (text) or $1000/mo (text+voice) recurring
 	SuccessURL      string
 	CancelURL       string
 	Logger          *logging.Logger

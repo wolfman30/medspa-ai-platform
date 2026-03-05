@@ -340,22 +340,22 @@ func formatSlotForDisplay(t time.Time) string {
 // FormatTimeSlotsForSMS formats slots as a numbered list for SMS
 func FormatTimeSlotsForSMS(slots []PresentedSlot, service string, exactMatch bool) string {
 	if len(slots) == 0 {
-		return fmt.Sprintf("I couldn't find any available times for %s in the next week. Would you like me to check different dates or times?", service)
+		return fmt.Sprintf("Hmm, I'm not finding any open times for %s in the next week 😕\n\nWant me to check different dates or times?", service)
 	}
 
 	var sb strings.Builder
 
 	if exactMatch {
-		sb.WriteString(fmt.Sprintf("Great! I found these available times for %s:\n\n", service))
+		sb.WriteString(fmt.Sprintf("Here's what's open for %s 👇\n\n", service))
 	} else {
-		sb.WriteString(fmt.Sprintf("I couldn't find exact matches for your preferences, but here are the closest available times for %s:\n\n", service))
+		sb.WriteString(fmt.Sprintf("Closest I could find for %s 👇\n\n", service))
 	}
 
 	for _, slot := range slots {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", slot.Index, slot.TimeStr))
+		sb.WriteString(fmt.Sprintf("  %d → %s\n", slot.Index, slot.TimeStr))
 	}
 
-	sb.WriteString("\nReply with the number of your preferred time.")
+	sb.WriteString("\nJust reply with the number that works best!")
 
 	return sb.String()
 }

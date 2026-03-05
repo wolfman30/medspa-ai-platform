@@ -217,15 +217,15 @@ func (d *depositDispatcher) SendDeposit(ctx context.Context, msg MessageRequest,
 		// Build the deposit SMS — explain what the deposit is + policies + link
 		amount := fmt.Sprintf("$%.2f", float64(intent.AmountCents)/100)
 		var body string
-		depositExplainer := fmt.Sprintf("Your %s deposit applies toward your treatment cost and secures your appointment. Please note: deposits are forfeited for no-shows or late cancellations.", amount)
+		depositExplainer := fmt.Sprintf("💳 %s deposit — applies toward your treatment cost and secures your spot.\n\n⚠️ Deposits are forfeited for no-shows or late cancellations.", amount)
 		if len(intent.BookingPolicies) > 0 {
-			body = depositExplainer + "\n\nBooking policies:\n"
+			body = depositExplainer + "\n\n📋 Booking policies:\n"
 			for _, policy := range intent.BookingPolicies {
-				body += "• " + policy + "\n"
+				body += "  ✅ " + policy + "\n"
 			}
-			body += fmt.Sprintf("\nComplete your deposit here:\n%s", checkoutURL)
+			body += fmt.Sprintf("\n→ Complete your deposit here:\n%s", checkoutURL)
 		} else {
-			body = fmt.Sprintf("%s\n\nComplete your deposit here:\n%s", depositExplainer, checkoutURL)
+			body = fmt.Sprintf("%s\n\n→ Complete your deposit here:\n%s", depositExplainer, checkoutURL)
 		}
 		conversationID := strings.TrimSpace(resp.ConversationID)
 		if conversationID == "" {

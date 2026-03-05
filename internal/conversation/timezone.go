@@ -54,10 +54,11 @@ func FormatAppointmentConfirmation(service string, appointmentTime time.Time, cl
 	timeStr := appointmentTime.Format("3:04 PM") + " " + tzAbbrev
 
 	return fmt.Sprintf(
-		"Payment received and your appointment is booked! 🎉\n\n"+
-			"📋 %s\n"+
+		"You're all booked! 🎉\n\n"+
+			"💉 %s\n"+
 			"📅 %s at %s\n"+
 			"📍 %s\n\n"+
-			"Reminder: There is a 24-hour cancellation policy. Cancellations made less than 24 hours before your appointment are non-refundable.",
+			"⚠️ 24-hour cancellation policy — cancellations made less than 24 hours before your appointment are non-refundable.\n\n"+
+			"See you there! ✨",
 		service, dateStr, timeStr, clinicName)
 }

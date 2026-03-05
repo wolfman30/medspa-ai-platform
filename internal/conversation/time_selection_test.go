@@ -94,25 +94,25 @@ func TestFormatTimeSlotsForSMS(t *testing.T) {
 		result := FormatTimeSlotsForSMS(slots, "Botox", true)
 
 		assert.Contains(t, result, "Botox")
-		assert.Contains(t, result, "1. Mon Feb 10 at 10:00 AM")
-		assert.Contains(t, result, "2. Mon Feb 10 at 11:30 AM")
-		assert.Contains(t, result, "3. Thu Feb 13 at 2:00 PM")
-		assert.Contains(t, result, "Reply with the number")
-		assert.NotContains(t, result, "couldn't find exact matches")
+		assert.Contains(t, result, "1 → Mon Feb 10 at 10:00 AM")
+		assert.Contains(t, result, "2 → Mon Feb 10 at 11:30 AM")
+		assert.Contains(t, result, "3 → Thu Feb 13 at 2:00 PM")
+		assert.Contains(t, result, "reply with the number")
+		assert.NotContains(t, result, "Closest")
 	})
 
 	t.Run("no exact match", func(t *testing.T) {
 		result := FormatTimeSlotsForSMS(slots, "Botox", false)
 
-		assert.Contains(t, result, "couldn't find exact matches")
+		assert.Contains(t, result, "Closest")
 		assert.Contains(t, result, "Botox")
-		assert.Contains(t, result, "1. Mon Feb 10 at 10:00 AM")
+		assert.Contains(t, result, "1 → Mon Feb 10 at 10:00 AM")
 	})
 
 	t.Run("empty slots", func(t *testing.T) {
 		result := FormatTimeSlotsForSMS([]PresentedSlot{}, "Botox", true)
 
-		assert.Contains(t, result, "couldn't find any available times")
+		assert.Contains(t, result, "not finding any open times")
 		assert.Contains(t, result, "Botox")
 	})
 }
