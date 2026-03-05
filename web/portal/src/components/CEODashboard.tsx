@@ -6,6 +6,7 @@ import { TestingStatusCard } from './TestingStatusCard';
 import { LeadLeakAuditCard } from './LeadLeakAuditCard';
 import { SalesScriptsCard } from './SalesScriptsCard';
 import { RevenueAttributionCard } from './RevenueAttributionCard';
+import { ResearchIntelCard } from './ResearchIntelCard';
 
 interface ProspectEvent {
   id: number;
@@ -386,6 +387,9 @@ export function CEODashboard() {
 
         {/* Morning Briefs */}
         <MorningBriefsCard />
+
+        {/* Research Intelligence */}
+        <ResearchIntelCard />
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Weekly Brief */}

@@ -1391,3 +1391,25 @@ export async function listAgents(): Promise<{ agents: AgentStatus[] }> {
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Research Intelligence
+// ---------------------------------------------------------------------------
+
+export interface ResearchDoc {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  tags: string[];
+  content: string;
+  updatedAt: string;
+}
+
+export async function getResearchDocs(): Promise<{ docs: ResearchDoc[] }> {
+  const res = await fetch(`${API_BASE}/admin/research`, {
+    headers: await getHeaders(),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
