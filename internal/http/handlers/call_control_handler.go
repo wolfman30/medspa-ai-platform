@@ -161,22 +161,10 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		h.startStreaming(callControlID, from, to)
 
 	case "streaming.started":
-		// Step 2: Stream is live — NOW speak the greeting.
-		// Nova Sonic is already listening, so when the caller responds
-		// after the greeting, there's zero dead zone.
-		speakFrom, speakTo := h.extractCallerContext(event)
-		if speakFrom == "" {
-			speakFrom = from
-		}
-		if speakTo == "" {
-			speakTo = to
-		}
-		h.speakGreeting(callControlID, speakFrom, speakTo)
-
-	case "speak.ended":
-		// Step 3: Greeting finished. Nova Sonic has been listening throughout.
-		// Caller can now speak and Nova Sonic will respond.
-		h.logger.Info("call-control: greeting finished, Nova Sonic ready",
+		// Stream is live — Nova Sonic handles the greeting via its system prompt.
+		// No Telnyx TTS needed; Nova Sonic's voice is higher quality and avoids
+		// the competing-greetings problem.
+		h.logger.Info("call-control: streaming started, Nova Sonic will greet caller",
 			"call_control_id", callControlID,
 		)
 
