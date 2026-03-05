@@ -9,7 +9,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/wolfman30/medspa-ai-platform/internal/moxie"
+	"github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 

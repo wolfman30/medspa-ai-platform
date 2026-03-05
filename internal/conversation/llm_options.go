@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 )
 
 // DepositConfig allows callers to configure defaults used when the LLM signals a deposit.

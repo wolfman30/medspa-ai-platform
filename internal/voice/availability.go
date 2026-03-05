@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 )
 
 // FetchAvailabilitySummary pre-fetches available slots for the clinic's top services

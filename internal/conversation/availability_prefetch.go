@@ -10,7 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 

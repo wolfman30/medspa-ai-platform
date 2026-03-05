@@ -10,8 +10,8 @@ import (
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	"github.com/wolfman30/medspa-ai-platform/internal/moxie"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────

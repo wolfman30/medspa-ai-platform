@@ -16,9 +16,9 @@ import (
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/aesthetic"
+	moxie "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/nextech"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	moxie "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
