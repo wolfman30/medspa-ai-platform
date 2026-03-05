@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 )
 
 // FetchAvailableTimesFromMoxieAPI fetches available time slots directly from

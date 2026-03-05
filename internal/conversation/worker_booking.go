@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 )
 
 func (w *Worker) handleMoxieBooking(ctx context.Context, msg MessageRequest, req *BookingRequest) {

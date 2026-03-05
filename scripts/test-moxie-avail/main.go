@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 

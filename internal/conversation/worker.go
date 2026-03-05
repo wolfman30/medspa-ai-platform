@@ -13,9 +13,9 @@ import (
 
 	"github.com/wolfman30/medspa-ai-platform/internal/booking"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
-	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/moxie"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
