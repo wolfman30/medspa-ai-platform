@@ -41,6 +41,9 @@ func (d *OutboxDispatcher) Handle(ctx context.Context, entry events.OutboxEntry)
 	case "payments.deposit.requested.v1":
 		// Conversation layer does not consume deposit requests; ignore gracefully.
 		return nil
+	case "messaging.message.sent.v1":
+		// Outbound message confirmations — written for audit/observability only.
+		return nil
 	default:
 		return fmt.Errorf("conversation: unhandled outbox type %s", entry.EventType)
 	}
