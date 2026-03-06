@@ -779,6 +779,37 @@ export async function getDepositStats(
   return res.json();
 }
 
+// Clinic Stats API
+
+export interface ClinicStats {
+  org_id: string;
+  conversations_started: number;
+  deposits_requested: number;
+  deposits_paid: number;
+  deposit_amount_total_cents: number;
+  period_start: string;
+  period_end: string;
+}
+
+export async function getClinicStats(
+  orgId: string,
+  start?: string,
+  end?: string,
+): Promise<ClinicStats> {
+  const params = new URLSearchParams();
+  if (start) params.set('start', start);
+  if (end) params.set('end', end);
+  const qs = params.toString();
+  const res = await fetch(
+    `${API_BASE}/admin/clinics/${orgId}/stats${qs ? '?' + qs : ''}`,
+    { headers: await getHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json();
+}
+
 // Notification Settings API
 
 export interface NotificationSettings {
