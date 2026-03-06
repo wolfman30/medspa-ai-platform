@@ -151,12 +151,18 @@ func FetchAvailableTimesFromMoxieAPIWithProvider(
 			}
 			seen[key] = true
 			if matchesTimePreferences(slotLocal, prefs) {
-				allSlots = append(allSlots, PresentedSlot{
+				ps := PresentedSlot{
 					DateTime:  slotLocal,
 					TimeStr:   formatSlotForDisplay(slotLocal),
 					Service:   serviceName,
 					Available: true,
-				})
+				}
+				if slot.End != "" {
+					if endLocal, err := ParseSlotTime(slot.End, cfg.Timezone); err == nil {
+						ps.EndDateTime = endLocal
+					}
+				}
+				allSlots = append(allSlots, ps)
 			}
 		}
 	}

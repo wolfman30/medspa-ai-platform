@@ -12,11 +12,12 @@ import (
 
 // PresentedSlot represents a time slot that was presented to the user
 type PresentedSlot struct {
-	Index     int       // 1-based index shown to user
-	DateTime  time.Time // Full date and time
-	TimeStr   string    // Display string like "Mon Feb 10 at 10:00 AM"
-	Service   string    // Service name
-	Available bool      // Whether it was available when presented
+	Index       int       // 1-based index shown to user
+	DateTime    time.Time // Full date and time
+	EndDateTime time.Time // End date and time (from Moxie slot)
+	TimeStr     string    // Display string like "Mon Feb 10 at 10:00 AM"
+	Service     string    // Service name
+	Available   bool      // Whether it was available when presented
 }
 
 // TimeSelectionState tracks the state of time selection for a conversation

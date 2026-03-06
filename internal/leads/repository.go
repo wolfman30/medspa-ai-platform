@@ -23,8 +23,9 @@ type SchedulingPreferences struct {
 
 // SelectedAppointment captures the specific time slot selected by the lead
 type SelectedAppointment struct {
-	DateTime *time.Time // The specific date/time selected
-	Service  string     // The specific service selected
+	DateTime    *time.Time // The specific date/time selected
+	EndDateTime *time.Time // The end date/time for the slot
+	Service     string     // The specific service selected
 }
 
 // ListLeadsFilter defines filtering options for listing leads
@@ -211,6 +212,7 @@ func (r *InMemoryRepository) UpdateSelectedAppointment(ctx context.Context, lead
 	}
 
 	lead.SelectedDateTime = appt.DateTime
+	lead.SelectedEndDateTime = appt.EndDateTime
 	if appt.Service != "" {
 		lead.SelectedService = appt.Service
 	}
@@ -257,6 +259,7 @@ func (r *InMemoryRepository) ClearSelectedAppointment(ctx context.Context, leadI
 		return ErrLeadNotFound
 	}
 	lead.SelectedDateTime = nil
+	lead.SelectedEndDateTime = nil
 	lead.SelectedService = ""
 	return nil
 }

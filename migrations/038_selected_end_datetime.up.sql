@@ -1,0 +1,1 @@
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS selected_end_datetime TIMESTAMPTZ;
