@@ -99,6 +99,14 @@ var agentDefinitions = []AgentStatus{
 		Enabled:  true,
 	},
 	{
+		ID: "taskmaster", Name: "Taskmaster", Emoji: "📋",
+		Role:     "Own the Stories board — track all work, flag stale cards, enforce accountability",
+		Goals:    []string{"0 stale cards (>48h)", "100% work tracked", "↑ daily velocity"},
+		Skills:   []string{"board-monitoring", "card-creation", "velocity-reporting"},
+		Schedule: "3x/day (8AM, 1PM, 8PM ET)",
+		Enabled:  true,
+	},
+	{
 		ID: "memory", Name: "Memory Agent", Emoji: "🧠",
 		Role:     "Distill daily logs into long-term memory",
 		Goals:    []string{"MEMORY.md < 500 lines", "high-signal content", "clean archives"},
