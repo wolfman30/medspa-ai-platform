@@ -59,19 +59,25 @@ func (h *GitHubWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("X-GitHub-Event") != "workflow_run" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	var evt githubWorkflowRunEvent
-	if err := json.Unmarshal(payload, &evt); err != nil {
-		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
-		return
-	}
-
-	if evt.Action == "completed" {
-		h.handleCompleted(r.Context(), evt)
+	switch r.Header.Get("X-GitHub-Event") {
+	case "workflow_run":
+		var evt githubWorkflowRunEvent
+		if err := json.Unmarshal(payload, &evt); err != nil {
+			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+		if evt.Action == "completed" {
+			h.handleCompleted(r.Context(), evt)
+		}
+	case "pull_request":
+		var evt githubPullRequestEvent
+		if err := json.Unmarshal(payload, &evt); err != nil {
+			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+		h.handlePullRequest(r.Context(), evt)
+	default:
+		// Unhandled event type — ignore
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -183,6 +189,43 @@ func (n *TelegramNotifier) Notify(ctx context.Context, message string) error {
 		return fmt.Errorf("telegram API error: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	return nil
+}
+
+type githubPullRequestEvent struct {
+	Action      string `json:"action"`
+	Number      int    `json:"number"`
+	PullRequest struct {
+		Title   string `json:"title"`
+		HTMLURL string `json:"html_url"`
+		User    struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	} `json:"pull_request"`
+}
+
+func (h *GitHubWebhookHandler) handlePullRequest(ctx context.Context, evt githubPullRequestEvent) {
+	switch evt.Action {
+	case "opened", "synchronize", "reopened":
+	default:
+		return
+	}
+
+	pr := evt.PullRequest
+	h.logger.Info("pull request event",
+		"action", evt.Action,
+		"number", evt.Number,
+		"title", pr.Title,
+		"author", pr.User.Login,
+	)
+
+	msg := fmt.Sprintf("🔍 PR #%d %s by %s: %s\nReview needed.\n%s",
+		evt.Number, evt.Action, pr.User.Login, pr.Title, pr.HTMLURL)
+
+	if h.notifier != nil {
+		if err := h.notifier.Notify(ctx, msg); err != nil {
+			h.logger.Error("failed to send PR notification", "error", err)
+		}
+	}
 }
 
 type githubWorkflowRunEvent struct {
