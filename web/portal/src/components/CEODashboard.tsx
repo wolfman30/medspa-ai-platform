@@ -257,7 +257,7 @@ export function CEODashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo-wolf.jpg" alt="AI Wolf Solutions" style={{width:36,height:36,borderRadius:'50%',opacity:0.9}} />
+            <img src="/logo-wolf.jpg" alt="AI Wolf Solutions" style={{width:36,height:36,borderRadius:'50%',opacity:0.9,objectFit:'cover'}} />
             <div>
               <h1 className="text-2xl font-bold tracking-tight">CEO Dashboard</h1>
               <p className="text-sm text-slate-400 mt-1">MedSpa Concierge — Enterprise Revenue Engine → $50M Exit</p>
