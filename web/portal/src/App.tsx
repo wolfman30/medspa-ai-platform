@@ -15,6 +15,7 @@ import { ContentCalendar } from './components/ContentCalendar';
 import { LeadsList } from './components/LeadsList';
 import { FinanceDashboard } from './components/FinanceDashboard';
 import { AgentTeamCard } from './components/AgentTeamCard';
+import { ClinicOperationalDashboard } from './components/ClinicOperationalDashboard';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -39,7 +40,8 @@ type AppView =
   | 'content'
   | 'finances'
   | 'agents'
-  | 'leads';
+  | 'leads'
+  | 'operations';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -463,6 +465,15 @@ function AuthenticatedApp() {
                     Agents
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('operations')}
+                    aria-current={view === 'operations' ? 'page' : undefined}
+                    className={view === 'operations' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Operations
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -478,6 +489,8 @@ function AuthenticatedApp() {
           <StoriesBoard />
         ) : view === 'agents' ? (
           <AgentTeamCard />
+        ) : view === 'operations' ? (
+          <ClinicOperationalDashboard orgId={orgId} />
         ) : view === 'finances' ? (
           <FinanceDashboard />
         ) : view === 'leads' ? (

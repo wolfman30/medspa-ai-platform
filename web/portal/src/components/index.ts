@@ -8,3 +8,4 @@ export { SMSSetup } from './SMSSetup';
 export { LOASetup } from './LOASetup';
 export { CampaignRegistration } from './CampaignRegistration';
 export { OnboardingWizard } from './OnboardingWizard';
+export { ClinicOperationalDashboard } from './ClinicOperationalDashboard';
