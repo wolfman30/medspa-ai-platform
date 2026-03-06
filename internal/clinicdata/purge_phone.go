@@ -138,7 +138,7 @@ func (p *Purger) PurgeOrg(ctx context.Context, orgID string, opts ...PurgeOrgOpt
 		p.runTrainingArchiveOrg(ctx, orgID)
 	}
 
-	conversationPattern := "sms:" + orgID + ":%"
+	conversationPattern := "%:" + orgID + ":%"
 
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
