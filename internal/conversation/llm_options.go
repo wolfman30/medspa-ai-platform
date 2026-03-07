@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
+	blvdclient "github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 )
@@ -85,6 +86,13 @@ func WithAPIBaseURL(url string) LLMOption {
 func WithVoiceModel(model string) LLMOption {
 	return func(s *LLMService) {
 		s.voiceModel = model
+	}
+}
+
+// WithBoulevardAdapter configures the Boulevard booking adapter for clinics using Boulevard.
+func WithBoulevardAdapter(adapter *blvdclient.BoulevardAdapter) LLMOption {
+	return func(s *LLMService) {
+		s.boulevardAdapter = adapter
 	}
 }
 

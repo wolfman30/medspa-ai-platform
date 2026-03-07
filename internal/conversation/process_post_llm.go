@@ -33,12 +33,15 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 	if s.clinicStore != nil && pc.req.OrgID != "" {
 		if cfg, err := s.clinicStore.Get(ctx, pc.req.OrgID); err == nil && cfg != nil {
 			clinicCfg = cfg
-			usesMoxie = cfg.UsesMoxieBooking()
+			usesMoxie = cfg.UsesMoxieBooking() || cfg.UsesBoulevardBooking()
 		}
 	}
 
+	usesBoulevard := clinicCfg != nil && clinicCfg.UsesBoulevardBooking()
+	usesBookingAPI := usesMoxie || usesBoulevard
+
 	// Enforce clinic-configured deposit amounts for Square clinics
-	if pc.depositIntent != nil && clinicCfg != nil && !usesMoxie {
+	if pc.depositIntent != nil && clinicCfg != nil && !usesBookingAPI {
 		if prefs, ok := extractPreferences(pc.history, serviceAliasesFromConfig(clinicCfg)); ok && prefs.ServiceInterest != "" {
 			if amount := clinicCfg.DepositAmountForService(prefs.ServiceInterest); amount > 0 {
 				pc.depositIntent.AmountCents = int32(amount)
@@ -46,9 +49,9 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 		}
 	}
 
-	// GUARD: Moxie clinics — no deposit before time selection
-	if pc.depositIntent != nil && usesMoxie && (pc.timeSelectionState == nil || !pc.timeSelectionState.SlotSelected) {
-		s.logger.Warn("deposit intent suppressed: Moxie clinic requires time selection before deposit",
+	// GUARD: Booking API clinics — no deposit before time selection
+	if pc.depositIntent != nil && usesBookingAPI && (pc.timeSelectionState == nil || !pc.timeSelectionState.SlotSelected) {
+		s.logger.Warn("deposit intent suppressed: booking API clinic requires time selection before deposit",
 			"conversation_id", pc.req.ConversationID,
 			"slot_selected", pc.timeSelectionState != nil && pc.timeSelectionState.SlotSelected,
 		)
@@ -72,9 +75,9 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 		pc.timeSelectionResponse.SavedToHistory = true
 	}
 
-	// Clear Square deposit for Moxie clinics
-	if usesMoxie && pc.depositIntent != nil {
-		s.logger.Info("clinic uses Moxie booking - skipping Square deposit intent", "org_id", pc.req.OrgID)
+	// Clear Square deposit for booking API clinics (they use their own payment flow)
+	if usesBookingAPI && pc.depositIntent != nil {
+		s.logger.Info("clinic uses booking API - skipping Square deposit intent", "org_id", pc.req.OrgID, "platform", clinicCfg.BookingPlatform)
 		pc.depositIntent = nil
 	}
 
@@ -85,13 +88,16 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 // maybeTriggerTimeSelection checks whether to fetch and present available time slots.
 func (s *LLMService) maybeTriggerTimeSelection(ctx context.Context, pc *processContext, clinicCfg *clinic.Config, usesMoxie bool) {
 	moxieAPIReady := s.moxieClient != nil && clinicCfg != nil && clinicCfg.MoxieConfig != nil
+	boulevardReady := s.boulevardAdapter != nil && clinicCfg != nil && clinicCfg.UsesBoulevardBooking()
+	bookingAPIReady := moxieAPIReady || boulevardReady
 	qualificationsMet := ShouldFetchAvailabilityWithConfig(pc.history, nil, clinicCfg)
-	shouldTrigger := moxieAPIReady && pc.timeSelectionState == nil
+	shouldTrigger := bookingAPIReady && pc.timeSelectionState == nil
 
 	if pc.timeSelectionState != nil && pc.timeSelectionState.SlotSelected {
 		shouldTrigger = false
 	}
-	if usesMoxie {
+	usesBookingAPI := usesMoxie || (clinicCfg != nil && clinicCfg.UsesBoulevardBooking())
+	if usesBookingAPI {
 		shouldTrigger = shouldTrigger && qualificationsMet
 	} else {
 		shouldTrigger = shouldTrigger && pc.depositIntent != nil && qualificationsMet
@@ -99,7 +105,7 @@ func (s *LLMService) maybeTriggerTimeSelection(ctx context.Context, pc *processC
 
 	// Defer until schedule preferences exist
 	var earlyPrefs *leads.SchedulingPreferences
-	if shouldTrigger && usesMoxie {
+	if shouldTrigger && usesBookingAPI {
 		p, _ := extractPreferences(pc.history, serviceAliasesFromConfig(clinicCfg))
 		earlyPrefs = &p
 		if !hasSchedulePreferences(earlyPrefs) {

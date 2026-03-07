@@ -16,6 +16,7 @@ import (
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/aesthetic"
+	boulevard "github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 	moxie "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/nextech"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -88,6 +89,13 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	moxieAPIClient := moxie.NewClient(logger)
 	opts = append(opts, conversation.WithMoxieClient(moxieAPIClient))
 	logger.Info("Moxie direct API client enabled for availability queries")
+
+	// Configure Boulevard booking adapter (dry-run by default via BOULEVARD_DRY_RUN env)
+	// The adapter uses per-clinic API keys from clinic config, but we create a global
+	// adapter that handles dry-run mode. Per-clinic credentials are checked at call time.
+	blvdAdapter := boulevard.NewBoulevardAdapter(nil, logger)
+	opts = append(opts, conversation.WithBoulevardAdapter(blvdAdapter))
+	logger.Info("Boulevard booking adapter enabled", "dry_run", blvdAdapter.IsDryRun())
 
 	// Availability pre-fetcher: starts background API calls as soon as
 	// a service is identified, before qualifications are complete.

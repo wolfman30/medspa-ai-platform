@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/compliance"
+	blvdclient "github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -33,6 +34,7 @@ type LLMService struct {
 	rag             RAGRetriever
 	emr             *EMRAdapter
 	moxieClient     *moxieclient.Client
+	boulevardAdapter *blvdclient.BoulevardAdapter
 	model           string
 	voiceModel      string
 	logger          *logging.Logger
@@ -166,7 +168,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 			if cfg.DepositAmountCents > 0 {
 				depositCents = int32(cfg.DepositAmountCents)
 			}
-			usesMoxie = cfg.UsesMoxieBooking()
+			usesMoxie = cfg.UsesMoxieBooking() || cfg.UsesBoulevardBooking()
 		}
 	}
 	var systemPrompt string
@@ -398,7 +400,10 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	// Check if all qualifications are met on the first message — if so, trigger
 	// time selection immediately instead of requiring a second message.
 	moxieAPIReady := s.moxieClient != nil && startCfg != nil && startCfg.MoxieConfig != nil
-	if moxieAPIReady && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
+	boulevardReady := s.boulevardAdapter != nil && startCfg != nil && startCfg.UsesBoulevardBooking()
+	bookingAPIReady := moxieAPIReady || boulevardReady
+	usesBookingAPI := usesMoxie || (startCfg != nil && startCfg.UsesBoulevardBooking())
+	if bookingAPIReady && usesBookingAPI && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 
 		// SCHEDULE CHECK — if we have name + service + patient type but no schedule

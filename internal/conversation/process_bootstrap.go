@@ -40,7 +40,7 @@ func (s *LLMService) bootstrapWithDeflection(ctx context.Context, pc *processCon
 			if cfg.DepositAmountCents > 0 {
 				depositCents = int32(cfg.DepositAmountCents)
 			}
-			usesMoxie = cfg.UsesMoxieBooking()
+			usesMoxie = cfg.UsesMoxieBooking() || cfg.UsesBoulevardBooking()
 		}
 	}
 
