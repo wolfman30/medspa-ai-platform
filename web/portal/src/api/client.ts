@@ -1443,6 +1443,37 @@ export interface LeadsListResponse {
   total_pages: number;
 }
 
+// Clinic operational dashboard (missed call cohort, conversion, LLM latency)
+export interface ClinicOperationalDashboard {
+  org_id: string;
+  period_start: string;
+  period_end: string;
+  missed_call_leads: number;
+  missed_call_paid_leads: number;
+  missed_call_conversion_pct: number;
+  llm_latency: {
+    total: number;
+    p90_ms: number;
+    p95_ms: number;
+    buckets: Array<{ le_seconds: number; label?: string; count: number }>;
+  };
+  daily: Array<{
+    day: string;
+    missed_call_leads: number;
+    paid_leads: number;
+  }>;
+}
+
+export async function getClinicOperationalDashboard(
+  orgId: string,
+  days: number = 7,
+): Promise<ClinicOperationalDashboard> {
+  const url = `${API_BASE}/admin/clinics/${orgId}/dashboard?days=${days}`;
+  const res = await fetch(url, { headers: await getHeaders() });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
 export async function listLeads(
   orgId: string,
   params?: { page?: number; page_size?: number; status?: string; search?: string; sort_by?: string; sort_order?: string },

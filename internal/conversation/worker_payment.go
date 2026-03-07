@@ -237,7 +237,13 @@ func (w *Worker) createMoxieBookingAfterPayment(ctx context.Context, evt *events
 	loc := ClinicLocation(cfg.Timezone)
 	localTime := lead.SelectedDateTime.In(loc)
 	startTime := lead.SelectedDateTime.UTC().Format(time.RFC3339)
-	endTime := lead.SelectedDateTime.Add(45 * time.Minute).UTC().Format(time.RFC3339)
+	var endTimeUTC time.Time
+	if lead.SelectedEndDateTime != nil {
+		endTimeUTC = lead.SelectedEndDateTime.UTC()
+	} else {
+		endTimeUTC = lead.SelectedDateTime.Add(30 * time.Minute).UTC()
+	}
+	endTime := endTimeUTC.Format(time.RFC3339)
 
 	providerID := mc.DefaultProviderID
 	if providerID == "" {

@@ -156,9 +156,15 @@ func (s *LLMService) handleSlotSelection(ctx context.Context, pc *processContext
 
 	// Store selected appointment on the lead
 	if pc.req.LeadID != "" && s.leadsRepo != nil {
+		endDT := slot.EndDateTime
+		var endDTPtr *time.Time
+		if !endDT.IsZero() {
+			endDTPtr = &endDT
+		}
 		if err := s.leadsRepo.UpdateSelectedAppointment(ctx, pc.req.LeadID, leads.SelectedAppointment{
-			DateTime: &slot.DateTime,
-			Service:  state.Service,
+			DateTime:    &slot.DateTime,
+			EndDateTime: endDTPtr,
+			Service:     state.Service,
 		}); err != nil {
 			s.logger.Warn("failed to save selected appointment", "lead_id", pc.req.LeadID, "error", err)
 		}

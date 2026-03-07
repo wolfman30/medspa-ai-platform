@@ -74,6 +74,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		       COALESCE(deposit_status, '') as deposit_status,
 		       COALESCE(priority_level, '') as priority_level,
 		       selected_datetime,
+		       selected_end_datetime,
 		       COALESCE(selected_service, '') as selected_service,
 		       COALESCE(booking_session_id, '') as booking_session_id,
 		       COALESCE(booking_platform, '') as booking_platform,
@@ -105,6 +106,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, orgID string, id strin
 		&lead.DepositStatus,
 		&lead.PriorityLevel,
 		&lead.SelectedDateTime,
+		&lead.SelectedEndDateTime,
 		&lead.SelectedService,
 		&lead.BookingSessionID,
 		&lead.BookingPlatform,
@@ -135,6 +137,7 @@ func (r *PostgresRepository) GetByBookingSessionID(ctx context.Context, sessionI
 		       COALESCE(deposit_status, '') as deposit_status,
 		       COALESCE(priority_level, '') as priority_level,
 		       selected_datetime,
+		       selected_end_datetime,
 		       COALESCE(selected_service, '') as selected_service,
 		       COALESCE(booking_session_id, '') as booking_session_id,
 		       COALESCE(booking_platform, '') as booking_platform,
@@ -167,6 +170,7 @@ func (r *PostgresRepository) GetByBookingSessionID(ctx context.Context, sessionI
 		&lead.DepositStatus,
 		&lead.PriorityLevel,
 		&lead.SelectedDateTime,
+		&lead.SelectedEndDateTime,
 		&lead.SelectedService,
 		&lead.BookingSessionID,
 		&lead.BookingPlatform,
@@ -202,6 +206,7 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		       COALESCE(deposit_status, '') as deposit_status,
 		       COALESCE(priority_level, '') as priority_level,
 		       selected_datetime,
+		       selected_end_datetime,
 		       COALESCE(selected_service, '') as selected_service,
 		       COALESCE(booking_session_id, '') as booking_session_id,
 		       COALESCE(booking_platform, '') as booking_platform,
@@ -234,6 +239,7 @@ func (r *PostgresRepository) GetOrCreateByPhone(ctx context.Context, orgID strin
 		&lead.DepositStatus,
 		&lead.PriorityLevel,
 		&lead.SelectedDateTime,
+		&lead.SelectedEndDateTime,
 		&lead.SelectedService,
 		&lead.BookingSessionID,
 		&lead.BookingPlatform,
@@ -316,10 +322,11 @@ func (r *PostgresRepository) UpdateSelectedAppointment(ctx context.Context, lead
 	query := `
 		UPDATE leads
 		SET selected_datetime = $2,
-		    selected_service = COALESCE(NULLIF($3, ''), selected_service)
+		    selected_end_datetime = $3,
+		    selected_service = COALESCE(NULLIF($4, ''), selected_service)
 		WHERE id = $1
 	`
-	result, err := r.pool.Exec(ctx, query, leadID, appt.DateTime, appt.Service)
+	result, err := r.pool.Exec(ctx, query, leadID, appt.DateTime, appt.EndDateTime, appt.Service)
 	if err != nil {
 		return fmt.Errorf("leads: update selected appointment failed: %w", err)
 	}
@@ -332,7 +339,7 @@ func (r *PostgresRepository) UpdateSelectedAppointment(ctx context.Context, lead
 // ClearSelectedAppointment resets the selected datetime and service on a lead
 // so a new service booking flow can start fresh.
 func (r *PostgresRepository) ClearSelectedAppointment(ctx context.Context, leadID string) error {
-	query := `UPDATE leads SET selected_datetime = NULL, selected_service = '' WHERE id = $1`
+	query := `UPDATE leads SET selected_datetime = NULL, selected_end_datetime = NULL, selected_service = '' WHERE id = $1`
 	_, err := r.pool.Exec(ctx, query, leadID)
 	if err != nil {
 		return fmt.Errorf("leads: clear selected appointment failed: %w", err)
@@ -354,6 +361,7 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 		       COALESCE(deposit_status, '') as deposit_status,
 		       COALESCE(priority_level, '') as priority_level,
 		       selected_datetime,
+		       selected_end_datetime,
 		       COALESCE(selected_service, '') as selected_service,
 		       COALESCE(booking_session_id, '') as booking_session_id,
 		       COALESCE(booking_platform, '') as booking_platform,
@@ -416,6 +424,7 @@ func (r *PostgresRepository) ListByOrg(ctx context.Context, orgID string, filter
 			&lead.DepositStatus,
 			&lead.PriorityLevel,
 			&lead.SelectedDateTime,
+			&lead.SelectedEndDateTime,
 			&lead.SelectedService,
 			&lead.BookingSessionID,
 			&lead.BookingPlatform,

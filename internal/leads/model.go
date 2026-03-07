@@ -27,8 +27,9 @@ type Lead struct {
 	PriorityLevel   string `json:"priority_level,omitempty"`   // "normal", "priority" (deposit paid)
 
 	// Selected appointment (set when lead picks a specific time slot)
-	SelectedDateTime *time.Time `json:"selected_datetime,omitempty"` // The specific date/time the lead selected
-	SelectedService  string     `json:"selected_service,omitempty"`  // The specific service selected for booking
+	SelectedDateTime    *time.Time `json:"selected_datetime,omitempty"`     // The specific date/time the lead selected
+	SelectedEndDateTime *time.Time `json:"selected_end_datetime,omitempty"` // The end date/time for the selected slot
+	SelectedService     string     `json:"selected_service,omitempty"`      // The specific service selected for booking
 
 	// Booking session state (for Moxie-based booking)
 	BookingSessionID          string     `json:"booking_session_id,omitempty"`          // Sidecar booking session ID

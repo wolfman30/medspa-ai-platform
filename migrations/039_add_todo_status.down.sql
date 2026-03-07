@@ -1,0 +1,3 @@
+-- PostgreSQL does not support removing enum values directly.
+-- To revert, recreate the type without 'todo' and update all references.
+-- This is intentionally left as a no-op for safety.

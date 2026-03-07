@@ -2,12 +2,43 @@ package stories
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
 const internalServerErrorMessage = "internal server error"
+
+var validStatuses = map[string]bool{
+	"backlog":     true,
+	"todo":        true,
+	"in_progress": true,
+	"review":      true,
+	"done":        true,
+}
+
+var validPriorities = map[string]bool{
+	"critical": true,
+	"high":     true,
+	"medium":   true,
+	"low":      true,
+}
+
+func validateStatus(s string) error {
+	if s != "" && !validStatuses[s] {
+		return fmt.Errorf("invalid status %q: must be one of backlog, todo, in_progress, review, done", s)
+	}
+	return nil
+}
+
+func validatePriority(p string) error {
+	if p != "" && !validPriorities[p] {
+		return fmt.Errorf("invalid priority %q: must be one of critical, high, medium, low", p)
+	}
+	return nil
+}
 
 type Handler struct {
 	repo *Repository
@@ -25,6 +56,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	stories, err := h.repo.List(r.Context(), status, priority, label)
 	if err != nil {
+		log.Printf("stories.List error: %v", err)
 		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
@@ -44,9 +76,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "title is required", http.StatusBadRequest)
 		return
 	}
+	if err := validateStatus(req.Status); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validatePriority(req.Priority); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	story, err := h.repo.Create(r.Context(), req)
 	if err != nil {
+		log.Printf("stories.Create error: %v", err)
 		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
@@ -69,9 +110,22 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if req.Status != nil {
+		if err := validateStatus(*req.Status); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	if req.Priority != nil {
+		if err := validatePriority(*req.Priority); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 
 	story, err := h.repo.Update(r.Context(), id, req)
 	if err != nil {
+		log.Printf("stories.Update id=%s error: %v", id, err)
 		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
@@ -93,6 +147,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), id); err != nil {
+		log.Printf("stories.Delete id=%s error: %v", id, err)
 		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
@@ -110,6 +165,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	story, err := h.repo.Get(r.Context(), id)
 	if err != nil {
+		log.Printf("stories.Get id=%s error: %v", id, err)
 		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
@@ -121,6 +177,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// Also fetch sub-tasks
 	subTasks, err := h.repo.GetSubTasks(r.Context(), id)
 	if err != nil {
+		log.Printf("stories.GetSubTasks id=%s error: %v", id, err)
 		http.Error(w, internalServerErrorMessage, http.StatusInternalServerError)
 		return
 	}
