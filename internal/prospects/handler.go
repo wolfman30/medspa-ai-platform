@@ -111,6 +111,49 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
+// POST /admin/prospects — create a new prospect.
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	var p Prospect
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), 400)
+		return
+	}
+	if p.ID == "" {
+		http.Error(w, "id is required", 400)
+		return
+	}
+	if p.ClinicName == "" {
+		http.Error(w, "clinic (clinic_name) is required", 400)
+		return
+	}
+	if p.Status == "" {
+		p.Status = "lead"
+	}
+	if p.Providers == nil {
+		p.Providers = []string{}
+	}
+
+	// Check if prospect already exists
+	existing, err := h.repo.Get(r.Context(), p.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if existing != nil {
+		http.Error(w, "prospect already exists", 409)
+		return
+	}
+
+	if err := h.repo.Upsert(r.Context(), &p); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(p)
+}
+
 // PUT /admin/prospects/{id}
 func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 	id := extractProspectID(r)
