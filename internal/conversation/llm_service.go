@@ -402,8 +402,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	moxieAPIReady := s.moxieClient != nil && startCfg != nil && startCfg.MoxieConfig != nil
 	boulevardReady := s.boulevardAdapter != nil && startCfg != nil && startCfg.UsesBoulevardBooking()
 	bookingAPIReady := moxieAPIReady || boulevardReady
-	usesBookingAPI := usesMoxie || (startCfg != nil && startCfg.UsesBoulevardBooking())
-	if bookingAPIReady && usesBookingAPI && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
+	if bookingAPIReady && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 
 		// SCHEDULE CHECK — if we have name + service + patient type but no schedule

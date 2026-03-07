@@ -158,7 +158,7 @@ func (s *LLMService) fetchAndPresentAvailability(
 		adapter := s.boulevardAdapter
 		if !adapter.IsDryRun() && cfg.BoulevardAPIKey != "" && cfg.BoulevardBusinessID != "" {
 			clinicClient := boulevard.NewBoulevardClient(cfg.BoulevardAPIKey, cfg.BoulevardBusinessID, s.logger)
-			adapter = boulevard.NewBoulevardAdapter(clinicClient, s.logger)
+			adapter = boulevard.NewBoulevardAdapter(clinicClient, false, s.logger)
 		}
 		s.logger.Info("fetching availability via Boulevard API",
 			"conversation_id", conversationID, "service", scraperServiceName, "dry_run", adapter.IsDryRun())

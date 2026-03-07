@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -90,10 +91,10 @@ func BuildConversationService(ctx context.Context, cfg *appconfig.Config, leadsR
 	opts = append(opts, conversation.WithMoxieClient(moxieAPIClient))
 	logger.Info("Moxie direct API client enabled for availability queries")
 
-	// Configure Boulevard booking adapter (dry-run by default via BOULEVARD_DRY_RUN env)
-	// The adapter uses per-clinic API keys from clinic config, but we create a global
-	// adapter that handles dry-run mode. Per-clinic credentials are checked at call time.
-	blvdAdapter := boulevard.NewBoulevardAdapter(nil, logger)
+	// Configure Boulevard booking adapter (dry-run by default).
+	// BOULEVARD_DRY_RUN=false opts out; any other value (including unset) keeps dry-run on.
+	blvdDryRun := !strings.EqualFold(os.Getenv("BOULEVARD_DRY_RUN"), "false")
+	blvdAdapter := boulevard.NewBoulevardAdapter(nil, blvdDryRun, logger)
 	opts = append(opts, conversation.WithBoulevardAdapter(blvdAdapter))
 	logger.Info("Boulevard booking adapter enabled", "dry_run", blvdAdapter.IsDryRun())
 

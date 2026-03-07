@@ -3,7 +3,6 @@ package boulevard
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -18,12 +17,12 @@ type BoulevardAdapter struct {
 }
 
 // NewBoulevardAdapter creates a new Boulevard adapter.
-// Set BOULEVARD_DRY_RUN=true to enable dry-run mode (no real bookings).
-func NewBoulevardAdapter(client *BoulevardClient, logger *logging.Logger) *BoulevardAdapter {
+// dryRun controls whether the adapter makes real API calls or returns mock data.
+// Use NewBoulevardAdapterFromEnv for environment-based configuration.
+func NewBoulevardAdapter(client *BoulevardClient, dryRun bool, logger *logging.Logger) *BoulevardAdapter {
 	if logger == nil {
 		logger = logging.Default()
 	}
-	dryRun := strings.EqualFold(os.Getenv("BOULEVARD_DRY_RUN"), "true")
 	return &BoulevardAdapter{client: client, dryRun: dryRun, logger: logger}
 }
 
@@ -35,13 +34,17 @@ func (a *BoulevardAdapter) IsDryRun() bool { return a.dryRun }
 // ResolveAvailability checks Boulevard for available slots.
 // In dry-run mode, returns mock slots for the next 3 business days.
 func (a *BoulevardAdapter) ResolveAvailability(ctx context.Context, serviceID, providerID string, date time.Time) ([]TimeSlot, error) {
+	if a == nil || a.client == nil {
+		if a != nil && !a.dryRun {
+			a.logger.Warn("Boulevard adapter: client not configured, cannot fetch availability",
+				"service_id", serviceID, "provider_id", providerID, "date", date.Format("2006-01-02"))
+			return nil, fmt.Errorf("boulevard adapter: client not configured")
+		}
+	}
 	if a.dryRun {
 		a.logger.Info("BOULEVARD DRY RUN: ResolveAvailability",
 			"service_id", serviceID, "provider_id", providerID, "date", date.Format("2006-01-02"))
 		return a.generateMockSlots(date), nil
-	}
-	if a == nil || a.client == nil {
-		return nil, nil
 	}
 	return a.client.GetAvailableSlots(ctx, serviceID, providerID, date)
 }
