@@ -30,25 +30,25 @@ const (
 
 // LLMService produces conversation responses using a configured LLM and stores context in Redis.
 type LLMService struct {
-	client          LLMClient
-	rag             RAGRetriever
-	emr             *EMRAdapter
-	moxieClient     *moxieclient.Client
+	client           LLMClient
+	rag              RAGRetriever
+	emr              *EMRAdapter
+	moxieClient      *moxieclient.Client
 	boulevardAdapter *blvdclient.BoulevardAdapter
-	model           string
-	voiceModel      string
-	logger          *logging.Logger
-	history         *historyStore
-	deposit         depositConfig
-	leadsRepo       leads.Repository
-	clinicStore     *clinic.Store
-	audit           *compliance.AuditService
-	paymentChecker  PaymentStatusChecker
-	faqClassifier   *FAQClassifier
-	variantResolver *VariantResolver
-	apiBaseURL      string // Public API base URL for callback URLs
-	events          *EventLogger
-	prefetcher      *AvailabilityPrefetcher
+	model            string
+	voiceModel       string
+	logger           *logging.Logger
+	history          *historyStore
+	deposit          depositConfig
+	leadsRepo        leads.Repository
+	clinicStore      *clinic.Store
+	audit            *compliance.AuditService
+	paymentChecker   PaymentStatusChecker
+	faqClassifier    *FAQClassifier
+	variantResolver  *VariantResolver
+	apiBaseURL       string // Public API base URL for callback URLs
+	events           *EventLogger
+	prefetcher       *AvailabilityPrefetcher
 }
 
 // NewLLMService returns an LLM-backed Service implementation.
