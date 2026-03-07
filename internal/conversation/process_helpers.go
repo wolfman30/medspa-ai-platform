@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
+	boulevard "github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
 )
 
@@ -146,12 +147,45 @@ func (s *LLMService) fetchAndPresentAvailability(
 		}
 	}
 
-	// Fetch availability via Moxie GraphQL API
+	// Fetch availability via Moxie GraphQL API or Boulevard cart-based API
 	fetchCtx, fetchCancel := context.WithTimeout(ctx, 120*time.Second)
 	var result *AvailabilityResult
 	var err error
 
-	if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
+	if s.boulevardAdapter != nil && cfg != nil && cfg.UsesBoulevardBooking() {
+		// Boulevard availability: use cart-based slot lookup
+		// For live (non-dry-run) mode, create a per-clinic client from config credentials
+		adapter := s.boulevardAdapter
+		if !adapter.IsDryRun() && cfg.BoulevardAPIKey != "" && cfg.BoulevardBusinessID != "" {
+			clinicClient := boulevard.NewBoulevardClient(cfg.BoulevardAPIKey, cfg.BoulevardBusinessID, s.logger)
+			adapter = boulevard.NewBoulevardAdapter(clinicClient, false, s.logger)
+		}
+		s.logger.Info("fetching availability via Boulevard API",
+			"conversation_id", conversationID, "service", scraperServiceName, "dry_run", adapter.IsDryRun())
+
+		blvdSlots, blvdErr := adapter.ResolveAvailability(fetchCtx, scraperServiceName, prefs.ProviderPreference, time.Now())
+		if blvdErr != nil {
+			s.logger.Warn("Boulevard API: availability fetch failed",
+				"error", blvdErr, "conversation_id", conversationID, "service", scraperServiceName)
+			err = blvdErr
+		} else {
+			// Convert Boulevard slots to AvailabilityResult
+			slots := make([]PresentedSlot, 0, len(blvdSlots))
+			for i, bs := range blvdSlots {
+				slots = append(slots, PresentedSlot{
+					Index:     i + 1,
+					DateTime:  bs.StartAt,
+					TimeStr:   bs.StartAt.Format("Mon Jan 2 at 3:04 PM"),
+					Service:   prefs.ServiceInterest,
+					Available: true,
+				})
+			}
+			result = &AvailabilityResult{
+				Slots:      slots,
+				ExactMatch: true,
+			}
+		}
+	} else if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
 		s.logger.Info("fetching availability via Moxie API",
 			"conversation_id", conversationID, "service", scraperServiceName)
 		result, err = FetchAvailableTimesFromMoxieAPIWithProvider(fetchCtx, s.moxieClient, cfg, scraperServiceName, prefs.ProviderPreference, timePrefs, onProgress, prefs.ServiceInterest)

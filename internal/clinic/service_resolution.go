@@ -213,6 +213,20 @@ func (c *Config) UsesVagaroBooking() bool {
 	return strings.ToLower(c.BookingPlatform) == "vagaro"
 }
 
+// UsesBoulevardBooking returns true if the clinic is configured for Boulevard booking.
+func (c *Config) UsesBoulevardBooking() bool {
+	if c == nil {
+		return false
+	}
+	return strings.ToLower(c.BookingPlatform) == "boulevard"
+}
+
+// UsesBookingAPI returns true if the clinic uses any API-based booking
+// (Moxie or Boulevard) that supports real-time availability lookup.
+func (c *Config) UsesBookingAPI() bool {
+	return c.UsesMoxieBooking() || c.UsesBoulevardBooking()
+}
+
 // UsesStripePayment returns true if the clinic is configured to use Stripe for deposit collection.
 func (c *Config) UsesStripePayment() bool {
 	if c == nil {
