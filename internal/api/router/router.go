@@ -298,6 +298,7 @@ func New(cfg *Config) http.Handler {
 			// Prospect tracker
 			if cfg.ProspectsHandler != nil {
 				admin.Get("/prospects", cfg.ProspectsHandler.List)
+				admin.Post("/prospects", cfg.ProspectsHandler.Create)
 				admin.Get("/prospects/{prospectID}", cfg.ProspectsHandler.Get)
 				admin.Put("/prospects/{prospectID}", cfg.ProspectsHandler.Upsert)
 				admin.Delete("/prospects/{prospectID}", cfg.ProspectsHandler.Delete)

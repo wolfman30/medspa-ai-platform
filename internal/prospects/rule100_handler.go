@@ -10,6 +10,8 @@ import (
 )
 
 // Touch event types that count toward the Rule of 100.
+// Includes both legacy long-form ("call_made") and short-form ("call") types
+// used by the POST /admin/prospects/{id}/events endpoint.
 var touchEventTypes = []string{
 	"text_sent",
 	"dm_sent",
@@ -18,6 +20,13 @@ var touchEventTypes = []string{
 	"comment_posted",
 	"voicemail_left",
 	"follow_up",
+	// Short-form aliases used by the events API
+	"call",
+	"dm",
+	"email",
+	"text",
+	"comment",
+	"voicemail",
 }
 
 // Rule100Response is the JSON shape returned by GET /admin/rule100/today.
@@ -196,19 +205,20 @@ func (r *Repository) TouchHistoryDays(ctx context.Context, today time.Time, days
 }
 
 // simplifyType converts event_type like "text_sent" to "text".
+// Also handles short-form types that are already simplified.
 func simplifyType(t string) string {
 	switch t {
-	case "text_sent":
+	case "text_sent", "text":
 		return "text"
-	case "dm_sent":
+	case "dm_sent", "dm":
 		return "dm"
-	case "email_sent":
+	case "email_sent", "email":
 		return "email"
-	case "call_made":
+	case "call_made", "call":
 		return "call"
-	case "comment_posted":
+	case "comment_posted", "comment":
 		return "comment"
-	case "voicemail_left":
+	case "voicemail_left", "voicemail":
 		return "voicemail"
 	case "follow_up":
 		return "follow_up"
