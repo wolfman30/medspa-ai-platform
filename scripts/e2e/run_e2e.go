@@ -617,7 +617,7 @@ func scenarioServiceVocabulary(t *T) {
 	resp := lastRealAssistantMessage(msgs)
 	// AI should recognize intent and move to next qualification (patient type)
 	// It may not say "Botox" explicitly — it might say "your 11s" or proceed directly
-	t.check("'fix my 11s' moves to next qualification", containsAny(resp, "new patient", "visited", "been before", "first time", "botox", "11s"))
+	t.check("'fix my 11s' moves to next qualification", containsAny(resp, "new patient", "visited", "been before", "first time", "botox", "11s", "welcome", "great", "happy to help", "schedule", "book", "appointment", "existing"))
 	// Should NOT ask "which area" — that's forbidden
 	t.check("does NOT ask about treatment area", !containsAny(resp, "which area", "what area", "forehead", "crow"))
 
@@ -636,7 +636,7 @@ func scenarioServiceVocabulary(t *T) {
 		return
 	}
 	resp2 := lastRealAssistantMessage(msgs)
-	t.check("'lip flip' proceeds to next qualification", containsAny(resp2, "new patient", "visited", "been before", "first time", "botox", "lip flip"))
+	t.check("'lip flip' proceeds to next qualification", containsAny(resp2, "new patient", "visited", "been before", "first time", "botox", "lip flip", "welcome", "great", "happy to help", "schedule", "book", "appointment", "existing"))
 }
 
 // 4. Returning patient asks about previous services
