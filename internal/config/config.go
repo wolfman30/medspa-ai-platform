@@ -159,7 +159,7 @@ type Config struct {
 	// ElevenLabs TTS Configuration (opt-in: only active when API key is set)
 	ElevenLabsAPIKey     string // from ELEVENLABS_API_KEY
 	ElevenLabsVoiceID    string // default: Lauren B (l4Coq6695JDX9xtLqXDE)
-	ElevenLabsModelID    string // default: eleven_v3
+	ElevenLabsModelID    string // default: eleven_flash_v2_5
 	ElevenLabsStability  float64
 	ElevenLabsSimilarity float64
 	ElevenLabsSpeed      float64
@@ -385,7 +385,7 @@ func Load() *Config {
 		// ElevenLabs TTS
 		ElevenLabsAPIKey:     getEnv("ELEVENLABS_API_KEY", ""),
 		ElevenLabsVoiceID:    getEnv("ELEVENLABS_VOICE_ID", "l4Coq6695JDX9xtLqXDE"),
-		ElevenLabsModelID:    getEnv("ELEVENLABS_MODEL_ID", "eleven_v3"),
+		ElevenLabsModelID:    getEnv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5"),
 		ElevenLabsStability:  getEnvAsFloat("ELEVENLABS_STABILITY", 0.5),
 		ElevenLabsSimilarity: getEnvAsFloat("ELEVENLABS_SIMILARITY", 0.75),
 		ElevenLabsSpeed:      getEnvAsFloat("ELEVENLABS_SPEED", 1.0),
