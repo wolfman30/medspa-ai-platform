@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -72,7 +73,7 @@ func (s *MemoryRAGStore) AddDocuments(ctx context.Context, clinicID string, cont
 
 	resp, err := s.client.Embed(ctx, s.model, contents)
 	if err != nil {
-		return err
+		return fmt.Errorf("AddDocuments: embed %d docs for %q: %w", len(contents), clinicID, err)
 	}
 	if len(resp) != len(contents) {
 		return errors.New("conversation: embedding response size mismatch")
@@ -100,7 +101,7 @@ func (s *MemoryRAGStore) ReplaceDocuments(ctx context.Context, clinicID string, 
 	}
 	resp, err := s.client.Embed(ctx, s.model, contents)
 	if err != nil {
-		return err
+		return fmt.Errorf("ReplaceDocuments: embed %d docs for %q: %w", len(contents), clinicID, err)
 	}
 	if len(resp) != len(contents) {
 		return errors.New("conversation: embedding response size mismatch")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"sort"
@@ -145,14 +146,14 @@ func (h *RevenueDashboardHandler) loadCoreMetrics(r *http.Request, resp *Revenue
 		&resp.AppointmentsBooked,
 		&resp.Funnel.Qualified.Count,
 	); err != nil {
-		return err
+		return fmt.Errorf("loadCoreMetrics: scan conversations: %w", err)
 	}
 
 	pWhere, pArgs := orgRangeClause("org_id", "created_at", resp.OrgID, startAt)
 	pq := `SELECT COALESCE(SUM(amount_cents), 0) FROM payments` + pWhere + ` AND status IN ('succeeded', 'paid', 'completed')`
 	var cents int64
 	if err := h.db.QueryRowContext(r.Context(), pq, pArgs...).Scan(&cents); err != nil {
-		return err
+		return fmt.Errorf("loadCoreMetrics: scan payments: %w", err)
 	}
 	resp.DepositsCollected = round2(float64(cents) / 100.0)
 	return nil
@@ -177,7 +178,7 @@ func (h *RevenueDashboardHandler) loadResponseTimeMetric(r *http.Request, resp *
 
 	var avg float64
 	if err := h.db.QueryRowContext(r.Context(), q, args...).Scan(&avg); err != nil {
-		return err
+		return fmt.Errorf("loadResponseTimeMetric: scan avg response time: %w", err)
 	}
 	resp.AvgResponseTimeSeconds = round2(avg)
 	return nil
@@ -193,7 +194,7 @@ func (h *RevenueDashboardHandler) loadServiceAttribution(r *http.Request, resp *
 		GROUP BY 1`
 	rows, err := h.db.QueryContext(r.Context(), q, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("loadServiceAttribution: query services: %w", err)
 	}
 	defer rows.Close()
 
@@ -203,7 +204,7 @@ func (h *RevenueDashboardHandler) loadServiceAttribution(r *http.Request, resp *
 		var name string
 		var count int
 		if err := rows.Scan(&name, &count); err != nil {
-			return err
+			return fmt.Errorf("loadServiceAttribution: scan row: %w", err)
 		}
 		price := prices[strings.ToLower(strings.TrimSpace(name))]
 		revenue := float64(count) * price
@@ -211,7 +212,7 @@ func (h *RevenueDashboardHandler) loadServiceAttribution(r *http.Request, resp *
 		services = append(services, RevenueTopService{Service: name, Count: count, Revenue: round2(revenue)})
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return fmt.Errorf("loadServiceAttribution: iterate rows: %w", err)
 	}
 	sort.Slice(services, func(i, j int) bool { return services[i].Revenue > services[j].Revenue })
 	if len(services) > 6 {
@@ -236,14 +237,14 @@ func (h *RevenueDashboardHandler) loadDailyBreakdown(r *http.Request, resp *Reve
 		GROUP BY 1`
 	rows, err := h.db.QueryContext(r.Context(), convQ, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("loadDailyBreakdown: query conversations: %w", err)
 	}
 	for rows.Next() {
 		var d time.Time
 		var conv, booked int
 		if err := rows.Scan(&d, &conv, &booked); err != nil {
 			rows.Close()
-			return err
+			return fmt.Errorf("loadDailyBreakdown: scan conversation row: %w", err)
 		}
 		key := d.Format("2006-01-02")
 		daily[key] = &RevenueDailyBreakdown{Date: key, Conversations: conv, AppointmentsBooked: booked}
@@ -257,7 +258,7 @@ func (h *RevenueDashboardHandler) loadDailyBreakdown(r *http.Request, resp *Reve
 		GROUP BY 1,2`
 	rows, err = h.db.QueryContext(r.Context(), revQ, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("loadDailyBreakdown: query revenue: %w", err)
 	}
 	for rows.Next() {
 		var d time.Time
@@ -265,7 +266,7 @@ func (h *RevenueDashboardHandler) loadDailyBreakdown(r *http.Request, resp *Reve
 		var count int
 		if err := rows.Scan(&d, &service, &count); err != nil {
 			rows.Close()
-			return err
+			return fmt.Errorf("loadDailyBreakdown: scan revenue row: %w", err)
 		}
 		key := d.Format("2006-01-02")
 		item, ok := daily[key]
@@ -284,14 +285,14 @@ func (h *RevenueDashboardHandler) loadDailyBreakdown(r *http.Request, resp *Reve
 		GROUP BY 1`
 	rows, err = h.db.QueryContext(r.Context(), payQ, pArgs...)
 	if err != nil {
-		return err
+		return fmt.Errorf("loadDailyBreakdown: query payments: %w", err)
 	}
 	for rows.Next() {
 		var d time.Time
 		var cents int64
 		if err := rows.Scan(&d, &cents); err != nil {
 			rows.Close()
-			return err
+			return fmt.Errorf("loadDailyBreakdown: scan payment row: %w", err)
 		}
 		key := d.Format("2006-01-02")
 		item, ok := daily[key]

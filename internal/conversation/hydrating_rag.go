@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -83,13 +84,13 @@ func (h *HydratingRAGRetriever) ensureHydrated(ctx context.Context, clinicID str
 
 	docs, err := h.repo.GetDocuments(ctx, clinicID)
 	if err != nil {
-		return err
+		return fmt.Errorf("ensureHydrated: get documents for %q: %w", clinicID, err)
 	}
 
 	if h.versioner != nil {
 		version, err := h.versioner.GetVersion(ctx, clinicID)
 		if err != nil {
-			return err
+			return fmt.Errorf("ensureHydrated: get version for %q: %w", clinicID, err)
 		}
 		storedVersion := int64(0)
 		if v, ok := h.hydratedVers.Load(clinicID); ok {
@@ -100,7 +101,7 @@ func (h *HydratingRAGRetriever) ensureHydrated(ctx context.Context, clinicID str
 		if version != storedVersion {
 			if replacer, ok := any(h.store).(RAGReplacer); ok {
 				if err := replacer.ReplaceDocuments(ctx, clinicID, docs); err != nil {
-					return err
+					return fmt.Errorf("ensureHydrated: replace documents for %q: %w", clinicID, err)
 				}
 				h.hydratedCounts.Store(clinicID, len(docs))
 				h.hydratedVers.Store(clinicID, version)
@@ -119,7 +120,7 @@ func (h *HydratingRAGRetriever) ensureHydrated(ctx context.Context, clinicID str
 	if start > len(docs) {
 		if replacer, ok := any(h.store).(RAGReplacer); ok {
 			if err := replacer.ReplaceDocuments(ctx, clinicID, docs); err != nil {
-				return err
+				return fmt.Errorf("ensureHydrated: replace stale documents for %q: %w", clinicID, err)
 			}
 			h.hydratedCounts.Store(clinicID, len(docs))
 			return nil
@@ -132,7 +133,7 @@ func (h *HydratingRAGRetriever) ensureHydrated(ctx context.Context, clinicID str
 
 	newDocs := docs[start:]
 	if err := h.store.AddDocuments(ctx, clinicID, newDocs); err != nil {
-		return err
+		return fmt.Errorf("ensureHydrated: add documents for %q: %w", clinicID, err)
 	}
 	h.hydratedCounts.Store(clinicID, len(docs))
 	return nil

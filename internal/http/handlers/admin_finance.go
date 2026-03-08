@@ -354,11 +354,11 @@ func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[s
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return err
+		return fmt.Errorf("plaidPost %s: marshal body: %w", path, err)
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.plaidURL+path, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return fmt.Errorf("plaidPost %s: create request: %w", path, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -375,7 +375,10 @@ func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[s
 		return fmt.Errorf("plaid status %d", resp.StatusCode)
 	}
 
-	return json.NewDecoder(resp.Body).Decode(out)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("plaidPost %s: decode response: %w", path, err)
+	}
+	return nil
 }
 
 func (h *AdminFinanceHandler) readBudget(ctx context.Context) (BudgetFile, error) {
@@ -416,15 +419,17 @@ func isS3NotFound(err error) bool {
 func (h *AdminFinanceHandler) writeBudget(ctx context.Context, budget BudgetFile) error {
 	b, err := json.MarshalIndent(budget, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("writeBudget: marshal: %w", err)
 	}
-	_, err = h.s3Client.PutObject(ctx, &s3.PutObjectInput{
+	if _, err = h.s3Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(h.s3Bucket),
 		Key:         aws.String(h.s3Key),
 		Body:        bytes.NewReader(b),
 		ContentType: aws.String("application/json"),
-	})
-	return err
+	}); err != nil {
+		return fmt.Errorf("writeBudget: put s3 object: %w", err)
+	}
+	return nil
 }
 
 func defaultBudgetFile() BudgetFile {
