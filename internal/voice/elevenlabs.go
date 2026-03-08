@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -150,7 +151,9 @@ func (c *ElevenLabsClient) StreamTTS(ctx context.Context) (*ElevenLabsSession, e
 	wsURL += fmt.Sprintf("?model_id=%s&output_format=pcm_%d", c.cfg.ModelID, c.cfg.OutputSampleRate)
 
 	dialer := websocket.Dialer{HandshakeTimeout: elevenLabsDialTimeout}
-	conn, _, err := dialer.DialContext(ctx, wsURL, nil)
+	headers := http.Header{}
+	headers.Set("xi-api-key", c.cfg.APIKey)
+	conn, _, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("elevenlabs: dial %s: %w", wsURL, err)
