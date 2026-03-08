@@ -6,7 +6,7 @@
 import { WebSocket } from "ws";
 
 const DEFAULT_VOICE_ID = "l4Coq6695JDX9xtLqXDE"; // Lauren B
-const DEFAULT_MODEL_ID = "eleven_v3";
+const DEFAULT_MODEL_ID = "eleven_flash_v2_5";
 
 export interface ElevenLabsConfig {
   apiKey: string;
@@ -63,7 +63,7 @@ export class ElevenLabsSession {
         `wss://api.elevenlabs.io/v1/text-to-speech/${this.config.voiceId}/stream-input` +
         `?model_id=${this.config.modelId}&output_format=pcm_${this.config.outputSampleRate}`;
 
-      this.ws = new WebSocket(url);
+      this.ws = new WebSocket(url, { headers: { "xi-api-key": this.config.apiKey } });
 
       this.ws.on("open", () => {
         // Send BOS (beginning of stream)
