@@ -24,6 +24,7 @@ const ctxKeyVoiceModel contextKey = "voiceModel"
 const (
 	maxHistoryMessages           = 40
 	maxVoiceHistoryMessages      = 20
+	maxConversationMessages      = 50
 	phiDeflectionReply           = "Thanks for sharing. I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 	medicalAdviceDeflectionReply = "I can help with booking and general questions, but I can't provide medical advice over text. Please call the clinic for medical guidance or discuss this with your provider during your consultation."
 )

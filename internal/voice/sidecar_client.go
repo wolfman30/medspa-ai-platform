@@ -140,6 +140,15 @@ func (sc *SidecarClient) SendToolResult(toolCallID, result string) error {
 	})
 }
 
+// InjectText sends a text message to the sidecar for the AI to speak.
+// Used for system-initiated messages like call duration warnings.
+func (sc *SidecarClient) InjectText(text string) error {
+	return sc.send(sidecarOutbound{
+		Type: "inject_text",
+		Data: text,
+	})
+}
+
 // Close gracefully shuts down the sidecar connection.
 func (sc *SidecarClient) Close() {
 	sc.mu.Lock()

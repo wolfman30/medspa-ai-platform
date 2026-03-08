@@ -108,6 +108,38 @@ func (s *LLMService) loadHistory(ctx context.Context, pc *processContext) (*Resp
 	}
 
 	pc.history = history
+
+	// Count non-system user messages to enforce conversation length limit.
+	userMsgCount := 0
+	for _, m := range history {
+		if m.Role == ChatRoleUser {
+			userMsgCount++
+		}
+	}
+	if userMsgCount >= maxConversationMessages {
+		phone := ""
+		if s.clinicStore != nil && pc.req.OrgID != "" {
+			if cfg, err := s.clinicStore.Get(ctx, pc.req.OrgID); err == nil && cfg != nil && cfg.Phone != "" {
+				phone = cfg.Phone
+			}
+		}
+		msg := "This conversation has been quite long! For the best experience, please call us directly"
+		if phone != "" {
+			msg += " at " + phone
+		}
+		msg += " and our team will be happy to help."
+		s.logger.Warn("conversation message limit reached",
+			"conversation_id", pc.req.ConversationID,
+			"user_messages", userMsgCount,
+			"limit", maxConversationMessages,
+		)
+		return &Response{
+			ConversationID: pc.req.ConversationID,
+			Message:        msg,
+			Timestamp:      time.Now().UTC(),
+		}, nil
+	}
+
 	s.logger.Info("ProcessMessage: history loaded",
 		"conversation_id", pc.req.ConversationID,
 		"history_length", len(history),

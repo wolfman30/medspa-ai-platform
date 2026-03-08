@@ -104,6 +104,21 @@ func (w *Worker) sendReply(ctx context.Context, payload queuePayload, resp *Resp
 		}
 	}
 
+	// SMS length cap: max 480 chars (3 SMS segments) to prevent runaway LLM output.
+	const maxSMSLength = 480
+	if len(resp.Message) > maxSMSLength {
+		w.logger.Warn("sms response truncated",
+			"conversation_id", resp.ConversationID,
+			"original_length", len(resp.Message),
+			"max_length", maxSMSLength,
+		)
+		resp = &Response{
+			ConversationID: resp.ConversationID,
+			Message:        truncateAtSentence(resp.Message, maxSMSLength),
+			Timestamp:      resp.Timestamp,
+		}
+	}
+
 	conversationID := strings.TrimSpace(resp.ConversationID)
 	if conversationID == "" {
 		conversationID = strings.TrimSpace(msg.ConversationID)
@@ -408,6 +423,31 @@ func (w *Worker) handleManualHandoff(ctx context.Context, msg MessageRequest, re
 		"patient_name", lead.PatientName,
 		"service", lead.ServiceRequested,
 	)
+}
+
+// truncateAtSentence truncates text to fit within maxLen by cutting at the
+// last sentence boundary (. ! ?) and appending "...".
+func truncateAtSentence(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
+	}
+	// Reserve space for "..."
+	limit := maxLen - 3
+	if limit <= 0 {
+		return "..."
+	}
+	candidate := text[:limit]
+	// Find the last sentence-ending punctuation
+	lastDot := strings.LastIndexAny(candidate, ".!?")
+	if lastDot > 0 {
+		return strings.TrimSpace(candidate[:lastDot+1]) + "..."
+	}
+	// No sentence boundary found — hard truncate at last space
+	lastSpace := strings.LastIndex(candidate, " ")
+	if lastSpace > 0 {
+		return strings.TrimSpace(candidate[:lastSpace]) + "..."
+	}
+	return candidate + "..."
 }
 
 func smsConversationID(orgID string, phone string) string {

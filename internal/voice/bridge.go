@@ -25,6 +25,13 @@ type BridgeConfig struct {
 	ToolDeps     *ToolDeps
 }
 
+const (
+	// maxCallDuration is the hard limit for voice calls (OWASP LLM10).
+	maxCallDuration = 10 * time.Minute
+	// callWarningTime is when we inject a courtesy warning.
+	callWarningTime = 8 * time.Minute
+)
+
 // Bridge manages the bidirectional audio flow between Telnyx and Nova Sonic.
 type Bridge struct {
 	logger      *slog.Logger
@@ -39,11 +46,13 @@ type Bridge struct {
 	callerPhone   string
 	mediaFormat   TelnyxMediaFormat
 
-	mu           sync.Mutex
-	closed       bool
-	cancelFn     context.CancelFunc
-	started      time.Time
-	outputChunks int
+	mu             sync.Mutex
+	closed         bool
+	cancelFn       context.CancelFunc
+	started        time.Time
+	outputChunks   int
+	warningTimer   *time.Timer
+	maxTimer       *time.Timer
 }
 
 // NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
@@ -89,6 +98,31 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 
 	// Start goroutine to process sidecar output events
 	go b.processSidecarOutput(ctx)
+
+	// Voice call duration limits (OWASP LLM10: unbounded consumption).
+	b.warningTimer = time.AfterFunc(callWarningTime, func() {
+		b.mu.Lock()
+		if b.closed {
+			b.mu.Unlock()
+			return
+		}
+		b.mu.Unlock()
+		b.logger.Warn("bridge: call approaching max duration, injecting warning",
+			"call_control_id", callControlID,
+			"elapsed", callWarningTime,
+		)
+		_ = b.sidecar.InjectText("I want to make sure I'm not keeping you too long. Is there anything else I can help with?")
+	})
+	b.maxTimer = time.AfterFunc(maxCallDuration, func() {
+		b.logger.Warn("bridge: max call duration reached, hanging up",
+			"call_control_id", callControlID,
+			"max_duration", maxCallDuration,
+		)
+		_ = b.sidecar.InjectText("Thank you for calling! Our team can help with anything else — have a great day!")
+		// Give a moment for the farewell to be spoken before closing.
+		time.Sleep(3 * time.Second)
+		b.Close()
+	})
 
 	logger.Info("bridge: created",
 		"call_control_id", callControlID,
@@ -137,6 +171,12 @@ func (b *Bridge) Close() {
 	}
 	b.closed = true
 
+	if b.warningTimer != nil {
+		b.warningTimer.Stop()
+	}
+	if b.maxTimer != nil {
+		b.maxTimer.Stop()
+	}
 	b.cancelFn()
 	b.sidecar.Close()
 	close(b.telnyxOutput)
