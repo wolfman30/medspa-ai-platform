@@ -5,6 +5,7 @@
 
 import { type WebSocket } from "ws";
 import { NovaSonicClient, type NovaSonicConfig } from "./nova-sonic-client.js";
+import { ElevenLabsSession, type ElevenLabsConfig } from "./elevenlabs-tts.js";
 import { DEFAULT_TOOLS, type ToolSpec } from "./tools.js";
 
 // ── Inbound messages (Go → Sidecar) ───────────────────────────────────
@@ -17,6 +18,8 @@ interface InitMessage {
     voice?: string;
     orgId?: string;
     callerPhone?: string;
+    clinicName?: string;
+    greeting?: string;
   };
 }
 
@@ -61,10 +64,16 @@ export class CallSession {
   private ws: WebSocket;
   private callId: string;
   private client: NovaSonicClient | null = null;
+  private elevenLabsSession: ElevenLabsSession | null = null;
+  private elevenLabsApiKey: string;
+  private pendingAssistantText = "";
+  private ttsQueue: string[] = [];
+  private ttsProcessing = false;
 
   constructor(ws: WebSocket, callId: string) {
     this.ws = ws;
     this.callId = callId;
+    this.elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "";
 
     ws.on("message", (raw) => {
       try {
@@ -125,10 +134,19 @@ export class CallSession {
     };
 
     this.client = new NovaSonicClient(this.callId, config, {
-      onAudio: (data) => this.send({ type: "audio", data }),
+      // DISABLED: Nova Sonic audio output — we use ElevenLabs TTS instead
+      onAudio: (_data) => {
+        // Intentionally ignored — ElevenLabs handles TTS
+      },
       onToolCall: (toolCallId, toolName, input) =>
         this.send({ type: "tool_call", toolCallId, toolName, input }),
-      onTranscript: (role, text) => this.send({ type: "transcript", role, text }),
+      onTranscript: (role, text) => {
+        this.send({ type: "transcript", role, text });
+        // Route assistant text to ElevenLabs for TTS
+        if (role === "assistant" && text.trim()) {
+          this.enqueueTTS(text);
+        }
+      },
       onError: (message) => this.send({ type: "error", message }),
       onSessionRenewed: () => this.send({ type: "session_renewed" }),
     });
@@ -136,6 +154,14 @@ export class CallSession {
     try {
       await this.client.start();
       this.log("info", "Nova Sonic session started");
+
+      // Send auto-greeting via ElevenLabs immediately (bypasses Nova Sonic VAD)
+      const greeting = msg.config.greeting ||
+        `Thank you for calling ${msg.config.clinicName || "our clinic"}. How can I help you today?`;
+      this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
+      this.enqueueTTS(greeting);
+      // Also send as transcript so Go side knows about it
+      this.send({ type: "transcript", role: "assistant", text: greeting });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       this.log("error", `Failed to start Nova Sonic: ${message}`);
@@ -177,6 +203,70 @@ export class CallSession {
     if (this.ws.readyState === this.ws.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
+  }
+
+  /** Queue text for ElevenLabs TTS and process sequentially. */
+  private enqueueTTS(text: string): void {
+    this.ttsQueue.push(text);
+    if (!this.ttsProcessing) {
+      this.processTTSQueue();
+    }
+  }
+
+  /** Process queued TTS requests one at a time. */
+  private async processTTSQueue(): Promise<void> {
+    if (this.ttsProcessing) return;
+    this.ttsProcessing = true;
+
+    while (this.ttsQueue.length > 0) {
+      const text = this.ttsQueue.shift()!;
+      try {
+        await this.speakViaElevenLabs(text);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.log("error", `ElevenLabs TTS failed: ${message}`);
+      }
+    }
+
+    this.ttsProcessing = false;
+  }
+
+  /** Speak text via ElevenLabs streaming TTS, sending audio to Go/Telnyx. */
+  private speakViaElevenLabs(text: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!this.elevenLabsApiKey) {
+        this.log("error", "ELEVENLABS_API_KEY not set");
+        reject(new Error("ELEVENLABS_API_KEY not set"));
+        return;
+      }
+
+      const session = new ElevenLabsSession(this.callId, {
+        apiKey: this.elevenLabsApiKey,
+      }, {
+        onAudio: (base64Audio) => {
+          // Forward PCM audio to Go → Telnyx
+          this.send({ type: "audio", data: base64Audio });
+        },
+        onError: (message) => {
+          this.log("error", `ElevenLabs error: ${message}`);
+          this.send({ type: "error", message });
+        },
+        onDone: () => {
+          session.close();
+          resolve();
+        },
+      });
+
+      session.connect()
+        .then(() => {
+          session.sendText(text);
+          session.flush();
+        })
+        .catch((err) => {
+          session.close();
+          reject(err);
+        });
+    });
   }
 
   /** Close the Nova Sonic client and WebSocket. */
