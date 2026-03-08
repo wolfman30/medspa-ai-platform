@@ -196,3 +196,10 @@ variable "assign_public_ip" {
   type        = bool
   default     = false
 }
+
+variable "elevenlabs_api_key" {
+  description = "ElevenLabs API key for voice TTS"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

@@ -319,6 +319,14 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 
 			systemPrompt := voice.BuildVoiceSystemPrompt(l, voiceToolDeps.ClinicStore, callCtx.OrgID, availabilitySummary)
 
+			// Resolve clinic name for ElevenLabs greeting
+			clinicName := "our office"
+			if voiceToolDeps.ClinicStore != nil {
+				if cfg, err := voiceToolDeps.ClinicStore.Get(context.Background(), callCtx.OrgID); err == nil && cfg != nil && cfg.Name != "" {
+					clinicName = cfg.Name
+				}
+			}
+
 			return voice.NewBridge(
 				context.Background(),
 				voice.BridgeConfig{
@@ -327,6 +335,7 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 					Voice:        novaSonicVoice,
 					OrgID:        callCtx.OrgID,
 					CallerPhone:  callCtx.From,
+					ClinicName:   clinicName,
 					ToolDeps:     voiceToolDeps,
 				},
 				callControlID,

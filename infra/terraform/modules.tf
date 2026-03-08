@@ -63,6 +63,7 @@ module "ecs_fargate" {
   deployment_maximum_percent               = var.deployment_maximum_percent
 
   enable_nova_sonic_sidecar = var.enable_nova_sonic_sidecar
+  elevenlabs_api_key       = var.elevenlabs_api_key
 
   assign_public_ip = var.assign_public_ip
 

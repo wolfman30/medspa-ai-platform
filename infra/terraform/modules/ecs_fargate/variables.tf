@@ -213,3 +213,10 @@ variable "nova_sonic_sidecar_memory" {
   type        = number
   default     = 512
 }
+
+variable "elevenlabs_api_key" {
+  description = "ElevenLabs API key for voice TTS"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

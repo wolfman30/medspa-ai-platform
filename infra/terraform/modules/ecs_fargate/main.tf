@@ -420,7 +420,8 @@ locals {
     environment = [
       { name = "PORT", value = tostring(var.nova_sonic_sidecar_port) },
       { name = "AWS_REGION", value = var.aws_region },
-      { name = "NODE_ENV", value = "production" }
+      { name = "NODE_ENV", value = "production" },
+      { name = "ELEVENLABS_API_KEY", value = var.elevenlabs_api_key }
     ]
     logConfiguration = {
       logDriver = "awslogs"

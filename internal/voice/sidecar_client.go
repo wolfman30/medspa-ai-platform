@@ -58,6 +58,7 @@ type sidecarInitConfig struct {
 	Voice        string           `json:"voice,omitempty"`
 	OrgID        string           `json:"orgId,omitempty"`
 	CallerPhone  string           `json:"callerPhone,omitempty"`
+	ClinicName   string           `json:"clinicName,omitempty"`
 }
 
 // SidecarClient manages a WebSocket connection to the Nova Sonic sidecar.
@@ -107,7 +108,7 @@ func DialSidecar(cfg SidecarConfig, logger *slog.Logger) (*SidecarClient, error)
 }
 
 // Init sends the session initialization message to the sidecar.
-func (sc *SidecarClient) Init(systemPrompt string, tools []ToolDefinition, voice, orgID, callerPhone string) error {
+func (sc *SidecarClient) Init(systemPrompt string, tools []ToolDefinition, voice, orgID, callerPhone, clinicName string) error {
 	return sc.send(sidecarOutbound{
 		Type: "init",
 		Config: &sidecarInitConfig{
@@ -116,6 +117,7 @@ func (sc *SidecarClient) Init(systemPrompt string, tools []ToolDefinition, voice
 			Voice:        voice,
 			OrgID:        orgID,
 			CallerPhone:  callerPhone,
+			ClinicName:   clinicName,
 		},
 	})
 }

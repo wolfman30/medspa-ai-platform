@@ -34,3 +34,6 @@ ui_certificate_arn = "arn:aws:acm:us-east-1:422017356225:certificate/65cd7cfe-4f
 cognito_user_pool_id = "us-east-1_eGSeUyPdg"
 cognito_client_id    = "7dr4acv3909to0jk292sr0q3h"
 cognito_region       = "us-east-1"
+
+# ElevenLabs TTS for voice AI
+elevenlabs_api_key = "sk_a50fab0a7da45aa03b397b5b0060ad562a7f5ded05090b9b"
