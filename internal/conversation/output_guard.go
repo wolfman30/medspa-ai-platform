@@ -23,6 +23,9 @@ type outputLeakPattern struct {
 }
 
 var outputLeakPatterns = []outputLeakPattern{
+	// Canary token — detects system prompt leakage
+	{regexp.MustCompile(`ZQXW9K7M`), "leak:canary_token", true},
+
 	// System prompt / instruction leaks
 	{regexp.MustCompile(`(?i)my (system\s+)?prompt\s+(is|says|tells|instructs)`), "leak:system_prompt_disclosure", true},
 	{regexp.MustCompile(`(?i)my instructions?\s+(are|say|tell|include|require)`), "leak:instructions_disclosure", true},
