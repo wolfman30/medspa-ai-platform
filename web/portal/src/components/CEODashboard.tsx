@@ -307,7 +307,7 @@ export function CEODashboard() {
         <RevenueAttributionCard orgId={(prospects[0]?.orgId as string) || 'demo-org'} period="month" />
 
         {/* Clinic Performance Stats (per-org, time-filterable) */}
-        <ClinicStatsCard orgId="d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599" />
+        <ClinicStatsCard orgId={(prospects[0]?.orgId as string) || 'd0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599'} />
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Pipeline Funnel */}

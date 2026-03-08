@@ -111,7 +111,7 @@ export function ClinicStatsCard({ orgId }: Props) {
             {stats.deposits_paid > 0 && (
               <span className="text-green-600 font-medium">
                 💡 ROI: {stats.deposit_amount_total_cents > 50000
-                  ? `${(stats.deposit_amount_total_cents / 50000).toFixed(1)}x monthly cost recovered`
+                  ? `${(stats.deposit_amount_total_cents / 50000).toFixed(1)}x vs $500/mo subscription`
                   : 'Building momentum...'}
               </span>
             )}
