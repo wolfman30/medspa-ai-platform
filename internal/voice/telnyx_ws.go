@@ -120,11 +120,12 @@ func (h *TelnyxWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // telnyxSession manages a single Telnyx WebSocket connection.
 type telnyxSession struct {
-	conn    *websocket.Conn
-	logger  *slog.Logger
-	factory BridgeFactory
-	bridge  *Bridge
-	mu      sync.Mutex
+	conn       *websocket.Conn
+	logger     *slog.Logger
+	factory    BridgeFactory
+	bridge     *Bridge
+	mu         sync.Mutex
+	mediaCount int
 }
 
 func (s *telnyxSession) run() {
@@ -159,6 +160,20 @@ func (s *telnyxSession) run() {
 		if err := json.Unmarshal(msg, &event); err != nil {
 			s.logger.Error("telnyx-ws: parse error", "error", err, "raw", string(msg))
 			continue
+		}
+
+		// Debug: log all non-media events and first few media events
+		if event.Event != "media" {
+			s.logger.Info("telnyx-ws: event received", "event", event.Event, "stream_id", event.StreamID)
+		} else {
+			s.mediaCount++
+			if s.mediaCount <= 3 || s.mediaCount%100 == 0 {
+				payloadLen := 0
+				if event.Media != nil {
+					payloadLen = len(event.Media.Payload)
+				}
+				s.logger.Info("telnyx-ws: media event", "count", s.mediaCount, "payload_len", payloadLen, "track", event.Media.Track)
+			}
 		}
 
 		switch event.Event {
