@@ -46,13 +46,13 @@ type Bridge struct {
 	callerPhone   string
 	mediaFormat   TelnyxMediaFormat
 
-	mu             sync.Mutex
-	closed         bool
-	cancelFn       context.CancelFunc
-	started        time.Time
-	outputChunks   int
-	warningTimer   *time.Timer
-	maxTimer       *time.Timer
+	mu           sync.Mutex
+	closed       bool
+	cancelFn     context.CancelFunc
+	started      time.Time
+	outputChunks int
+	warningTimer *time.Timer
+	maxTimer     *time.Timer
 }
 
 // NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
