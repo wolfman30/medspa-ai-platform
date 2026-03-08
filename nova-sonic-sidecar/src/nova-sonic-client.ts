@@ -527,6 +527,13 @@ export class NovaSonicClient {
 
   private handleContentStart(data: ContentStartPayload): void {
     const contentName = data.contentName;
+    this.log("info", "handleContentStart DETAIL", {
+      contentName,
+      type: data.type,
+      role: data.role,
+      rawKeys: Object.keys(data),
+      rawData: JSON.stringify(data).substring(0, 500),
+    });
     if (!contentName) return;
 
     if (data.type === "AUDIO") {
@@ -547,6 +554,15 @@ export class NovaSonicClient {
     if (!contentName) return;
     const content = data.content ?? "";
 
+    this.log("info", "handleTextOutput DETAIL", {
+      contentName,
+      contentLen: content.length,
+      contentPreview: content.substring(0, 200),
+      hasTextBuf: this.textContentBuffers.has(contentName),
+      hasToolBuf: this.toolUseBuffers.has(contentName),
+      allTextBufKeys: Array.from(this.textContentBuffers.keys()),
+    });
+
     const textBuf = this.textContentBuffers.get(contentName);
     if (textBuf) {
       textBuf.text += content;
@@ -556,6 +572,9 @@ export class NovaSonicClient {
     const toolBuf = this.toolUseBuffers.get(contentName);
     if (toolBuf) {
       toolBuf.input += content;
+    } else {
+      this.log("warn", "textOutput has NO matching buffer — creating ad-hoc TEXT buffer", { contentName });
+      this.textContentBuffers.set(contentName, { role: "assistant", text: content });
     }
   }
 
@@ -576,22 +595,50 @@ export class NovaSonicClient {
 
   private handleContentEnd(data: ContentEndPayload): void {
     const contentName = data.contentName;
+    this.log("info", "handleContentEnd DETAIL", {
+      contentName,
+      type: data.type,
+      rawKeys: Object.keys(data),
+      rawData: JSON.stringify(data).substring(0, 500),
+      hasTextBuf: contentName ? this.textContentBuffers.has(contentName) : false,
+      hasToolBuf: contentName ? this.toolUseBuffers.has(contentName) : false,
+    });
     if (!contentName) return;
 
     if (data.type === "AUDIO") {
       this.audioOutputActive = false;
       this.audioStateResolve?.();
       this.audioStateResolve = null;
+      // Check if there's a text buffer for this contentName (fallback for mismatched types)
+      if (this.textContentBuffers.has(contentName)) {
+        this.log("warn", "contentEnd type=AUDIO but text buffer exists — emitting transcript anyway", { contentName });
+        this.emitTextTranscript(contentName);
+      }
     } else if (data.type === "TEXT") {
       this.emitTextTranscript(contentName);
     } else if (data.type === "TOOL") {
       this.emitToolCall(contentName, data);
+    } else {
+      // Unknown or missing type — check if we have a pending text buffer
+      if (this.textContentBuffers.has(contentName)) {
+        this.log("warn", `contentEnd type=${data.type} but text buffer exists — emitting transcript`, { contentName });
+        this.emitTextTranscript(contentName);
+      } else if (this.toolUseBuffers.has(contentName)) {
+        this.log("warn", `contentEnd type=${data.type} but tool buffer exists — emitting tool call`, { contentName });
+        this.emitToolCall(contentName, data);
+      }
     }
   }
 
   /** Emit a transcript callback for a completed text content block. */
   private emitTextTranscript(contentName: string): void {
     const textBuf = this.textContentBuffers.get(contentName);
+    this.log("info", "emitTextTranscript FIRING", {
+      contentName,
+      hasBuffer: !!textBuf,
+      text: textBuf?.text?.substring(0, 200) ?? "(none)",
+      role: textBuf?.role ?? "(none)",
+    });
     if (textBuf?.text) {
       const role = textBuf.role === "user" ? "user" as const : "assistant" as const;
       // Deduplicate — Nova Sonic sends each response as TEXT twice
