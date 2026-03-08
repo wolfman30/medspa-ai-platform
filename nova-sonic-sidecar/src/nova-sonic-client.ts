@@ -57,6 +57,7 @@ interface BedrockResponseEvent {
 /** contentStart event payload. */
 interface ContentStartPayload {
   contentName?: string;
+  contentId?: string;
   type?: "AUDIO" | "TEXT" | "TOOL";
   role?: string;
   toolUseConfiguration?: { toolName?: string };
@@ -65,6 +66,7 @@ interface ContentStartPayload {
 /** contentEnd event payload. */
 interface ContentEndPayload {
   contentName?: string;
+  contentId?: string;
   type?: "AUDIO" | "TEXT" | "TOOL";
   toolUseConfiguration?: { toolUseId?: string };
   toolResultInputConfiguration?: { toolUseId?: string };
@@ -73,6 +75,7 @@ interface ContentEndPayload {
 /** textOutput / toolUse event payload. */
 interface TextPayload {
   contentName?: string;
+  contentId?: string;
   content?: string;
 }
 
@@ -526,13 +529,13 @@ export class NovaSonicClient {
   // ── Event handlers ─────────────────────────────────────────────────
 
   private handleContentStart(data: ContentStartPayload): void {
-    const contentName = data.contentName;
+    const contentName = data.contentName || data.contentId;
     this.log("info", "handleContentStart DETAIL", {
       contentName,
+      contentId: data.contentId,
       type: data.type,
       role: data.role,
       rawKeys: Object.keys(data),
-      rawData: JSON.stringify(data).substring(0, 500),
     });
     if (!contentName) return;
 
@@ -550,7 +553,7 @@ export class NovaSonicClient {
   }
 
   private handleTextOutput(data: TextPayload): void {
-    const contentName = data.contentName;
+    const contentName = data.contentName || data.contentId;
     if (!contentName) return;
     const content = data.content ?? "";
 
@@ -585,7 +588,7 @@ export class NovaSonicClient {
   }
 
   private handleToolUse(data: TextPayload): void {
-    const contentName = data.contentName;
+    const contentName = data.contentName || data.contentId;
     if (!contentName) return;
     const toolBuf = this.toolUseBuffers.get(contentName);
     if (toolBuf) {
@@ -594,7 +597,7 @@ export class NovaSonicClient {
   }
 
   private handleContentEnd(data: ContentEndPayload): void {
-    const contentName = data.contentName;
+    const contentName = data.contentName || data.contentId;
     this.log("info", "handleContentEnd DETAIL", {
       contentName,
       type: data.type,
