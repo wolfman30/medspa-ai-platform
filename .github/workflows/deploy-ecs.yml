@@ -231,7 +231,8 @@ jobs:
             -var="enable_blue_green=true" \
             -var="enable_nova_sonic_sidecar=true" \
             -var="assign_public_ip=true" \
-            -var="enable_nat_gateway=false"
+            -var="enable_nat_gateway=false" \
+            -var="elevenlabs_api_key=${{ secrets.ELEVENLABS_API_KEY }}"
 
       - name: Read UI outputs
         id: ui
