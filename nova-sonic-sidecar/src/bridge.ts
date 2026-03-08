@@ -134,9 +134,9 @@ export class CallSession {
     };
 
     this.client = new NovaSonicClient(this.callId, config, {
-      // DISABLED: Nova Sonic audio output — we use ElevenLabs TTS instead
-      onAudio: (_data) => {
-        // Intentionally ignored — ElevenLabs handles TTS
+      onAudio: (data) => {
+        // Forward Nova Sonic's native audio output to Go/Telnyx
+        this.send({ type: "audio", data });
       },
       onToolCall: (toolCallId, toolName, input) =>
         this.send({ type: "tool_call", toolCallId, toolName, input }),
