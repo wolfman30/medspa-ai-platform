@@ -185,7 +185,7 @@ func (s *ConversationStore) AppendMessage(ctx context.Context, conversationID st
 	// Ensure conversation exists
 	_, err := s.EnsureConversation(ctx, conversationID)
 	if err != nil {
-		return err
+		return fmt.Errorf("AppendMessage: ensure conversation %s: %w", conversationID, err)
 	}
 
 	// Insert message
@@ -252,15 +252,16 @@ func (s *ConversationStore) EndConversation(ctx context.Context, conversationID 
 	}
 
 	now := time.Now()
-	_, err := s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 		UPDATE conversations SET
 			status = 'ended',
 			ended_at = $1,
 			updated_at = $1
 		WHERE conversation_id = $2 AND ended_at IS NULL
-	`, now, conversationID)
-
-	return err
+	`, now, conversationID); err != nil {
+		return fmt.Errorf("EndConversation %s: %w", conversationID, err)
+	}
+	return nil
 }
 
 // GetConversation retrieves a conversation by its ID.
@@ -367,8 +368,10 @@ func (s *ConversationStore) LinkLead(ctx context.Context, conversationID string,
 			updated_at = $2
 		WHERE conversation_id = $3
 	`, leadID, now, conversationID)
-
-	return err
+	if err != nil {
+		return fmt.Errorf("LinkLead %s: %w", conversationID, err)
+	}
+	return nil
 }
 
 // UpdateStatus updates the status of a conversation.
@@ -381,8 +384,10 @@ func (s *ConversationStore) UpdateStatus(ctx context.Context, conversationID, st
 		UPDATE conversations SET status = $1, updated_at = $2
 		WHERE conversation_id = $3
 	`, status, time.Now(), conversationID)
-
-	return err
+	if err != nil {
+		return fmt.Errorf("UpdateStatus %s: %w", conversationID, err)
+	}
+	return nil
 }
 
 // UpdateStatusByPhone updates conversation status by org_id and phone number.

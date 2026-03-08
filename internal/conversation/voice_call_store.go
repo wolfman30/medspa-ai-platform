@@ -105,7 +105,7 @@ func (s *VoiceCallStore) GetCallState(ctx context.Context, callID string) (*Voic
 func (s *VoiceCallStore) IncrementTurn(ctx context.Context, callID string) error {
 	state, err := s.GetCallState(ctx, callID)
 	if err != nil {
-		return err
+		return fmt.Errorf("IncrementTurn: get call state %s: %w", callID, err)
 	}
 	if state == nil {
 		return fmt.Errorf("voice call state: call %s not found", callID)
@@ -119,7 +119,7 @@ func (s *VoiceCallStore) IncrementTurn(ctx context.Context, callID string) error
 func (s *VoiceCallStore) EndCall(ctx context.Context, callID, outcome string) error {
 	state, err := s.GetCallState(ctx, callID)
 	if err != nil {
-		return err
+		return fmt.Errorf("EndCall: get call state %s: %w", callID, err)
 	}
 	if state == nil {
 		return fmt.Errorf("voice call state: call %s not found", callID)
@@ -138,8 +138,10 @@ func (s *VoiceCallStore) AppendTranscript(ctx context.Context, callID string, en
 	pipe := s.rdb.Pipeline()
 	pipe.RPush(ctx, voiceTranscriptKey(callID), data)
 	pipe.Expire(ctx, voiceTranscriptKey(callID), voiceCallTTL)
-	_, err = pipe.Exec(ctx)
-	return err
+	if _, err = pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("AppendTranscript: pipeline exec for %s: %w", callID, err)
+	}
+	return nil
 }
 
 // GetTranscript retrieves the full voice call transcript.
