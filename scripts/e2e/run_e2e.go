@@ -1163,7 +1163,8 @@ func scenarioEmailValidation(t *T) {
 	}
 	t.check("availability triggered without email", true)
 
-	// Select a slot first; email collection happens AFTER time selection in Moxie flow.
+	// Select a slot — after selection, bot shows booking policies + deposit link.
+	// Email is NOT collected via SMS; it's captured on the Moxie booking/Stripe Checkout page.
 	if err := sendSMS("1"); err != nil {
 		t.fatalf("send slot selection: %v", err)
 		return
@@ -1174,31 +1175,9 @@ func scenarioEmailValidation(t *T) {
 		return
 	}
 	respAfterSlot := lastRealAssistantMessage(msgsAfterSlot)
-	t.check("asks for email after slot selection", containsAny(respAfterSlot, "email", "address"))
-
-	// Send invalid email — AI should ask for a valid email.
-	if err := sendSMS("not-an-email"); err != nil {
-		t.fatalf("send bad email: %v", err)
-		return
-	}
-	msgs2, err := waitForReply(3, 25)
-	if err != nil {
-		t.fatalf("%v", err)
-		return
-	}
-	resp2 := lastRealAssistantMessage(msgs2)
-	t.check("asks for valid email after invalid input", containsAny(resp2, "email", "valid", "address"))
-
-	// Send valid email
-	if err := sendSMS("jamie@test.com"); err != nil {
-		t.fatalf("send good email: %v", err)
-		return
-	}
-	time.Sleep(8 * time.Second)
-	conv, _ := getConversation()
-	msgs3 := getMessages(conv)
-	allText := allRealAssistantMessages(msgs3)
-	t.check("valid email accepted", containsAny(allText, "jamie@test.com", "got it", "great", "thank", "email"))
+	// After slot selection, bot should present booking policies or deposit link (not ask for email)
+	t.check("booking flow continues after slot selection", containsAny(respAfterSlot,
+		"policy", "policies", "deposit", "pay", "confirm", "cancel", "stripe", "book"))
 }
 
 // 25. Combined day+time filter (B13)
