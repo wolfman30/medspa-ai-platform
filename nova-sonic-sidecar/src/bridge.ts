@@ -69,6 +69,7 @@ export class CallSession {
   private pendingAssistantText = "";
   private ttsQueue: string[] = [];
   private ttsProcessing = false;
+  private greetingSent = false;
 
   constructor(ws: WebSocket, callId: string) {
     this.ws = ws;
@@ -139,10 +140,20 @@ export class CallSession {
       onToolCall: (toolCallId, toolName, input) =>
         this.send({ type: "tool_call", toolCallId, toolName, input }),
       onTranscript: (role, text) => {
-        this.send({ type: "transcript", role, text });
+        // Strip mood/stage direction tags like [warm], [empathetic], etc.
+        let cleanText = text.replace(/\[[\w\s]+\]\s*/g, "").trim();
+        if (!cleanText) return;
+
+        this.send({ type: "transcript", role, text: cleanText });
+
         // Route assistant text to ElevenLabs for TTS
-        if (role === "assistant" && text.trim()) {
-          this.enqueueTTS(text);
+        if (role === "assistant") {
+          // Skip duplicate greetings — we already sent one via ElevenLabs
+          if (this.greetingSent && this.isGreeting(cleanText)) {
+            this.log("info", `Skipping duplicate greeting: ${cleanText.substring(0, 60)}`);
+            return;
+          }
+          this.enqueueTTS(cleanText);
         }
       },
       onError: (message) => this.send({ type: "error", message }),
@@ -158,6 +169,7 @@ export class CallSession {
         `Thank you for calling ${msg.config.clinicName || "our clinic"}. How can I help you today?`;
       this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
       this.enqueueTTS(greeting);
+      this.greetingSent = true;
       // Also send as transcript so Go side knows about it
       this.send({ type: "transcript", role: "assistant", text: greeting });
     } catch (err: unknown) {
@@ -281,6 +293,16 @@ export class CallSession {
       this.ws.close();
     }
     this.log("info", "Call session cleaned up");
+  }
+
+  /** Check if text is a greeting (to suppress duplicates from Nova Sonic). */
+  private isGreeting(text: string): boolean {
+    const lower = text.toLowerCase();
+    return (
+      (lower.includes("thank") && lower.includes("calling")) ||
+      (lower.includes("hi there") && lower.includes("how can i help")) ||
+      (lower.includes("welcome to") && lower.includes("how can"))
+    );
   }
 
   private log(level: string, msg: string): void {

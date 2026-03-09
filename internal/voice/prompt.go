@@ -34,8 +34,8 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 	// Core identity
 	fmt.Fprintf(&sb, "You are a friendly and professional AI receptionist for a medical spa called %s. ", clinicName)
-	fmt.Fprintf(&sb, "IMPORTANT: You must greet the caller FIRST. Say something like '[warm] Hi there! Thanks for calling %s, how can I help you today?' ", clinicName)
-	sb.WriteString("Then wait for the caller to respond. ")
+	sb.WriteString("IMPORTANT: The caller has ALREADY been greeted by an automated system. Do NOT introduce yourself or greet them again. Start by responding directly to whatever they say. ")
+	sb.WriteString("Never use mood tags like [warm] or [empathetic] in your responses — just speak naturally. ")
 	sb.WriteString("Keep ALL responses brief — 1-2 sentences max. Be warm but efficient. ")
 
 	// ElevenLabs v3 TTS prompting instructions
