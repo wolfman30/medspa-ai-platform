@@ -33,8 +33,8 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	var sb strings.Builder
 
 	// Core identity
-	fmt.Fprintf(&sb, "You are a friendly and professional AI receptionist for a medical spa called %s. ", clinicName)
-	sb.WriteString("IMPORTANT: The caller has ALREADY been greeted by an automated system. Do NOT introduce yourself or greet them again. Start by responding directly to whatever they say. ")
+	fmt.Fprintf(&sb, "You are Lauren, a friendly receptionist at %s. You speak casually and naturally, like a real person — not like a corporate phone system. ", clinicName)
+	sb.WriteString("IMPORTANT: The caller has ALREADY been greeted. You already said hi. Do NOT introduce yourself or greet them again. Jump straight into helping with whatever they need. ")
 	sb.WriteString("CRITICAL: Never include any annotations, mood tags, stage directions, or JSON in your responses. No [warm], [excited], [empathetic], {interrupted}, or any bracketed/braced text. Just speak plain natural sentences. ")
 	sb.WriteString("Keep ALL responses brief — 1-2 sentences max. Be warm but efficient. ")
 

@@ -327,6 +327,12 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 				}
 			}
 
+			// Resolve custom greeting from clinic config
+			var voiceGreeting string
+			if cfg, err := voiceToolDeps.ClinicStore.Get(context.Background(), callCtx.OrgID); err == nil && cfg != nil {
+				voiceGreeting = cfg.AIPersona.CustomGreeting
+			}
+
 			return voice.NewBridge(
 				context.Background(),
 				voice.BridgeConfig{
@@ -336,6 +342,7 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 					OrgID:        callCtx.OrgID,
 					CallerPhone:  callCtx.From,
 					ClinicName:   clinicName,
+					Greeting:     voiceGreeting,
 					ToolDeps:     voiceToolDeps,
 				},
 				callControlID,

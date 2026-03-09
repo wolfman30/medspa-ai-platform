@@ -170,8 +170,9 @@ export class CallSession {
       this.log("info", "Nova Sonic session started");
 
       // Send auto-greeting via ElevenLabs immediately (bypasses Nova Sonic VAD)
+      const clinicName = msg.config.clinicName || "our office";
       const greeting = msg.config.greeting ||
-        `Thank you for calling ${msg.config.clinicName || "our clinic"}. How can I help you today?`;
+        `Hi, thanks for calling ${clinicName}! This is Lauren, how can I help you?`;
       this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
       this.enqueueTTS(greeting);
       this.greetingSent = true;

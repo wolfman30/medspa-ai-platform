@@ -21,6 +21,7 @@ type BridgeConfig struct {
 	OrgID        string
 	CallerPhone  string // E.164
 	ClinicName   string // For ElevenLabs greeting
+	Greeting     string // Custom greeting text (optional)
 	Tools        []ToolDefinition
 	ToolDeps     *ToolDeps
 }
@@ -90,7 +91,7 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 	if tools == nil {
 		tools = DefaultTools()
 	}
-	if err := sidecar.Init(cfg.SystemPrompt, tools, cfg.Voice, cfg.OrgID, cfg.CallerPhone, cfg.ClinicName); err != nil {
+	if err := sidecar.Init(cfg.SystemPrompt, tools, cfg.Voice, cfg.OrgID, cfg.CallerPhone, cfg.ClinicName, cfg.Greeting); err != nil {
 		cancel()
 		sidecar.Close()
 		return nil, fmt.Errorf("init nova sonic session: %w", err)
