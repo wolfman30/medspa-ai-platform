@@ -140,8 +140,13 @@ export class CallSession {
       onToolCall: (toolCallId, toolName, input) =>
         this.send({ type: "tool_call", toolCallId, toolName, input }),
       onTranscript: (role, text) => {
-        // Strip mood/stage direction tags like [warm], [empathetic], etc.
-        let cleanText = text.replace(/\[[\w\s]+\]\s*/g, "").trim();
+        // Strip mood/stage direction tags like [warm], [excited], [sigh], etc.
+        let cleanText = text.replace(/\[[\w\s-]+\]\s*/g, "").trim();
+        
+        // Strip JSON control messages like { "interrupted" : true }
+        cleanText = cleanText.replace(/\{[^}]*"interrupted"[^}]*\}/g, "").trim();
+        
+        // Skip empty or whitespace-only after cleanup
         if (!cleanText) return;
 
         this.send({ type: "transcript", role, text: cleanText });
