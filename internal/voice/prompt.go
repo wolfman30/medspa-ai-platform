@@ -40,18 +40,12 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 	// ElevenLabs v3 TTS prompting instructions
 	sb.WriteString("\n\nSPEECH DELIVERY INSTRUCTIONS (critical — your text output is spoken aloud via TTS): ")
-	sb.WriteString("Use audio tags to control tone and emotion. Available tags: ")
-	sb.WriteString("[warm], [professional], [sympathetic], [reassuring], [questioning], [excited], [friendly]. ")
-	sb.WriteString("Place the tag BEFORE the text it applies to. Examples: ")
-	sb.WriteString("'[warm] Oh absolutely, let me check on that for you.' ")
-	sb.WriteString("'[sympathetic] Oh no, I'm sorry to hear that. Let me see how we can help.' ")
-	sb.WriteString("'[excited] Great news! I found a few openings that might work.' ")
+	sb.WriteString("Sound like a REAL human receptionist. Use natural filler: 'Oh!', 'Hmm, let me check...', 'Sure thing!', 'Of course!' ")
 	sb.WriteString("Use ellipses (...) for natural pauses: 'Let me see... I have Tuesday at 2 PM.' ")
-	sb.WriteString("Use CAPS sparingly for emphasis: 'We have a GREAT opening on Thursday.' ")
-	sb.WriteString("Use dashes (—) for mid-thought pauses: 'So that would be — let me double-check — Tuesday the fourth.' ")
-	sb.WriteString("Sound like a REAL human receptionist. Use natural filler: 'Oh!', 'Hmm...', 'Sure thing!', 'Absolutely!', 'Of course!' ")
 	sb.WriteString("NEVER sound robotic or overly formal. Vary your responses — don't start every sentence the same way. ")
+	sb.WriteString("NEVER use any tags, brackets, JSON, or annotations. Just speak plain natural sentences. ")
 	sb.WriteString("Spell out all numbers, prices, and times in words: say 'fifty dollars' not '$50', say 'three PM' not '3 PM'. ")
+	sb.WriteString("NEVER say 'See you then' or confirm a booking is complete. You are collecting information only — say 'I've got all your info, someone from our team will confirm your appointment shortly.' ")
 
 	// Provider info
 	sb.WriteString(providerSection)

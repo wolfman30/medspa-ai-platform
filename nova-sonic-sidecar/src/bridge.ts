@@ -70,6 +70,7 @@ export class CallSession {
   private ttsQueue: string[] = [];
   private ttsProcessing = false;
   private greetingSent = false;
+  private recentTTSTexts = new Set<string>();
 
   constructor(ws: WebSocket, callId: string) {
     this.ws = ws;
@@ -144,7 +145,9 @@ export class CallSession {
         let cleanText = text.replace(/\[[\w\s-]+\]\s*/g, "").trim();
         
         // Strip JSON control messages like { "interrupted" : true }
-        cleanText = cleanText.replace(/\{[^}]*"interrupted"[^}]*\}/g, "").trim();
+        cleanText = cleanText.replace(/\{[^}]*interrupted[^}]*\}/gi, "").trim();
+        // Also strip if the entire message looks like JSON
+        if (cleanText.startsWith("{") && cleanText.endsWith("}")) cleanText = "";
         
         // Skip empty or whitespace-only after cleanup
         if (!cleanText) return;
@@ -157,6 +160,17 @@ export class CallSession {
           if (this.greetingSent && this.isGreeting(cleanText)) {
             this.log("info", `Skipping duplicate greeting: ${cleanText.substring(0, 60)}`);
             return;
+          }
+          // Second layer dedup — catch any duplicates that slip through nova-sonic-client
+          const normalized = cleanText.trim().replace(/\s+/g, " ").toLowerCase();
+          if (this.recentTTSTexts.has(normalized)) {
+            this.log("info", `Bridge dedup: skipping duplicate TTS: ${cleanText.substring(0, 60)}`);
+            return;
+          }
+          this.recentTTSTexts.add(normalized);
+          if (this.recentTTSTexts.size > 30) {
+            const first = this.recentTTSTexts.values().next().value;
+            if (first) this.recentTTSTexts.delete(first);
           }
           this.enqueueTTS(cleanText);
         }
