@@ -93,6 +93,9 @@ type UpdateConfigRequest struct {
 	VoiceAIEnabled            *bool               `json:"voice_ai_enabled,omitempty"`
 	TelnyxAssistantID         string              `json:"telnyx_assistant_id,omitempty"`
 	SMSPhoneNumber            string              `json:"sms_phone_number,omitempty"`
+	BoulevardBusinessID       string              `json:"boulevard_business_id,omitempty"`
+	BoulevardLocationID       string              `json:"boulevard_location_id,omitempty"`
+	ProviderNames             map[string]string   `json:"provider_names,omitempty"`
 }
 
 // UpdateConfig creates or updates the clinic configuration for an org.
@@ -253,6 +256,15 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SMSPhoneNumber != "" {
 		cfg.SMSPhoneNumber = req.SMSPhoneNumber
+	}
+	if req.BoulevardBusinessID != "" {
+		cfg.BoulevardBusinessID = req.BoulevardBusinessID
+	}
+	if req.BoulevardLocationID != "" {
+		cfg.BoulevardLocationID = req.BoulevardLocationID
+	}
+	if len(req.ProviderNames) > 0 {
+		cfg.ProviderNames = req.ProviderNames
 	}
 
 	// Save updated config
