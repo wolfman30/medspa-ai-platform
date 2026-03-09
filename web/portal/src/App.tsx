@@ -12,6 +12,7 @@ import { ProspectTracker } from './components/ProspectTracker';
 import { CEODashboard } from './components/CEODashboard';
 import { StoriesBoard } from './components/StoriesBoard';
 import { ContentCalendar } from './components/ContentCalendar';
+import { MorningBriefs } from './components/MorningBriefs';
 import { LeadsList } from './components/LeadsList';
 import { FinanceDashboard } from './components/FinanceDashboard';
 import { AgentTeamCard } from './components/AgentTeamCard';
@@ -41,7 +42,8 @@ type AppView =
   | 'finances'
   | 'agents'
   | 'leads'
-  | 'operations';
+  | 'operations'
+  | 'briefs';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -449,6 +451,15 @@ function AuthenticatedApp() {
                 )}
                 {isAdmin && (
                   <button
+                    onClick={() => setView('briefs')}
+                    aria-current={view === 'briefs' ? 'page' : undefined}
+                    className={view === 'briefs' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Briefs
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
                     onClick={() => setView('finances')}
                     aria-current={view === 'finances' ? 'page' : undefined}
                     className={view === 'finances' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
@@ -483,6 +494,8 @@ function AuthenticatedApp() {
       {isAdmin && orgId ? (
         view === 'ceo-dashboard' ? (
           <CEODashboard />
+        ) : view === 'briefs' ? (
+          <MorningBriefs />
         ) : view === 'content' ? (
           <ContentCalendar />
         ) : view === 'stories' ? (
