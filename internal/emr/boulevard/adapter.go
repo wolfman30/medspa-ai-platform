@@ -3,7 +3,6 @@ package boulevard
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -17,8 +16,8 @@ type BoulevardAdapter struct {
 }
 
 // NewBoulevardAdapter creates a new Boulevard adapter.
-// dryRun controls whether the adapter makes real API calls or returns mock data.
-// Use NewBoulevardAdapterFromEnv for environment-based configuration.
+// In dry-run mode, read-only operations (availability lookup) still hit the real API,
+// but writes (reserve, checkout) are skipped and return fake results.
 func NewBoulevardAdapter(client *BoulevardClient, dryRun bool, logger *logging.Logger) *BoulevardAdapter {
 	if logger == nil {
 		logger = logging.Default()
@@ -31,35 +30,39 @@ func (a *BoulevardAdapter) Name() string { return "boulevard" }
 // IsDryRun returns true if the adapter is in dry-run mode.
 func (a *BoulevardAdapter) IsDryRun() bool { return a.dryRun }
 
-// ResolveAvailability checks Boulevard for available slots.
-// In dry-run mode, returns mock slots for the next 3 business days.
-func (a *BoulevardAdapter) ResolveAvailability(ctx context.Context, serviceID, providerID string, date time.Time) ([]TimeSlot, error) {
+// SetClient replaces the underlying client (used for per-clinic client creation).
+func (a *BoulevardAdapter) SetClient(client *BoulevardClient) {
+	a.client = client
+}
+
+// ResolveAvailability checks Boulevard for available slots using the real public API.
+// Works in both dry-run and live mode — availability is read-only.
+func (a *BoulevardAdapter) ResolveAvailability(ctx context.Context, serviceName, providerName string, date time.Time) ([]TimeSlot, error) {
 	if a == nil || a.client == nil {
-		if a != nil && !a.dryRun {
-			a.logger.Warn("Boulevard adapter: client not configured, cannot fetch availability",
-				"service_id", serviceID, "provider_id", providerID, "date", date.Format("2006-01-02"))
-			return nil, fmt.Errorf("boulevard adapter: client not configured")
-		}
+		return nil, fmt.Errorf("boulevard adapter: client not configured")
 	}
-	if a.dryRun {
-		a.logger.Info("BOULEVARD DRY RUN: ResolveAvailability",
-			"service_id", serviceID, "provider_id", providerID, "date", date.Format("2006-01-02"))
-		return a.generateMockSlots(date), nil
+
+	tz := "America/New_York" // TODO: get from clinic config
+	a.logger.Info("Boulevard: fetching real availability",
+		"service", serviceName, "provider", providerName, "dry_run", a.dryRun)
+
+	slots, _, err := a.client.GetAvailableSlots(ctx, serviceName, providerName, tz)
+	if err != nil {
+		return nil, fmt.Errorf("boulevard availability: %w", err)
 	}
-	return a.client.GetAvailableSlots(ctx, serviceID, providerID, date)
+
+	a.logger.Info("Boulevard: availability fetched", "slots", len(slots), "service", serviceName)
+	return slots, nil
 }
 
 // CreateBooking runs the full Boulevard cart-based booking flow.
-// In dry-run mode, logs the booking details and returns a fake result.
+// In dry-run mode, logs the request and returns a fake result.
 func (a *BoulevardAdapter) CreateBooking(ctx context.Context, req CreateBookingRequest) (*BookingResult, error) {
 	if a.dryRun {
 		a.logger.Info("BOULEVARD DRY RUN: CreateBooking (NOT actually booking)",
 			"service_id", req.ServiceID,
-			"provider_id", req.ProviderID,
-			"start_at", req.StartAt.Format(time.RFC3339),
+			"bookable_time_id", req.BookableTimeID,
 			"client_name", req.Client.FirstName+" "+req.Client.LastName,
-			"client_email", req.Client.Email,
-			"client_phone", req.Client.Phone,
 		)
 		return &BookingResult{
 			BookingID: "dry-run-" + time.Now().Format("20060102150405"),
@@ -70,40 +73,7 @@ func (a *BoulevardAdapter) CreateBooking(ctx context.Context, req CreateBookingR
 	if a == nil || a.client == nil {
 		return nil, fmt.Errorf("boulevard adapter: client not configured")
 	}
-	return a.client.CreateBooking(ctx, req)
-}
-
-// generateMockSlots produces fake availability for demo/dry-run mode.
-// Returns 3 slots per day for the next 3 business days.
-func (a *BoulevardAdapter) generateMockSlots(startDate time.Time) []TimeSlot {
-	var slots []TimeSlot
-	day := startDate
-	daysAdded := 0
-	for daysAdded < 3 {
-		// Skip weekends
-		if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
-			day = day.AddDate(0, 0, 1)
-			continue
-		}
-		// Morning, midday, afternoon slots
-		for _, hour := range []int{10, 13, 15} {
-			start := time.Date(day.Year(), day.Month(), day.Day(), hour, 0, 0, 0, day.Location())
-			end := start.Add(60 * time.Minute)
-			slots = append(slots, TimeSlot{StartAt: start, EndAt: end})
-		}
-		day = day.AddDate(0, 0, 1)
-		daysAdded++
-	}
-	return slots
-}
-
-func splitName(full string) (first, last string) {
-	parts := strings.Fields(strings.TrimSpace(full))
-	if len(parts) == 0 {
-		return "", ""
-	}
-	if len(parts) == 1 {
-		return parts[0], ""
-	}
-	return parts[0], strings.Join(parts[1:], " ")
+	// Full flow: CreateCart → AddItem → Reserve → SetClient → Checkout
+	// TODO: implement when going live
+	return nil, fmt.Errorf("boulevard live booking not yet implemented")
 }

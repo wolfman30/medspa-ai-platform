@@ -563,6 +563,22 @@ func buildSystemPrompt(depositCents int, usesMoxie bool, cfg ...*clinic.Config) 
 		}
 	}
 
+	// Boulevard clinics: add provider preference from ProviderNames in clinic config
+	if len(cfg) > 0 && cfg[0] != nil && cfg[0].UsesBoulevardBooking() && len(cfg[0].ProviderNames) > 0 {
+		var blvdInfo strings.Builder
+		blvdInfo.WriteString("\n\n📋 PROVIDER INFO — IMPORTANT:\n")
+		blvdInfo.WriteString("Available providers at this clinic:\n")
+		for id, name := range cfg[0].ProviderNames {
+			_ = id
+			blvdInfo.WriteString(fmt.Sprintf("- %s\n", name))
+		}
+		blvdInfo.WriteString("\n🚨 PROVIDER PREFERENCE RULE:\n")
+		blvdInfo.WriteString("For ALL services, you MUST ask the patient:\n")
+		blvdInfo.WriteString("\"Do you have a preferred provider? We have [names]. Or no preference is totally fine!\"\n")
+		blvdInfo.WriteString("Ask this BEFORE checking availability. Do NOT skip this step.\n")
+		prompt += blvdInfo.String()
+	}
+
 	return prompt
 }
 

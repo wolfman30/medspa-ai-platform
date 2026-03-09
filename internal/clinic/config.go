@@ -164,9 +164,14 @@ type Config struct {
 	// HandoffNotificationEmail is the clinic owner's email for manual handoff email alerts.
 	HandoffNotificationEmail string `json:"handoff_notification_email,omitempty"`
 
-	// Boulevard API credentials (used when BookingPlatform == "boulevard").
-	BoulevardAPIKey     string `json:"boulevard_api_key,omitempty"`
+	// Boulevard config (used when BookingPlatform == "boulevard").
+	// Public widget API — no API key needed, just business ID + location ID.
 	BoulevardBusinessID string `json:"boulevard_business_id,omitempty"`
+	BoulevardLocationID string `json:"boulevard_location_id,omitempty"`
+
+	// ProviderNames maps provider IDs/slugs to display names for non-Moxie clinics.
+	// For Boulevard clinics, set manually from the booking widget staff data.
+	ProviderNames map[string]string `json:"provider_names,omitempty"`
 
 	// VoiceAIEnabled controls whether inbound voice calls use Telnyx Voice AI.
 	// When false (default), calls fall through to voicemail → SMS text-back flow.

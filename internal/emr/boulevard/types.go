@@ -1,41 +1,49 @@
 package boulevard
 
-import "time"
-
-const (
-	defaultGraphQLEndpoint = "https://dashboard.joinblvd.com/api/2020-01/graphql"
+import (
+	"encoding/json"
+	"time"
 )
 
-// Service represents a bookable Boulevard service.
+const (
+	// Public widget GraphQL endpoint — no API key needed.
+	publicGraphQLEndpoint = "https://www.joinblvd.com/b/.api/graph"
+)
+
+// Service represents a bookable Boulevard service from the cart's available categories.
 type Service struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	PriceCents  int    `json:"priceCents,omitempty"` // e.g. 37500 = $375.00
 	DurationMin int    `json:"durationMin,omitempty"`
 }
 
 // Provider represents a Boulevard staff member/provider.
 type Provider struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID        string `json:"id"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Name      string `json:"name"` // convenience: "FirstName LastName"
 }
 
-// TimeSlot represents a concrete time slot.
+// TimeSlot represents a concrete bookable time slot.
 type TimeSlot struct {
+	ID      string    `json:"id"` // e.g. "t_2026-03-11T11:30:00"
 	StartAt time.Time `json:"startAt"`
-	EndAt   time.Time `json:"endAt"`
 }
 
-// CartItem represents one service item in the booking cart.
+// StaffVariant represents a provider available for a specific time slot.
+type StaffVariant struct {
+	ID        string `json:"id"` // composite: "serviceId:staffId"
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+}
+
+// CartItem represents one selected service item in the booking cart.
 type CartItem struct {
-	ID         string `json:"id"`
-	ServiceID  string `json:"serviceId"`
-	ProviderID string `json:"providerId,omitempty"`
-}
-
-// Cart is the Boulevard booking cart.
-type Cart struct {
-	ID    string     `json:"id"`
-	Items []CartItem `json:"items,omitempty"`
+	ID   string `json:"id"`   // selected item ID (different from catalog ID)
+	Name string `json:"name"` // service name
 }
 
 // Client is the patient/contact details passed to checkout.
@@ -48,11 +56,11 @@ type Client struct {
 
 // CreateBookingRequest is input for the full cart-based booking flow.
 type CreateBookingRequest struct {
-	ServiceID  string    `json:"serviceId"`
-	ProviderID string    `json:"providerId,omitempty"`
-	StartAt    time.Time `json:"startAt"`
-	Client     Client    `json:"client"`
-	Notes      string    `json:"notes,omitempty"`
+	ServiceID      string `json:"serviceId"`            // catalog service ID (s_...)
+	ProviderID     string `json:"providerId,omitempty"` // staff variant ID
+	BookableTimeID string `json:"bookableTimeId"`       // from GetBookableTimes (t_...)
+	Client         Client `json:"client"`
+	Notes          string `json:"notes,omitempty"`
 }
 
 // BookingResult is the outcome from checkout.
@@ -61,6 +69,8 @@ type BookingResult struct {
 	CartID    string `json:"cartId"`
 	Status    string `json:"status,omitempty"`
 }
+
+// ---- GraphQL transport types ----
 
 type graphQLRequest struct {
 	OperationName string      `json:"operationName,omitempty"`
@@ -72,71 +82,7 @@ type graphQLError struct {
 	Message string `json:"message"`
 }
 
-type graphQLResponse[T any] struct {
-	Data   T              `json:"data"`
-	Errors []graphQLError `json:"errors"`
-}
-
-// Narrow response payloads for each API operation.
-type servicesData struct {
-	Services []struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Duration int    `json:"duration"`
-	} `json:"services"`
-}
-
-type providersData struct {
-	Staff []struct {
-		ID       string `json:"id"`
-		FullName string `json:"fullName"`
-	} `json:"staff"`
-}
-
-type createCartData struct {
-	CreateCart struct {
-		Cart struct {
-			ID string `json:"id"`
-		} `json:"cart"`
-	} `json:"createCart"`
-}
-
-type addServiceData struct {
-	CartAddService struct {
-		Cart struct {
-			ID string `json:"id"`
-		} `json:"cart"`
-	} `json:"cartAddService"`
-}
-
-type availableSlotsData struct {
-	CartAvailableTimeSlots []struct {
-		StartAt string `json:"startAt"`
-		EndAt   string `json:"endAt"`
-	} `json:"cartAvailableTimeSlots"`
-}
-
-type reserveSlotData struct {
-	CartReserveTimeSlot struct {
-		Cart struct {
-			ID string `json:"id"`
-		} `json:"cart"`
-	} `json:"cartReserveTimeSlot"`
-}
-
-type addClientData struct {
-	CartSetClient struct {
-		Cart struct {
-			ID string `json:"id"`
-		} `json:"cart"`
-	} `json:"cartSetClient"`
-}
-
-type checkoutData struct {
-	CartCheckout struct {
-		Booking struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-		} `json:"booking"`
-	} `json:"cartCheckout"`
+type graphQLResponse struct {
+	Data   json.RawMessage `json:"data"`
+	Errors []graphQLError  `json:"errors"`
 }
