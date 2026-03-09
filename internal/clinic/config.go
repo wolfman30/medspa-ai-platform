@@ -169,6 +169,9 @@ type Config struct {
 	BoulevardBusinessID string `json:"boulevard_business_id,omitempty"`
 	BoulevardLocationID string `json:"boulevard_location_id,omitempty"`
 
+	// ProviderNames maps provider IDs/slugs to display names for non-Moxie clinics (e.g. Boulevard).
+	ProviderNames map[string]string `json:"provider_names,omitempty"`
+
 	// VoiceAIEnabled controls whether inbound voice calls use Telnyx Voice AI.
 	// When false (default), calls fall through to voicemail → SMS text-back flow.
 	VoiceAIEnabled bool `json:"voice_ai_enabled"`

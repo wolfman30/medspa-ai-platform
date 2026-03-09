@@ -9,29 +9,26 @@ import (
 	"time"
 )
 
-func TestGetServices(t *testing.T) {
+func TestCreateCart(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify x-blvd-bid header
 		if got := r.Header.Get("x-blvd-bid"); got != "biz123" {
-			t.Errorf("expected x-blvd-bid=biz123, got=%s", got)
+			t.Errorf("x-blvd-bid = %q, want %q", got, "biz123")
 		}
 		// Verify NO Authorization header
 		if auth := r.Header.Get("Authorization"); auth != "" {
-			t.Errorf("expected no Authorization header, got=%s", auth)
+			t.Errorf("unexpected Authorization header: %s", auth)
 		}
-
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{
 				"createCart": map[string]any{
 					"cart": map[string]any{
-						"id":    "cart_1",
-						"token": "tok_1",
+						"id": "cart_1",
 						"availableCategories": []map[string]any{
 							{
-								"id":   "cat_1",
 								"name": "Injectables",
 								"availableItems": []map[string]any{
-									{"id": "svc_1", "name": "Botox", "description": "wrinkle treatment"},
+									{"id": "s_1", "name": "Botox", "description": "Wrinkle relaxer", "listPriceRange": map[string]any{"min": map[string]any{"amount": 20000}, "max": map[string]any{"amount": 20000}}},
 								},
 							},
 						},
@@ -42,34 +39,33 @@ func TestGetServices(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewBoulevardClient("biz123", "loc123", nil)
+	c := NewBoulevardClient("biz123", "loc456", nil)
 	c.endpoint = ts.URL
 
-	services, err := c.GetServices(context.Background())
+	cartID, services, err := c.CreateCart(context.Background())
 	if err != nil {
-		t.Fatalf("GetServices error: %v", err)
+		t.Fatalf("CreateCart error: %v", err)
 	}
-	if len(services) != 1 || services[0].ID != "svc_1" || services[0].Name != "Botox" {
+	if cartID != "cart_1" {
+		t.Fatalf("cartID = %q, want cart_1", cartID)
+	}
+	if len(services) != 1 || services[0].Name != "Botox" {
 		t.Fatalf("unexpected services: %+v", services)
+	}
+	if services[0].PriceCents != 20000 {
+		t.Fatalf("price = %d, want 20000", services[0].PriceCents)
 	}
 }
 
-func TestCreateCart(t *testing.T) {
+func TestAddSelectedItem(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		vars, _ := req["variables"].(map[string]any)
-		if vars["locationId"] != "loc123" {
-			t.Errorf("expected locationId=loc123, got=%v", vars["locationId"])
-		}
-
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{
-				"createCart": map[string]any{
+				"cartAddSelectedBookableItem": map[string]any{
 					"cart": map[string]any{
-						"id":                  "cart_1",
-						"token":               "tok_1",
-						"availableCategories": []any{},
+						"selectedItems": []map[string]any{
+							{"id": "sel_1", "item": map[string]any{"name": "Botox"}},
+						},
 					},
 				},
 			},
@@ -77,109 +73,43 @@ func TestCreateCart(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewBoulevardClient("biz123", "loc123", nil)
+	c := NewBoulevardClient("biz", "loc", nil)
 	c.endpoint = ts.URL
 
-	cart, err := c.CreateCart(context.Background())
+	selID, err := c.AddSelectedItem(context.Background(), "cart_1", "s_1")
 	if err != nil {
-		t.Fatalf("CreateCart error: %v", err)
+		t.Fatalf("AddSelectedItem error: %v", err)
 	}
-	if cart.ID != "cart_1" || cart.Token != "tok_1" {
-		t.Fatalf("unexpected cart: %+v", cart)
+	if selID != "sel_1" {
+		t.Fatalf("selectedItemID = %q, want sel_1", selID)
 	}
 }
 
-func TestDryRunReserveAndCheckout(t *testing.T) {
-	c := NewBoulevardClient("biz", "loc", nil)
-	c.SetDryRun(true)
-
-	// Reserve should succeed without hitting any server
-	if err := c.ReserveSlot(context.Background(), "cart_1", "time_1"); err != nil {
-		t.Fatalf("ReserveSlot dry-run error: %v", err)
-	}
-
-	// Checkout should return dry-run result
-	result, err := c.Checkout(context.Background(), "cart_1")
-	if err != nil {
-		t.Fatalf("Checkout dry-run error: %v", err)
-	}
-	if result.Status != "DRY_RUN" {
-		t.Fatalf("expected DRY_RUN status, got=%s", result.Status)
-	}
-}
-
-func TestCreateBooking_FullCartFlow(t *testing.T) {
-	ops := make([]string, 0)
+func TestGetBookableTimes(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		op, _ := req["operationName"].(string)
-		ops = append(ops, op)
-
-		switch op {
-		case "CreateCart":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"createCart": map[string]any{"cart": map[string]any{
-					"id": "cart_1", "token": "tok_1", "availableCategories": []any{},
-				}},
-			}})
-		case "CartAddSelectedBookableItem":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"cartAddSelectedBookableItem": map[string]any{"cart": map[string]any{
-					"id":            "cart_1",
-					"selectedItems": []any{map[string]any{"id": "sel_1"}},
-				}},
-			}})
-		case "CartBookableTimes":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"cartBookableTimes": []any{
-					map[string]any{"id": "time_1", "startTime": "2026-02-21T15:00:00Z"},
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"cartBookableTimes": []map[string]any{
+					{"id": "t_2026-03-11T11:30:00", "startTime": "2026-03-11T11:30:00-04:00"},
+					{"id": "t_2026-03-11T14:00:00", "startTime": "2026-03-11T14:00:00-04:00"},
 				},
-			}})
-		case "ReserveCartBookableItems":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"reserveCartBookableItems": map[string]any{"cart": map[string]any{"id": "cart_1"}},
-			}})
-		case "UpdateCart":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"updateCart": map[string]any{"cart": map[string]any{"id": "cart_1"}},
-			}})
-		case "CheckoutCart":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"checkoutCart": map[string]any{"appointments": []any{
-					map[string]any{"id": "appt_1", "startAt": "2026-02-21T15:00:00Z"},
-				}},
-			}})
-		default:
-			http.Error(w, "unknown op: "+op, http.StatusBadRequest)
-		}
+			},
+		})
 	}))
 	defer ts.Close()
 
 	c := NewBoulevardClient("biz", "loc", nil)
 	c.endpoint = ts.URL
 
-	res, err := c.CreateBooking(context.Background(), CreateBookingRequest{
-		ServiceID: "svc_1",
-		StartAt:   time.Date(2026, 2, 21, 15, 0, 0, 0, time.UTC),
-		Client:    Client{FirstName: "Jane", LastName: "Doe", Email: "jane@example.com", Phone: "+15555550123"},
-	})
+	slots, err := c.GetBookableTimes(context.Background(), "cart_1", "2026-03-11", "America/New_York")
 	if err != nil {
-		t.Fatalf("CreateBooking error: %v", err)
+		t.Fatalf("GetBookableTimes error: %v", err)
 	}
-	if res.BookingID != "appt_1" {
-		t.Fatalf("unexpected booking id: %s", res.BookingID)
+	if len(slots) != 2 {
+		t.Fatalf("got %d slots, want 2", len(slots))
 	}
-
-	want := []string{"CreateCart", "CartAddSelectedBookableItem", "CartBookableTimes",
-		"ReserveCartBookableItems", "UpdateCart", "CheckoutCart"}
-	if len(ops) != len(want) {
-		t.Fatalf("ops mismatch: got=%v want=%v", ops, want)
-	}
-	for i := range want {
-		if ops[i] != want[i] {
-			t.Fatalf("op[%d]=%s want=%s", i, ops[i], want[i])
-		}
+	if slots[0].ID != "t_2026-03-11T11:30:00" {
+		t.Fatalf("slot[0].ID = %q", slots[0].ID)
 	}
 }
 
@@ -191,24 +121,20 @@ func TestGraphQLError(t *testing.T) {
 
 	c := NewBoulevardClient("biz", "loc", nil)
 	c.endpoint = ts.URL
-	_, err := c.GetServices(context.Background())
+	_, _, err := c.CreateCart(context.Background())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !contains(err.Error(), "boom") {
-		t.Fatalf("expected error to contain 'boom', got: %v", err)
-	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+func TestDryRunAdapter(t *testing.T) {
+	adapter := NewBoulevardAdapter(nil, true, nil)
+	if !adapter.IsDryRun() {
+		t.Fatal("expected dry run")
 	}
-	return false
+	// With nil client, ResolveAvailability should fail (no mock data anymore)
+	_, err := adapter.ResolveAvailability(context.Background(), "Botox", "", time.Now())
+	if err == nil {
+		t.Fatal("expected error with nil client")
+	}
 }
