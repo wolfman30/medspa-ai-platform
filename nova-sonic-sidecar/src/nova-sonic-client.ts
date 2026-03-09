@@ -111,6 +111,7 @@ export class NovaSonicClient {
   // Output audio state — hold input while assistant speaks
   private audioOutputActive = false;
   private lastEmittedTranscript = "";
+  private recentAssistantTexts = new Set<string>();
 
   // Accumulation buffers for multi-chunk content
   private textContentBuffers = new Map<string, { role: string; text: string }>();
@@ -644,12 +645,20 @@ export class NovaSonicClient {
     });
     if (textBuf?.text) {
       const role = textBuf.role === "user" ? "user" as const : "assistant" as const;
-      // Deduplicate — Nova Sonic sends each response as TEXT twice
+      // Deduplicate — Nova Sonic sends each response as TEXT + AUDIO with same text
       const normalized = textBuf.text.trim().replace(/\s+/g, " ");
-      if (normalized && normalized !== this.lastEmittedTranscript) {
+      if (normalized && role === "assistant" && this.recentAssistantTexts.has(normalized)) {
+        this.log("info", "Skipping duplicate assistant text", { text: normalized.substring(0, 80) });
+      } else if (normalized) {
         this.callbacks.onTranscript(role, textBuf.text);
         if (role === "assistant") {
           this.lastEmittedTranscript = normalized;
+          this.recentAssistantTexts.add(normalized);
+          // Keep set bounded — clear after 20 entries
+          if (this.recentAssistantTexts.size > 20) {
+            const first = this.recentAssistantTexts.values().next().value;
+            if (first) this.recentAssistantTexts.delete(first);
+          }
         }
       }
     }
