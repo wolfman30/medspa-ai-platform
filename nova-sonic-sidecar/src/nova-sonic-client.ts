@@ -374,11 +374,11 @@ export class NovaSonicClient {
     this.addEvent({ event: { contentEnd: { promptName: this.promptName, contentName } } });
   }
 
-  /** Send a synthetic "Hello" turn so Nova Sonic greets immediately. */
+  /** Send a synthetic user turn so Nova Sonic knows the greeting was already handled. */
   private enqueueGreetingTrigger(): void {
     const contentName = randomUUID();
     this.addEvent({ event: { contentStart: { promptName: this.promptName, contentName, type: "TEXT", interactive: true, role: "USER", textInputConfiguration: { mediaType: "text/plain" } } } });
-    this.addEvent({ event: { textInput: { promptName: this.promptName, contentName, content: "Hello" } } });
+    this.addEvent({ event: { textInput: { promptName: this.promptName, contentName, content: "[system: the automated greeting has been played to the caller. Wait silently for the caller to speak. Do not respond until the caller says something.]" } } });
     this.addEvent({ event: { contentEnd: { promptName: this.promptName, contentName } } });
   }
 
