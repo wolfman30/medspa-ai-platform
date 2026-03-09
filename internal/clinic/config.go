@@ -164,9 +164,10 @@ type Config struct {
 	// HandoffNotificationEmail is the clinic owner's email for manual handoff email alerts.
 	HandoffNotificationEmail string `json:"handoff_notification_email,omitempty"`
 
-	// Boulevard API credentials (used when BookingPlatform == "boulevard").
-	BoulevardAPIKey     string `json:"boulevard_api_key,omitempty"`
+	// Boulevard public API config (used when BookingPlatform == "boulevard").
+	// No API key needed — uses the public booking widget endpoint with x-blvd-bid header.
 	BoulevardBusinessID string `json:"boulevard_business_id,omitempty"`
+	BoulevardLocationID string `json:"boulevard_location_id,omitempty"`
 
 	// VoiceAIEnabled controls whether inbound voice calls use Telnyx Voice AI.
 	// When false (default), calls fall through to voicemail → SMS text-back flow.

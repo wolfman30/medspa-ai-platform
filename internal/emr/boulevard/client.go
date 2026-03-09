@@ -16,238 +16,474 @@ import (
 const (
 	defaultTimeout = 20 * time.Second
 
-	queryServices = `query Services($businessId: ID!) {
-  services(businessId: $businessId) {
-    id
-    name
-    duration
-  }
-}`
+	// --- GraphQL queries matching Boulevard's public booking widget API ---
 
-	queryProviders = `query Providers($businessId: ID!, $serviceId: ID!) {
-  staff(businessId: $businessId, serviceId: $serviceId) {
-    id
-    fullName
-  }
-}`
-
-	mutationCreateCart = `mutation CreateCart($businessId: ID!) {
-  createCart(input: { businessId: $businessId }) {
-    cart { id }
-  }
-}`
-
-	mutationAddServiceToCart = `mutation CartAddService($cartId: ID!, $serviceId: ID!, $providerId: ID) {
-  cartAddService(input: { cartId: $cartId, serviceId: $serviceId, providerId: $providerId }) {
-    cart { id }
-  }
-}`
-
-	queryCartAvailableSlots = `query CartAvailableTimeSlots($cartId: ID!, $date: Date!, $providerId: ID) {
-  cartAvailableTimeSlots(cartId: $cartId, date: $date, providerId: $providerId) {
-    startAt
-    endAt
-  }
-}`
-
-	mutationReserveSlot = `mutation CartReserveTimeSlot($cartId: ID!, $startAt: DateTime!) {
-  cartReserveTimeSlot(input: { cartId: $cartId, startAt: $startAt }) {
-    cart { id }
-  }
-}`
-
-	mutationSetClient = `mutation CartSetClient($cartId: ID!, $firstName: String!, $lastName: String!, $email: String, $phone: String) {
-  cartSetClient(input: {
-    cartId: $cartId,
-    firstName: $firstName,
-    lastName: $lastName,
-    email: $email,
-    phone: $phone
-  }) {
-    cart { id }
-  }
-}`
-
-	mutationCheckout = `mutation CartCheckout($cartId: ID!, $notes: String) {
-  cartCheckout(input: { cartId: $cartId, notes: $notes }) {
-    booking {
+	mutationCreateCart = `mutation CreateCart($locationId: ID!) {
+  createCart(input: { locationId: $locationId }) {
+    cart {
       id
-      status
+      token
+      availableCategories {
+        id
+        name
+        availableItems {
+          id
+          name
+          description
+        }
+      }
+    }
+  }
+}`
+
+	mutationAddSelectedItem = `mutation CartAddSelectedBookableItem($input: CartAddSelectedBookableItemInput!) {
+  cartAddSelectedBookableItem(input: $input) {
+    cart {
+      id
+      selectedItems {
+        id
+        selectedItem {
+          ... on CartAvailableBookableItem {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+}`
+
+	queryBookableDates = `query CartBookableDates($idOrToken: String!, $limit: Int, $tz: Tz) {
+  cartBookableDates(idOrToken: $idOrToken, limit: $limit, tz: $tz) {
+    date
+  }
+}`
+
+	queryBookableTimes = `query CartBookableTimes($idOrToken: String!, $searchDate: Date!, $tz: Tz) {
+  cartBookableTimes(idOrToken: $idOrToken, searchDate: $searchDate, tz: $tz) {
+    id
+    startTime
+  }
+}`
+
+	queryStaffVariants = `query CartBookableStaffVariants($idOrToken: String!, $bookableTimeId: ID!, $itemId: ID!) {
+  cartBookableStaffVariants(idOrToken: $idOrToken, bookableTimeId: $bookableTimeId, itemId: $itemId) {
+    staffVariants {
+      id
+      staff {
+        id
+        firstName
+        lastName
+      }
+    }
+  }
+}`
+
+	mutationReserveItems = `mutation ReserveCartBookableItems($input: ReserveCartBookableItemsInput!) {
+  reserveCartBookableItems(input: $input) {
+    cart {
+      id
+    }
+  }
+}`
+
+	mutationUpdateCart = `mutation UpdateCart($input: UpdateCartInput!) {
+  updateCart(input: $input) {
+    cart {
+      id
+    }
+  }
+}`
+
+	mutationCheckoutCart = `mutation CheckoutCart($input: CheckoutCartInput!) {
+  checkoutCart(input: $input) {
+    appointments {
+      id
+      startAt
+      appointmentServiceOptions {
+        id
+      }
     }
   }
 }`
 )
 
-// BoulevardClient is a lightweight GraphQL client for Boulevard booking flows.
+// BoulevardClient is a lightweight GraphQL client for Boulevard's public booking widget API.
+// It uses the x-blvd-bid header for authentication — no API key required.
 type BoulevardClient struct {
 	endpoint   string
 	httpClient *http.Client
-	apiKey     string
-	businessID string
+	businessID string // used as x-blvd-bid header
+	locationID string // used for cart creation
+	dryRun     bool
 	logger     *logging.Logger
 }
 
-// NewBoulevardClient creates a new Boulevard GraphQL client.
-func NewBoulevardClient(apiKey, businessID string, logger *logging.Logger) *BoulevardClient {
+// NewBoulevardClient creates a new Boulevard public API client.
+// businessID is used as the x-blvd-bid header value.
+// locationID is used when creating carts.
+func NewBoulevardClient(businessID, locationID string, logger *logging.Logger) *BoulevardClient {
 	if logger == nil {
 		logger = logging.Default()
 	}
 	return &BoulevardClient{
-		endpoint: defaultGraphQLEndpoint,
+		endpoint: publicGraphQLEndpoint,
 		httpClient: &http.Client{
 			Timeout: defaultTimeout,
 		},
-		apiKey:     apiKey,
 		businessID: businessID,
+		locationID: locationID,
 		logger:     logger,
 	}
 }
 
-// GetServices returns available services.
-func (c *BoulevardClient) GetServices(ctx context.Context) ([]Service, error) {
-	var out graphQLResponse[servicesData]
-	if err := c.do(ctx, "Services", queryServices, map[string]interface{}{"businessId": c.businessID}, &out); err != nil {
+// SetDryRun enables or disables dry-run mode.
+func (c *BoulevardClient) SetDryRun(dryRun bool) {
+	c.dryRun = dryRun
+}
+
+// IsDryRun returns whether the client is in dry-run mode.
+func (c *BoulevardClient) IsDryRun() bool {
+	return c.dryRun
+}
+
+// CreateCart creates a new booking cart and returns it with available service categories.
+func (c *BoulevardClient) CreateCart(ctx context.Context) (*Cart, error) {
+	var out graphQLResponse[createCartData]
+	if err := c.do(ctx, "CreateCart", mutationCreateCart, map[string]interface{}{
+		"locationId": c.locationID,
+	}, &out); err != nil {
 		return nil, err
 	}
-	services := make([]Service, 0, len(out.Data.Services))
-	for _, s := range out.Data.Services {
-		services = append(services, Service{ID: s.ID, Name: s.Name, DurationMin: s.Duration})
+	if out.Data.CreateCart.Cart.ID == "" {
+		return nil, fmt.Errorf("boulevard: create cart returned empty cart id")
+	}
+
+	cart := &Cart{
+		ID:    out.Data.CreateCart.Cart.ID,
+		Token: out.Data.CreateCart.Cart.Token,
+	}
+
+	for _, cat := range out.Data.CreateCart.Cart.AvailableCategories {
+		sc := ServiceCategory{ID: cat.ID, Name: cat.Name}
+		for _, item := range cat.AvailableItems {
+			sc.Services = append(sc.Services, Service{
+				ID:          item.ID,
+				Name:        item.Name,
+				Description: item.Description,
+				CategoryID:  cat.ID,
+			})
+		}
+		cart.AvailableCategories = append(cart.AvailableCategories, sc)
+	}
+
+	return cart, nil
+}
+
+// GetServices creates a cart and returns all available services from the categories.
+func (c *BoulevardClient) GetServices(ctx context.Context) ([]Service, error) {
+	cart, err := c.CreateCart(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("boulevard: get services: %w", err)
+	}
+	var services []Service
+	for _, cat := range cart.AvailableCategories {
+		services = append(services, cat.Services...)
 	}
 	return services, nil
 }
 
-// GetProviders returns providers/staff that can perform a service.
-func (c *BoulevardClient) GetProviders(ctx context.Context, serviceID string) ([]Provider, error) {
-	var out graphQLResponse[providersData]
-	if err := c.do(ctx, "Providers", queryProviders, map[string]interface{}{"businessId": c.businessID, "serviceId": serviceID}, &out); err != nil {
-		return nil, err
+// AddSelectedItem adds a bookable item to the cart.
+// Returns the selected item ID (different from the catalog item ID).
+func (c *BoulevardClient) AddSelectedItem(ctx context.Context, idOrToken, itemID string) (string, error) {
+	var out graphQLResponse[addSelectedItemData]
+	if err := c.do(ctx, "CartAddSelectedBookableItem", mutationAddSelectedItem, map[string]interface{}{
+		"input": map[string]interface{}{
+			"idOrToken": idOrToken,
+			"itemId":    itemID,
+		},
+	}, &out); err != nil {
+		return "", err
 	}
-	providers := make([]Provider, 0, len(out.Data.Staff))
-	for _, p := range out.Data.Staff {
-		providers = append(providers, Provider{ID: p.ID, Name: p.FullName})
+	items := out.Data.CartAddSelectedBookableItem.Cart.SelectedItems
+	if len(items) == 0 {
+		return "", fmt.Errorf("boulevard: add item returned no selected items")
 	}
-	return providers, nil
+	// Return the last selected item's ID
+	return items[len(items)-1].ID, nil
 }
 
-// GetAvailableSlots performs cart-based availability lookup.
-func (c *BoulevardClient) GetAvailableSlots(ctx context.Context, serviceID, providerID string, date time.Time) ([]TimeSlot, error) {
-	cartID, err := c.createCart(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.addService(ctx, cartID, serviceID, providerID); err != nil {
-		return nil, err
-	}
-
+// GetBookableDates returns available dates for the cart.
+func (c *BoulevardClient) GetBookableDates(ctx context.Context, idOrToken string, limit int, tz string) ([]BookableDate, error) {
 	vars := map[string]interface{}{
-		"cartId": cartID,
-		"date":   date.Format("2006-01-02"),
+		"idOrToken": idOrToken,
 	}
-	if strings.TrimSpace(providerID) != "" {
-		vars["providerId"] = providerID
+	if limit > 0 {
+		vars["limit"] = limit
 	}
-
-	var out graphQLResponse[availableSlotsData]
-	if err := c.do(ctx, "CartAvailableTimeSlots", queryCartAvailableSlots, vars, &out); err != nil {
+	if tz != "" {
+		vars["tz"] = tz
+	}
+	var out graphQLResponse[bookableDatesData]
+	if err := c.do(ctx, "CartBookableDates", queryBookableDates, vars, &out); err != nil {
 		return nil, err
 	}
+	dates := make([]BookableDate, 0, len(out.Data.CartBookableDates))
+	for _, d := range out.Data.CartBookableDates {
+		dates = append(dates, BookableDate{Date: d.Date})
+	}
+	return dates, nil
+}
 
-	slots := make([]TimeSlot, 0, len(out.Data.CartAvailableTimeSlots))
-	for _, s := range out.Data.CartAvailableTimeSlots {
-		start, err := time.Parse(time.RFC3339, s.StartAt)
-		if err != nil {
-			continue
+// GetBookableTimes returns available time slots for a specific date.
+func (c *BoulevardClient) GetBookableTimes(ctx context.Context, idOrToken, searchDate, tz string) ([]BookableTime, error) {
+	vars := map[string]interface{}{
+		"idOrToken":  idOrToken,
+		"searchDate": searchDate,
+	}
+	if tz != "" {
+		vars["tz"] = tz
+	}
+	var out graphQLResponse[bookableTimesData]
+	if err := c.do(ctx, "CartBookableTimes", queryBookableTimes, vars, &out); err != nil {
+		return nil, err
+	}
+	times := make([]BookableTime, 0, len(out.Data.CartBookableTimes))
+	for _, t := range out.Data.CartBookableTimes {
+		times = append(times, BookableTime{ID: t.ID, StartTime: t.StartTime})
+	}
+	return times, nil
+}
+
+// GetStaffVariants returns providers available for a specific time slot and item.
+// itemID must be the SELECTED item ID from AddSelectedItem, not the catalog ID.
+func (c *BoulevardClient) GetStaffVariants(ctx context.Context, idOrToken, bookableTimeID, itemID string) ([]StaffVariant, error) {
+	var out graphQLResponse[staffVariantsData]
+	if err := c.do(ctx, "CartBookableStaffVariants", queryStaffVariants, map[string]interface{}{
+		"idOrToken":      idOrToken,
+		"bookableTimeId": bookableTimeID,
+		"itemId":         itemID,
+	}, &out); err != nil {
+		return nil, err
+	}
+	variants := make([]StaffVariant, 0, len(out.Data.CartBookableStaffVariants.StaffVariants))
+	for _, v := range out.Data.CartBookableStaffVariants.StaffVariants {
+		sv := StaffVariant{ID: v.ID}
+		sv.Staff.ID = v.Staff.ID
+		sv.Staff.FirstName = v.Staff.FirstName
+		sv.Staff.LastName = v.Staff.LastName
+		variants = append(variants, sv)
+	}
+	return variants, nil
+}
+
+// ReserveSlot reserves a bookable time slot in the cart.
+// In dry-run mode, logs but returns a fake success.
+func (c *BoulevardClient) ReserveSlot(ctx context.Context, idOrToken, bookableTimeID string) error {
+	if c.dryRun {
+		c.logger.Info("BOULEVARD DRY RUN: ReserveSlot (skipped)",
+			"idOrToken", idOrToken, "bookableTimeId", bookableTimeID)
+		return nil
+	}
+	var out graphQLResponse[reserveItemsData]
+	return c.do(ctx, "ReserveCartBookableItems", mutationReserveItems, map[string]interface{}{
+		"input": map[string]interface{}{
+			"idOrToken":      idOrToken,
+			"bookableTimeId": bookableTimeID,
+		},
+	}, &out)
+}
+
+// UpdateCartClient sets client information on the cart.
+// In dry-run mode, logs but returns a fake success.
+func (c *BoulevardClient) UpdateCartClient(ctx context.Context, idOrToken string, cl Client) error {
+	if c.dryRun {
+		c.logger.Info("BOULEVARD DRY RUN: UpdateCartClient (skipped)",
+			"idOrToken", idOrToken, "client", cl.FirstName+" "+cl.LastName)
+		return nil
+	}
+	var out graphQLResponse[updateCartData]
+	return c.do(ctx, "UpdateCart", mutationUpdateCart, map[string]interface{}{
+		"input": map[string]interface{}{
+			"idOrToken": idOrToken,
+			"clientInformation": map[string]interface{}{
+				"firstName":   cl.FirstName,
+				"lastName":    cl.LastName,
+				"email":       cl.Email,
+				"phoneNumber": cl.Phone,
+			},
+		},
+	}, &out)
+}
+
+// Checkout completes the booking.
+// In dry-run mode, logs but returns a fake success.
+func (c *BoulevardClient) Checkout(ctx context.Context, idOrToken string) (*BookingResult, error) {
+	if c.dryRun {
+		c.logger.Info("BOULEVARD DRY RUN: Checkout (skipped)", "idOrToken", idOrToken)
+		return &BookingResult{
+			BookingID: "dry-run-" + time.Now().Format("20060102150405"),
+			CartID:    idOrToken,
+			Status:    "DRY_RUN",
+		}, nil
+	}
+	var out graphQLResponse[checkoutCartData]
+	if err := c.do(ctx, "CheckoutCart", mutationCheckoutCart, map[string]interface{}{
+		"input": map[string]interface{}{
+			"idOrToken": idOrToken,
+		},
+	}, &out); err != nil {
+		return nil, err
+	}
+	result := &BookingResult{
+		CartID: idOrToken,
+		Status: "confirmed",
+	}
+	if len(out.Data.CheckoutCart.Appointments) > 0 {
+		result.BookingID = out.Data.CheckoutCart.Appointments[0].ID
+	}
+	return result, nil
+}
+
+// GetAvailableSlots performs the full cart-based availability lookup:
+// createCart → addItem → getBookableDates → getBookableTimes.
+// This is a convenience method that combines multiple API calls.
+func (c *BoulevardClient) GetAvailableSlots(ctx context.Context, serviceID, providerID string, date time.Time) ([]TimeSlot, error) {
+	cart, err := c.CreateCart(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("boulevard: create cart for availability: %w", err)
+	}
+
+	idOrToken := cart.ID
+
+	selectedItemID, err := c.AddSelectedItem(ctx, idOrToken, serviceID)
+	if err != nil {
+		return nil, fmt.Errorf("boulevard: add item for availability: %w", err)
+	}
+	_ = selectedItemID // used for staff variants if needed
+
+	tz := "America/New_York" // default timezone
+	times, err := c.GetBookableTimes(ctx, idOrToken, date.Format("2006-01-02"), tz)
+	if err != nil {
+		return nil, fmt.Errorf("boulevard: get bookable times: %w", err)
+	}
+
+	slots := make([]TimeSlot, 0, len(times))
+	for _, t := range times {
+		startTime, parseErr := time.Parse(time.RFC3339, t.StartTime)
+		if parseErr != nil {
+			// Try ISO 8601 without timezone
+			startTime, parseErr = time.Parse("2006-01-02T15:04:05", t.StartTime)
+			if parseErr != nil {
+				c.logger.Warn("boulevard: failed to parse time", "startTime", t.StartTime, "error", parseErr)
+				continue
+			}
 		}
-		end, err := time.Parse(time.RFC3339, s.EndAt)
-		if err != nil {
-			continue
-		}
-		slots = append(slots, TimeSlot{StartAt: start, EndAt: end})
+		slots = append(slots, TimeSlot{
+			ID:      t.ID,
+			StartAt: startTime,
+			EndAt:   startTime.Add(60 * time.Minute), // default 1hr; actual duration from service
+		})
 	}
 	return slots, nil
 }
 
-// CreateBooking executes the full Boulevard cart flow.
+// CreateBooking executes the full Boulevard cart flow:
+// createCart → addItem → reserve → setClient → checkout.
 func (c *BoulevardClient) CreateBooking(ctx context.Context, req CreateBookingRequest) (*BookingResult, error) {
-	cartID, err := c.createCart(ctx)
+	cart, err := c.CreateCart(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.addService(ctx, cartID, req.ServiceID, req.ProviderID); err != nil {
+	idOrToken := cart.ID
+
+	_, err = c.AddSelectedItem(ctx, idOrToken, req.ServiceID)
+	if err != nil {
 		return nil, err
 	}
-	if err := c.reserveSlot(ctx, cartID, req.StartAt); err != nil {
+
+	// Get times for the requested date to find the matching bookableTimeId
+	tz := "America/New_York"
+	times, err := c.GetBookableTimes(ctx, idOrToken, req.StartAt.Format("2006-01-02"), tz)
+	if err != nil {
+		return nil, fmt.Errorf("boulevard: get times for booking: %w", err)
+	}
+
+	// Find matching time slot
+	var bookableTimeID string
+	for _, t := range times {
+		startTime, parseErr := time.Parse(time.RFC3339, t.StartTime)
+		if parseErr != nil {
+			startTime, parseErr = time.Parse("2006-01-02T15:04:05", t.StartTime)
+			if parseErr != nil {
+				continue
+			}
+		}
+		if startTime.Equal(req.StartAt) || startTime.Unix() == req.StartAt.Unix() {
+			bookableTimeID = t.ID
+			break
+		}
+	}
+	if bookableTimeID == "" {
+		return nil, fmt.Errorf("boulevard: no matching time slot found for %s", req.StartAt.Format(time.RFC3339))
+	}
+
+	if err := c.ReserveSlot(ctx, idOrToken, bookableTimeID); err != nil {
 		return nil, err
 	}
-	if err := c.setClient(ctx, cartID, req.Client); err != nil {
+	if err := c.UpdateCartClient(ctx, idOrToken, req.Client); err != nil {
 		return nil, err
 	}
-	return c.checkout(ctx, cartID, req.Notes)
+	return c.Checkout(ctx, idOrToken)
 }
 
-func (c *BoulevardClient) createCart(ctx context.Context) (string, error) {
-	var out graphQLResponse[createCartData]
-	if err := c.do(ctx, "CreateCart", mutationCreateCart, map[string]interface{}{"businessId": c.businessID}, &out); err != nil {
-		return "", err
-	}
-	if out.Data.CreateCart.Cart.ID == "" {
-		return "", fmt.Errorf("boulevard: create cart returned empty cart id")
-	}
-	return out.Data.CreateCart.Cart.ID, nil
-}
-
-func (c *BoulevardClient) addService(ctx context.Context, cartID, serviceID, providerID string) error {
-	vars := map[string]interface{}{"cartId": cartID, "serviceId": serviceID}
-	if strings.TrimSpace(providerID) != "" {
-		vars["providerId"] = providerID
-	}
-	var out graphQLResponse[addServiceData]
-	if err := c.do(ctx, "CartAddService", mutationAddServiceToCart, vars, &out); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *BoulevardClient) reserveSlot(ctx context.Context, cartID string, startAt time.Time) error {
-	var out graphQLResponse[reserveSlotData]
-	return c.do(ctx, "CartReserveTimeSlot", mutationReserveSlot, map[string]interface{}{
-		"cartId":  cartID,
-		"startAt": startAt.UTC().Format(time.RFC3339),
-	}, &out)
-}
-
-func (c *BoulevardClient) setClient(ctx context.Context, cartID string, cl Client) error {
-	var out graphQLResponse[addClientData]
-	return c.do(ctx, "CartSetClient", mutationSetClient, map[string]interface{}{
-		"cartId":    cartID,
-		"firstName": cl.FirstName,
-		"lastName":  cl.LastName,
-		"email":     cl.Email,
-		"phone":     cl.Phone,
-	}, &out)
-}
-
-func (c *BoulevardClient) checkout(ctx context.Context, cartID, notes string) (*BookingResult, error) {
-	var out graphQLResponse[checkoutData]
-	if err := c.do(ctx, "CartCheckout", mutationCheckout, map[string]interface{}{
-		"cartId": cartID,
-		"notes":  notes,
-	}, &out); err != nil {
+// GetProviders creates a cart, adds the service, gets dates/times, then gets staff variants.
+// This is a convenience method to list providers for a service.
+func (c *BoulevardClient) GetProviders(ctx context.Context, serviceID string) ([]Provider, error) {
+	cart, err := c.CreateCart(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return &BookingResult{
-		BookingID: out.Data.CartCheckout.Booking.ID,
-		CartID:    cartID,
-		Status:    out.Data.CartCheckout.Booking.Status,
-	}, nil
+	idOrToken := cart.ID
+
+	selectedItemID, err := c.AddSelectedItem(ctx, idOrToken, serviceID)
+	if err != nil {
+		return nil, err
+	}
+
+	tz := "America/New_York"
+	dates, err := c.GetBookableDates(ctx, idOrToken, 1, tz)
+	if err != nil || len(dates) == 0 {
+		return nil, fmt.Errorf("boulevard: no available dates for service %s", serviceID)
+	}
+
+	times, err := c.GetBookableTimes(ctx, idOrToken, dates[0].Date, tz)
+	if err != nil || len(times) == 0 {
+		return nil, fmt.Errorf("boulevard: no available times for service %s on %s", serviceID, dates[0].Date)
+	}
+
+	variants, err := c.GetStaffVariants(ctx, idOrToken, times[0].ID, selectedItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var providers []Provider
+	for _, v := range variants {
+		if !seen[v.Staff.ID] {
+			seen[v.Staff.ID] = true
+			providers = append(providers, Provider{
+				ID:   v.Staff.ID,
+				Name: strings.TrimSpace(v.Staff.FirstName + " " + v.Staff.LastName),
+			})
+		}
+	}
+	return providers, nil
 }
 
 func (c *BoulevardClient) do(ctx context.Context, operationName, query string, variables interface{}, out interface{}) error {
-	if strings.TrimSpace(c.apiKey) == "" {
-		return fmt.Errorf("boulevard: missing api key")
-	}
 	if strings.TrimSpace(c.businessID) == "" {
-		return fmt.Errorf("boulevard: missing business id")
+		return fmt.Errorf("boulevard: missing business id (x-blvd-bid)")
 	}
 
 	body, err := json.Marshal(graphQLRequest{OperationName: operationName, Query: query, Variables: variables})
@@ -260,8 +496,7 @@ func (c *BoulevardClient) do(ctx context.Context, operationName, query string, v
 		return fmt.Errorf("boulevard: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("X-Business-Id", c.businessID)
+	req.Header.Set("x-blvd-bid", c.businessID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -286,30 +521,12 @@ func (c *BoulevardClient) do(ctx context.Context, operationName, query string, v
 		return fmt.Errorf("boulevard: unmarshal response: %w", err)
 	}
 
-	// Best-effort error extraction from GraphQL envelope.
-	if env, ok := out.(*graphQLResponse[servicesData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
+	// Check for GraphQL errors in the response envelope
+	var envelope struct {
+		Errors []graphQLError `json:"errors"`
 	}
-	if env, ok := out.(*graphQLResponse[providersData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
-	}
-	if env, ok := out.(*graphQLResponse[createCartData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
-	}
-	if env, ok := out.(*graphQLResponse[addServiceData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
-	}
-	if env, ok := out.(*graphQLResponse[availableSlotsData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
-	}
-	if env, ok := out.(*graphQLResponse[reserveSlotData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
-	}
-	if env, ok := out.(*graphQLResponse[addClientData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
-	}
-	if env, ok := out.(*graphQLResponse[checkoutData]); ok && len(env.Errors) > 0 {
-		return fmt.Errorf("boulevard: graphql error: %s", env.Errors[0].Message)
+	if err := json.Unmarshal(respBody, &envelope); err == nil && len(envelope.Errors) > 0 {
+		return fmt.Errorf("boulevard: graphql error: %s", envelope.Errors[0].Message)
 	}
 
 	return nil

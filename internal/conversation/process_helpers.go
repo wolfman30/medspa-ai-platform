@@ -156,9 +156,9 @@ func (s *LLMService) fetchAndPresentAvailability(
 		// Boulevard availability: use cart-based slot lookup
 		// For live (non-dry-run) mode, create a per-clinic client from config credentials
 		adapter := s.boulevardAdapter
-		if !adapter.IsDryRun() && cfg.BoulevardAPIKey != "" && cfg.BoulevardBusinessID != "" {
-			clinicClient := boulevard.NewBoulevardClient(cfg.BoulevardAPIKey, cfg.BoulevardBusinessID, s.logger)
-			adapter = boulevard.NewBoulevardAdapter(clinicClient, false, s.logger)
+		if cfg.BoulevardBusinessID != "" && cfg.BoulevardLocationID != "" {
+			clinicClient := boulevard.NewBoulevardClient(cfg.BoulevardBusinessID, cfg.BoulevardLocationID, s.logger)
+			adapter = boulevard.NewBoulevardAdapter(clinicClient, adapter.IsDryRun(), s.logger)
 		}
 		s.logger.Info("fetching availability via Boulevard API",
 			"conversation_id", conversationID, "service", scraperServiceName, "dry_run", adapter.IsDryRun())
