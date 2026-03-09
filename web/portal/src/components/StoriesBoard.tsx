@@ -360,14 +360,23 @@ export function StoriesBoard() {
     priority: '',
     label: '',
   });
+  const [labelInput, setLabelInput] = useState('');
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, label: labelInput }));
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [labelInput]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const trimmedLabel = filters.label.trim();
       const data = await listStories({
         status: filters.status || undefined,
         priority: filters.priority || undefined,
-        label: filters.label || undefined,
+        label: trimmedLabel || undefined,
       });
       setStories(data.stories);
       setError('');
@@ -431,12 +440,15 @@ export function StoriesBoard() {
         <input
           className="ui-input"
           placeholder="Filter by label..."
-          value={filters.label}
-          onChange={(e) => setFilters((prev) => ({ ...prev, label: e.target.value }))}
+          value={labelInput}
+          onChange={(e) => setLabelInput(e.target.value)}
         />
         <button
           className="ui-btn ui-btn-ghost"
-          onClick={() => setFilters({ status: '', priority: '', label: '' })}
+          onClick={() => {
+            setLabelInput('');
+            setFilters({ status: '', priority: '', label: '' });
+          }}
         >
           Clear filters
         </button>
