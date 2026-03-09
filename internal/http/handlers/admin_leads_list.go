@@ -130,32 +130,50 @@ func (h *AdminLeadsHandler) ListLeads(w http.ResponseWriter, r *http.Request) {
 		lead.CreatedAt = createdAt.Format(time.RFC3339)
 		lead.UpdatedAt = updatedAt.Format(time.RFC3339)
 
-		json.Unmarshal(interestedServices, &lead.InterestedServices)
-		json.Unmarshal(tags, &lead.Tags)
+		if len(interestedServices) > 0 {
+			if err := json.Unmarshal(interestedServices, &lead.InterestedServices); err != nil {
+				h.logger.Error("failed to decode interested_services", "lead_id", lead.ID, "error", err)
+			}
+		}
+		if len(tags) > 0 {
+			if err := json.Unmarshal(tags, &lead.Tags); err != nil {
+				h.logger.Error("failed to decode tags", "lead_id", lead.ID, "error", err)
+			}
+		}
 
 		// Get conversation job count via phone pattern
 		// conversation_id format: "sms:{orgID}:{phone}"
 		normalizedPhone := normalizePhoneDigits(lead.Phone)
 		conversationPattern := "sms:" + orgID + ":%" + normalizedPhone + "%"
 		var jobCount int
-		h.db.QueryRowContext(r.Context(),
+		if err := h.db.QueryRowContext(r.Context(),
 			`SELECT COUNT(*) FROM conversation_jobs WHERE conversation_id LIKE $1`,
 			conversationPattern,
-		).Scan(&jobCount)
-		lead.ConversationJobCount = jobCount
+		).Scan(&jobCount); err != nil {
+			h.logger.Error("failed to get conversation job count", "lead_id", lead.ID, "error", err)
+		} else {
+			lead.ConversationJobCount = jobCount
+		}
 
 		// Get last contact from conversation_jobs
 		var lastContact sql.NullTime
-		h.db.QueryRowContext(r.Context(),
+		if err := h.db.QueryRowContext(r.Context(),
 			`SELECT MAX(created_at) FROM conversation_jobs WHERE conversation_id LIKE $1`,
 			conversationPattern,
-		).Scan(&lastContact)
-		if lastContact.Valid {
+		).Scan(&lastContact); err != nil {
+			h.logger.Error("failed to get last contact", "lead_id", lead.ID, "error", err)
+		} else if lastContact.Valid {
 			formatted := lastContact.Time.Format(time.RFC3339)
 			lead.LastContactAt = &formatted
 		}
 
 		leads = append(leads, lead)
+	}
+
+	if err := rows.Err(); err != nil {
+		h.logger.Error("lead rows iteration failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
 	if leads == nil {

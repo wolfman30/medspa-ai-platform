@@ -60,13 +60,23 @@ func (h *AdminLeadsHandler) UpdateLead(w http.ResponseWriter, r *http.Request) {
 		argNum++
 	}
 	if req.Tags != nil {
-		tagsJSON, _ := json.Marshal(req.Tags)
+		tagsJSON, err := json.Marshal(req.Tags)
+		if err != nil {
+			h.logger.Error("failed to marshal tags", "error", err)
+			http.Error(w, "invalid tags", http.StatusBadRequest)
+			return
+		}
 		updates = append(updates, "tags = $"+strconv.Itoa(argNum))
 		args = append(args, tagsJSON)
 		argNum++
 	}
 	if req.InterestedServices != nil {
-		servicesJSON, _ := json.Marshal(req.InterestedServices)
+		servicesJSON, err := json.Marshal(req.InterestedServices)
+		if err != nil {
+			h.logger.Error("failed to marshal interested services", "error", err)
+			http.Error(w, "invalid interested_services", http.StatusBadRequest)
+			return
+		}
 		updates = append(updates, "interested_services = $"+strconv.Itoa(argNum))
 		args = append(args, servicesJSON)
 		argNum++
@@ -81,6 +91,8 @@ func (h *AdminLeadsHandler) UpdateLead(w http.ResponseWriter, r *http.Request) {
 	args = append(args, time.Now())
 	argNum++
 
+	// argNum continues from SET placeholders into WHERE placeholders to keep
+	// parameter positions aligned with a single args slice.
 	args = append(args, leadUUID, orgID)
 
 	query := "UPDATE leads SET " + strings.Join(updates, ", ") +
@@ -93,7 +105,12 @@ func (h *AdminLeadsHandler) UpdateLead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		h.logger.Error("failed to read rows affected", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	if rows == 0 {
 		http.Error(w, "lead not found", http.StatusNotFound)
 		return

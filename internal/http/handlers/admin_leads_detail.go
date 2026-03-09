@@ -59,8 +59,16 @@ func (h *AdminLeadsHandler) GetLead(w http.ResponseWriter, r *http.Request) {
 	lead.Notes = notes.String
 	lead.CreatedAt = createdAt.Format(time.RFC3339)
 	lead.UpdatedAt = updatedAt.Format(time.RFC3339)
-	json.Unmarshal(interestedServices, &lead.InterestedServices)
-	json.Unmarshal(tags, &lead.Tags)
+	if len(interestedServices) > 0 {
+		if err := json.Unmarshal(interestedServices, &lead.InterestedServices); err != nil {
+			h.logger.Error("failed to decode interested_services", "lead_id", lead.ID, "error", err)
+		}
+	}
+	if len(tags) > 0 {
+		if err := json.Unmarshal(tags, &lead.Tags); err != nil {
+			h.logger.Error("failed to decode tags", "lead_id", lead.ID, "error", err)
+		}
+	}
 
 	// Get distinct conversation IDs from conversation_jobs via phone
 	normalizedPhone := normalizePhoneDigits(lead.Phone)
@@ -70,23 +78,33 @@ func (h *AdminLeadsHandler) GetLead(w http.ResponseWriter, r *http.Request) {
 		`SELECT DISTINCT conversation_id FROM conversation_jobs WHERE conversation_id LIKE $1 ORDER BY conversation_id`,
 		conversationPattern,
 	)
-	if err == nil {
+	if err != nil {
+		h.logger.Error("failed to get conversation ids", "lead_id", lead.ID, "error", err)
+	} else {
 		defer convIDRows.Close()
 		for convIDRows.Next() {
 			var convID string
-			if convIDRows.Scan(&convID) == nil {
-				lead.ConversationIDs = append(lead.ConversationIDs, convID)
+			if err := convIDRows.Scan(&convID); err != nil {
+				h.logger.Error("failed to scan conversation id", "lead_id", lead.ID, "error", err)
+				continue
 			}
+			lead.ConversationIDs = append(lead.ConversationIDs, convID)
+		}
+		if err := convIDRows.Err(); err != nil {
+			h.logger.Error("conversation id rows iteration failed", "lead_id", lead.ID, "error", err)
 		}
 	}
 
 	// Get job count
 	var jobCount int
-	h.db.QueryRowContext(r.Context(),
+	if err := h.db.QueryRowContext(r.Context(),
 		`SELECT COUNT(*) FROM conversation_jobs WHERE conversation_id LIKE $1`,
 		conversationPattern,
-	).Scan(&jobCount)
-	lead.ConversationJobCount = jobCount
+	).Scan(&jobCount); err != nil {
+		h.logger.Error("failed to get conversation job count", "lead_id", lead.ID, "error", err)
+	} else {
+		lead.ConversationJobCount = jobCount
+	}
 
 	// Get payments
 	payQuery := `
@@ -97,16 +115,23 @@ func (h *AdminLeadsHandler) GetLead(w http.ResponseWriter, r *http.Request) {
 		LIMIT 10
 	`
 	payRows, err := h.db.QueryContext(r.Context(), payQuery, leadUUID)
-	if err == nil {
+	if err != nil {
+		h.logger.Error("failed to query payments", "lead_id", lead.ID, "error", err)
+	} else {
 		defer payRows.Close()
 		for payRows.Next() {
 			var pay PaymentSummary
 			var payCreatedAt time.Time
 			err := payRows.Scan(&pay.ID, &pay.AmountCents, &pay.Status, &payCreatedAt)
-			if err == nil {
-				pay.CreatedAt = payCreatedAt.Format(time.RFC3339)
-				lead.Payments = append(lead.Payments, pay)
+			if err != nil {
+				h.logger.Error("failed to scan payment", "lead_id", lead.ID, "error", err)
+				continue
 			}
+			pay.CreatedAt = payCreatedAt.Format(time.RFC3339)
+			lead.Payments = append(lead.Payments, pay)
+		}
+		if err := payRows.Err(); err != nil {
+			h.logger.Error("payment rows iteration failed", "lead_id", lead.ID, "error", err)
 		}
 	}
 
@@ -119,16 +144,23 @@ func (h *AdminLeadsHandler) GetLead(w http.ResponseWriter, r *http.Request) {
 		LIMIT 10
 	`
 	bookRows, err := h.db.QueryContext(r.Context(), bookQuery, leadUUID)
-	if err == nil {
+	if err != nil {
+		h.logger.Error("failed to query bookings", "lead_id", lead.ID, "error", err)
+	} else {
 		defer bookRows.Close()
 		for bookRows.Next() {
 			var book BookingSummary
 			var scheduledAt time.Time
 			err := bookRows.Scan(&book.ID, &book.Service, &scheduledAt, &book.Status)
-			if err == nil {
-				book.ScheduledAt = scheduledAt.Format(time.RFC3339)
-				lead.Bookings = append(lead.Bookings, book)
+			if err != nil {
+				h.logger.Error("failed to scan booking", "lead_id", lead.ID, "error", err)
+				continue
 			}
+			book.ScheduledAt = scheduledAt.Format(time.RFC3339)
+			lead.Bookings = append(lead.Bookings, book)
+		}
+		if err := bookRows.Err(); err != nil {
+			h.logger.Error("booking rows iteration failed", "lead_id", lead.ID, "error", err)
 		}
 	}
 
