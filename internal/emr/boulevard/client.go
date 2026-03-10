@@ -6,12 +6,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
+
+// parseMoneyScalar converts a Boulevard Money scalar string (e.g. "200.00") to cents.
+// Returns 0 if the string is empty or unparsable.
+func parseMoneyScalar(s string) int {
+	if s == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return int(math.Round(f * 100))
+}
 
 const defaultTimeout = 20 * time.Second
 
@@ -50,7 +65,7 @@ func (c *BoulevardClient) CreateCart(ctx context.Context) (cartID string, servic
         name
         availableItems {
           id name description
-          listPriceRange { min { amount } max { amount } }
+          listPriceRange { min max }
         }
       }
     }
@@ -72,8 +87,8 @@ func (c *BoulevardClient) CreateCart(ctx context.Context) (cartID string, servic
 						Name           string `json:"name"`
 						Description    string `json:"description"`
 						ListPriceRange struct {
-							Min struct{ Amount int } `json:"min"`
-							Max struct{ Amount int } `json:"max"`
+							Min string `json:"min"`
+							Max string `json:"max"`
 						} `json:"listPriceRange"`
 					} `json:"availableItems"`
 				} `json:"availableCategories"`
@@ -95,7 +110,7 @@ func (c *BoulevardClient) CreateCart(ctx context.Context) (cartID string, servic
 				ID:          item.ID,
 				Name:        item.Name,
 				Description: item.Description,
-				PriceCents:  item.ListPriceRange.Min.Amount,
+				PriceCents:  parseMoneyScalar(item.ListPriceRange.Min),
 			})
 		}
 	}

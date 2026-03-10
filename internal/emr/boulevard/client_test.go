@@ -28,7 +28,7 @@ func TestCreateCart(t *testing.T) {
 							{
 								"name": "Injectables",
 								"availableItems": []map[string]any{
-									{"id": "s_1", "name": "Botox", "description": "Wrinkle relaxer", "listPriceRange": map[string]any{"min": map[string]any{"amount": 20000}, "max": map[string]any{"amount": 20000}}},
+									{"id": "s_1", "name": "Botox", "description": "Wrinkle relaxer", "listPriceRange": map[string]any{"min": "200.00", "max": "200.00"}},
 								},
 							},
 						},
