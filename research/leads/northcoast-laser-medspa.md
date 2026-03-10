@@ -45,3 +45,16 @@
 - ✅ Injectables + laser (high-value)
 - ✅ Saturday-only half day = after-hours opportunity
 - ⚠️ Not on Moxie (manual handoff initially)
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** (440) 639-3223 ✅ confirmed on website
+**Owners:** Betsy (Licensed Aesthetician), James A. Turbett, MD (Medical Director), Melissa (Nurse Injector) — trio
+**Google:** 300+ reviews per website claim ("400+ Five Star Reviews" including non-Google)
+**Website:** Webflow-based. NO online booking — "Schedule" button is just a tel: link. $50-off lead capture form at bottom.
+**Instagram:** @northcoast_lasermedspa — 1,177 followers, 1,089 posts
+
+### Findings
+1. **Contact form is BROKEN** — the $50-off lead capture form shows "Oops! Something went wrong while submitting the form." Active lead leak RIGHT NOW. ([northcoastlaser.com — scroll to bottom](https://www.northcoastlaser.com/))
+2. **"Schedule an Appointment" is just a phone call link** — no actual online scheduling. With 300+ Google reviews they're busy, but every booking requires a call during business hours. ([northcoastlaser.com](https://www.northcoastlaser.com/))
+3. **Saturday half-day (9AM-12PM) + no text-back = weekend lead leak** — unreachable 75% of the weekend. Competitors with online booking capture those leads. ([northcoastlaser.com](https://www.northcoastlaser.com/))

@@ -34,3 +34,16 @@
 - Hotel partnership angle is unique — guests calling after hours is almost guaranteed
 - "Premier wellness destination" positioning = they care about client experience
 - Could position AI text-back as enhancing their concierge-level service
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** (216) 202-4770 ✅ confirmed on website footer
+**Staff:** Rick (provider, mentioned in reviews), board-certified physicians
+**Hours:** Mon-Fri 10AM-6PM, Sat 10AM-4PM, Sun Closed ✅
+**Google:** "Hidden Gem" on Rviewo = low review count despite high rating
+**Instagram:** @vitalitylounge.health — exists, follower count unverified
+
+### Findings
+1. **Closed Sunday + limited Saturday = missed hotel guest calls** — partnered with Hyatt and Westin (per About page), meaning travelers calling after hours get nothing. No text-back = lost hotel revenue. ([vitalitylounge.health/about-us](https://vitalitylounge.health/about-us/))
+2. **"Hidden Gem" = low Google review count** — despite being "top-rated," fewer reviews than competitors. Not asking for reviews hurts local SEO. ([Rviewo](https://rviewo.com/local-guides/top-10-med-spa-cleveland-2026))
+3. **No online booking despite premium pricing ($269-$729)** — high-ticket wellness packages but no way to book online. Every lead must call during business hours. ([vitalitylounge.health](https://vitalitylounge.health/))

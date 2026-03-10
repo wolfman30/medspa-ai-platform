@@ -21,7 +21,7 @@
 - Membership program (Silver/Gold/Platinum tiers)
 
 ## Profile
-- **Independent:** Yes — physician-owned single-location practice
+- **Independent:** Yes — physician-owned practice (3 locations: Hudson, Canton, Waterville)
 - **Vibe:** Premium/luxury, "Northeast Ohio's Premier Luxury Medical Spa"
 - **Credentials:** International training, Allergan Masters course
 - **Financing:** CareCredit + PatientFi — suggests higher-ticket procedures
@@ -35,3 +35,16 @@
 
 ## Researched
 - 2026-02-19
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** Hudson: (234) 205-2029 | Canton: (234) 200-5401 | Waterville: (234) 200-5529
+**Owner:** Dr. Tricia N. Bedrick
+**Google:** 4.9 stars, ~220 reviews (via PortraitCare)
+**Website:** neoskincenter.com — has Zenoti online booking. CareCredit + PatientFi financing.
+**Instagram:** @neoskincenter — 6,938 followers, 1,414 posts
+
+### Findings
+1. **NOW 3 LOCATIONS** ⚠️ — our file says single location but NEOSkin has expanded to Hudson, Canton, AND Waterville. Multi-location = more phone lines, more missed calls, stronger text-back value prop. ([neoskincenter.com/contact-us](https://neoskincenter.com/contact-us/))
+2. **Uses Zenoti for booking** — Zenoti has AI features, so pitch needs to differentiate. Zenoti's AI is EMR-focused, not missed-call text-back. Position as complementary. ([neoskin.zenoti.com](https://neoskin.zenoti.com/webstoreNew/services))
+3. **Not BBB accredited** — BBB profile exists but not accredited. Dr. Bedrick has strong credentials (Allergan Masters, international training) — lead with respect. ([BBB](https://www.bbb.org/us/oh/hudson/profile/medical-spa/neoskin-center-0272-90028409))

@@ -36,3 +36,16 @@
 - 2 locations means more missed calls, higher value proposition
 - Vagaro user — not Moxie, so text-back only (no booking integration), but still high value
 - Strong social = marketing-savvy, may appreciate tech solutions
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** (419) 617-0085 ✅ confirmed via CareCredit listing
+**Founders:** Dr. Janice Rice & Amber Keller, CNP
+**Facebook:** 4,803 likes, 284 talking about this, 479 check-ins
+**Website:** Squarespace site with /booking page (Vagaro). No chat widget. No phone on homepage.
+**Instagram:** @lakeerieaesthetics — active, recent reels
+
+### Findings
+1. **No phone number on homepage** — only physical addresses for Sandusky and Avon Lake shown. Clients who want to call must dig or Google it. ([lakeerieaesthetics.com](https://www.lakeerieaesthetics.com/))
+2. **Booking page shows cancellation policy but widget may not render** — /booking page is JavaScript-dependent; if Vagaro widget fails, visitors see policy text and nothing to click. ([lakeerieaesthetics.com/booking](https://www.lakeerieaesthetics.com/booking))
+3. **Two locations but no click-to-call or Google Maps embed** — mobile users can't tap-to-call or get directions from homepage. ([lakeerieaesthetics.com](https://www.lakeerieaesthetics.com/))

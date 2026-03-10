@@ -41,3 +41,15 @@
 - 50+ services is actually a selling point: complex menus mean callers have more questions
 - Closed 2 days/week + limited hours = lots of after-hours missed calls
 - Same Mentor Ave strip as Pura Vida — could demo one to sell the other
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** (440) 942-5300 ✅ confirmed via Yelp, Facebook, contact page
+**Google:** Not verified. BBB: NOT accredited. Facebook: 432 likes, 148 check-ins.
+**Website:** cerenitymedspa.com — Cloudflare-blocked (403). Second domain cerenityintegrativemedspa.com DNS not resolving.
+**Instagram:** No branded @handle found — only a location page exists.
+
+### Findings
+1. **Website appears broken/blocked** — cerenitymedspa.com returns Cloudflare 403 challenge page. Second domain doesn't resolve. Potential clients bouncing. ([cerenitymedspa.com](https://cerenitymedspa.com))
+2. **No visible Instagram presence** — no branded @handle found; only an IG location tag. Invisible to 25-45 demographic. ([IG location](https://www.instagram.com/explore/locations/100189738106274/cerenity-integrative-medspa/))
+3. **Not BBB accredited + negative reviews on MapQuest** — no reputation management strategy apparent. ([BBB profile](https://www.bbb.org/us/oh/mentor/profile/medical-spa/cerenity-integrative-medspa-0312-92059269))

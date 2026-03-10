@@ -41,3 +41,15 @@
 ## Notes
 - Two websites (lighttouchonline.com + lighttouchcle.com) suggests DIY web presence — may not be tech-savvy
 - Long tenure means established patient base but possibly outdated systems
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** (216) 430-7188 ✅ matches file
+**Hours:** Mon–Fri 11:00 AM–4:30 PM, Sat–Sun Closed
+**Google:** 5.0 stars, ~40-44 reviews
+**Instagram:** @lighttouchcle — 1,605 followers, 114 posts
+
+### Findings
+1. **Broken link on homepage** — Injectables link has malformed URL (`https://https://lighttouchonline.com/injectables/`) returning an error. Costing them leads right now. ([lighttouchonline.com](https://lighttouchonline.com/))
+2. **No online booking at all** — every CTA is "call (216) 430-7188." No online booking = losing 60%+ of consumers who prefer digital booking. Competitors (Euro Look, KÜR) all have it. ([lighttouchonline.com](https://lighttouchonline.com/))
+3. **Two separate websites causing confusion** — lighttouchonline.com (main) and lighttouchcle.com (Wix, semi-abandoned). Splitting SEO authority across two domains hurts rankings. ([lighttouchcle.com](https://www.lighttouchcle.com/))

@@ -30,3 +30,16 @@
 - Great fit: phone-first booking, independent, injectable focus, underserved market area
 - No visible EMR/booking platform = likely manual scheduling = high pain point for text-back
 - Lake County is an untapped market in our pipeline
+
+## Lead Leak Check — March 10, 2026
+
+**Phone (verified):** (440) 290-0755 ✅ (Facebook, Yelp, Mentor Chamber)
+**Staff:** Ashley (lead injector), Sarah, Kim (nurses)
+**Hours:** NOT listed on website or Facebook
+**Google:** Unverified. Facebook: 13 reviews, 100% recommend. Yelp: very positive.
+**Instagram:** @puravidawellness_mentor — 2,387 followers, 213 posts
+
+### Findings
+1. **No online booking at all** — Wix website has zero booking functionality. No Calendly, no Zenoti, nothing. Every appointment requires a call/text. Anyone browsing at 9pm can't book. ([puravidawellnessmentor.com](https://www.puravidawellnessmentor.com/))
+2. **Phone number NOT on homepage** — (440) 290-0755 not prominently displayed on main page. Have to find it on Facebook or Yelp. ([puravidawellnessmentor.com](https://www.puravidawellnessmentor.com/))
+3. **WellnessLiving listing found** — they appear on wellnessliving.com, suggesting they use/tried it for scheduling, but it's not integrated into their website. ([WellnessLiving](https://www.wellnessliving.com/explore/locations/medical-aesthetics/us-oh-mentor/puravidawellness-Y658RX/))
