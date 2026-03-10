@@ -51,6 +51,8 @@ type ConversationWorkerAssembler struct {
 	convStore     *conversation.ConversationStore
 }
 
+// ConversationWorkerAssemblerDeps holds the dependencies needed to create
+// a ConversationWorkerAssembler.
 type ConversationWorkerAssemblerDeps struct {
 	InlineWorkerDeps  InlineWorkerDeps
 	LeadsRepo         leads.Repository
@@ -59,6 +61,8 @@ type ConversationWorkerAssemblerDeps struct {
 	ConversationStore *conversation.ConversationStore
 }
 
+// NewConversationWorkerAssembler creates an assembler that lazily builds
+// the inline conversation worker with all required subsystems.
 func NewConversationWorkerAssembler(deps ConversationWorkerAssemblerDeps) *ConversationWorkerAssembler {
 	inlineWorkerDeps := deps.InlineWorkerDeps
 	return &ConversationWorkerAssembler{

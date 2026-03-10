@@ -24,12 +24,15 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
 )
 
+// ClinicBootstrap holds Redis-backed clinic configuration services.
 type ClinicBootstrap struct {
 	RedisClient   *redis.Client
 	ClinicStore   *clinic.Store
 	SMSTranscript *conversation.SMSTranscriptStore
 }
 
+// BootstrapClinic connects to Redis and initializes the clinic config store
+// and SMS transcript store.
 func BootstrapClinic(cfg *appconfig.Config, appCtx context.Context, logger *logging.Logger) ClinicBootstrap {
 	redisClient := appbootstrap.BuildRedisClient(appCtx, cfg, logger, false)
 	clinicStore := appbootstrap.BuildClinicStore(redisClient)
@@ -37,6 +40,8 @@ func BootstrapClinic(cfg *appconfig.Config, appCtx context.Context, logger *logg
 	return ClinicBootstrap{RedisClient: redisClient, ClinicStore: clinicStore, SMSTranscript: smsTranscript}
 }
 
+// MessagingDeps holds dependencies for initializing SMS webhook handling
+// and outbound messaging.
 type MessagingDeps struct {
 	Cfg                   *appconfig.Config
 	Logger                *logging.Logger
@@ -49,6 +54,8 @@ type MessagingDeps struct {
 	ClinicStore           *clinic.Store
 }
 
+// MessagingBootstrap holds the assembled messaging handler, org resolver,
+// and outbound messenger for SMS processing.
 type MessagingBootstrap struct {
 	MessagingHandler *messaging.Handler
 	Resolver         *messaging.StaticOrgResolver
@@ -56,6 +63,8 @@ type MessagingBootstrap struct {
 	MessengerReason  string
 }
 
+// BootstrapMessaging wires up the SMS webhook handler, org-to-number routing,
+// and outbound messenger (Telnyx or Twilio).
 func BootstrapMessaging(deps MessagingDeps) MessagingBootstrap {
 	cfg := deps.Cfg
 	logger := deps.Logger
@@ -112,6 +121,8 @@ func BootstrapMessaging(deps MessagingDeps) MessagingBootstrap {
 	return MessagingBootstrap{MessagingHandler: messagingHandler, Resolver: resolver, WebhookMessenger: webhookMessenger, MessengerReason: webhookMessengerReason}
 }
 
+// PaymentsBootstrap holds payment webhook handlers and checkout services
+// for Square, Stripe, and fake/sandbox payment flows.
 type PaymentsBootstrap struct {
 	CheckoutHandler      *payments.CheckoutHandler
 	SquareWebhookHandler *payments.SquareWebhookHandler
@@ -121,6 +132,8 @@ type PaymentsBootstrap struct {
 	StripeConnectHandler *payments.StripeConnectHandler
 }
 
+// PaymentsDeps holds dependencies for initializing payment processing
+// (Square OAuth, Stripe Connect, webhooks, and checkout).
 type PaymentsDeps struct {
 	AppCtx                context.Context
 	Cfg                   *appconfig.Config
@@ -136,6 +149,8 @@ type PaymentsDeps struct {
 	ConversationPublisher *conversation.Publisher
 }
 
+// BootstrapPayments initializes Square and Stripe payment processing,
+// including OAuth, webhooks, checkout services, and the multi-provider router.
 func BootstrapPayments(deps PaymentsDeps) PaymentsBootstrap {
 	appCtx := deps.AppCtx
 	cfg := deps.Cfg
@@ -250,12 +265,15 @@ func BootstrapPayments(deps PaymentsDeps) PaymentsBootstrap {
 	}
 }
 
+// VoiceBootstrap holds handlers for voice AI (Telnyx Call Control,
+// Nova Sonic WebSocket bridge, and voice webhook processing).
 type VoiceBootstrap struct {
 	VoiceAIHandler *handlers.VoiceAIHandler
 	VoiceWSHandler *voice.TelnyxWSHandler
 	CallControl    *handlers.CallControlHandler
 }
 
+// VoiceDeps holds dependencies for initializing voice AI handlers.
 type VoiceDeps struct {
 	Cfg                   *appconfig.Config
 	Logger                *logging.Logger
@@ -270,6 +288,8 @@ type VoiceDeps struct {
 	Resolver              *messaging.StaticOrgResolver
 }
 
+// BootstrapVoice initializes the voice AI handler, Nova Sonic WebSocket
+// bridge, and Telnyx Call Control handler based on config availability.
 func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 	cfg := deps.Cfg
 	logger := deps.Logger
@@ -368,6 +388,8 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 	return VoiceBootstrap{VoiceAIHandler: voiceAIHandler, VoiceWSHandler: voiceWSHandler, CallControl: callControlHandler}
 }
 
+// BootstrapNotifications creates the GitHub webhook handler that forwards
+// CI/CD events to Telegram. Returns nil if GITHUB_WEBHOOK_SECRET is not set.
 func BootstrapNotifications(cfg *appconfig.Config, logger *logging.Logger) *handlers.GitHubWebhookHandler {
 	var githubWebhookHandler *handlers.GitHubWebhookHandler
 	if cfg.GitHubWebhookSecret != "" {

@@ -35,6 +35,8 @@ type AdminHandlerAssembler struct {
 	redisClient *redis.Client
 }
 
+// NewAdminHandlerAssembler creates an assembler from the given dependencies,
+// used to lazily construct admin handlers that share context and config.
 func NewAdminHandlerAssembler(deps AdminClinicDataDeps) *AdminHandlerAssembler {
 	return &AdminHandlerAssembler{
 		appCtx:      deps.AppCtx,

@@ -31,6 +31,8 @@ type RetrySender struct {
 	batchSize   int
 }
 
+// NewRetrySender creates a RetrySender with exponential backoff defaults:
+// 5 max attempts, 5-minute base delay, 1-minute poll interval, 25-message batches.
 func NewRetrySender(store retryStore, telnyx telnyxSender, logger *logging.Logger) *RetrySender {
 	if logger == nil {
 		logger = logging.Default()
