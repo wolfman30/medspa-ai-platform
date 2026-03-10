@@ -268,7 +268,7 @@ func verifyStripeSignature(secret string, payload []byte, header string) bool {
 	if err != nil {
 		return false
 	}
-	if abs64(time.Now().Unix()-ts) > 300 {
+	if abs64(time.Now().Unix()-ts) > WebhookTimestampToleranceSec {
 		return false
 	}
 

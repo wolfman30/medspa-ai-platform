@@ -202,7 +202,7 @@ func sanitizeDigits(value string) string {
 
 // normalizeUSDigits prepends a leading "1" to 10-digit US phone numbers.
 func normalizeUSDigits(digits string) string {
-	if len(digits) == 10 {
+	if len(digits) == USLocalDigits {
 		return "1" + digits
 	}
 	return digits

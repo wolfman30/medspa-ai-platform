@@ -239,7 +239,7 @@ func (h *AdminTestingHandler) UploadEvidence(w http.ResponseWriter, r *http.Requ
 	}
 
 	// 10MB max
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	if err := r.ParseMultipartForm(MaxUploadBytes); err != nil {
 		http.Error(w, "file too large (max 10MB)", http.StatusBadRequest)
 		return
 	}

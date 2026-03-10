@@ -108,8 +108,8 @@ func (h *AdminLeadsHandler) ListLeads(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
+	if pageSize < 1 || pageSize > MaxPageSize {
+		pageSize = DefaultPageSize
 	}
 	status := r.URL.Query().Get("status")
 	search := r.URL.Query().Get("search")

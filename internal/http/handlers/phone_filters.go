@@ -11,9 +11,9 @@ func phoneDigitsCandidates(raw string) []string {
 		return nil
 	}
 	candidates := []string{digits}
-	if len(digits) == 10 {
+	if len(digits) == USLocalDigits {
 		candidates = append(candidates, "1"+digits)
-	} else if len(digits) == 11 && strings.HasPrefix(digits, "1") {
+	} else if len(digits) == USFullDigits && strings.HasPrefix(digits, "1") {
 		candidates = append(candidates, digits[1:])
 	}
 	return uniqueStrings(candidates)

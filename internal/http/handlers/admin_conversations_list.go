@@ -25,8 +25,8 @@ func (h *AdminConversationsHandler) ListConversations(w http.ResponseWriter, r *
 		page = 1
 	}
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
+	if pageSize < 1 || pageSize > MaxPageSize {
+		pageSize = DefaultPageSize
 	}
 	phone := r.URL.Query().Get("phone")
 	status := r.URL.Query().Get("status")
