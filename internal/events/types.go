@@ -1,7 +1,11 @@
+// Package events defines domain event types and infrastructure for reliable
+// event delivery via the transactional outbox pattern.
 package events
 
 import "time"
 
+// ConversationMessageReceivedV1 is emitted when an inbound SMS or channel
+// message is received and associated with a conversation.
 type ConversationMessageReceivedV1 struct {
 	EventID        string    `json:"event_id"`
 	OrgID          string    `json:"org_id"`
@@ -14,6 +18,8 @@ type ConversationMessageReceivedV1 struct {
 	ToNumber       string    `json:"to_number,omitempty"`
 }
 
+// DepositRequestedV1 is emitted when a deposit checkout link is generated
+// and sent to a patient for a booking intent.
 type DepositRequestedV1 struct {
 	EventID         string    `json:"event_id"`
 	OrgID           string    `json:"org_id"`
@@ -25,6 +31,8 @@ type DepositRequestedV1 struct {
 	Provider        string    `json:"provider"`
 }
 
+// PaymentSucceededV1 is emitted when a deposit payment is successfully
+// captured by a payment provider (Square or Stripe).
 type PaymentSucceededV1 struct {
 	EventID         string     `json:"event_id"`
 	OrgID           string     `json:"org_id"`
@@ -41,6 +49,8 @@ type PaymentSucceededV1 struct {
 	ServiceName     string     `json:"service_name,omitempty"`
 }
 
+// PaymentFailedV1 is emitted when a deposit payment attempt fails or is
+// declined by the payment provider.
 type PaymentFailedV1 struct {
 	EventID         string    `json:"event_id"`
 	OrgID           string    `json:"org_id"`
@@ -55,6 +65,8 @@ type PaymentFailedV1 struct {
 	FailureStatus   string    `json:"failure_status,omitempty"`
 }
 
+// BookingConfirmedV1 is emitted when an appointment is successfully booked
+// on the EMR (e.g. Moxie) after deposit payment.
 type BookingConfirmedV1 struct {
 	EventID        string     `json:"event_id"`
 	OrgID          string     `json:"org_id"`

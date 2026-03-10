@@ -70,6 +70,8 @@ func BootstrapDB(ctx context.Context, cfg *appconfig.Config, logger *logging.Log
 	}
 }
 
+// SetupMessagingMetrics creates a Prometheus registry with messaging and
+// conversation metrics and returns an HTTP handler for the /metrics endpoint.
 func SetupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
 	registry := prometheus.NewRegistry()
 	messagingMetrics := observemetrics.NewMessagingMetrics(registry)
@@ -78,6 +80,8 @@ func SetupMessagingMetrics() (http.Handler, *observemetrics.MessagingMetrics) {
 	return metricsHandler, messagingMetrics
 }
 
+// ConnectPostgresPool creates a pgx connection pool and verifies connectivity
+// with a 5-second timeout. Calls os.Exit(1) on failure.
 func ConnectPostgresPool(ctx context.Context, dbURL string, logger *logging.Logger) *pgxpool.Pool {
 	if dbURL == "" {
 		return nil
@@ -132,6 +136,8 @@ func connectSQLDB(pool *pgxpool.Pool, logger *logging.Logger) *sql.DB {
 	return db
 }
 
+// SetupTelnyxClient creates a Telnyx API client from config. Returns nil if
+// the API key is empty. Calls os.Exit(1) if the key is present but invalid.
 func SetupTelnyxClient(cfg *appconfig.Config, logger *logging.Logger) *telnyxclient.Client {
 	if cfg.TelnyxAPIKey == "" {
 		logger.Debug("telnyx client not created: API key empty")
@@ -157,6 +163,8 @@ func initializeLeadsRepository(dbPool *pgxpool.Pool) leads.Repository {
 	return leads.NewInMemoryRepository()
 }
 
+// ConversationSetupDeps holds dependencies for initializing the conversation
+// queue, job store, and publisher.
 type ConversationSetupDeps struct {
 	Ctx    context.Context
 	Cfg    *appconfig.Config
@@ -164,6 +172,9 @@ type ConversationSetupDeps struct {
 	Logger *logging.Logger
 }
 
+// SetupConversation initializes the conversation infrastructure. When
+// USE_MEMORY_QUEUE is true, it uses an in-process queue with PostgreSQL job
+// persistence; otherwise it uses SQS + DynamoDB.
 func SetupConversation(deps ConversationSetupDeps) (*conversation.Publisher, conversation.JobRecorder, conversation.JobUpdater, *conversation.MemoryQueue) {
 	ctx := deps.Ctx
 	cfg := deps.Cfg
@@ -193,6 +204,8 @@ func SetupConversation(deps ConversationSetupDeps) (*conversation.Publisher, con
 	return publisher, store, store, nil
 }
 
+// WaitForInlineWorker blocks until the inline conversation worker finishes or
+// a 30-second shutdown timeout elapses. No-op if inlineWorker is nil.
 func WaitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logger) {
 	if inlineWorker == nil {
 		return
@@ -214,6 +227,8 @@ func WaitForInlineWorker(inlineWorker *conversation.Worker, logger *logging.Logg
 	}
 }
 
+// NewBriefsHandler creates a market brief handler with optional PostgreSQL
+// persistence and research directory discovery.
 func NewBriefsHandler(pool *pgxpool.Pool, logger *logging.Logger) *handlers.AdminBriefsHandler {
 	abs, err := filepath.Abs("research")
 	if err != nil {
@@ -228,6 +243,8 @@ func NewBriefsHandler(pool *pgxpool.Pool, logger *logging.Logger) *handlers.Admi
 	return h
 }
 
+// NewProspectsHandler creates a prospect management handler with optional
+// research directory for enrichment data.
 func NewProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
 	h := prospects.NewHandler(prospects.NewRepository(sqlDB))
 	if abs, err := filepath.Abs("research"); err == nil {
@@ -238,10 +255,13 @@ func NewProspectsHandler(sqlDB *sql.DB) *prospects.Handler {
 	return h
 }
 
+// NewStoriesHandler creates a stories board handler backed by PostgreSQL.
 func NewStoriesHandler(sqlDB *sql.DB) *stories.Handler {
 	return stories.NewHandler(stories.NewRepository(sqlDB))
 }
 
+// NewFinanceHandler creates the admin finance handler with Plaid API and S3
+// integration for transaction categorization and budget tracking.
 func NewFinanceHandler(appCtx context.Context, appCfg *appconfig.Config, logger *logging.Logger) *handlers.AdminFinanceHandler {
 	env := strings.ToLower(strings.TrimSpace(os.Getenv("PLAID_ENV")))
 	baseURL := "https://production.plaid.com"

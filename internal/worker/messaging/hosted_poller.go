@@ -27,6 +27,8 @@ type HostedPoller struct {
 	batch    int
 }
 
+// NewHostedPoller creates a HostedPoller that checks pending number porting
+// orders every 10 minutes in batches of 20.
 func NewHostedPoller(store hostedStore, telnyx hostedClient, logger *logging.Logger) *HostedPoller {
 	if logger == nil {
 		logger = logging.Default()

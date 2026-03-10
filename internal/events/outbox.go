@@ -33,10 +33,15 @@ type execQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
+// OutboxStore provides transactional outbox persistence backed by PostgreSQL.
+// Events are inserted within the same transaction as domain writes and later
+// delivered asynchronously by the Deliverer.
 type OutboxStore struct {
 	pool execQuerier
 }
 
+// NewOutboxStore creates an OutboxStore backed by the given connection pool.
+// Panics if pool is nil.
 func NewOutboxStore(pool *pgxpool.Pool) *OutboxStore {
 	if pool == nil {
 		panic("events: pgx pool required")
@@ -116,6 +121,8 @@ type Deliverer struct {
 	interval  time.Duration
 }
 
+// NewDeliverer creates a Deliverer that polls the outbox and forwards events
+// to handler. Default batch size is 25 entries every 2 seconds.
 func NewDeliverer(store *OutboxStore, handler DeliveryHandler, logger *logging.Logger) *Deliverer {
 	if logger == nil {
 		logger = logging.Default()

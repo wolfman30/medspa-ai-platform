@@ -18,10 +18,15 @@ type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// ProcessedStore provides idempotent webhook event tracking backed by
+// PostgreSQL. Each event is identified by a deterministic UUID derived
+// from the provider name and external event ID.
 type ProcessedStore struct {
 	pool rowQuerier
 }
 
+// NewProcessedStore creates a ProcessedStore backed by the given connection pool.
+// Panics if pool is nil.
 func NewProcessedStore(pool *pgxpool.Pool) *ProcessedStore {
 	if pool == nil {
 		panic("events: pgx pool required")
