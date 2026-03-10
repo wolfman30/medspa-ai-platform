@@ -1557,7 +1557,7 @@ func TestMoxieTimeSelection_NoBookingURL_NoBookingRequest(t *testing.T) {
 	}
 }
 
-func TestMoxieTimeSelection_NoEmail_BookingBlocked(t *testing.T) {
+func TestMoxieTimeSelection_NoEmail_BookingProceeds(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
@@ -1635,9 +1635,12 @@ func TestMoxieTimeSelection_NoEmail_BookingBlocked(t *testing.T) {
 		t.Fatalf("process: %v", err)
 	}
 
-	// BookingRequest should be nil — email required for Moxie
-	if resp.BookingRequest != nil {
-		t.Error("expected BookingRequest to be nil when email is missing")
+	// BookingRequest should be populated — email is captured on the booking page, not via SMS
+	if resp.BookingRequest == nil {
+		t.Fatal("expected BookingRequest to be populated even without email (email captured on booking page)")
+	}
+	if resp.BookingRequest.Email != "" {
+		t.Errorf("expected empty email, got %q", resp.BookingRequest.Email)
 	}
 }
 

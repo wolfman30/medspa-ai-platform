@@ -230,26 +230,7 @@ func (s *LLMService) assembleBookingRequest(ctx context.Context, pc *processCont
 	}
 
 	if email == "" {
-		s.logger.Warn("booking blocked: no email for Moxie booking", "lead_id", pc.req.LeadID)
-		if pc.selectedSlot != nil {
-			slotTime := pc.selectedSlot.DateTime
-			serviceName := ""
-			if pc.timeSelectionState != nil {
-				serviceName = pc.timeSelectionState.Service
-			}
-			pc.reply = fmt.Sprintf("Great choice! I've got %s for %s. To complete your booking, I just need your email address. What's the best email for you?",
-				slotTime.Format("Monday, January 2 at 3:04 PM"), serviceName)
-			for i := len(pc.history) - 1; i >= 0; i-- {
-				if pc.history[i].Role == ChatRoleAssistant {
-					pc.history[i].Content = pc.reply
-					break
-				}
-			}
-			if err := s.history.Save(ctx, pc.req.ConversationID, pc.history); err != nil {
-				s.logger.Warn("failed to save history after email request override", "error", err)
-			}
-		}
-		return
+		s.logger.Info("proceeding with booking without email — will be captured on booking page", "lead_id", pc.req.LeadID)
 	}
 
 	var slotDateTime time.Time
