@@ -9,3 +9,4 @@
 | 2026-03-09 | #73 | Split `admin_leads.go` (579→5 files: types, list, detail, update, stats) | `internal/http/handlers/admin_leads_*.go` |
 | 2026-03-09 | #74 | Split `oauth.go` (569→5 files: types, token, store, locations, core) | `internal/payments/oauth_*.go` |
 | 2026-03-10 | #78 | Extract 7 magic numbers to named constants (pagination, phone digits, upload size, webhook tolerance, label truncation) | `internal/http/handlers/constants.go`, `internal/payments/constants.go` |
+| 2026-03-10 | #82 | Add godoc comments to 38 exported symbols across events, bootstrap, and worker packages | `internal/events/*.go`, `internal/bootstrap/*.go`, `internal/worker/messaging/*.go` |
