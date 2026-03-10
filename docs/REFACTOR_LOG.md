@@ -7,3 +7,4 @@
 | 2026-03-08 | #72 | Wrap 26 bare `return err` with `fmt.Errorf` context across 6 files | `revenue_dashboard.go`, `admin_finance.go`, `hydrating_rag.go`, `voice_call_store.go`, `conversation_store.go`, `rag_store.go` |
 | 2026-03-09 | #73 | Split `admin_leads.go` (579→5 files: types, list, detail, update, stats) | `internal/http/handlers/admin_leads_*.go` |
 | 2026-03-09 | #74 | Split `oauth.go` (569→5 files: types, token, store, locations, core) | `internal/payments/oauth_*.go` |
+| 2026-03-10 | #78 | Extract 7 magic numbers to named constants (pagination, phone digits, upload size, webhook tolerance, label truncation) | `internal/http/handlers/constants.go`, `internal/payments/constants.go` |
