@@ -80,8 +80,8 @@ func formatSquareError(body []byte) string {
 			return label
 		}
 	}
-	if len(trimmed) > 180 {
-		return trimmed[:180] + "..."
+	if len(trimmed) > MaxOAuthLabelLen {
+		return trimmed[:MaxOAuthLabelLen] + "..."
 	}
 	return trimmed
 }
