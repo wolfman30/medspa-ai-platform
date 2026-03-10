@@ -411,6 +411,10 @@ jobs:
           echo "❌ API not ready after 5 minutes"
           exit 1
 
+      - name: Run Boulevard integration test
+        run: |
+          go test -tags integration -v -timeout 120s ./internal/emr/boulevard/ -run TestIntegration
+
       - name: Run E2E smoke test (happy-path)
         env:
           API_BASE_URL: ${{ secrets.API_PUBLIC_BASE_URL }}

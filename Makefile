@@ -70,6 +70,10 @@ e2e-dev:
 	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
 	API_BASE_URL=https://api-dev.aiwolfsolutions.com go run scripts/e2e/run_e2e.go
 
+# Run Boulevard integration test against live BodyTonic config
+test-boulevard:
+	go test -tags integration -v -timeout 120s ./internal/emr/boulevard/ -run TestIntegration
+
 e2e-adela:
 	@test -n "$$ADMIN_JWT_SECRET" || { echo "Set ADMIN_JWT_SECRET env var"; exit 1; }
 	ADMIN_JWT_SECRET=$(ADMIN_JWT_SECRET) API_BASE_URL=$(API_BASE_URL) go run scripts/e2e/adela_e2e.go $(filter-out $@,$(MAKECMDGOALS))
