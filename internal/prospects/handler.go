@@ -5,9 +5,18 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// isCleanID ensures an ID contains only safe characters (alphanumeric, hyphens, underscores)
+// to prevent path traversal when used in filesystem paths.
+var cleanIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+func isCleanID(id string) bool {
+	return id != "" && cleanIDRegex.MatchString(id)
+}
 
 type Handler struct {
 	repo        *Repository
@@ -40,7 +49,7 @@ func (h *Handler) GetOutreach(w http.ResponseWriter, r *http.Request) {
 		"dmExists":       false,
 	}
 
-	if h.researchDir != "" {
+	if h.researchDir != "" && isCleanID(id) {
 		draftPath := filepath.Join(h.researchDir, "outreach", id+"-email.md")
 		if data, err := os.ReadFile(draftPath); err == nil {
 			resp["draft"] = string(data)

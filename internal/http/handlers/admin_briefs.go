@@ -131,11 +131,23 @@ func (h *AdminBriefsHandler) listBriefsFromFilesystem(w http.ResponseWriter) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"briefs": fsBriefs})
 }
 
+// validDateParam checks that a date parameter is a safe YYYY-MM-DD string
+// and cannot be used for path traversal.
+var validDateRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+func isValidDate(s string) bool {
+	return validDateRegex.MatchString(s)
+}
+
 // GetBrief handles GET /admin/briefs/{date}
 func (h *AdminBriefsHandler) GetBrief(w http.ResponseWriter, r *http.Request) {
 	date := chi.URLParam(r, "date")
 	if date == "" {
 		http.Error(w, "missing date parameter", http.StatusBadRequest)
+		return
+	}
+	if !isValidDate(date) {
+		http.Error(w, "invalid date format, expected YYYY-MM-DD", http.StatusBadRequest)
 		return
 	}
 

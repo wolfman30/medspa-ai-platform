@@ -46,7 +46,7 @@ func (h *GitHubWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := io.ReadAll(r.Body)
+	payload, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10 MB max
 	if err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return

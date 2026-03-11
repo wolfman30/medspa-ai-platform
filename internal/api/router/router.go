@@ -119,6 +119,10 @@ type Config struct {
 	// Readiness check dependencies
 	RedisClient    *redis.Client
 	HasSMSProvider bool
+
+	// Env is the deployment environment (e.g. "production", "staging", "development").
+	// When set to "production" or "staging", HTTPS redirect is enforced.
+	Env string
 }
 
 // New creates a new Chi router with all routes configured
@@ -131,6 +135,11 @@ func New(cfg *Config) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
+	if cfg.Env == "production" || cfg.Env == "staging" {
+		r.Use(httpmiddleware.HTTPSRedirect)
+	}
+	r.Use(httpmiddleware.MaxBodySize(10 << 20)) // 10 MB global request body limit
+	r.Use(httpmiddleware.SecurityHeaders)
 	if len(cfg.CORSAllowedOrigins) > 0 {
 		r.Use(httpmiddleware.CORS(cfg.CORSAllowedOrigins))
 	}
@@ -194,9 +203,12 @@ func New(cfg *Config) http.Handler {
 			public.Get("/ws/voice", cfg.VoiceWSHandler.ServeHTTP)
 		}
 		if cfg.WebChatHandler != nil {
-			public.Get("/chat/ws", cfg.WebChatHandler.HandleWebSocket)
-			public.Post("/chat/message", cfg.WebChatHandler.HandleMessage)
-			public.Get("/chat/history", cfg.WebChatHandler.HandleHistory)
+			public.Route("/chat", func(r chi.Router) {
+				r.Use(httpmiddleware.RateLimit(30, 60))
+				r.Get("/ws", cfg.WebChatHandler.HandleWebSocket)
+				r.Post("/message", cfg.WebChatHandler.HandleMessage)
+				r.Get("/history", cfg.WebChatHandler.HandleHistory)
+			})
 			public.Get("/chat/widget.js", cfg.WebChatHandler.HandleWidgetJS)
 		}
 		if cfg.PaymentRedirect != nil {
@@ -436,6 +448,7 @@ func New(cfg *Config) http.Handler {
 
 	// Tenant-scoped API routes
 	r.Group(func(tenant chi.Router) {
+		tenant.Use(httpmiddleware.RateLimit(50, 100))
 		tenant.Use(requireOrgID)
 
 		tenant.Route("/leads", func(r chi.Router) {

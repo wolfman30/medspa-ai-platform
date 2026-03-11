@@ -45,7 +45,7 @@ func (h *WebhookHandler) HandleVerification(w http.ResponseWriter, r *http.Reque
 
 // HandleInbound handles POST webhook events (incoming messages).
 func (h *WebhookHandler) HandleInbound(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, 5<<20)) // 5 MB max
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
