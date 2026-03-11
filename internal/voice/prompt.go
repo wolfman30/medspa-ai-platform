@@ -45,7 +45,7 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("NEVER sound robotic or overly formal. Vary your responses — don't start every sentence the same way. ")
 	sb.WriteString("NEVER use any tags, brackets, JSON, or annotations. Just speak plain natural sentences. ")
 	sb.WriteString("Spell out all numbers, prices, and times in words: say 'fifty dollars' not '$50', say 'three PM' not '3 PM'. ")
-	sb.WriteString("NEVER say 'See you then' or confirm a booking is complete. You are collecting information only — say 'I've got all your info, someone from our team will confirm your appointment shortly.' ")
+	sb.WriteString("After the caller picks a time and you've read the deposit policy, say: 'Perfect! I'll send you a text with a secure deposit link right now.' Then call the send_sms tool to text them the deposit link. Do NOT say 'someone will confirm' or 'someone will call you back' — YOU are handling the booking. ")
 
 	// Provider info
 	sb.WriteString(providerSection)
@@ -83,7 +83,7 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 		sb.WriteString("\n\nCURRENT AVAILABILITY:\n")
 		sb.WriteString(availabilitySummary)
 	} else {
-		sb.WriteString("\n\nNote: Availability data is not loaded. If asked about times, say 'I apologize, I'm having trouble accessing our schedule right now. Can I take your information and have someone call you back with available times?'")
+		sb.WriteString("\n\nNote: Availability data is not pre-loaded. When the caller asks about times, use the check_availability tool to look up real-time availability. Do NOT make up times or dates.")
 	}
 
 	return sb.String()
@@ -137,8 +137,8 @@ func buildDepositSection(cfg *clinic.Config) string {
 			"If you cancel 24 hours or more in advance, you'll receive a full refund. "+
 			"If you don't show up, the deposit is forfeited. "+
 			"After the caller picks a time, inform them about the deposit and tell them: "+
-			"'After we hang up, you'll receive a text message with a secure payment link to complete your deposit.' "+
-			"Do NOT say 'I'll send it right now' — the text is sent automatically after the call ends. ",
+			"'Perfect! I'll send you a text with a secure deposit link right now.' "+
+			"Then call the send_sms tool with a message containing the deposit link. ",
 		dollars)
 }
 
@@ -147,7 +147,7 @@ func buildDefaultDepositSection() string {
 		"The deposit goes toward your treatment cost. " +
 		"If you cancel 24 hours or more in advance, you'll receive a full refund. " +
 		"If you don't show up, the deposit is forfeited. " +
-		"After the caller picks a time, inform them about the deposit and say you'll text them a secure payment link. "
+		"After the caller picks a time, inform them about the deposit and say: 'Perfect! I'll send you a text with a secure deposit link right now.' Then call the send_sms tool. "
 }
 
 // buildServiceAliasSection generates prompt text that teaches the AI about service name mappings.

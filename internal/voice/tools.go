@@ -81,11 +81,10 @@ func DefaultTools() []ToolDefinition {
 
 // ToolDeps holds shared service dependencies for tool handlers.
 type ToolDeps struct {
-	MoxieClient      *moxie.Client
-	BoulevardAdapter *boulevard.BoulevardAdapter
-	Messenger        conversation.ReplyMessenger
-	ClinicStore      *clinic.Store
-	LeadsRepo        leads.Repository
+	MoxieClient *moxie.Client
+	Messenger   conversation.ReplyMessenger
+	ClinicStore *clinic.Store
+	LeadsRepo   leads.Repository
 }
 
 // ToolHandler routes tool calls to the appropriate handler.
@@ -258,10 +257,15 @@ func filterSlotByTime(t time.Time, afterHour int, prefTimes string) bool {
 }
 
 func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clinic.Config, service, provider string, now time.Time, loc *time.Location, afterHour int, prefTimes string) (string, error) {
-	if h.deps.BoulevardAdapter == nil {
-		h.logger.Warn("voice-tool: check_availability — no boulevard adapter")
+	if cfg.BoulevardBusinessID == "" || cfg.BoulevardLocationID == "" {
+		h.logger.Warn("voice-tool: check_availability — no boulevard config")
 		return `{"message": "I'm having trouble checking availability right now. I'll text you available times shortly."}`, nil
 	}
+
+	// Create per-clinic Boulevard client and adapter
+	blvdClient := boulevard.NewBoulevardClient(cfg.BoulevardBusinessID, cfg.BoulevardLocationID, nil)
+	dryRun := true // always dry-run for voice (no real bookings yet)
+	adapter := boulevard.NewBoulevardAdapter(blvdClient, dryRun, nil)
 
 	// Resolve service name via aliases
 	resolvedService := service
@@ -272,7 +276,7 @@ func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clini
 		}
 	}
 
-	slots, err := h.deps.BoulevardAdapter.ResolveAvailability(ctx, resolvedService, provider, now)
+	slots, err := adapter.ResolveAvailability(ctx, resolvedService, provider, now)
 	if err != nil {
 		h.logger.Error("voice-tool: boulevard availability error", "error", err)
 		return `{"message": "I'm having trouble checking availability right now. I'll text you available times shortly."}`, nil
