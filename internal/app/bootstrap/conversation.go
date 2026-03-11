@@ -283,7 +283,7 @@ func buildEMRAdapter(ctx context.Context, cfg *appconfig.Config, logger *logging
 func ensureDefaultKnowledge(ctx context.Context, repo *conversation.RedisKnowledgeRepository) error {
 	existing, err := repo.GetDocuments(ctx, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("app: ensureDefaultKnowledge: %w", err)
 	}
 	if len(existing) > 0 {
 		return nil
@@ -302,7 +302,7 @@ func hydrateRAGFromRedis(ctx context.Context, repo conversation.KnowledgeReposit
 	}
 	docsByClinic, err := repo.LoadAll(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("app: hydrateRAGFromRedis: %w", err)
 	}
 	if len(docsByClinic) == 0 {
 		if redisRepo, ok := repo.(*conversation.RedisKnowledgeRepository); ok {
@@ -311,7 +311,7 @@ func hydrateRAGFromRedis(ctx context.Context, repo conversation.KnowledgeReposit
 			}
 			docsByClinic, err = repo.LoadAll(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("app: hydrateRAGFromRedis: %w", err)
 			}
 		}
 	}

@@ -90,7 +90,7 @@ func (p *SandboxAutoPurger) MaybePurgeAfterPayment(ctx context.Context, evt even
 		purgeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if _, err := p.purger.PurgePhone(purgeCtx, evt.OrgID, digits); err != nil {
-			return err
+			return fmt.Errorf("clinicdata: MaybePurgeAfterPayment: %w", err)
 		}
 		p.logger.Info("sandbox auto purge completed", "org_id", evt.OrgID, "phone_last4", last4(digits), "provider_ref", evt.ProviderRef)
 		return nil

@@ -167,7 +167,10 @@ func (a *Adapter) SendMessage(ctx context.Context, recipientID, text string) err
 			"error", err,
 		)
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("channels: SendMessage: %w", err)
+	}
+	return nil
 }
 
 // SendButtonMessage sends a button template DM.
@@ -178,8 +181,9 @@ func (a *Adapter) SendButtonMessage(ctx context.Context, recipientID, text strin
 			"recipient_id", recipientID,
 			"error", err,
 		)
+		return fmt.Errorf("channels: SendButtonMessage: %w", err)
 	}
-	return err
+	return nil
 }
 
 // SendReply implements conversation.ReplyMessenger for Instagram.

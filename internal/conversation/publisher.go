@@ -99,7 +99,7 @@ func (p *Publisher) enqueue(ctx context.Context, payload queuePayload, opts ...P
 	var err error
 	payload, body, err := encodePayload(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("conversation: enqueue: %w", err)
 	}
 
 	// Create job record in database before sending to queue

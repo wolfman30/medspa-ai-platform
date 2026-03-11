@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,5 +21,8 @@ func (a BookingServiceAdapter) ConfirmBooking(ctx context.Context, orgID uuid.UU
 		return nil
 	}
 	_, err := a.Service.ConfirmBooking(ctx, orgID, leadID, scheduledFor)
-	return err
+	if err != nil {
+		return fmt.Errorf("conversation: ConfirmBooking: %w", err)
+	}
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -197,5 +198,8 @@ func (h *ClientRegistrationHandler) createOrganization(ctx context.Context, orgI
 		INSERT INTO organizations (id, name, owner_email, operator_phone, contact_email, timezone, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 	`, orgID, name, ownerEmail, phone, ownerEmail, timezone)
-	return err
+	if err != nil {
+		return fmt.Errorf("http: createOrganization: %w", err)
+	}
+	return nil
 }

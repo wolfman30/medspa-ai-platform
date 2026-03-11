@@ -3,6 +3,7 @@ package prospects
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -93,12 +94,18 @@ func (r *Repository) Upsert(ctx context.Context, p *Prospect) error {
 		p.ID, p.ClinicName, p.OwnerName, p.OwnerTitle, p.Location, p.Phone, p.Email, p.Website,
 		p.EMR, p.Status, p.Configured, p.TelnyxNumber, p.TenDLC, p.SMSWorking, p.OrgID,
 		p.ServicesCount, pq.Array(p.Providers), p.NextAction, p.Notes, now)
-	return err
+	if err != nil {
+		return fmt.Errorf("prospects: Upsert: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM prospects WHERE id = $1`, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("prospects: Delete: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) AddEvent(ctx context.Context, e *Event) error {

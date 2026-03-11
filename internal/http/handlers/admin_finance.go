@@ -365,7 +365,7 @@ func (h *AdminFinanceHandler) plaidPost(r *http.Request, path string, body map[s
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		h.logger.Error("plaid request failed", "path", path, "error", err)
-		return err
+		return fmt.Errorf("http: plaidPost: %w", err)
 	}
 	defer resp.Body.Close()
 

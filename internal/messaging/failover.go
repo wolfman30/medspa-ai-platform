@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -41,7 +42,7 @@ func (f *FailoverMessenger) SendReply(ctx context.Context, reply conversation.Ou
 	if err := f.primary.SendReply(ctx, reply); err == nil {
 		return nil
 	} else if f.secondary == nil {
-		return err
+		return fmt.Errorf("messaging: SendReply: %w", err)
 	} else {
 		f.logger.Warn("primary sms send failed; attempting fallback",
 			"provider", f.primaryName,

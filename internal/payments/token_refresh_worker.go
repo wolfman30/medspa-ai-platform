@@ -2,6 +2,7 @@ package payments
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/pkg/logging"
@@ -105,7 +106,7 @@ func (w *TokenRefreshWorker) refreshExpiringTokens(ctx context.Context) {
 func (w *TokenRefreshWorker) refreshToken(ctx context.Context, cred SquareCredentials) error {
 	newCreds, err := w.oauthService.RefreshToken(ctx, cred.RefreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("payments: refreshToken: %w", err)
 	}
 
 	// Preserve the location ID from the original credentials

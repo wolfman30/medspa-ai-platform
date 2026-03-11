@@ -3,6 +3,7 @@ package aesthetic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -98,7 +99,7 @@ func (c *Client) SyncAvailability(ctx context.Context, opts SyncAvailabilityOpti
 
 	slots, err := c.upstream.GetAvailability(ctx, req)
 	if err != nil {
-		return err
+		return fmt.Errorf("emr: SyncAvailability: %w", err)
 	}
 
 	c.store.replaceSlots(clinicID, start, slots)

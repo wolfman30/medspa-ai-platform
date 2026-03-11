@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -22,7 +23,10 @@ func (s *TenDLCOnboardingService) storeBrand(ctx context.Context, b *Brand) erro
 		b.VerificationScore, b.RejectionReason, b.SubmittedAt, b.VerifiedAt,
 		b.CreatedAt, b.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("onboarding: storeBrand: %w", err)
+	}
+	return nil
 }
 
 // storeCampaign persists a new campaign registration to the database.
@@ -40,7 +44,10 @@ func (s *TenDLCOnboardingService) storeCampaign(ctx context.Context, c *Campaign
 		sampleMsgs, c.Status, c.RejectionReason, c.NumbersAssigned,
 		c.SubmittedAt, c.ApprovedAt, c.CreatedAt, c.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("onboarding: storeCampaign: %w", err)
+	}
+	return nil
 }
 
 // updateBrandStatus updates brand status fields in the database.
@@ -53,7 +60,10 @@ func (s *TenDLCOnboardingService) updateBrandStatus(ctx context.Context, b *Bran
 	_, err := s.db.ExecContext(ctx, query,
 		b.Status, b.VerificationScore, b.RejectionReason, b.VerifiedAt, b.UpdatedAt, b.ID,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("onboarding: updateBrandStatus: %w", err)
+	}
+	return nil
 }
 
 // updateCampaignStatus updates campaign status fields in the database.
@@ -66,7 +76,10 @@ func (s *TenDLCOnboardingService) updateCampaignStatus(ctx context.Context, c *C
 	_, err := s.db.ExecContext(ctx, query,
 		c.Status, c.RejectionReason, c.NumbersAssigned, c.ApprovedAt, c.UpdatedAt, c.ID,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("onboarding: updateCampaignStatus: %w", err)
+	}
+	return nil
 }
 
 // GetBrandByID retrieves a brand registration by its primary key.

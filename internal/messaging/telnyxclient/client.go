@@ -172,7 +172,10 @@ func (c *Client) SubmitOwnershipVerification(ctx context.Context, orderID, code 
 		return fmt.Errorf("telnyxclient: marshal verification payload: %w", err)
 	}
 	_, err = c.invoke(ctx, http.MethodPost, fmt.Sprintf("/hosted_messaging/orders/%s/actions/verify", orderID), nil, body, "application/json")
-	return err
+	if err != nil {
+		return fmt.Errorf("messaging: SubmitOwnershipVerification: %w", err)
+	}
+	return nil
 }
 
 // UploadDocument attaches LOA/invoice proof to a hosted messaging order.
@@ -202,7 +205,10 @@ func (c *Client) UploadDocument(ctx context.Context, orderID string, docType Doc
 		return fmt.Errorf("telnyxclient: close multipart writer: %w", err)
 	}
 	_, err = c.invoke(ctx, http.MethodPost, fmt.Sprintf("/hosted_messaging/orders/%s/documents", orderID), nil, buf.Bytes(), writer.FormDataContentType())
-	return err
+	if err != nil {
+		return fmt.Errorf("messaging: UploadDocument: %w", err)
+	}
+	return nil
 }
 
 // GetHostedOrder fetches the latest status for a hosted messaging order.
