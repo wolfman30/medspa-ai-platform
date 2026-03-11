@@ -45,15 +45,15 @@ func (s *PGJobStore) PutPending(ctx context.Context, job *JobRecord) error {
 
 	startJSON, err := marshalJSON(job.StartRequest)
 	if err != nil {
-		return err
+		return fmt.Errorf("conversation: PutPending: %w", err)
 	}
 	msgJSON, err := marshalJSON(job.MessageRequest)
 	if err != nil {
-		return err
+		return fmt.Errorf("conversation: PutPending: %w", err)
 	}
 	respJSON, err := marshalJSON(job.Response)
 	if err != nil {
-		return err
+		return fmt.Errorf("conversation: PutPending: %w", err)
 	}
 
 	expiresAt := time.Unix(job.ExpiresAt, 0).UTC()
@@ -77,7 +77,7 @@ func (s *PGJobStore) MarkCompleted(ctx context.Context, jobID string, resp *Resp
 	}
 	respJSON, err := marshalJSON(resp)
 	if err != nil {
-		return err
+		return fmt.Errorf("conversation: MarkCompleted: %w", err)
 	}
 
 	result, execErr := s.db.Exec(ctx, `

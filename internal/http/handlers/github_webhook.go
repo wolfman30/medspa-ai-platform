@@ -168,19 +168,19 @@ func (n *TelegramNotifier) Notify(ctx context.Context, message string) error {
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("http: Notify: %w", err)
 	}
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.botToken)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("http: Notify: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := n.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("http: Notify: %w", err)
 	}
 	defer resp.Body.Close()
 

@@ -311,13 +311,19 @@ func (h *DisputeWebhookHandler) storeDispute(ctx context.Context, dispute *Dispu
 		dispute.CreatedAt,
 		time.Now(),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("payments: storeDispute: %w", err)
+	}
+	return nil
 }
 
 func (h *DisputeWebhookHandler) updateDisputeState(ctx context.Context, disputeID string, state DisputeState) error {
 	query := `UPDATE payment_disputes SET state = $1, updated_at = $2 WHERE dispute_id = $3`
 	_, err := h.db.ExecContext(ctx, query, string(state), time.Now(), disputeID)
-	return err
+	if err != nil {
+		return fmt.Errorf("payments: updateDisputeState: %w", err)
+	}
+	return nil
 }
 
 func (h *DisputeWebhookHandler) storeEvidence(ctx context.Context, disputeID string, evidence *DisputeEvidence) error {
@@ -338,7 +344,10 @@ func (h *DisputeWebhookHandler) storeEvidence(ctx context.Context, disputeID str
 		evidence.AdditionalNotes,
 		evidence.CollectedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("payments: storeEvidence: %w", err)
+	}
+	return nil
 }
 
 // RegisterDisputeRoutes registers the dispute webhook routes.

@@ -372,7 +372,10 @@ func (s *SLATracker) storePromise(ctx context.Context, p *CallbackPromise) error
 		p.Type, p.Status, p.PromiseText, p.DueAt, p.RemindAt, p.ReminderSent,
 		p.CreatedAt, p.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("support: storePromise: %w", err)
+	}
+	return nil
 }
 
 func (s *SLATracker) getPromisesDueForReminder(ctx context.Context) ([]*CallbackPromise, error) {
@@ -429,13 +432,19 @@ func (s *SLATracker) sendReminder(ctx context.Context, promise *CallbackPromise)
 func (s *SLATracker) markReminderSent(ctx context.Context, promiseID uuid.UUID) error {
 	query := `UPDATE callback_promises SET reminder_sent = true, status = $1, updated_at = $2 WHERE id = $3`
 	_, err := s.db.ExecContext(ctx, query, PromiseStatusReminded, time.Now(), promiseID)
-	return err
+	if err != nil {
+		return fmt.Errorf("support: markReminderSent: %w", err)
+	}
+	return nil
 }
 
 func (s *SLATracker) markExpired(ctx context.Context, promiseID uuid.UUID) error {
 	query := `UPDATE callback_promises SET status = $1, updated_at = $2 WHERE id = $3`
 	_, err := s.db.ExecContext(ctx, query, PromiseStatusExpired, time.Now(), promiseID)
-	return err
+	if err != nil {
+		return fmt.Errorf("support: markExpired: %w", err)
+	}
+	return nil
 }
 
 func (s *SLATracker) queryPromises(ctx context.Context, query string, args ...any) ([]*CallbackPromise, error) {

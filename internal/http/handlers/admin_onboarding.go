@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -166,7 +167,7 @@ func (h *AdminOnboardingHandler) upsertOrganization(ctx context.Context, orgID, 
 	`, orgID, name, phone, email, timezone)
 	var insertedID string
 	if err := row.Scan(&insertedID); err != nil {
-		return err
+		return fmt.Errorf("http: upsertOrganization: %w", err)
 	}
 	return nil
 }

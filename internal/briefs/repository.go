@@ -2,6 +2,7 @@ package briefs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -81,5 +82,8 @@ func (r *PostgresBriefsRepository) Upsert(ctx context.Context, date, title, cont
 		   summary = COALESCE(EXCLUDED.summary, morning_briefs.summary),
 		   updated_at = now()`,
 		date, title, content, summary)
-	return err
+	if err != nil {
+		return fmt.Errorf("briefs: Upsert: %w", err)
+	}
+	return nil
 }

@@ -425,7 +425,7 @@ func (s *TenDLCOnboardingService) AssignNumberToCampaign(ctx context.Context, ca
 
 	campaign, err := s.GetCampaignByID(ctx, campaignID)
 	if err != nil {
-		return err
+		return fmt.Errorf("onboarding: AssignNumberToCampaign: %w", err)
 	}
 
 	if campaign.Status != CampaignStatusActive {

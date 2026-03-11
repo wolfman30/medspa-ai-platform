@@ -307,7 +307,10 @@ func (s *EscalationService) storeEscalation(ctx context.Context, e *Escalation) 
 		e.LeadID, e.ConversationID, e.PaymentID, e.AmountCents, e.Description,
 		e.RecommendedAction, e.TranscriptSummary, e.CreatedAt, e.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("support: storeEscalation: %w", err)
+	}
+	return nil
 }
 
 func (s *EscalationService) notifyStaff(ctx context.Context, e *Escalation) error {
@@ -318,7 +321,7 @@ func (s *EscalationService) notifyStaff(ctx context.Context, e *Escalation) erro
 	// Get staff contact info for this org
 	staffPhone, staffEmail, err := s.getStaffContacts(ctx, e.OrgID)
 	if err != nil {
-		return err
+		return fmt.Errorf("support: notifyStaff: %w", err)
 	}
 
 	// Send SMS for high/medium priority

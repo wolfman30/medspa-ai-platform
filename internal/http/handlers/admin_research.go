@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -141,7 +142,7 @@ func (h *AdminResearchHandler) readIndex(ctx context.Context) (*ResearchIndex, e
 func (h *AdminResearchHandler) writeIndex(ctx context.Context, idx *ResearchIndex) error {
 	data, err := json.Marshal(idx)
 	if err != nil {
-		return err
+		return fmt.Errorf("http: writeIndex: %w", err)
 	}
 	_, err = h.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(h.bucket),
@@ -149,5 +150,8 @@ func (h *AdminResearchHandler) writeIndex(ctx context.Context, idx *ResearchInde
 		Body:        bytes.NewReader(data),
 		ContentType: aws.String("application/json"),
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("http: writeIndex: %w", err)
+	}
+	return nil
 }
