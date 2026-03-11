@@ -21,6 +21,7 @@ import { MorningBriefs } from './components/MorningBriefs';
 import { MultiOrgRollup } from './components/MultiOrgRollup';
 import { CronCalendar } from './components/CronCalendar';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
+import { SMSSendTool } from './components/SMSSendTool';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -51,7 +52,8 @@ type AppView =
   | 'briefs'
   | 'rollup'
   | 'crons'
-  | 'analytics';
+  | 'analytics'
+  | 'sms-send';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -527,6 +529,15 @@ function AuthenticatedApp() {
                 >
                   Analytics
                 </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('sms-send')}
+                    aria-current={view === 'sms-send' ? 'page' : undefined}
+                    className={view === 'sms-send' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    SMS
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -546,6 +557,8 @@ function AuthenticatedApp() {
           <AgentTeamCard />
         ) : view === 'analytics' ? (
           <AnalyticsDashboard orgId={orgId} />
+        ) : view === 'sms-send' ? (
+          <SMSSendTool orgId={orgId} />
         ) : view === 'operations' ? (
           <ClinicOperationalDashboard orgId={orgId} />
         ) : view === 'rollup' ? (
