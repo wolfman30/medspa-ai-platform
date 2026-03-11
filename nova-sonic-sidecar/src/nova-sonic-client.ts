@@ -311,10 +311,9 @@ export class NovaSonicClient {
             topP: 0.9,
             temperature: 0.7,
           },
-          // Bug #7: Use LOW sensitivity to avoid cutting off short utterances like "I'm"
-          turnDetectionConfiguration: {
-            endpointingSensitivity: "LOW",
-          },
+          // Bug #7: turnDetectionConfiguration NOT supported by current Nova Sonic version
+          // Reverted — was causing "endpointing sensitivity config" error and killing all calls
+          // TODO: Re-enable when AWS upgrades Nova Sonic to support this feature
         },
       },
     });
