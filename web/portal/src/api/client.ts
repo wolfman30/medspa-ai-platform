@@ -1495,6 +1495,44 @@ export interface ClinicOperationalDashboard {
   }>;
 }
 
+// Lead Stats API
+export interface LeadStats {
+  total_leads: number;
+  by_status: Record<string, number>;
+  new_this_week: number;
+  new_this_month: number;
+  conversion_rate: number;
+}
+
+export async function getLeadStats(orgId: string): Promise<LeadStats> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/leads/stats`,
+    { headers: await getHeaders() },
+  );
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
+// Conversation Stats API
+export interface ConversationStats {
+  total_conversations: number;
+  total_messages: number;
+  by_status: Record<string, number>;
+  today_count: number;
+  week_count: number;
+  month_count: number;
+  six_month_count: number;
+}
+
+export async function getConversationStats(orgId: string): Promise<ConversationStats> {
+  const res = await fetch(
+    `${API_BASE}/admin/orgs/${orgId}/conversations/stats`,
+    { headers: await getHeaders() },
+  );
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
 export async function getClinicOperationalDashboard(
   orgId: string,
   days: number = 7,
