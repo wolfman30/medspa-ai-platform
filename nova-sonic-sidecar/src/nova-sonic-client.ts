@@ -311,6 +311,10 @@ export class NovaSonicClient {
             topP: 0.9,
             temperature: 0.7,
           },
+          // Bug #7: Use LOW sensitivity to avoid cutting off short utterances like "I'm"
+          turnDetectionConfiguration: {
+            endpointingSensitivity: "LOW",
+          },
         },
       },
     });
@@ -644,6 +648,13 @@ export class NovaSonicClient {
       role: textBuf?.role ?? "(none)",
     });
     if (textBuf?.text) {
+      // Bug #6: Filter out any JSON-looking strings at the emitTextTranscript level
+      const trimmed = textBuf.text.trim();
+      if (/^\s*\{.*\}\s*$/s.test(trimmed)) {
+        this.log("info", "Filtering JSON-like transcript", { text: trimmed.substring(0, 100) });
+        this.textContentBuffers.delete(contentName);
+        return;
+      }
       const role = textBuf.role === "user" ? "user" as const : "assistant" as const;
       // Deduplicate — Nova Sonic sends each response as TEXT + AUDIO with same text
       const normalized = textBuf.text.trim().replace(/\s+/g, " ");

@@ -67,10 +67,11 @@ export class CallSession {
   private elevenLabsSession: ElevenLabsSession | null = null;
   private elevenLabsApiKey: string;
   private pendingAssistantText = "";
-  private ttsQueue: string[] = [];
+  private ttsQueue: { text: string; onDone?: () => void }[] = [];
   private ttsProcessing = false;
   private greetingSent = false;
-  private recentTTSTexts = new Set<string>();
+  private greetingMuteUntil = 0; // timestamp: discard user audio until this time
+  private recentTTSTexts = new Map<string, number>(); // normalized text → timestamp
 
   constructor(ws: WebSocket, callId: string) {
     this.ws = ws;
@@ -107,6 +108,8 @@ export class CallSession {
         this.handleInit(msg);
         break;
       case "audio":
+        // Bug #1: Discard audio during post-greeting mute window to prevent echo/crosstalk
+        if (Date.now() < this.greetingMuteUntil) break;
         this.client?.sendAudio(msg.data);
         break;
       case "tool_result":
@@ -144,10 +147,10 @@ export class CallSession {
         // Strip mood/stage direction tags like [warm], [excited], [sigh], etc.
         let cleanText = text.replace(/\[[\w\s-]+\]\s*/g, "").trim();
         
-        // Strip JSON control messages like { "interrupted" : true }
-        cleanText = cleanText.replace(/\{[^}]*interrupted[^}]*\}/gi, "").trim();
-        // Also strip if the entire message looks like JSON
-        if (cleanText.startsWith("{") && cleanText.endsWith("}")) cleanText = "";
+        // Bug #6: Strip any JSON-like control messages (interrupted, etc.)
+        cleanText = cleanText.replace(/\{[^}]*\}/gi, "").trim();
+        // Also reject if the entire message is JSON-like after cleanup
+        if (/^\s*\{.*\}\s*$/.test(cleanText)) cleanText = "";
         
         // Skip empty or whitespace-only after cleanup
         if (!cleanText) return;
@@ -161,15 +164,18 @@ export class CallSession {
             this.log("info", `Skipping duplicate greeting: ${cleanText.substring(0, 60)}`);
             return;
           }
-          // Second layer dedup — catch any duplicates that slip through nova-sonic-client
+          // Bug #5: Dedup on normalized text content with 5-second time window
           const normalized = cleanText.trim().replace(/\s+/g, " ").toLowerCase();
-          if (this.recentTTSTexts.has(normalized)) {
+          const now = Date.now();
+          const lastSeen = this.recentTTSTexts.get(normalized);
+          if (lastSeen && (now - lastSeen) < 5000) {
             this.log("info", `Bridge dedup: skipping duplicate TTS: ${cleanText.substring(0, 60)}`);
             return;
           }
-          this.recentTTSTexts.add(normalized);
+          this.recentTTSTexts.set(normalized, now);
+          // Keep map bounded — evict old entries
           if (this.recentTTSTexts.size > 30) {
-            const first = this.recentTTSTexts.values().next().value;
+            const first = this.recentTTSTexts.keys().next().value;
             if (first) this.recentTTSTexts.delete(first);
           }
           this.enqueueTTS(cleanText);
@@ -188,7 +194,11 @@ export class CallSession {
       const greeting = msg.config.greeting ||
         `Hi, thanks for calling ${clinicName}! This is Lauren, how can I help you?`;
       this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
-      this.enqueueTTS(greeting);
+      // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
+      this.enqueueTTSWithCallback(greeting, () => {
+        this.greetingMuteUntil = Date.now() + 1500;
+        this.log("info", "Post-greeting mute window active for 1.5s");
+      });
       this.greetingSent = true;
       // Also send as transcript so Go side knows about it
       this.send({ type: "transcript", role: "assistant", text: greeting });
@@ -237,7 +247,15 @@ export class CallSession {
 
   /** Queue text for ElevenLabs TTS and process sequentially. */
   private enqueueTTS(text: string): void {
-    this.ttsQueue.push(text);
+    this.ttsQueue.push({ text });
+    if (!this.ttsProcessing) {
+      this.processTTSQueue();
+    }
+  }
+
+  /** Queue text for TTS with a callback when done. */
+  private enqueueTTSWithCallback(text: string, onDone: () => void): void {
+    this.ttsQueue.push({ text, onDone });
     if (!this.ttsProcessing) {
       this.processTTSQueue();
     }
@@ -249,9 +267,10 @@ export class CallSession {
     this.ttsProcessing = true;
 
     while (this.ttsQueue.length > 0) {
-      const text = this.ttsQueue.shift()!;
+      const item = this.ttsQueue.shift()!;
       try {
-        await this.speakViaElevenLabs(text);
+        await this.speakViaElevenLabs(item.text);
+        item.onDone?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.log("error", `ElevenLabs TTS failed: ${message}`);

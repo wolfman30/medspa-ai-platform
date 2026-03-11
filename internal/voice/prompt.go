@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 )
@@ -31,6 +32,14 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	}
 
 	var sb strings.Builder
+
+	// Current date awareness (bug #2: prevent offering past dates)
+	now := time.Now()
+	fmt.Fprintf(&sb, "Today's date is %s. NEVER offer appointment dates in the past. Only offer dates from tomorrow onward. ", now.Format("Monday, January 2, 2006"))
+
+	// Time filtering rules (bugs #3, #4: respect "after X" constraints)
+	sb.WriteString(`When a caller says "after X PM", ONLY offer times STRICTLY AFTER that hour. "After 4 PM" means 4:30 PM or later, NEVER 4:00 PM exactly. `)
+	sb.WriteString("If the caller corrects you on timing, acknowledge the correction and only offer times matching their updated preference. ")
 
 	// Core identity
 	fmt.Fprintf(&sb, "You are Lauren, a friendly receptionist at %s. You speak casually and naturally, like a real person — not like a corporate phone system. ", clinicName)
