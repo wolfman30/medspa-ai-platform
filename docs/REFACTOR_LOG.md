@@ -11,3 +11,4 @@
 | 2026-03-10 | #78 | Extract 7 magic numbers to named constants (pagination, phone digits, upload size, webhook tolerance, label truncation) | `internal/http/handlers/constants.go`, `internal/payments/constants.go` |
 | 2026-03-10 | #82 | Add godoc comments to 38 exported symbols across events, bootstrap, and worker packages | `internal/events/*.go`, `internal/bootstrap/*.go`, `internal/worker/messaging/*.go` |
 | 2026-03-11 | #83 | Wrap 41 bare `return err` with `fmt.Errorf` context across 22 files (round 2) | 22 files across 12 packages (bootstrap, briefs, channels, clinicdata, conversation, emr, handlers, messaging, onboarding, payments, prospects, support) |
+| 2026-03-11 | #85 | Split `archive.go` (531→3 files: types, redact, operations) + extracted `uploadArchive()` helper | `internal/clinicdata/archive*.go` |
