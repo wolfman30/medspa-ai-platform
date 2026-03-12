@@ -71,7 +71,8 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("1) What service they want, ")
 	sb.WriteString("2) Their full name (repeat it back to confirm), ")
 	sb.WriteString("3) Whether they're a new or returning patient, ")
-	sb.WriteString("4) Their preferred DAYS and TIMES (not dates — say 'What days and times work best for you?'). ")
+	sb.WriteString("4) Provider preference (ask: 'Do you have a provider preference, or first available?'), ")
+	sb.WriteString("5) Their preferred DAYS and TIMES (not dates — say 'What days and times work best for you?'). ")
 	sb.WriteString("CRITICAL: Ask only ONE question per response. Do NOT combine questions like 'What's your name and are you new or returning?' — ask for the name first, wait for the answer, THEN ask if they're new or returning. ")
 
 	// Deposit policy
