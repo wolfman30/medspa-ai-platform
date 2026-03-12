@@ -50,10 +50,10 @@ func (h *ToolHandler) checkAvailability(ctx context.Context, input json.RawMessa
 
 	// Route to Boulevard or Moxie based on clinic config
 	if cfg.BookingPlatform == "boulevard" {
-		return h.checkBoulevardAvailability(ctx, cfg, params.Service, params.ProviderPreference, now, loc, afterHour, params.PreferredTimes)
+		return h.checkBoulevardAvailability(ctx, cfg, params.Service, params.ProviderPreference, now, loc, afterHour, params.PreferredDays, params.PreferredTimes)
 	}
 
-	return h.checkMoxieAvailability(ctx, cfg, params.Service, now, loc, afterHour, params.PreferredTimes)
+	return h.checkMoxieAvailability(ctx, cfg, params.Service, now, loc, afterHour, params.PreferredDays, params.PreferredTimes)
 }
 
 // parseAfterHour extracts the hour from "after 4", "after 4pm", "after 3:00 PM" etc.
@@ -120,9 +120,50 @@ func filterSlotByTime(t time.Time, afterHour int, prefTimes string) bool {
 	return true // no filter
 }
 
+func filterSlotByDay(t time.Time, prefDays string) bool {
+	pref := strings.ToLower(strings.TrimSpace(prefDays))
+	if pref == "" {
+		return true
+	}
+
+	day := strings.ToLower(t.Weekday().String())
+	if strings.Contains(pref, day) {
+		return true
+	}
+	if strings.Contains(pref, "weekday") {
+		return t.Weekday() >= time.Monday && t.Weekday() <= time.Friday
+	}
+	if strings.Contains(pref, "weekend") {
+		return t.Weekday() == time.Saturday || t.Weekday() == time.Sunday
+	}
+
+	return false
+}
+
+func resolveRequestedServiceForBoulevard(cfg *clinic.Config, requested string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(requested))
+	if normalized == "" {
+		return "", false
+	}
+
+	if cfg.ServiceAliases != nil {
+		if alias, ok := cfg.ServiceAliases[normalized]; ok && strings.TrimSpace(alias) != "" {
+			return alias, true
+		}
+	}
+
+	for _, svc := range cfg.Services {
+		if strings.EqualFold(strings.TrimSpace(svc), requested) {
+			return svc, true
+		}
+	}
+
+	return requested, false
+}
+
 // checkBoulevardAvailability queries the Boulevard API for available appointment
 // slots and filters them by time preferences.
-func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clinic.Config, service, provider string, now time.Time, loc *time.Location, afterHour int, prefTimes string) (string, error) {
+func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clinic.Config, service, provider string, now time.Time, loc *time.Location, afterHour int, prefDays, prefTimes string) (string, error) {
 	if cfg.BoulevardBusinessID == "" || cfg.BoulevardLocationID == "" {
 		h.logger.Warn("voice-tool: check_availability — no boulevard config")
 		return `{"message": "I'm having trouble checking availability right now. I'll text you available times shortly."}`, nil
@@ -133,13 +174,9 @@ func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clini
 	dryRun := true // always dry-run for voice (no real bookings yet)
 	adapter := boulevard.NewBoulevardAdapter(blvdClient, dryRun, nil)
 
-	// Resolve service name via aliases
-	resolvedService := service
-	if cfg.ServiceAliases != nil {
-		normalized := strings.ToLower(strings.TrimSpace(service))
-		if alias, ok := cfg.ServiceAliases[normalized]; ok {
-			resolvedService = alias
-		}
+	resolvedService, serviceMatched := resolveRequestedServiceForBoulevard(cfg, service)
+	if !serviceMatched {
+		return `{"message": "I want to make sure I give you accurate openings for that exact service. Would you like me to have the team confirm the exact times and text you right away?", "exact_times_confident": false, "service_matched": false}`, nil
 	}
 
 	slots, err := adapter.ResolveAvailability(ctx, resolvedService, provider, now)
@@ -153,6 +190,9 @@ func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clini
 		t := slot.StartAt
 		if t.Before(now) {
 			continue // skip past slots
+		}
+		if !filterSlotByDay(t, prefDays) {
+			continue
 		}
 		if !filterSlotByTime(t, afterHour, prefTimes) {
 			continue
@@ -168,12 +208,12 @@ func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clini
 	}
 
 	slotsJSON, _ := json.Marshal(filtered)
-	return fmt.Sprintf(`{"available_slots": %s}`, string(slotsJSON)), nil
+	return fmt.Sprintf(`{"available_slots": %s, "exact_times_confident": true, "service_matched": true, "service": %q}`, string(slotsJSON), resolvedService), nil
 }
 
 // checkMoxieAvailability queries the Moxie API for available appointment slots
 // and filters them by time preferences.
-func (h *ToolHandler) checkMoxieAvailability(ctx context.Context, cfg *clinic.Config, service string, now time.Time, loc *time.Location, afterHour int, prefTimes string) (string, error) {
+func (h *ToolHandler) checkMoxieAvailability(ctx context.Context, cfg *clinic.Config, service string, now time.Time, loc *time.Location, afterHour int, prefDays, prefTimes string) (string, error) {
 	if h.deps.MoxieClient == nil || cfg.MoxieConfig == nil {
 		return `{"message": "Online scheduling is not configured for this clinic. I'll text you available times shortly."}`, nil
 	}
@@ -213,6 +253,9 @@ func (h *ToolHandler) checkMoxieAvailability(ctx context.Context, cfg *clinic.Co
 			if t.Before(now) {
 				continue // skip past slots
 			}
+			if !filterSlotByDay(t, prefDays) {
+				continue
+			}
 			if !filterSlotByTime(t, afterHour, prefTimes) {
 				continue
 			}
@@ -231,5 +274,5 @@ func (h *ToolHandler) checkMoxieAvailability(ctx context.Context, cfg *clinic.Co
 	}
 
 	slotsJSON, _ := json.Marshal(slots)
-	return fmt.Sprintf(`{"available_slots": %s}`, string(slotsJSON)), nil
+	return fmt.Sprintf(`{"available_slots": %s, "exact_times_confident": true, "service_matched": true, "service": %q}`, string(slotsJSON), service), nil
 }

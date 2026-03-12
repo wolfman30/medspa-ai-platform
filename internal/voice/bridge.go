@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,9 @@ type Bridge struct {
 	// depositSMSSent tracks whether we've already sent the deposit SMS for this call.
 	// Set to true after we fire the SMS so we don't send duplicates.
 	depositSMSSent bool
+	// slotSelectionCaptured is set once Lauren explicitly confirms a date+time slot.
+	// Deposit SMS is gated on this to prevent premature payment prompts.
+	slotSelectionCaptured bool
 	// paymentConfirmed tracks whether payment was confirmed during this call.
 	paymentConfirmed bool
 	// paymentConfirmationAnnounced ensures we only inject payment confirmation once per call.
@@ -263,7 +267,9 @@ func (b *Bridge) processSidecarOutput(ctx context.Context) {
 					continue
 				}
 				b.logger.Info("bridge: transcript", "text", event.Text)
-				// Detect when Lauren mentions sending a deposit link — trigger SMS immediately.
+				b.maybeCaptureSlotSelection(event.Text)
+				// Detect when Lauren mentions sending a deposit link — trigger SMS only after
+				// an explicit slot selection (date+time) has been captured.
 				// Nova Sonic tools are disabled (AWS limitation), so we fire SMS from Go side
 				// when the assistant's transcript indicates deposit intent.
 				b.maybeFireDepositSMS(ctx, event.Text)
@@ -448,6 +454,30 @@ func (b *Bridge) listenForPaymentConfirmation(ctx context.Context) {
 	}
 }
 
+var (
+	weekdayDateTimePattern = regexp.MustCompile(`(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^\n]{0,80}\b(\d{1,2}:\d{2}|\d{1,2})\s*(am|pm)\b`)
+	monthDateTimePattern   = regexp.MustCompile(`(?i)\b(january|february|march|april|may|june|july|august|september|october|november|december)\b[^\n]{0,40}\b\d{1,2}(st|nd|rd|th)?\b[^\n]{0,40}\b(\d{1,2}:\d{2}|\d{1,2})\s*(am|pm)\b`)
+)
+
+// maybeCaptureSlotSelection records when Lauren explicitly confirms a date+time slot.
+func (b *Bridge) maybeCaptureSlotSelection(text string) {
+	if !looksLikeExplicitSlotSelection(text) {
+		return
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.slotSelectionCaptured = true
+}
+
+func looksLikeExplicitSlotSelection(text string) bool {
+	normalized := strings.ToLower(text)
+	if !(strings.Contains(normalized, "works") || strings.Contains(normalized, "perfect") || strings.Contains(normalized, "great") || strings.Contains(normalized, "book")) {
+		return false
+	}
+	return weekdayDateTimePattern.MatchString(text) || monthDateTimePattern.MatchString(text)
+}
+
 // maybeFireDepositSMS checks if Lauren's transcript indicates she's sending a deposit link,
 // and fires the actual SMS. This is the workaround for Nova Sonic tools being disabled.
 func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
@@ -456,7 +486,16 @@ func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
 		b.mu.Unlock()
 		return
 	}
+	slotSelected := b.slotSelectionCaptured
 	b.mu.Unlock()
+
+	if !slotSelected {
+		b.logger.Info("bridge: deposit intent ignored until slot is explicitly selected",
+			"caller", b.callerPhone,
+			"text", text,
+		)
+		return
+	}
 
 	lower := strings.ToLower(text)
 	// Detect deposit link intent: Lauren says she'll text/send a deposit/payment link

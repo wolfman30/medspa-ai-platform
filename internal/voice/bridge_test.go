@@ -105,6 +105,7 @@ func waitForSend(t *testing.T, m *testMessenger) {
 func TestBridgeMaybeFireDepositSMS_FiresOnDepositAndTextYou(t *testing.T) {
 	b, messenger := newBridgeForDepositTests(t)
 
+	b.maybeCaptureSlotSelection("Perfect, Thursday March 19 at 5 PM works great.")
 	b.maybeFireDepositSMS(context.Background(), "Great, there's a deposit and I'll text you the secure payment details now.")
 	waitForSend(t, messenger)
 
@@ -116,6 +117,7 @@ func TestBridgeMaybeFireDepositSMS_FiresOnDepositAndTextYou(t *testing.T) {
 func TestBridgeMaybeFireDepositSMS_FiresOnDepositAndLink(t *testing.T) {
 	b, messenger := newBridgeForDepositTests(t)
 
+	b.maybeCaptureSlotSelection("Awesome, Wednesday March 18 at 4:30 PM works perfectly.")
 	b.maybeFireDepositSMS(context.Background(), "Perfect — your deposit is next, use this secure link to complete it.")
 	waitForSend(t, messenger)
 
@@ -127,6 +129,7 @@ func TestBridgeMaybeFireDepositSMS_FiresOnDepositAndLink(t *testing.T) {
 func TestBridgeMaybeFireDepositSMS_DoesNotFireForDepositOnly(t *testing.T) {
 	b, messenger := newBridgeForDepositTests(t)
 
+	b.maybeCaptureSlotSelection("Great, Tuesday March 17 at 3 PM works for you.")
 	b.maybeFireDepositSMS(context.Background(), "A deposit is required to secure your appointment.")
 
 	select {
@@ -144,6 +147,7 @@ func TestBridgeMaybeFireDepositSMS_DoesNotFireForDepositOnly(t *testing.T) {
 func TestBridgeMaybeFireDepositSMS_OnlyFiresOncePerCall(t *testing.T) {
 	b, messenger := newBridgeForDepositTests(t)
 
+	b.maybeCaptureSlotSelection("Great, Tuesday March 17 at 3 PM works for you.")
 	b.maybeFireDepositSMS(context.Background(), "There's a deposit and I'll text you now.")
 	waitForSend(t, messenger)
 	b.maybeFireDepositSMS(context.Background(), "Resending the deposit link now.")
@@ -177,6 +181,7 @@ func TestBridgeShouldProcessAssistantText_DeduplicatesWithinWindow(t *testing.T)
 func TestBridgeMaybeFireDepositSMS_DuplicateTranscriptVariantsStillSendOnce(t *testing.T) {
 	b, messenger := newBridgeForDepositTests(t)
 
+	b.maybeCaptureSlotSelection("Perfect, Friday March 20 at 11 AM works great.")
 	b.maybeFireDepositSMS(context.Background(), "I'll text you the deposit link now.")
 	waitForSend(t, messenger)
 	b.maybeFireDepositSMS(context.Background(), "  i'll TEXT you the deposit LINK now.  ")
@@ -190,6 +195,31 @@ func TestBridgeMaybeFireDepositSMS_DuplicateTranscriptVariantsStillSendOnce(t *t
 
 	if got := messenger.count(); got != 1 {
 		t.Fatalf("expected exactly 1 SMS send, got %d", got)
+	}
+}
+
+func TestBridgeMaybeFireDepositSMS_DoesNotFireBeforeExplicitSlotSelection(t *testing.T) {
+	b, messenger := newBridgeForDepositTests(t)
+
+	b.maybeFireDepositSMS(context.Background(), "I'll text you the deposit link now.")
+
+	select {
+	case <-messenger.ch:
+		t.Fatal("unexpected SMS send before explicit slot selection")
+	case <-time.After(150 * time.Millisecond):
+		// expected
+	}
+	if got := messenger.count(); got != 0 {
+		t.Fatalf("expected 0 SMS sends, got %d", got)
+	}
+}
+
+func TestLooksLikeExplicitSlotSelection(t *testing.T) {
+	if !looksLikeExplicitSlotSelection("Perfect, Thursday March 19 at 5 PM works great.") {
+		t.Fatal("expected explicit slot selection to be detected")
+	}
+	if looksLikeExplicitSlotSelection("I can check Thursday afternoon if that works") {
+		t.Fatal("did not expect vague time reference to count as explicit slot selection")
 	}
 }
 

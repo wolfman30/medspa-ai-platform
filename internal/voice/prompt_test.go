@@ -100,6 +100,9 @@ func TestBuildVoiceSystemPrompt_DepositLanguageAndFlow(t *testing.T) {
 	store := setupClinicStore(t, cfg)
 	prompt := BuildVoiceSystemPrompt(slog.Default(), store, orgID, "")
 
+	if !strings.Contains(prompt, "ONLY after the caller explicitly selects a specific date AND time") {
+		t.Fatalf("expected prompt to require explicit slot confirmation before deposit, got: %q", prompt)
+	}
 	if !strings.Contains(prompt, "I'm texting you") {
 		t.Fatalf("expected prompt to contain \"I'm texting you\", got: %q", prompt)
 	}
@@ -157,6 +160,20 @@ func TestBuildVoiceSystemPrompt_IncludesAfterXGuardrails(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "NEVER 4:00") {
 		t.Fatalf("expected strict after-X wording in prompt, got: %q", prompt)
+	}
+}
+
+func TestBuildVoiceSystemPrompt_AvailabilityConfidenceGuardrails(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	mustContain := []string{
+		"ONLY speak exact times when they come from a live, service-matched availability result",
+		"exact_times_confident true",
+		"do NOT state exact times",
+	}
+	for _, fragment := range mustContain {
+		if !strings.Contains(prompt, fragment) {
+			t.Fatalf("expected prompt to contain %q, got: %q", fragment, prompt)
+		}
 	}
 }
 

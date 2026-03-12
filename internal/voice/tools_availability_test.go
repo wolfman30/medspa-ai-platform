@@ -3,6 +3,8 @@ package voice
 import (
 	"testing"
 	"time"
+
+	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 )
 
 func TestParseAfterHour(t *testing.T) {
@@ -42,5 +44,42 @@ func TestFilterSlotByTime_AfterHourIsStrictlyExclusive(t *testing.T) {
 	}
 	if !filterSlotByTime(slotAtFive, 16, "") {
 		t.Fatal("expected 5:00 PM to be included for 'after 4'")
+	}
+}
+
+func TestFilterSlotByDay(t *testing.T) {
+	slotMonday := time.Date(2026, 3, 16, 10, 0, 0, 0, time.UTC)
+	slotSaturday := time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC)
+
+	if !filterSlotByDay(slotMonday, "monday") {
+		t.Fatal("expected monday slot to match monday preference")
+	}
+	if filterSlotByDay(slotMonday, "friday") {
+		t.Fatal("did not expect monday slot to match friday preference")
+	}
+	if !filterSlotByDay(slotMonday, "weekdays") {
+		t.Fatal("expected monday slot to match weekdays preference")
+	}
+	if !filterSlotByDay(slotSaturday, "weekend") {
+		t.Fatal("expected saturday slot to match weekend preference")
+	}
+}
+
+func TestResolveRequestedServiceForBoulevard(t *testing.T) {
+	cfg := &clinic.Config{
+		Services: []string{"Wrinkle Relaxers", "Hydrafacial"},
+		ServiceAliases: map[string]string{
+			"botox": "Wrinkle Relaxers",
+		},
+	}
+
+	if got, ok := resolveRequestedServiceForBoulevard(cfg, "botox"); !ok || got != "Wrinkle Relaxers" {
+		t.Fatalf("expected alias to resolve confidently, got (%q, %v)", got, ok)
+	}
+	if got, ok := resolveRequestedServiceForBoulevard(cfg, "Hydrafacial"); !ok || got != "Hydrafacial" {
+		t.Fatalf("expected exact service to resolve confidently, got (%q, %v)", got, ok)
+	}
+	if _, ok := resolveRequestedServiceForBoulevard(cfg, "something random"); ok {
+		t.Fatal("expected unknown service to be low confidence")
 	}
 }
