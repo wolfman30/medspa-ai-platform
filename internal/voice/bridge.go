@@ -411,8 +411,8 @@ func (b *Bridge) listenForPaymentConfirmation(ctx context.Context) {
 
 			// Inject confirmation text into Lauren's conversation
 			confirmText := fmt.Sprintf(
-				"[SYSTEM: The patient's payment has been confirmed. Their deposit was successfully processed. "+
-					"Tell them: 'I just got confirmation that your payment went through! You're all booked. "+
+				"[SYSTEM: The patient's payment has been confirmed. Their deposit was successfully processed. " +
+					"Tell them: 'I just got confirmation that your payment went through! You're all booked. " +
 					"You'll receive a confirmation text shortly. Is there anything else I can help with?']")
 			if err := b.sidecar.InjectText(confirmText); err != nil {
 				b.logger.Error("bridge: failed to inject payment confirmation", "error", err)
