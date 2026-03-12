@@ -188,21 +188,9 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 			"from", from,
 			"to", to,
 		)
-		// Send post-call SMS with deposit/booking link.
-		// Nova Sonic tools are disabled (AWS limitation), so Lauren tells callers
-		// "I'll text you a deposit link" but can't actually send it during the call.
-		// We fire the SMS here after hangup to fulfill that promise.
-		if h.postCallSMS != nil && from != "" && to != "" {
-			go func() {
-				if err := h.postCallSMS.SendPostCallSMS(context.Background(), from, to); err != nil {
-					h.logger.Error("call-control: post-call SMS failed",
-						"error", err, "from", from, "to", to)
-				} else {
-					h.logger.Info("call-control: post-call SMS sent",
-						"caller", from, "clinic", to)
-				}
-			}()
-		}
+		// Deposit SMS is now sent DURING the call (bridge.go detects Lauren's
+		// deposit intent in her transcript and fires SMS immediately).
+		// No post-hangup SMS needed.
 
 	default:
 		h.logger.Debug("call-control: unhandled event", "event_type", eventType)

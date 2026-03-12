@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,6 +55,10 @@ type Bridge struct {
 	outputChunks int
 	warningTimer *time.Timer
 	maxTimer     *time.Timer
+
+	// depositSMSSent tracks whether we've already sent the deposit SMS for this call.
+	// Set to true after we fire the SMS so we don't send duplicates.
+	depositSMSSent bool
 }
 
 // NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
@@ -234,6 +239,10 @@ func (b *Bridge) processSidecarOutput(ctx context.Context) {
 
 			case "text":
 				b.logger.Info("bridge: transcript", "text", event.Text)
+				// Detect when Lauren mentions sending a deposit link — trigger SMS immediately.
+				// Nova Sonic tools are disabled (AWS limitation), so we fire SMS from Go side
+				// when the assistant's transcript indicates deposit intent.
+				b.maybeFireDepositSMS(ctx, event.Text)
 
 			case "error":
 				b.logger.Error("bridge: nova sonic error", "error", event.Text)
@@ -356,4 +365,35 @@ var mulawDecodeTable = [256]int16{
 	244, 228, 212, 196, 180, 164, 148, 132,
 	120, 112, 104, 96, 88, 80, 72, 64,
 	56, 48, 40, 32, 24, 16, 8, 0,
+}
+
+// maybeFireDepositSMS checks if Lauren's transcript indicates she's sending a deposit link,
+// and fires the actual SMS. This is the workaround for Nova Sonic tools being disabled.
+func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
+	if b.depositSMSSent {
+		return
+	}
+
+	lower := strings.ToLower(text)
+	// Detect deposit link intent: Lauren says she'll text/send a deposit/payment link
+	hasDeposit := strings.Contains(lower, "deposit") || strings.Contains(lower, "payment")
+	hasSend := strings.Contains(lower, "text you") || strings.Contains(lower, "send you") || strings.Contains(lower, "sending")
+	hasLink := strings.Contains(lower, "link") || strings.Contains(lower, "secure")
+
+	if !(hasDeposit && hasSend) && !(hasDeposit && hasLink) {
+		return
+	}
+
+	b.depositSMSSent = true
+	b.logger.Info("bridge: detected deposit SMS intent in transcript, firing SMS",
+		"caller", b.callerPhone, "org_id", b.orgID, "text", text)
+
+	// Fire SMS async so we don't block audio
+	go func() {
+		if err := b.toolHandler.SendDepositSMS(ctx, b.orgID, b.callerPhone); err != nil {
+			b.logger.Error("bridge: deposit SMS failed", "error", err, "caller", b.callerPhone)
+		} else {
+			b.logger.Info("bridge: deposit SMS sent successfully", "caller", b.callerPhone)
+		}
+	}()
 }

@@ -490,3 +490,63 @@ func (h *ToolHandler) saveQualification(ctx context.Context, input json.RawMessa
 	)
 	return fmt.Sprintf(`{"status": "saved", "lead_id": "%s"}`, lead.ID), nil
 }
+
+// SendDepositSMS sends a deposit link SMS to the caller during an active voice call.
+// This is called by the bridge when it detects Lauren mentioning a deposit link.
+func (h *ToolHandler) SendDepositSMS(ctx context.Context, orgID, callerPhone string) error {
+	if h.deps == nil || h.deps.Messenger == nil || h.deps.ClinicStore == nil {
+		return fmt.Errorf("messenger or clinic store not configured")
+	}
+
+	cfg, err := h.deps.ClinicStore.Get(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("get clinic config: %w", err)
+	}
+
+	clinicName := "our office"
+	if cfg.Name != "" {
+		clinicName = cfg.Name
+	}
+
+	depositAmount := 50
+	if cfg.DepositAmountCents > 0 {
+		depositAmount = cfg.DepositAmountCents / 100
+	}
+
+	fromNumber := cfg.SMSPhoneNumber
+	if fromNumber == "" {
+		fromNumber = cfg.Phone
+	}
+
+	// Build deposit link — use the API base URL for short payment URLs
+	depositURL := fmt.Sprintf("https://api-dev.aiwolfsolutions.com/deposit/%s", orgID)
+
+	body := fmt.Sprintf(
+		"Hi! This is Lauren from %s 😊\n\n"+
+			"Here's your $%d deposit link to secure your appointment:\n%s\n\n"+
+			"Once you complete the payment, I'll confirm your booking. "+
+			"If you have any questions, just reply to this text!",
+		clinicName, depositAmount, depositURL,
+	)
+
+	err = h.deps.Messenger.SendReply(ctx, conversation.OutboundReply{
+		OrgID: orgID,
+		To:    callerPhone,
+		From:  fromNumber,
+		Body:  body,
+		Metadata: map[string]string{
+			"source": "voice_ai_deposit",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("send deposit SMS: %w", err)
+	}
+
+	h.logger.Info("voice-tool: deposit SMS sent",
+		"to", callerPhone,
+		"from", fromNumber,
+		"clinic", clinicName,
+		"deposit", depositAmount,
+	)
+	return nil
+}
