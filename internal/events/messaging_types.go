@@ -16,6 +16,7 @@ type MessageReceivedV1 struct {
 	CorrelationID string    `json:"correlation_id,omitempty"`
 }
 
+// EventType returns the canonical event name for MessageReceivedV1.
 func (MessageReceivedV1) EventType() string {
 	return "messaging.message.received.v1"
 }
@@ -36,6 +37,7 @@ type MessageSentV1 struct {
 	ProviderMessageID    string    `json:"provider_message_id,omitempty"`
 }
 
+// EventType returns the canonical event name for MessageSentV1.
 func (MessageSentV1) EventType() string {
 	return "messaging.message.sent.v1"
 }
@@ -49,6 +51,7 @@ type HostedOrderActivatedV1 struct {
 	ActivatedAt     time.Time `json:"activated_at"`
 }
 
+// EventType returns the canonical event name for HostedOrderActivatedV1.
 func (HostedOrderActivatedV1) EventType() string {
 	return "messaging.hosted_order.activated.v1"
 }
@@ -62,6 +65,7 @@ type BrandCreatedV1 struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+// EventType returns the canonical event name for BrandCreatedV1.
 func (BrandCreatedV1) EventType() string {
 	return "messaging.ten_dlc.brand.created.v1"
 }
@@ -76,6 +80,7 @@ type CampaignApprovedV1 struct {
 	ApprovedAt         time.Time `json:"approved_at"`
 }
 
+// EventType returns the canonical event name for CampaignApprovedV1.
 func (CampaignApprovedV1) EventType() string {
 	return "messaging.ten_dlc.campaign.approved.v1"
 }

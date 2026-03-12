@@ -56,6 +56,7 @@ func newOutboxStoreWithExec(exec execQuerier) *OutboxStore {
 	return &OutboxStore{pool: exec}
 }
 
+// Insert writes an event to the outbox table and returns its generated ID.
 func (s *OutboxStore) Insert(ctx context.Context, aggregate string, eventType string, payload any) (uuid.UUID, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -72,6 +73,7 @@ func (s *OutboxStore) Insert(ctx context.Context, aggregate string, eventType st
 	return id, nil
 }
 
+// FetchPending returns undelivered outbox rows in creation order.
 func (s *OutboxStore) FetchPending(ctx context.Context, limit int32) ([]OutboxEntry, error) {
 	query := `
 		SELECT id, aggregate, event_type, payload, created_at
@@ -99,6 +101,7 @@ func (s *OutboxStore) FetchPending(ctx context.Context, limit int32) ([]OutboxEn
 	return entries, rows.Err()
 }
 
+// MarkDelivered sets dispatched_at for the given outbox ID when not already dispatched.
 func (s *OutboxStore) MarkDelivered(ctx context.Context, id uuid.UUID) (bool, error) {
 	query := `
 		UPDATE outbox
@@ -136,6 +139,7 @@ func NewDeliverer(store *OutboxStore, handler DeliveryHandler, logger *logging.L
 	}
 }
 
+// WithBatchSize overrides the number of events fetched per poll.
 func (d *Deliverer) WithBatchSize(size int32) *Deliverer {
 	if size > 0 {
 		d.batchSize = size
@@ -143,6 +147,7 @@ func (d *Deliverer) WithBatchSize(size int32) *Deliverer {
 	return d
 }
 
+// WithInterval overrides the polling interval used by Start.
 func (d *Deliverer) WithInterval(interval time.Duration) *Deliverer {
 	if interval > 0 {
 		d.interval = interval
@@ -150,6 +155,7 @@ func (d *Deliverer) WithInterval(interval time.Duration) *Deliverer {
 	return d
 }
 
+// Start polls for pending events until the context is canceled.
 func (d *Deliverer) Start(ctx context.Context) {
 	if d.store == nil || d.handler == nil {
 		return
