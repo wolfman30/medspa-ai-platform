@@ -49,8 +49,8 @@ func TestToolHandlerSendDepositSMS_SendsExpectedContent(t *testing.T) {
 	if !strings.Contains(msg.Body, "$90") {
 		t.Fatalf("expected deposit amount in message body, got: %q", msg.Body)
 	}
-	if !strings.Contains(msg.Body, "https://aiwolfsolutions.com/deposit") {
-		t.Fatalf("expected deposit link in message body, got: %q", msg.Body)
+	if !strings.Contains(msg.Body, "https://buy.stripe.com/") {
+		t.Fatalf("expected Stripe deposit link in message body, got: %q", msg.Body)
 	}
 }
 
