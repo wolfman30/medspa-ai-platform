@@ -12,18 +12,21 @@ import (
 	"time"
 )
 
+// KnowledgeFile is the input payload format used by the seed-knowledge script.
 type KnowledgeFile struct {
 	ClinicID   string     `json:"clinic_id"`
 	ClinicName string     `json:"clinic_name"`
 	Documents  []Document `json:"documents"`
 }
 
+// Document represents one knowledge base document for a clinic.
 type Document struct {
 	Title    string `json:"title"`
 	Category string `json:"category"`
 	Content  string `json:"content"`
 }
 
+// KnowledgeRequest matches the API request body for batch knowledge uploads.
 type KnowledgeRequest struct {
 	Documents []string `json:"documents"`
 }

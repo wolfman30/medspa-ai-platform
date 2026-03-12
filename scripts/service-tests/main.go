@@ -30,6 +30,7 @@ import (
 // Config types
 // ---------------------------------------------------------------------------
 
+// ClinicConfig is the subset of clinic configuration needed for service test generation.
 type ClinicConfig struct {
 	OrgID string `json:"org_id"`
 	Name  string `json:"name"`
@@ -39,6 +40,7 @@ type ClinicConfig struct {
 	ServiceAliases map[string]string `json:"service_aliases"`
 }
 
+// MoxieConfig captures Moxie-specific service and provider mappings used by tests.
 type MoxieConfig struct {
 	MedSpaID             string            `json:"medspa_id"`
 	MedSpaSlug           string            `json:"medspa_slug"`
@@ -51,6 +53,7 @@ type MoxieConfig struct {
 // Test result types
 // ---------------------------------------------------------------------------
 
+// ServiceResult stores pass/fail outcomes for each service-level validation.
 type ServiceResult struct {
 	Name           string
 	MoxieID        string
