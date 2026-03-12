@@ -188,6 +188,20 @@
     box-shadow: 0 14px 35px rgba(76, 29, 149, 0.18);
   }
 
+  .ui-logo {
+    @apply block shrink-0 rounded-full;
+    object-fit: cover;
+    object-position: center;
+  }
+
+  .ui-logo-sm {
+    @apply h-7 w-7;
+  }
+
+  .ui-logo-md {
+    @apply h-8 w-8;
+  }
+
   .ui-link {
     @apply text-violet-700 hover:text-violet-900;
   }

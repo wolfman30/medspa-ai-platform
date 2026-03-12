@@ -14,7 +14,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,sans-
 /* ── NAV ── */
 nav{position:fixed;top:0;width:100%;background:rgba(26,26,46,.95);backdrop-filter:blur(10px);z-index:100;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}
 nav .logo{color:var(--gold);font-weight:700;font-size:1.1rem;letter-spacing:.5px;display:flex;align-items:center;gap:.5rem}
-nav .logo img{height:32px;width:32px;border-radius:50%}
+nav .logo img{display:block;height:32px;width:32px;border-radius:50%;object-fit:cover;object-position:center}
 nav .logo span{color:var(--white)}
 nav a.cta-sm{background:var(--gold);color:var(--navy);padding:.5rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9rem;transition:background .2s}
 nav a.cta-sm:hover{background:var(--gold-light)}
@@ -22,7 +22,7 @@ nav a.cta-sm:hover{background:var(--gold-light)}
 /* ── HERO ── */
 .hero{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-light) 100%);color:var(--white);padding:8rem 2rem 5rem;text-align:center;position:relative;overflow:hidden}
 .hero::after{content:'';position:absolute;bottom:-2px;left:0;width:100%;height:80px;background:var(--white);clip-path:ellipse(55% 100% at 50% 100%)}
-.hero-logo{width:80px;height:80px;border-radius:50%;margin:0 auto 1.5rem;box-shadow:0 8px 30px rgba(212,165,116,.3);border:2px solid rgba(212,165,116,.3)}
+.hero-logo{display:block;width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:center;margin:0 auto 1.5rem;box-shadow:0 8px 30px rgba(212,165,116,.3);border:2px solid rgba(212,165,116,.3)}
 .hero h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;max-width:800px;margin:0 auto 1.25rem;line-height:1.15}
 .hero h1 .gold{color:var(--gold)}
 .hero p.sub{font-size:clamp(1rem,2.5vw,1.25rem);opacity:.85;max-width:600px;margin:0 auto 2.5rem;line-height:1.5}
@@ -104,6 +104,7 @@ section{padding:5rem 2rem}
 /* ── FOOTER ── */
 footer{background:var(--navy);color:rgba(255,255,255,.4);text-align:center;padding:2rem;font-size:.85rem}
 footer a{color:var(--gold);text-decoration:none}
+footer .footer-logo{display:block;width:40px;height:40px;border-radius:50%;object-fit:cover;object-position:center;margin:0 auto .5rem;opacity:.7}
 
 /* ── RESPONSIVE ── */
 @media(max-width:768px){
@@ -311,7 +312,7 @@ footer a{color:var(--gold);text-decoration:none}
 
 <!-- FOOTER -->
 <footer>
-  <img src="logo-wolf.jpg" alt="AI Wolf Solutions" style="width:40px;height:40px;border-radius:50%;margin-bottom:.5rem;opacity:.7">
+  <img src="logo-wolf.jpg" alt="AI Wolf Solutions" class="footer-logo">
   <p>© 2026 <a href="https://aiwolfsolutions.com">AI Wolf Solutions</a>. All rights reserved.</p>
   <p style="margin-top:.5rem"><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms & Conditions</a></p>
 </footer>
