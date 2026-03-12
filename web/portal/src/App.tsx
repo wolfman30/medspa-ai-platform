@@ -16,6 +16,7 @@ import { LeadsList } from './components/LeadsList';
 import { FinanceDashboard } from './components/FinanceDashboard';
 import { AgentTeamCard } from './components/AgentTeamCard';
 import { ClinicOperationalDashboard } from './components/ClinicOperationalDashboard';
+import { TelnyxMissionControl } from './components/TelnyxMissionControl';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -41,7 +42,8 @@ type AppView =
   | 'finances'
   | 'agents'
   | 'leads'
-  | 'operations';
+  | 'operations'
+  | 'telnyx';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -474,6 +476,15 @@ function AuthenticatedApp() {
                     Operations
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('telnyx')}
+                    aria-current={view === 'telnyx' ? 'page' : undefined}
+                    className={view === 'telnyx' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Telnyx
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -491,6 +502,8 @@ function AuthenticatedApp() {
           <AgentTeamCard />
         ) : view === 'operations' ? (
           <ClinicOperationalDashboard orgId={orgId} />
+        ) : view === 'telnyx' ? (
+          <TelnyxMissionControl />
         ) : view === 'finances' ? (
           <FinanceDashboard />
         ) : view === 'leads' ? (
