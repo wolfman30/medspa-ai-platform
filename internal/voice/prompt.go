@@ -80,7 +80,9 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("SPEAK the available times directly WITH THE FULL DATE — for example: ")
 	sb.WriteString("'I have openings on Tuesday, March 4th at 2 PM, Wednesday, March 5th at 10 AM, and Thursday, March 6th at 4 PM. Which works best for you?' ")
 	sb.WriteString("ALWAYS include both the day of week AND the date (month and day number). ")
-	sb.WriteString("Never say just 'Tuesday' without the date. Be specific. Do NOT say 'let me check' — use the availability data below.")
+	sb.WriteString("Never say just 'Tuesday' without the date. Be specific. Do NOT say 'let me check' — use the availability data below.\n")
+	sb.WriteString("IMPORTANT: If the caller says 'after 4' or 'after 4pm', ONLY offer times AFTER that hour — NOT at that hour. ")
+	sb.WriteString("'After 4' means 4:30, 5:00, etc. — NEVER 4:00. Same for any 'after X' request. Be strict about this.")
 
 	// Service alias mappings and available services
 	if cs != nil && orgID != "" {
