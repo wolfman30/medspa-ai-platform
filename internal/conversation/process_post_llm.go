@@ -72,9 +72,11 @@ func (s *LLMService) handlePostLLMResponse(ctx context.Context, pc *processConte
 		pc.timeSelectionResponse.SavedToHistory = true
 	}
 
-	// Clear Square deposit for booking API clinics (they use their own payment flow)
-	if usesMoxie && pc.depositIntent != nil {
-		s.logger.Info("clinic uses booking API - skipping Square deposit intent", "org_id", pc.req.OrgID)
+	// Clear Square deposit for Moxie clinics (they use their own payment flow on the booking page).
+	// Boulevard clinics still need Stripe deposit links.
+	isMoxieOnly := clinicCfg != nil && clinicCfg.UsesMoxieBooking() && !clinicCfg.UsesBoulevardBooking()
+	if isMoxieOnly && pc.depositIntent != nil {
+		s.logger.Info("clinic uses Moxie booking API - skipping Square deposit intent", "org_id", pc.req.OrgID)
 		pc.depositIntent = nil
 	}
 
