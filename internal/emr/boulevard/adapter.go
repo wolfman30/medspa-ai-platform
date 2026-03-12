@@ -38,21 +38,28 @@ func (a *BoulevardAdapter) SetClient(client *BoulevardClient) {
 // ResolveAvailability checks Boulevard for available slots using the real public API.
 // Works in both dry-run and live mode — availability is read-only.
 func (a *BoulevardAdapter) ResolveAvailability(ctx context.Context, serviceName, providerName string, date time.Time) ([]TimeSlot, error) {
+	slots, _, err := a.ResolveAvailabilityWithCart(ctx, serviceName, providerName, date)
+	return slots, err
+}
+
+// ResolveAvailabilityWithCart is like ResolveAvailability but also returns the cart ID
+// for later booking operations.
+func (a *BoulevardAdapter) ResolveAvailabilityWithCart(ctx context.Context, serviceName, providerName string, date time.Time) ([]TimeSlot, string, error) {
 	if a == nil || a.client == nil {
-		return nil, fmt.Errorf("boulevard adapter: client not configured")
+		return nil, "", fmt.Errorf("boulevard adapter: client not configured")
 	}
 
 	tz := "America/New_York" // TODO: get from clinic config
 	a.logger.Info("Boulevard: fetching real availability",
 		"service", serviceName, "provider", providerName, "dry_run", a.dryRun)
 
-	slots, _, err := a.client.GetAvailableSlots(ctx, serviceName, providerName, tz)
+	slots, cartID, err := a.client.GetAvailableSlots(ctx, serviceName, providerName, tz)
 	if err != nil {
-		return nil, fmt.Errorf("boulevard availability: %w", err)
+		return nil, "", fmt.Errorf("boulevard availability: %w", err)
 	}
 
-	a.logger.Info("Boulevard: availability fetched", "slots", len(slots), "service", serviceName)
-	return slots, nil
+	a.logger.Info("Boulevard: availability fetched", "slots", len(slots), "service", serviceName, "cart_id", cartID)
+	return slots, cartID, nil
 }
 
 // CreateBooking runs the full Boulevard cart-based booking flow.

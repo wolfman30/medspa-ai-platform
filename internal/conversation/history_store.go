@@ -76,6 +76,27 @@ func timeSelectionKey(conversationID string) string {
 	return fmt.Sprintf("time_selection:%s", conversationID)
 }
 
+func boulevardCartKey(conversationID string) string {
+	return fmt.Sprintf("blvd_cart:%s", conversationID)
+}
+
+// SaveBoulevardCartID persists the Boulevard cart ID for later booking.
+func (s *historyStore) SaveBoulevardCartID(ctx context.Context, conversationID, cartID string) error {
+	if cartID == "" {
+		return nil
+	}
+	return s.redis.Set(ctx, boulevardCartKey(conversationID), cartID, conversationTTL).Err()
+}
+
+// GetBoulevardCartID retrieves the stored Boulevard cart ID.
+func (s *historyStore) GetBoulevardCartID(ctx context.Context, conversationID string) (string, error) {
+	val, err := s.redis.Get(ctx, boulevardCartKey(conversationID)).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	return val, err
+}
+
 // SaveTimeSelectionState persists the time selection state for a conversation.
 func (s *historyStore) SaveTimeSelectionState(ctx context.Context, conversationID string, state *TimeSelectionState) error {
 	ctx, span := s.tracer.Start(ctx, "conversation.save_time_selection")

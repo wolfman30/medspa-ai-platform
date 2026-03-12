@@ -93,7 +93,7 @@ func (s *LLMService) maybeTriggerTimeSelection(ctx context.Context, pc *processC
 	if pc.timeSelectionState != nil && pc.timeSelectionState.SlotSelected {
 		shouldTrigger = false
 	}
-	if usesMoxie {
+	if usesMoxie || boulevardReady {
 		shouldTrigger = shouldTrigger && qualificationsMet
 	} else {
 		shouldTrigger = shouldTrigger && pc.depositIntent != nil && qualificationsMet
@@ -101,7 +101,7 @@ func (s *LLMService) maybeTriggerTimeSelection(ctx context.Context, pc *processC
 
 	// Defer until schedule preferences exist
 	var earlyPrefs *leads.SchedulingPreferences
-	if shouldTrigger && usesMoxie {
+	if shouldTrigger && (usesMoxie || boulevardReady) {
 		p, _ := extractPreferences(pc.history, serviceAliasesFromConfig(clinicCfg))
 		earlyPrefs = &p
 		if !hasSchedulePreferences(earlyPrefs) {

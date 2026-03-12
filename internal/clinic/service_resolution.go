@@ -108,6 +108,10 @@ func (c *Config) ResolveProviderID(providerName string) string {
 // ServiceNeedsProviderPreference returns true if the given service (by normalized name)
 // has more than one eligible provider.
 func (c *Config) ServiceNeedsProviderPreference(serviceName string) bool {
+	// Boulevard clinics: all services need provider preference if multiple providers configured
+	if c.UsesBoulevardBooking() && len(c.ProviderNames) > 1 {
+		return true
+	}
 	if c.MoxieConfig == nil || c.MoxieConfig.ServiceProviderCount == nil {
 		return false
 	}
@@ -136,6 +140,18 @@ func (c *Config) ServiceMenuItemID(serviceName string) string {
 // with resolvable names.
 func (c *Config) ProviderNamesForService(serviceName string) []string {
 	empty := []string{}
+	// Boulevard clinics: return all providers (not service-specific mapping)
+	if c.UsesBoulevardBooking() && len(c.ProviderNames) > 0 {
+		names := make([]string, 0, len(c.ProviderNames))
+		for _, name := range c.ProviderNames {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+		sort.Strings(names)
+		return names
+	}
 	if c.MoxieConfig == nil || c.MoxieConfig.ProviderNames == nil || c.MoxieConfig.ServiceProviders == nil {
 		return empty
 	}

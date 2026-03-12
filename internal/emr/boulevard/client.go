@@ -291,8 +291,20 @@ func (c *BoulevardClient) GetAvailableSlots(ctx context.Context, serviceName, pr
 	if serviceID == "" {
 		nameLower := strings.ToLower(serviceName)
 		for _, svc := range services {
-			if strings.Contains(strings.ToLower(svc.Name), nameLower) || strings.Contains(nameLower, strings.ToLower(svc.Name)) {
+			svcLower := strings.ToLower(svc.Name)
+			if strings.Contains(svcLower, nameLower) || strings.Contains(nameLower, svcLower) {
 				serviceID = svc.ID
+				break
+			}
+			// Match against slash-separated parts (e.g. "botox" matches "Botox/Dysport/Xeomin")
+			for _, part := range strings.Split(svcLower, "/") {
+				part = strings.TrimSpace(part)
+				if part != "" && (strings.Contains(part, nameLower) || strings.Contains(nameLower, part)) {
+					serviceID = svc.ID
+					break
+				}
+			}
+			if serviceID != "" {
 				break
 			}
 		}

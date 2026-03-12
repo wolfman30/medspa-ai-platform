@@ -332,7 +332,23 @@ func ShouldFetchAvailabilityWithConfig(history []ChatMessage, lead interface{}, 
 // first name from the clinic config. This is the most reliable source since it
 // doesn't depend on fragile pattern matching in system prompt text.
 func matchProviderFromConfig(history []ChatMessage, cfg *clinic.Config) string {
-	if cfg == nil || cfg.MoxieConfig == nil || cfg.MoxieConfig.ProviderNames == nil {
+	if cfg == nil {
+		return ""
+	}
+
+	// Collect provider names from both Moxie and Boulevard configs
+	var providerNames []string
+	if cfg.MoxieConfig != nil && cfg.MoxieConfig.ProviderNames != nil {
+		for _, name := range cfg.MoxieConfig.ProviderNames {
+			providerNames = append(providerNames, name)
+		}
+	}
+	if cfg.ProviderNames != nil {
+		for _, name := range cfg.ProviderNames {
+			providerNames = append(providerNames, name)
+		}
+	}
+	if len(providerNames) == 0 {
 		return ""
 	}
 
@@ -347,7 +363,7 @@ func matchProviderFromConfig(history []ChatMessage, cfg *clinic.Config) string {
 	lower := userText.String()
 
 	// Check each provider's first name against user messages
-	for _, fullName := range cfg.MoxieConfig.ProviderNames {
+	for _, fullName := range providerNames {
 		parts := strings.Fields(fullName)
 		if len(parts) == 0 {
 			continue

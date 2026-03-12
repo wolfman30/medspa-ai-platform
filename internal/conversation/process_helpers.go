@@ -163,22 +163,38 @@ func (s *LLMService) fetchAndPresentAvailability(
 		s.logger.Info("fetching availability via Boulevard API",
 			"conversation_id", conversationID, "service", scraperServiceName, "dry_run", adapter.IsDryRun())
 
-		blvdSlots, blvdErr := adapter.ResolveAvailability(fetchCtx, scraperServiceName, prefs.ProviderPreference, time.Now())
+		blvdSlots, blvdCartID, blvdErr := adapter.ResolveAvailabilityWithCart(fetchCtx, scraperServiceName, prefs.ProviderPreference, time.Now())
 		if blvdErr != nil {
 			s.logger.Warn("Boulevard API: availability fetch failed",
 				"error", blvdErr, "conversation_id", conversationID, "service", scraperServiceName)
 			err = blvdErr
 		} else {
-			// Convert Boulevard slots to AvailabilityResult
+			// Store Boulevard cart ID for later booking
+			if blvdCartID != "" {
+				if saveErr := s.history.SaveBoulevardCartID(ctx, conversationID, blvdCartID); saveErr != nil {
+					s.logger.Warn("failed to save Boulevard cart ID", "error", saveErr)
+				}
+			}
+			// Convert Boulevard slots to AvailabilityResult, applying time preferences
 			slots := make([]PresentedSlot, 0, len(blvdSlots))
-			for i, bs := range blvdSlots {
+			idx := 1
+			for _, bs := range blvdSlots {
+				if !matchesTimePreferences(bs.StartAt, timePrefs) {
+					continue
+				}
 				slots = append(slots, PresentedSlot{
-					Index:     i + 1,
+					Index:     idx,
 					DateTime:  bs.StartAt,
 					TimeStr:   bs.StartAt.Format("Mon Jan 2 at 3:04 PM"),
 					Service:   prefs.ServiceInterest,
 					Available: true,
 				})
+				idx++
+			}
+			// Spread across days like Moxie flow
+			slots = spreadSlotsAcrossDays(slots, maxSlotsToPresent, 2)
+			for i := range slots {
+				slots[i].Index = i + 1
 			}
 			result = &AvailabilityResult{
 				Slots:      slots,
