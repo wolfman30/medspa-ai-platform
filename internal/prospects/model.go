@@ -2,6 +2,7 @@ package prospects
 
 import "time"
 
+// Prospect captures CRM and operational readiness data for a single clinic lead.
 type Prospect struct {
 	ID            string    `json:"id"`
 	ClinicName    string    `json:"clinic"`
@@ -27,6 +28,7 @@ type Prospect struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
+// Event records a dated timeline entry for a prospect.
 type Event struct {
 	ID         int       `json:"id"`
 	ProspectID string    `json:"prospectId"`
