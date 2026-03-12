@@ -57,8 +57,8 @@ func NewBoulevardClient(businessID, locationID string, logger *logging.Logger) *
 
 // CreateCart creates a new booking cart and returns the cart ID plus all available services.
 func (c *BoulevardClient) CreateCart(ctx context.Context) (cartID string, services []Service, err error) {
-	query := `mutation CreateCart($loc: ID!) {
-  createCart(input: { locationId: $loc }) {
+	query := `mutation CreateCart($loc: ID) {
+  createCart(locationId: $loc) {
     cart {
       id
       availableCategories {
@@ -258,14 +258,12 @@ func (c *BoulevardClient) GetStaffVariants(ctx context.Context, cartID, bookable
 
 // ReserveSlot holds a time slot in the cart.
 func (c *BoulevardClient) ReserveSlot(ctx context.Context, cartID, bookableTimeID string) error {
-	query := `mutation Reserve($input: ReserveCartBookableItemsInput!) {
-  reserveCartBookableItems(input: $input) { cart { id } }
+	query := `mutation Reserve($cartId: ID!, $timeId: ID!) {
+  reserveCartBookableItems(idOrToken: $cartId, bookableTimeId: $timeId) { cart { id } }
 }`
 	_, err := c.do(ctx, query, map[string]interface{}{
-		"input": map[string]interface{}{
-			"idOrToken":      cartID,
-			"bookableTimeId": bookableTimeID,
-		},
+		"cartId": cartID,
+		"timeId": bookableTimeID,
 	})
 	if err != nil {
 		return fmt.Errorf("reserveSlot: %w", err)
