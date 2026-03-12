@@ -149,3 +149,29 @@ func TestBuildVoiceSystemPrompt_UsesClinicConfigFromStore(t *testing.T) {
 		t.Fatalf("expected prompt to include deposit from config, got: %q", prompt)
 	}
 }
+
+func TestBuildVoiceSystemPrompt_IncludesAfterXGuardrails(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	if !strings.Contains(prompt, "after 4") {
+		t.Fatalf("expected after-X guidance in prompt, got: %q", prompt)
+	}
+	if !strings.Contains(prompt, "NEVER 4:00") {
+		t.Fatalf("expected strict after-X wording in prompt, got: %q", prompt)
+	}
+}
+
+func TestBuildVoiceSystemPrompt_PaymentAndBrokenLinkTruthfulness(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	mustContain := []string{
+		"Do NOT say 'your payment went through'",
+		"NEVER claim a payment went through",
+		"404 error",
+		"Do NOT make up solutions",
+		"NEVER offer to send things to email",
+	}
+	for _, fragment := range mustContain {
+		if !strings.Contains(prompt, fragment) {
+			t.Fatalf("expected prompt to contain %q, got: %q", fragment, prompt)
+		}
+	}
+}

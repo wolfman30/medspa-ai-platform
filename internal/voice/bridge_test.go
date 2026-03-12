@@ -163,6 +163,36 @@ func TestBridgeMaybeFireDepositSMS_OnlyFiresOncePerCall(t *testing.T) {
 	}
 }
 
+func TestBridgeShouldProcessAssistantText_DeduplicatesWithinWindow(t *testing.T) {
+	b := &Bridge{recentAssistantText: make(map[string]time.Time)}
+
+	if !b.shouldProcessAssistantText("I'll text you the link now") {
+		t.Fatal("expected first assistant text to be processed")
+	}
+	if b.shouldProcessAssistantText("  i'll text you the link now  ") {
+		t.Fatal("expected normalized duplicate assistant text to be suppressed")
+	}
+}
+
+func TestBridgeMaybeFireDepositSMS_DuplicateTranscriptVariantsStillSendOnce(t *testing.T) {
+	b, messenger := newBridgeForDepositTests(t)
+
+	b.maybeFireDepositSMS(context.Background(), "I'll text you the deposit link now.")
+	waitForSend(t, messenger)
+	b.maybeFireDepositSMS(context.Background(), "  i'll TEXT you the deposit LINK now.  ")
+
+	select {
+	case <-messenger.ch:
+		t.Fatal("unexpected second SMS send for duplicate variant")
+	case <-time.After(150 * time.Millisecond):
+		// expected
+	}
+
+	if got := messenger.count(); got != 1 {
+		t.Fatalf("expected exactly 1 SMS send, got %d", got)
+	}
+}
+
 func TestPaymentConfirmationChannel(t *testing.T) {
 	caller := "+15551234567"
 	want := "voice:payment:+15551234567"

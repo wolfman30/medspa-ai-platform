@@ -95,9 +95,16 @@ func parseAfterHour(pref string) int {
 func filterSlotByTime(t time.Time, afterHour int, prefTimes string) bool {
 	hour := t.Hour()
 
-	// Strict "after X" filter takes priority
+	// Strict "after X" filter takes priority.
+	// "After 4" excludes 4:00 but includes 4:30 and later.
 	if afterHour >= 0 {
-		return hour > afterHour // strict: "after 4" excludes 4:00 PM exactly
+		if hour > afterHour {
+			return true
+		}
+		if hour < afterHour {
+			return false
+		}
+		return t.Minute() > 0 || t.Second() > 0
 	}
 
 	// General time-of-day preferences

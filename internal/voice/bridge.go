@@ -67,6 +67,8 @@ type Bridge struct {
 	depositSMSSent bool
 	// paymentConfirmed tracks whether payment was confirmed during this call.
 	paymentConfirmed bool
+	// paymentConfirmationAnnounced ensures we only inject payment confirmation once per call.
+	paymentConfirmationAnnounced bool
 	// recentAssistantText stores normalized transcript snippets to suppress duplicate repeats.
 	recentAssistantText map[string]time.Time
 }
@@ -414,10 +416,25 @@ func (b *Bridge) listenForPaymentConfirmation(ctx context.Context) {
 			if !ok {
 				return
 			}
+
+			b.mu.Lock()
+			alreadyAnnounced := b.paymentConfirmationAnnounced
+			if !alreadyAnnounced {
+				b.paymentConfirmed = true
+				b.paymentConfirmationAnnounced = true
+			}
+			b.mu.Unlock()
+
+			if alreadyAnnounced {
+				b.logger.Info("bridge: duplicate payment confirmation suppressed",
+					"caller", b.callerPhone,
+					"payload", msg.Payload,
+				)
+				continue
+			}
+
 			b.logger.Info("bridge: payment confirmation received!",
 				"caller", b.callerPhone, "payload", msg.Payload)
-
-			b.paymentConfirmed = true
 
 			// Inject confirmation text into Lauren's conversation
 			confirmText := fmt.Sprintf(
@@ -434,9 +451,12 @@ func (b *Bridge) listenForPaymentConfirmation(ctx context.Context) {
 // maybeFireDepositSMS checks if Lauren's transcript indicates she's sending a deposit link,
 // and fires the actual SMS. This is the workaround for Nova Sonic tools being disabled.
 func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
+	b.mu.Lock()
 	if b.depositSMSSent {
+		b.mu.Unlock()
 		return
 	}
+	b.mu.Unlock()
 
 	lower := strings.ToLower(text)
 	// Detect deposit link intent: Lauren says she'll text/send a deposit/payment link
@@ -448,7 +468,14 @@ func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
 		return
 	}
 
+	b.mu.Lock()
+	if b.depositSMSSent {
+		b.mu.Unlock()
+		return
+	}
 	b.depositSMSSent = true
+	b.mu.Unlock()
+
 	b.logger.Info("bridge: detected deposit SMS intent in transcript, firing SMS",
 		"caller", b.callerPhone, "org_id", b.orgID, "text", text)
 
