@@ -18,11 +18,13 @@ func isCleanID(id string) bool {
 	return id != "" && cleanIDRegex.MatchString(id)
 }
 
+// Handler serves admin HTTP endpoints for prospect management.
 type Handler struct {
 	repo        *Repository
 	researchDir string // base path to research/ directory
 }
 
+// NewHandler creates a prospect admin HTTP handler.
 func NewHandler(repo *Repository) *Handler {
 	return &Handler{repo: repo}
 }
@@ -32,7 +34,7 @@ func (h *Handler) SetResearchDir(dir string) {
 	h.researchDir = dir
 }
 
-// GET /admin/prospects/{id}/outreach
+// GetOutreach returns saved outreach drafts and research notes for a prospect.
 func (h *Handler) GetOutreach(w http.ResponseWriter, r *http.Request) {
 	id := extractProspectID(r)
 	if id == "" {
@@ -73,7 +75,7 @@ func (h *Handler) GetOutreach(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// GET /admin/prospects
+// List returns all prospects with timeline events for admin dashboards.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	prospects, err := h.repo.List(r.Context())
 	if err != nil {
@@ -98,7 +100,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /admin/prospects/{id}
+// Get returns a single prospect by ID.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := extractProspectID(r)
 	if id == "" {
@@ -120,7 +122,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-// POST /admin/prospects — create a new prospect.
+// Create validates and inserts a new prospect.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var p Prospect
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -163,7 +165,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-// PUT /admin/prospects/{id}
+// Upsert creates or updates a prospect at the requested ID.
 func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 	id := extractProspectID(r)
 	if id == "" {
@@ -190,7 +192,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
 }
 
-// DELETE /admin/prospects/{id}
+// Delete removes a prospect by ID.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := extractProspectID(r)
 	if id == "" {
@@ -207,7 +209,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 }
 
-// POST /admin/prospects/{id}/events
+// AddEvent appends a dated event to a prospect timeline.
 func (h *Handler) AddEvent(w http.ResponseWriter, r *http.Request) {
 	id := extractProspectID(r)
 	if id == "" {

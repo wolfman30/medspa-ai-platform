@@ -9,14 +9,17 @@ import (
 	"github.com/lib/pq"
 )
 
+// Repository provides database access for prospect and prospect event records.
 type Repository struct {
 	db *sql.DB
 }
 
+// NewRepository builds a prospect repository backed by the provided SQL database handle.
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
+// List returns all prospects ordered by most recently updated first.
 func (r *Repository) List(ctx context.Context) ([]Prospect, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, clinic_name, owner_name, owner_title, location, phone, email, website,
@@ -48,6 +51,7 @@ func (r *Repository) List(ctx context.Context) ([]Prospect, error) {
 	return out, rows.Err()
 }
 
+// Get returns a prospect by ID and hydrates its timeline events.
 func (r *Repository) Get(ctx context.Context, id string) (*Prospect, error) {
 	var p Prospect
 	err := r.db.QueryRowContext(ctx, `
@@ -77,6 +81,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*Prospect, error) {
 	return &p, nil
 }
 
+// Upsert inserts or updates a prospect by ID.
 func (r *Repository) Upsert(ctx context.Context, p *Prospect) error {
 	now := time.Now()
 	_, err := r.db.ExecContext(ctx, `
@@ -100,6 +105,7 @@ func (r *Repository) Upsert(ctx context.Context, p *Prospect) error {
 	return nil
 }
 
+// Delete removes a prospect by ID.
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM prospects WHERE id = $1`, id)
 	if err != nil {
@@ -108,6 +114,7 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// AddEvent inserts a timeline event for a prospect and sets the generated event ID.
 func (r *Repository) AddEvent(ctx context.Context, e *Event) error {
 	return r.db.QueryRowContext(ctx, `
 		INSERT INTO prospect_events (prospect_id, event_type, event_date, note)
@@ -115,6 +122,7 @@ func (r *Repository) AddEvent(ctx context.Context, e *Event) error {
 		e.ProspectID, e.Type, e.Date, e.Note).Scan(&e.ID)
 }
 
+// ListEvents returns timeline events for a prospect in chronological order.
 func (r *Repository) ListEvents(ctx context.Context, prospectID string) ([]Event, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, prospect_id, event_type, event_date, note
