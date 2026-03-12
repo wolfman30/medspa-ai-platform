@@ -244,6 +244,9 @@ func BootstrapPayments(deps PaymentsDeps) PaymentsBootstrap {
 			stripeNumberResolver = payments.NewFallbackNumberResolver(stripeNumberResolver, fallbackFromNumber)
 		}
 		stripeWebhookHandler = payments.NewStripeWebhookHandler(cfg.StripeWebhookSecret, paymentsRepo, leadsRepo, processedStore, outboxStore, stripeNumberResolver, logger)
+		if redisClient != nil {
+			stripeWebhookHandler.SetRedis(redisClient)
+		}
 		logger.Info("stripe webhook handler initialized")
 	}
 	if cfg.StripeConnectClientID != "" && cfg.StripeSecretKey != "" && clinicStore != nil {
@@ -364,6 +367,7 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 					ClinicName:   clinicName,
 					Greeting:     voiceGreeting,
 					ToolDeps:     voiceToolDeps,
+					Redis:        redisClient,
 				},
 				callControlID,
 				mediaFormat,

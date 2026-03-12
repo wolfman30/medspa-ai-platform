@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -25,6 +27,7 @@ type BridgeConfig struct {
 	Greeting     string // Custom greeting text (optional)
 	Tools        []ToolDefinition
 	ToolDeps     *ToolDeps
+	Redis        *redis.Client // For payment confirmation pub/sub
 }
 
 const (
@@ -39,6 +42,7 @@ type Bridge struct {
 	logger      *slog.Logger
 	sidecar     *SidecarClient
 	toolHandler *ToolHandler
+	redisClient *redis.Client
 
 	// telnyxOutput is the channel for audio going back to Telnyx
 	telnyxOutput chan []byte
@@ -59,6 +63,8 @@ type Bridge struct {
 	// depositSMSSent tracks whether we've already sent the deposit SMS for this call.
 	// Set to true after we fire the SMS so we don't send duplicates.
 	depositSMSSent bool
+	// paymentConfirmed tracks whether payment was confirmed during this call.
+	paymentConfirmed bool
 }
 
 // NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
@@ -78,6 +84,7 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 		telnyxOutput:  make(chan []byte, 128),
 		cancelFn:      cancel,
 		started:       time.Now(),
+		redisClient:   cfg.Redis,
 	}
 
 	// Create tool handler
@@ -104,6 +111,11 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 
 	// Start goroutine to process sidecar output events
 	go b.processSidecarOutput(ctx)
+
+	// Start goroutine to listen for payment confirmations via Redis pub/sub
+	if b.redisClient != nil {
+		go b.listenForPaymentConfirmation(ctx)
+	}
 
 	// Voice call duration limits (OWASP LLM10: unbounded consumption).
 	b.warningTimer = time.AfterFunc(callWarningTime, func() {
@@ -365,6 +377,48 @@ var mulawDecodeTable = [256]int16{
 	244, 228, 212, 196, 180, 164, 148, 132,
 	120, 112, 104, 96, 88, 80, 72, 64,
 	56, 48, 40, 32, 24, 16, 8, 0,
+}
+
+// PaymentConfirmationChannel returns the Redis pub/sub channel name for a caller's payment.
+func PaymentConfirmationChannel(callerPhone string) string {
+	return "voice:payment:" + callerPhone
+}
+
+// listenForPaymentConfirmation subscribes to Redis for payment events during this call.
+// When Stripe webhook processes a successful payment from this caller, it publishes
+// to the channel, and we inject a confirmation message into Lauren's conversation.
+func (b *Bridge) listenForPaymentConfirmation(ctx context.Context) {
+	channel := PaymentConfirmationChannel(b.callerPhone)
+	pubsub := b.redisClient.Subscribe(ctx, channel)
+	defer pubsub.Close()
+
+	b.logger.Info("bridge: listening for payment confirmation",
+		"channel", channel, "caller", b.callerPhone)
+
+	ch := pubsub.Channel()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			b.logger.Info("bridge: payment confirmation received!",
+				"caller", b.callerPhone, "payload", msg.Payload)
+
+			b.paymentConfirmed = true
+
+			// Inject confirmation text into Lauren's conversation
+			confirmText := fmt.Sprintf(
+				"[SYSTEM: The patient's payment has been confirmed. Their deposit was successfully processed. "+
+					"Tell them: 'I just got confirmation that your payment went through! You're all booked. "+
+					"You'll receive a confirmation text shortly. Is there anything else I can help with?']")
+			if err := b.sidecar.InjectText(confirmText); err != nil {
+				b.logger.Error("bridge: failed to inject payment confirmation", "error", err)
+			}
+		}
+	}
 }
 
 // maybeFireDepositSMS checks if Lauren's transcript indicates she's sending a deposit link,

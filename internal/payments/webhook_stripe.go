@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
@@ -28,6 +30,7 @@ type StripeWebhookHandler struct {
 	outbox        outboxWriter
 	numbers       OrgNumberResolver
 	logger        *logging.Logger
+	redis         *redis.Client // Optional: for notifying active voice calls of payment
 }
 
 // NewStripeWebhookHandler creates a new handler for Stripe webhooks.
@@ -52,6 +55,11 @@ func NewStripeWebhookHandler(
 		numbers:       numbers,
 		logger:        logger,
 	}
+}
+
+// SetRedis sets the Redis client for voice call payment notifications.
+func (h *StripeWebhookHandler) SetRedis(r *redis.Client) {
+	h.redis = r
 }
 
 // Handle processes incoming Stripe webhook events.
@@ -177,6 +185,19 @@ func (h *StripeWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	var amountCents int64
 	if session.AmountTotal > 0 {
 		amountCents = session.AmountTotal
+	}
+
+	// Notify active voice call (if any) that payment was confirmed.
+	// The voice bridge subscribes to "voice:payment:{phone}" via Redis pub/sub.
+	if h.redis != nil && lead.Phone != "" {
+		channel := "voice:payment:" + lead.Phone
+		if err := h.redis.Publish(context.Background(), channel, "confirmed").Err(); err != nil {
+			h.logger.Warn("stripe webhook: failed to publish voice payment notification",
+				"error", err, "channel", channel)
+		} else {
+			h.logger.Info("stripe webhook: published voice payment notification",
+				"channel", channel, "lead_phone", lead.Phone)
+		}
 	}
 
 	event := events.PaymentSucceededV1{

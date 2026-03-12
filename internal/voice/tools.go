@@ -518,8 +518,10 @@ func (h *ToolHandler) SendDepositSMS(ctx context.Context, orgID, callerPhone str
 		fromNumber = cfg.Phone
 	}
 
-	// Build deposit link — use the API base URL for short payment URLs
-	depositURL := fmt.Sprintf("https://api-dev.aiwolfsolutions.com/deposit/%s", orgID)
+	// Build deposit link.
+	// TODO: Wire to real Stripe Checkout Session for per-appointment deposits.
+	// For now, use the Stripe test payment link for demos.
+	depositURL := "https://aiwolfsolutions.com/deposit"
 
 	body := fmt.Sprintf(
 		"Hi! This is Lauren from %s 😊\n\n"+
