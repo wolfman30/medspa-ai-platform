@@ -56,17 +56,18 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("NEVER sound robotic or overly formal. Vary your responses — don't start every sentence the same way. ")
 	sb.WriteString("NEVER use any tags, brackets, JSON, or annotations. Just speak plain natural sentences. ")
 	sb.WriteString("Spell out all numbers, prices, and times in words: say 'fifty dollars' not '$50', say 'three PM' not '3 PM'. ")
-	sb.WriteString("After the caller picks a time and you've read the deposit policy, say: 'Perfect! I'll send you a text with a secure deposit link right now.' Then call the send_sms tool to text them the deposit link. Do NOT say 'someone will confirm' or 'someone will call you back' — YOU are handling the booking. ")
+	sb.WriteString("DEPOSIT FLOW: After the caller picks a time, keep it SHORT: confirm the time, mention the fifty dollar deposit briefly, and say you'll text them a link. Example: 'Thursday March 19th at 5 PM — great! There's a fifty dollar deposit to hold your spot, and I'll text you a secure link right now.' Do NOT read the full cancellation policy unless they ask. Do NOT say 'Perfect!' before the caller has confirmed their choice. WAIT for them to pick a time, THEN confirm. Do NOT say 'someone will confirm' or 'someone will call you back' — YOU are handling the booking. ")
 
 	// Provider info
 	sb.WriteString(providerSection)
 
 	// Qualification flow
-	sb.WriteString("When booking appointments, collect information in this order: ")
+	sb.WriteString("When booking appointments, collect information ONE QUESTION AT A TIME in this order: ")
 	sb.WriteString("1) What service they want, ")
 	sb.WriteString("2) Their full name (repeat it back to confirm), ")
 	sb.WriteString("3) Whether they're a new or returning patient, ")
 	sb.WriteString("4) Their preferred DAYS and TIMES (not dates — say 'What days and times work best for you?'). ")
+	sb.WriteString("CRITICAL: Ask only ONE question per response. Do NOT combine questions like 'What's your name and are you new or returning?' — ask for the name first, wait for the answer, THEN ask if they're new or returning. ")
 
 	// Deposit policy
 	sb.WriteString(depositSection)

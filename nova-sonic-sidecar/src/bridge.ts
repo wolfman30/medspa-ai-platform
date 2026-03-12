@@ -164,11 +164,12 @@ export class CallSession {
             this.log("info", `Skipping duplicate greeting: ${cleanText.substring(0, 60)}`);
             return;
           }
-          // Bug #5: Dedup on normalized text content with 5-second time window
+          // Bug #5: Dedup on normalized text content with 30-second time window
+          // Nova Sonic sends duplicate responses with varying delays (sometimes >5s)
           const normalized = cleanText.trim().replace(/\s+/g, " ").toLowerCase();
           const now = Date.now();
           const lastSeen = this.recentTTSTexts.get(normalized);
-          if (lastSeen && (now - lastSeen) < 5000) {
+          if (lastSeen && (now - lastSeen) < 30000) {
             this.log("info", `Bridge dedup: skipping duplicate TTS: ${cleanText.substring(0, 60)}`);
             return;
           }
