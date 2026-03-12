@@ -247,7 +247,9 @@ func (h *ToolHandler) SendDepositSMS(ctx context.Context, orgID, callerPhone str
 	// Build deposit link.
 	// TODO: Wire to real Stripe Checkout Session for per-appointment deposits.
 	// For now, use the Stripe test payment link for demos.
-	depositURL := "https://aiwolfsolutions.com/deposit"
+	// TODO: Generate per-appointment Stripe Checkout Sessions dynamically.
+	// For now, use a static Stripe test payment link for $50 deposits.
+	depositURL := "https://buy.stripe.com/test_7sY4gBa7Z4Cg1DSfil7N600"
 
 	body := fmt.Sprintf(
 		"Hi! This is Lauren from %s 😊\n\n"+
