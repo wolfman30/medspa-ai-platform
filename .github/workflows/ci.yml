@@ -54,8 +54,13 @@ jobs:
     - name: Run govulncheck
       run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-    - name: Run unit tests
-      run: make test
+    - name: Run unit tests with coverage profile
+      run: |
+        go test -coverprofile=coverage.out -covermode=atomic ./...
+        go test -cover ./...
+
+    - name: Print total coverage summary
+      run: go tool cover -func=coverage.out
 
     - name: Enforce package coverage
       run: make ci-cover
