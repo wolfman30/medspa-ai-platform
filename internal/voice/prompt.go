@@ -115,7 +115,19 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 // buildProviderSection returns provider instructions based on clinic config.
 func buildProviderSection(cfg *clinic.Config) string {
-	if cfg.MoxieConfig == nil || len(cfg.MoxieConfig.ProviderNames) == 0 {
+	// Collect provider names from either Moxie config or top-level provider_names (Boulevard/non-Moxie).
+	names := make([]string, 0)
+	if cfg.MoxieConfig != nil && len(cfg.MoxieConfig.ProviderNames) > 0 {
+		for _, name := range cfg.MoxieConfig.ProviderNames {
+			names = append(names, name)
+		}
+	} else if len(cfg.ProviderNames) > 0 {
+		for _, name := range cfg.ProviderNames {
+			names = append(names, name)
+		}
+	}
+
+	if len(names) == 0 {
 		// Single provider from legacy AIPersona field
 		if cfg.AIPersona.ProviderName != "" {
 			return fmt.Sprintf(
@@ -125,11 +137,6 @@ func buildProviderSection(cfg *clinic.Config) string {
 				cfg.Name, cfg.AIPersona.ProviderName, firstName(cfg.AIPersona.ProviderName))
 		}
 		return "Do NOT make up provider names like 'Dr. Smith'. If you don't know the provider names, say 'one of our providers'. "
-	}
-
-	names := make([]string, 0, len(cfg.MoxieConfig.ProviderNames))
-	for _, name := range cfg.MoxieConfig.ProviderNames {
-		names = append(names, name)
 	}
 
 	if len(names) == 1 {

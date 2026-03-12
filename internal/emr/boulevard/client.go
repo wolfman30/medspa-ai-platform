@@ -87,8 +87,8 @@ func (c *BoulevardClient) CreateCart(ctx context.Context) (cartID string, servic
 						Name           string `json:"name"`
 						Description    string `json:"description"`
 						ListPriceRange struct {
-							Min string `json:"min"`
-							Max string `json:"max"`
+							Min interface{} `json:"min"`
+							Max interface{} `json:"max"`
 						} `json:"listPriceRange"`
 					} `json:"availableItems"`
 				} `json:"availableCategories"`
@@ -110,7 +110,7 @@ func (c *BoulevardClient) CreateCart(ctx context.Context) (cartID string, servic
 				ID:          item.ID,
 				Name:        item.Name,
 				Description: item.Description,
-				PriceCents:  parseMoneyScalar(item.ListPriceRange.Min),
+				PriceCents:  parseMoneyScalar(fmt.Sprintf("%v", item.ListPriceRange.Min)),
 			})
 		}
 	}
