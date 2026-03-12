@@ -21,6 +21,12 @@ type MissedCallTexter interface {
 	HandleMissedCall(ctx context.Context, from, to string) error
 }
 
+// PostCallSMSSender sends a follow-up SMS after a voice call ends.
+type PostCallSMSSender interface {
+	// SendPostCallSMS sends a deposit/booking link SMS to the caller after hangup.
+	SendPostCallSMS(ctx context.Context, callerPhone, clinicPhone string) error
+}
+
 // CallControlHandler handles Telnyx Call Control webhook events.
 // When a call comes in, it checks if the clinic has voice AI enabled.
 // If yes, it answers and starts media streaming to Nova Sonic.
@@ -32,6 +38,7 @@ type CallControlHandler struct {
 	orgResolver      messaging.OrgResolver
 	clinicStore      *clinic.Store
 	missedCallTexter MissedCallTexter
+	postCallSMS      PostCallSMSSender
 }
 
 // CallControlConfig configures the handler.
@@ -42,6 +49,7 @@ type CallControlConfig struct {
 	OrgResolver      messaging.OrgResolver
 	ClinicStore      *clinic.Store
 	MissedCallTexter MissedCallTexter
+	PostCallSMS      PostCallSMSSender
 }
 
 // NewCallControlHandler creates a new Call Control webhook handler.
@@ -56,6 +64,7 @@ func NewCallControlHandler(cfg CallControlConfig) *CallControlHandler {
 		orgResolver:      cfg.OrgResolver,
 		clinicStore:      cfg.ClinicStore,
 		missedCallTexter: cfg.MissedCallTexter,
+		postCallSMS:      cfg.PostCallSMS,
 	}
 }
 
@@ -179,6 +188,21 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 			"from", from,
 			"to", to,
 		)
+		// Send post-call SMS with deposit/booking link.
+		// Nova Sonic tools are disabled (AWS limitation), so Lauren tells callers
+		// "I'll text you a deposit link" but can't actually send it during the call.
+		// We fire the SMS here after hangup to fulfill that promise.
+		if h.postCallSMS != nil && from != "" && to != "" {
+			go func() {
+				if err := h.postCallSMS.SendPostCallSMS(context.Background(), from, to); err != nil {
+					h.logger.Error("call-control: post-call SMS failed",
+						"error", err, "from", from, "to", to)
+				} else {
+					h.logger.Info("call-control: post-call SMS sent",
+						"caller", from, "clinic", to)
+				}
+			}()
+		}
 
 	default:
 		h.logger.Debug("call-control: unhandled event", "event_type", eventType)

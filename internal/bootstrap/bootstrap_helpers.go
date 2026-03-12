@@ -375,12 +375,22 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 
 	var callControlHandler *handlers.CallControlHandler
 	if cfg.NovaSonicStreamURL != "" && cfg.TelnyxAPIKey != "" {
+		// Post-call SMS service: sends deposit link after voice call hangup
+		// (workaround for Nova Sonic tools being disabled).
+		postCallSMS := voice.NewPostCallSMSService(voice.PostCallSMSConfig{
+			Logger:      slog.Default(),
+			Messenger:   webhookMessenger,
+			OrgResolver: resolver,
+			ClinicStore: clinicStore,
+		})
+
 		callControlHandler = handlers.NewCallControlHandler(handlers.CallControlConfig{
 			Logger:       logger,
 			TelnyxAPIKey: cfg.TelnyxAPIKey,
 			StreamURL:    cfg.NovaSonicStreamURL,
 			OrgResolver:  resolver,
 			ClinicStore:  clinicStore,
+			PostCallSMS:  postCallSMS,
 		})
 		logger.Info("call control handler initialized", "stream_url", cfg.NovaSonicStreamURL)
 	}

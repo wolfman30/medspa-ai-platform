@@ -56,7 +56,8 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("NEVER sound robotic or overly formal. Vary your responses — don't start every sentence the same way. ")
 	sb.WriteString("NEVER use any tags, brackets, JSON, or annotations. Just speak plain natural sentences. ")
 	sb.WriteString("Spell out all numbers, prices, and times in words: say 'fifty dollars' not '$50', say 'three PM' not '3 PM'. ")
-	sb.WriteString("DEPOSIT FLOW: After the caller picks a time, keep it SHORT: confirm the time, mention the fifty dollar deposit briefly, and say you'll text them a link. Example: 'Thursday March 19th at 5 PM — great! There's a fifty dollar deposit to hold your spot, and I'll text you a secure link right now.' Do NOT read the full cancellation policy unless they ask. Do NOT say 'Perfect!' before the caller has confirmed their choice. WAIT for them to pick a time, THEN confirm. Do NOT say 'someone will confirm' or 'someone will call you back' — YOU are handling the booking. ")
+	sb.WriteString("DEPOSIT FLOW: After the caller picks a time, keep it SHORT: confirm the time, mention the fifty dollar deposit briefly, and say you'll text them a link after the call. Example: 'Thursday March nineteenth at five PM — awesome! There's a fifty dollar deposit to hold your spot, and I'll text you a secure link right after we hang up.' Do NOT read the full cancellation policy unless they ask. Do NOT say 'Perfect!' before the caller has confirmed their choice. WAIT for them to pick a time, THEN confirm. Do NOT say 'someone will confirm' or 'someone will call you back' — YOU are handling the booking. ")
+	sb.WriteString("If the caller seems confused, says 'I don't know', or isn't sure what they want, gently guide them: 'No worries! I can help. Are you looking to book an appointment, or do you have a question about one of our services?' ")
 
 	// Provider info
 	sb.WriteString(providerSection)
@@ -144,22 +145,22 @@ func buildDepositSection(cfg *clinic.Config) string {
 	}
 	dollars := cents / 100
 	return fmt.Sprintf(
-		"DEPOSIT POLICY: We require a $%d deposit to secure your appointment. "+
+		"DEPOSIT POLICY: We require a %d dollar deposit to secure your appointment. "+
 			"The deposit goes toward your treatment cost. "+
-			"If you cancel 24 hours or more in advance, you'll receive a full refund. "+
-			"If you don't show up, the deposit is forfeited. "+
-			"After the caller picks a time, inform them about the deposit and tell them: "+
-			"'Perfect! I'll send you a text with a secure deposit link right now.' "+
-			"Then call the send_sms tool with a message containing the deposit link. ",
-		dollars)
+			"Keep deposit talk SHORT — don't read the cancellation policy unless asked. "+
+			"After the caller picks a time, confirm it and say briefly: "+
+			"'There's a %d dollar deposit to hold your spot — I'll text you a secure link right after we hang up!' "+
+			"Do NOT say 'I'll send it right now' — the text goes out automatically after the call. ",
+		dollars, dollars)
 }
 
 func buildDefaultDepositSection() string {
-	return "DEPOSIT POLICY: We require a $50 deposit to secure your appointment. " +
+	return "DEPOSIT POLICY: We require a fifty dollar deposit to secure your appointment. " +
 		"The deposit goes toward your treatment cost. " +
-		"If you cancel 24 hours or more in advance, you'll receive a full refund. " +
-		"If you don't show up, the deposit is forfeited. " +
-		"After the caller picks a time, inform them about the deposit and say: 'Perfect! I'll send you a text with a secure deposit link right now.' Then call the send_sms tool. "
+		"Keep deposit talk SHORT — don't read the cancellation policy unless asked. " +
+		"After the caller picks a time, confirm it and say briefly: " +
+		"'There's a fifty dollar deposit to hold your spot — I'll text you a secure link right after we hang up!' " +
+		"Do NOT say 'I'll send it right now' — the text goes out automatically after the call. "
 }
 
 // buildServiceAliasSection generates prompt text that teaches the AI about service name mappings.
