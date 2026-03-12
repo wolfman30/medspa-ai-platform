@@ -13,3 +13,4 @@
 | 2026-03-11 | #83 | Wrap 41 bare `return err` with `fmt.Errorf` context across 22 files (round 2) | 22 files across 12 packages (bootstrap, briefs, channels, clinicdata, conversation, emr, handlers, messaging, onboarding, payments, prospects, support) |
 | 2026-03-11 | #85 | Split `archive.go` (531→3 files: types, redact, operations) + extracted `uploadArchive()` helper | `internal/clinicdata/archive*.go` |
 | 2026-03-11 | #87 | Split `nextech/client.go` (515→3 files: client, appointments, patients) + extracted named constants | `internal/emr/nextech/{client,appointments,patients}.go` |
+| 2026-03-12 | #88 | Split `voice/tools.go` (554→3 files: definitions, availability, handlers) + added error context | `internal/voice/tools_{definitions,availability,handlers}.go` |
