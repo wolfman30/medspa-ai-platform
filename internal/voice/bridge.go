@@ -432,7 +432,7 @@ func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
 	// Detect deposit link intent: Lauren says she'll text/send a deposit/payment link
 	hasDeposit := strings.Contains(lower, "deposit") || strings.Contains(lower, "payment")
 	hasSend := strings.Contains(lower, "text you") || strings.Contains(lower, "send you") || strings.Contains(lower, "sending")
-	hasLink := strings.Contains(lower, "link") || strings.Contains(lower, "secure")
+	hasLink := strings.Contains(lower, "link") || strings.Contains(lower, "secure link") || strings.Contains(lower, "secure deposit")
 
 	if !(hasDeposit && hasSend) && !(hasDeposit && hasLink) {
 		return
