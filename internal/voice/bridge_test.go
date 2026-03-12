@@ -79,7 +79,7 @@ func newBridgeForDepositTests(t *testing.T) (*Bridge, *testMessenger) {
 	store := setupClinicStore(t, cfg)
 	messenger := newTestMessenger()
 
-	h := NewToolHandler(orgID, "+15551112222", &ToolDeps{
+	h := NewToolHandler(orgID, "+15551112222", "+15550000003", &ToolDeps{
 		Messenger:   messenger,
 		ClinicStore: store,
 	}, slog.Default())

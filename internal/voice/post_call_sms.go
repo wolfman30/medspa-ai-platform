@@ -74,10 +74,12 @@ func (s *PostCallSMSService) SendPostCallSMS(ctx context.Context, callerPhone, c
 			if cfg.DepositAmountCents > 0 {
 				depositAmount = cfg.DepositAmountCents / 100
 			}
-			if cfg.SMSPhoneNumber != "" {
-				smsFrom = cfg.SMSPhoneNumber
-			} else if cfg.Phone != "" {
-				smsFrom = cfg.Phone
+			if smsFrom == "" {
+				if cfg.SMSPhoneNumber != "" {
+					smsFrom = cfg.SMSPhoneNumber
+				} else if cfg.Phone != "" {
+					smsFrom = cfg.Phone
+				}
 			}
 		}
 	}

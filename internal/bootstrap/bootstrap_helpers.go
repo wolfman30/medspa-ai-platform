@@ -364,6 +364,7 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 					Voice:        novaSonicVoice,
 					OrgID:        callCtx.OrgID,
 					CallerPhone:  callCtx.From,
+					CalledPhone:  callCtx.To,
 					ClinicName:   clinicName,
 					Greeting:     voiceGreeting,
 					ToolDeps:     voiceToolDeps,

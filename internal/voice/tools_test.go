@@ -23,7 +23,7 @@ func TestToolHandlerSendDepositSMS_SendsExpectedContent(t *testing.T) {
 	store := setupClinicStore(t, cfg)
 	messenger := newTestMessenger()
 
-	h := NewToolHandler(orgID, caller, &ToolDeps{
+	h := NewToolHandler(orgID, caller, "+15557778888", &ToolDeps{
 		Messenger:   messenger,
 		ClinicStore: store,
 	}, slog.Default())
@@ -40,8 +40,8 @@ func TestToolHandlerSendDepositSMS_SendsExpectedContent(t *testing.T) {
 	if msg.To != caller {
 		t.Fatalf("To = %q, want %q", msg.To, caller)
 	}
-	if msg.From != cfg.SMSPhoneNumber {
-		t.Fatalf("From = %q, want %q", msg.From, cfg.SMSPhoneNumber)
+	if msg.From != "+15557778888" {
+		t.Fatalf("From = %q, want called voice number %q", msg.From, "+15557778888")
 	}
 	if !strings.Contains(msg.Body, "Lauren from Glow Medspa") {
 		t.Fatalf("expected clinic name in message body, got: %q", msg.Body)
@@ -55,7 +55,7 @@ func TestToolHandlerSendDepositSMS_SendsExpectedContent(t *testing.T) {
 }
 
 func TestToolHandlerSendDepositSMS_MissingClinicConfigReturnsError(t *testing.T) {
-	h := NewToolHandler("org-tools-test", "+15551110000", &ToolDeps{
+	h := NewToolHandler("org-tools-test", "+15551110000", "", &ToolDeps{
 		Messenger: newTestMessenger(),
 		// ClinicStore intentionally missing
 	}, slog.Default())
@@ -81,7 +81,7 @@ func TestToolHandlerSendDepositSMS_FallsBackToMainPhoneWhenSMSPhoneMissing(t *te
 	store := setupClinicStore(t, cfg)
 	messenger := newTestMessenger()
 
-	h := NewToolHandler(orgID, caller, &ToolDeps{
+	h := NewToolHandler(orgID, caller, "", &ToolDeps{
 		Messenger:   messenger,
 		ClinicStore: store,
 	}, slog.Default())
@@ -107,7 +107,7 @@ func TestToolHandlerSendDepositSMS_PrefersSMSPhoneWhenAvailable(t *testing.T) {
 	store := setupClinicStore(t, cfg)
 	messenger := newTestMessenger()
 
-	h := NewToolHandler(orgID, caller, &ToolDeps{
+	h := NewToolHandler(orgID, caller, "", &ToolDeps{
 		Messenger:   messenger,
 		ClinicStore: store,
 	}, slog.Default())
@@ -123,7 +123,7 @@ func TestToolHandlerSendDepositSMS_PrefersSMSPhoneWhenAvailable(t *testing.T) {
 }
 
 func TestToolHandlerCheckAvailability_ReturnsFallbackWithoutClinicStore(t *testing.T) {
-	h := NewToolHandler("org-tools-check", "+15551112222", &ToolDeps{}, slog.Default())
+	h := NewToolHandler("org-tools-check", "+15551112222", "", &ToolDeps{}, slog.Default())
 
 	input, err := json.Marshal(map[string]string{"service": "Botox"})
 	if err != nil {
@@ -141,7 +141,7 @@ func TestToolHandlerCheckAvailability_ReturnsFallbackWithoutClinicStore(t *testi
 }
 
 func TestToolHandlerCheckAvailability_ReturnsParseErrorForInvalidJSON(t *testing.T) {
-	h := NewToolHandler("org-tools-check", "+15551112222", &ToolDeps{}, slog.Default())
+	h := NewToolHandler("org-tools-check", "+15551112222", "", &ToolDeps{}, slog.Default())
 
 	_, err := h.checkAvailability(context.Background(), json.RawMessage("{"))
 	if err == nil {

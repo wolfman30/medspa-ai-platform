@@ -22,22 +22,24 @@ type ToolDeps struct {
 
 // ToolHandler routes tool calls to the appropriate handler.
 type ToolHandler struct {
-	logger *slog.Logger
-	orgID  string
-	from   string // caller phone (E.164)
-	deps   *ToolDeps
+	logger      *slog.Logger
+	orgID       string
+	from        string // caller phone (E.164)
+	calledPhone string // clinic number dialed by caller (voice "to" number)
+	deps        *ToolDeps
 }
 
 // NewToolHandler creates a tool handler for a specific call session.
-func NewToolHandler(orgID, from string, deps *ToolDeps, logger *slog.Logger) *ToolHandler {
+func NewToolHandler(orgID, from, calledPhone string, deps *ToolDeps, logger *slog.Logger) *ToolHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &ToolHandler{
-		logger: logger,
-		orgID:  orgID,
-		from:   from,
-		deps:   deps,
+		logger:      logger,
+		orgID:       orgID,
+		from:        from,
+		calledPhone: calledPhone,
+		deps:        deps,
 	}
 }
 
@@ -145,10 +147,7 @@ func (h *ToolHandler) sendSMS(ctx context.Context, input json.RawMessage) (strin
 		return "", fmt.Errorf("sendSMS: get clinic config: %w", err)
 	}
 
-	fromNumber := cfg.SMSPhoneNumber
-	if fromNumber == "" {
-		fromNumber = cfg.Phone
-	}
+	fromNumber := h.resolveSMSFromNumber(cfg)
 
 	err = h.deps.Messenger.SendReply(ctx, conversation.OutboundReply{
 		OrgID: h.orgID,
@@ -217,6 +216,21 @@ func (h *ToolHandler) saveQualification(ctx context.Context, input json.RawMessa
 	return fmt.Sprintf(`{"status": "saved", "lead_id": "%s"}`, lead.ID), nil
 }
 
+// resolveSMSFromNumber picks the sender number for voice-initiated SMS.
+// Priority: called voice number -> clinic SMS number -> clinic phone.
+func (h *ToolHandler) resolveSMSFromNumber(cfg *clinic.Config) string {
+	if h.calledPhone != "" {
+		return h.calledPhone
+	}
+	if cfg != nil && cfg.SMSPhoneNumber != "" {
+		return cfg.SMSPhoneNumber
+	}
+	if cfg != nil {
+		return cfg.Phone
+	}
+	return ""
+}
+
 // SendDepositSMS sends a deposit link SMS to the caller during an active voice call.
 // This is called by the bridge when it detects Lauren mentioning a deposit link.
 func (h *ToolHandler) SendDepositSMS(ctx context.Context, orgID, callerPhone string) error {
@@ -239,10 +253,7 @@ func (h *ToolHandler) SendDepositSMS(ctx context.Context, orgID, callerPhone str
 		depositAmount = cfg.DepositAmountCents / 100
 	}
 
-	fromNumber := cfg.SMSPhoneNumber
-	if fromNumber == "" {
-		fromNumber = cfg.Phone
-	}
+	fromNumber := h.resolveSMSFromNumber(cfg)
 
 	// Build deposit link.
 	// TODO: Wire to real Stripe Checkout Session for per-appointment deposits.

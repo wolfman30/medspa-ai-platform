@@ -22,7 +22,8 @@ type BridgeConfig struct {
 	SystemPrompt string
 	Voice        string
 	OrgID        string
-	CallerPhone  string // E.164
+	CallerPhone  string // E.164 caller number
+	CalledPhone  string // E.164 clinic number dialed by caller
 	ClinicName   string // For ElevenLabs greeting
 	Greeting     string // Custom greeting text (optional)
 	Tools        []ToolDefinition
@@ -50,6 +51,7 @@ type Bridge struct {
 	callControlID string
 	orgID         string
 	callerPhone   string
+	calledPhone   string
 	mediaFormat   TelnyxMediaFormat
 
 	mu           sync.Mutex
@@ -65,6 +67,8 @@ type Bridge struct {
 	depositSMSSent bool
 	// paymentConfirmed tracks whether payment was confirmed during this call.
 	paymentConfirmed bool
+	// recentAssistantText stores normalized transcript snippets to suppress duplicate repeats.
+	recentAssistantText map[string]time.Time
 }
 
 // NewBridge creates a bridge for a single call, connecting to the Nova Sonic sidecar.
@@ -76,19 +80,21 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 	ctx, cancel := context.WithCancel(ctx)
 
 	b := &Bridge{
-		logger:        logger,
-		callControlID: callControlID,
-		orgID:         cfg.OrgID,
-		callerPhone:   cfg.CallerPhone,
-		mediaFormat:   mediaFormat,
-		telnyxOutput:  make(chan []byte, 128),
-		cancelFn:      cancel,
-		started:       time.Now(),
-		redisClient:   cfg.Redis,
+		logger:              logger,
+		callControlID:       callControlID,
+		orgID:               cfg.OrgID,
+		callerPhone:         cfg.CallerPhone,
+		calledPhone:         cfg.CalledPhone,
+		mediaFormat:         mediaFormat,
+		telnyxOutput:        make(chan []byte, 128),
+		cancelFn:            cancel,
+		started:             time.Now(),
+		redisClient:         cfg.Redis,
+		recentAssistantText: make(map[string]time.Time),
 	}
 
 	// Create tool handler
-	b.toolHandler = NewToolHandler(cfg.OrgID, cfg.CallerPhone, cfg.ToolDeps, logger)
+	b.toolHandler = NewToolHandler(cfg.OrgID, cfg.CallerPhone, cfg.CalledPhone, cfg.ToolDeps, logger)
 
 	// Connect to Nova Sonic sidecar
 	sidecar, err := DialSidecar(SidecarConfig{URL: cfg.SidecarURL}, logger)
@@ -250,6 +256,10 @@ func (b *Bridge) processSidecarOutput(ctx context.Context) {
 				}
 
 			case "text":
+				if !b.shouldProcessAssistantText(event.Text) {
+					b.logger.Info("bridge: duplicate transcript suppressed", "text", event.Text)
+					continue
+				}
 				b.logger.Info("bridge: transcript", "text", event.Text)
 				// Detect when Lauren mentions sending a deposit link — trigger SMS immediately.
 				// Nova Sonic tools are disabled (AWS limitation), so we fire SMS from Go side
@@ -450,4 +460,33 @@ func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
 			b.logger.Info("bridge: deposit SMS sent successfully", "caller", b.callerPhone)
 		}
 	}()
+}
+
+// shouldProcessAssistantText suppresses duplicate assistant transcripts that can arrive
+// from sidecar retries/replays. It deduplicates normalized text within a short time window.
+func (b *Bridge) shouldProcessAssistantText(text string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(text))
+	if normalized == "" {
+		return false
+	}
+
+	const dedupWindow = 30 * time.Second
+	now := time.Now()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if prev, ok := b.recentAssistantText[normalized]; ok && now.Sub(prev) <= dedupWindow {
+		return false
+	}
+
+	// opportunistic cleanup
+	for k, ts := range b.recentAssistantText {
+		if now.Sub(ts) > dedupWindow {
+			delete(b.recentAssistantText, k)
+		}
+	}
+
+	b.recentAssistantText[normalized] = now
+	return true
 }
