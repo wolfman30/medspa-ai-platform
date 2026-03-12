@@ -163,7 +163,7 @@ func BootstrapPayments(deps PaymentsDeps) PaymentsBootstrap {
 	paymentsRepo := deps.PaymentsRepo
 	clinicStore := deps.ClinicStore
 	conversationPublisher := deps.ConversationPublisher
-	_ = deps.RedisClient
+	redisClient := deps.RedisClient
 
 	var checkoutHandler *payments.CheckoutHandler
 	var squareWebhookHandler *payments.SquareWebhookHandler
