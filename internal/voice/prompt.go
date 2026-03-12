@@ -102,7 +102,9 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 		sb.WriteString("\n\nCURRENT AVAILABILITY:\n")
 		sb.WriteString(availabilitySummary)
 	} else {
-		sb.WriteString("\n\nNote: Availability data is not pre-loaded. When the caller asks about times, use the check_availability tool to look up real-time availability. Do NOT make up times or dates.")
+		sb.WriteString("\n\nNote: Availability data is not pre-loaded. Do NOT make up times or dates. ")
+		sb.WriteString("If you do not have real availability data, be honest and say you'll have the team follow up with exact openings. ")
+		sb.WriteString("NEVER provide specific appointment times unless they are present in the CURRENT AVAILABILITY section.")
 	}
 
 	return sb.String()
