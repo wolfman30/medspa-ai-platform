@@ -6,18 +6,26 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/leads"
+	"github.com/wolfman30/medspa-ai-platform/internal/payments"
 )
+
+// CheckoutLinkCreator creates payment checkout links.
+type CheckoutLinkCreator interface {
+	CreatePaymentLink(ctx context.Context, params payments.CheckoutParams) (*payments.CheckoutResponse, error)
+}
 
 // ToolDeps holds shared service dependencies for tool handlers.
 type ToolDeps struct {
-	MoxieClient *moxie.Client
-	Messenger   conversation.ReplyMessenger
-	ClinicStore *clinic.Store
-	LeadsRepo   leads.Repository
+	MoxieClient     *moxie.Client
+	Messenger       conversation.ReplyMessenger
+	ClinicStore     *clinic.Store
+	LeadsRepo       leads.Repository
+	CheckoutService CheckoutLinkCreator
 }
 
 // ToolHandler routes tool calls to the appropriate handler.
@@ -255,12 +263,26 @@ func (h *ToolHandler) SendDepositSMS(ctx context.Context, orgID, callerPhone str
 
 	fromNumber := h.resolveSMSFromNumber(cfg)
 
-	// Build deposit link.
-	// TODO: Wire to real Stripe Checkout Session for per-appointment deposits.
-	// For now, use the Stripe test payment link for demos.
-	// TODO: Generate per-appointment Stripe Checkout Sessions dynamically.
-	// For now, use a static Stripe test payment link for $50 deposits.
-	depositURL := "https://buy.stripe.com/test_7sY4gBa7Z4Cg1DSfil7N600"
+	// Build deposit link via real Stripe Checkout Session.
+	var depositURL string
+	if h.deps.CheckoutService != nil {
+		intentID := uuid.New()
+		checkoutResp, err := h.deps.CheckoutService.CreatePaymentLink(ctx, payments.CheckoutParams{
+			OrgID:           orgID,
+			AmountCents:     int32(cfg.DepositAmountCents),
+			BookingIntentID: intentID,
+			Description:     fmt.Sprintf("Deposit – %s", clinicName),
+			FromNumber:      callerPhone,
+			// TODO: populate LeadID and ScheduledFor once available in voice context
+		})
+		if err != nil {
+			return fmt.Errorf("SendDepositSMS: create checkout session: %w", err)
+		}
+		depositURL = checkoutResp.URL
+	} else {
+		h.logger.Warn("voice-tool: CheckoutService not configured, using fallback test link")
+		depositURL = "https://buy.stripe.com/test_7sY4gBa7Z4Cg1DSfil7N600"
+	}
 
 	body := fmt.Sprintf(
 		"Hi! This is Lauren from %s 😊\n\n"+

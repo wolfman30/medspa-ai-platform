@@ -105,7 +105,12 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 	// Availability data
 	if availabilitySummary != "" {
-		sb.WriteString("\n\nCURRENT AVAILABILITY:\n")
+		sb.WriteString("\n\nCRITICAL: The availability below is a GENERAL OVERVIEW only. ")
+		sb.WriteString("After the caller tells you their time preferences (e.g., 'after 4 PM', 'mornings only'), ")
+		sb.WriteString("you MUST call the check_availability tool to get properly filtered results. ")
+		sb.WriteString("Do NOT manually filter times from this list — the tool applies server-side filtering that you cannot replicate. ")
+		sb.WriteString("ALWAYS use the tool after learning the caller's service, provider, and time preferences.\n")
+		sb.WriteString("\nCURRENT AVAILABILITY:\n")
 		sb.WriteString(availabilitySummary)
 	} else {
 		sb.WriteString("\n\nNote: Availability data is not pre-loaded. Do NOT make up times or dates. ")
