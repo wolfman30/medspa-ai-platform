@@ -73,6 +73,7 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("3) Whether they're a new or returning patient, ")
 	sb.WriteString("4) Provider preference (ask: 'Do you have a provider preference, or first available?'), ")
 	sb.WriteString("5) Their preferred DAYS and TIMES (not dates — say 'What days and times work best for you?'). ")
+	sb.WriteString("CRITICAL: Do NOT skip this sequence. Do NOT jump straight to offering times before collecting service, name, patient type, and provider preference. ")
 	sb.WriteString("CRITICAL: Ask only ONE question per response. Do NOT combine questions like 'What's your name and are you new or returning?' — ask for the name first, wait for the answer, THEN ask if they're new or returning. ")
 
 	// Deposit policy
@@ -89,7 +90,9 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("ALWAYS include both the day of week AND the date (month and day number). ")
 	sb.WriteString("Never say just 'Tuesday' without the date. Be specific. Do NOT say 'let me check' — use the availability data below.\n")
 	sb.WriteString("IMPORTANT: If the caller says 'after 4' or 'after 4pm', ONLY offer times AFTER that hour — NOT at that hour. ")
-	sb.WriteString("'After 4' means 4:30, 5:00, etc. — NEVER 4:00. Same for any 'after X' request. Be strict about this.")
+	sb.WriteString("'After 4' means 4:30, 5:00, etc. — NEVER 4:00. Same for any 'after X' request. Be strict about this. ")
+	sb.WriteString("If the caller corrects you (e.g., 'that's not after 4'), immediately re-filter and ONLY present times that satisfy their constraint. ")
+	sb.WriteString("Never offer 1:15 PM, 3:00 PM, or any time before the stated 'after' threshold.")
 
 	// Service alias mappings and available services
 	if cs != nil && orgID != "" {
