@@ -472,7 +472,7 @@ func (b *Bridge) maybeCaptureSlotSelection(text string) {
 
 func looksLikeExplicitSlotSelection(text string) bool {
 	normalized := strings.ToLower(text)
-	if !(strings.Contains(normalized, "works") || strings.Contains(normalized, "perfect") || strings.Contains(normalized, "great") || strings.Contains(normalized, "book")) {
+	if !(strings.Contains(normalized, "works") || strings.Contains(normalized, "perfect") || strings.Contains(normalized, "great") || strings.Contains(normalized, "awesome") || strings.Contains(normalized, "book")) {
 		return false
 	}
 	return weekdayDateTimePattern.MatchString(text) || monthDateTimePattern.MatchString(text)

@@ -218,6 +218,9 @@ func TestLooksLikeExplicitSlotSelection(t *testing.T) {
 	if !looksLikeExplicitSlotSelection("Perfect, Thursday March 19 at 5 PM works great.") {
 		t.Fatal("expected explicit slot selection to be detected")
 	}
+	if !looksLikeExplicitSlotSelection("Wednesday March 25th at 4:30 PM — awesome! There's a fifty dollar deposit to hold your spot.") {
+		t.Fatal("expected explicit slot selection to be detected for 'awesome' confirmations")
+	}
 	if looksLikeExplicitSlotSelection("I can check Thursday afternoon if that works") {
 		t.Fatal("did not expect vague time reference to count as explicit slot selection")
 	}
