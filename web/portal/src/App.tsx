@@ -17,6 +17,7 @@ import { FinanceDashboard } from './components/FinanceDashboard';
 import { AgentTeamCard } from './components/AgentTeamCard';
 import { ClinicOperationalDashboard } from './components/ClinicOperationalDashboard';
 import { TelnyxMissionControl } from './components/TelnyxMissionControl';
+import { MorningBriefs } from './components/MorningBriefs';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -43,7 +44,8 @@ type AppView =
   | 'agents'
   | 'leads'
   | 'operations'
-  | 'telnyx';
+  | 'telnyx'
+  | 'briefs';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -451,6 +453,15 @@ function AuthenticatedApp() {
                 )}
                 {isAdmin && (
                   <button
+                    onClick={() => setView('briefs')}
+                    aria-current={view === 'briefs' ? 'page' : undefined}
+                    className={view === 'briefs' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Briefs
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
                     onClick={() => setView('finances')}
                     aria-current={view === 'finances' ? 'page' : undefined}
                     className={view === 'finances' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
@@ -496,6 +507,8 @@ function AuthenticatedApp() {
           <CEODashboard />
         ) : view === 'content' ? (
           <ContentCalendar />
+        ) : view === 'briefs' ? (
+          <MorningBriefs />
         ) : view === 'stories' ? (
           <StoriesBoard />
         ) : view === 'agents' ? (
