@@ -16,3 +16,4 @@
 | 2026-03-12 | #88 | Split `voice/tools.go` (554→3 files: definitions, availability, handlers) + added error context | `internal/voice/tools_{definitions,availability,handlers}.go` |
 | 2026-03-12 | #91 | Add godoc comments for exported prospects types/repository/handler symbols | `internal/prospects/{model,repository,handler}.go` |
 | 2026-03-12 | #92 | Add missing Godoc comments for exported symbols in `internal/events` | `internal/events/outbox.go`, `internal/events/processed_store.go`, `internal/events/types.go`, `internal/events/messaging_types.go` |
+| 2026-03-12 | #93 | Add godoc comments for exported types in service test and knowledge seeding scripts | `scripts/service-tests/main.go`, `scripts/seed-knowledge/main.go` |
