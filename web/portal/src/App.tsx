@@ -18,6 +18,7 @@ import { AgentTeamCard } from './components/AgentTeamCard';
 import { ClinicOperationalDashboard } from './components/ClinicOperationalDashboard';
 import { TelnyxMissionControl } from './components/TelnyxMissionControl';
 import { MorningBriefs } from './components/MorningBriefs';
+import { MultiOrgRollup } from './components/MultiOrgRollup';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -45,7 +46,8 @@ type AppView =
   | 'leads'
   | 'operations'
   | 'telnyx'
-  | 'briefs';
+  | 'briefs'
+  | 'rollup';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -496,6 +498,15 @@ function AuthenticatedApp() {
                     Telnyx
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('rollup')}
+                    aria-current={view === 'rollup' ? 'page' : undefined}
+                    className={view === 'rollup' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Revenue Rollup
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -515,6 +526,8 @@ function AuthenticatedApp() {
           <AgentTeamCard />
         ) : view === 'operations' ? (
           <ClinicOperationalDashboard orgId={orgId} />
+        ) : view === 'rollup' ? (
+          <MultiOrgRollup />
         ) : view === 'telnyx' ? (
           <TelnyxMissionControl />
         ) : view === 'finances' ? (
