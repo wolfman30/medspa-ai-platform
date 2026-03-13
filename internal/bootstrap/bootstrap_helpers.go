@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -356,19 +357,48 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 				voiceGreeting = cfg.AIPersona.CustomGreeting
 			}
 
+			conversationID := "voice:" + callCtx.OrgID + ":" + strings.TrimPrefix(callCtx.From, "+")
+			onTranscript := func(role, text string) {
+				if conversationStore == nil || strings.TrimSpace(text) == "" {
+					return
+				}
+				now := time.Now()
+				from := callCtx.From
+				to := callCtx.To
+				status := "delivered"
+				if role == "assistant" {
+					from = callCtx.To
+					to = callCtx.From
+					status = "sent"
+				}
+				if err := conversationStore.AppendMessage(context.Background(), conversationID, conversation.SMSTranscriptMessage{
+					Role:      role,
+					From:      from,
+					To:        to,
+					Body:      text,
+					Timestamp: now,
+					Status:    status,
+					Metadata:  map[string]string{"channel": "voice", "source": "nova-bridge"},
+				}); err != nil {
+					logger.Error("voice bridge: failed to persist transcript", "error", err, "conversation_id", conversationID)
+				}
+			}
+
 			return voice.NewBridge(
 				context.Background(),
 				voice.BridgeConfig{
-					SidecarURL:   sidecarURL,
-					SystemPrompt: systemPrompt,
-					Voice:        novaSonicVoice,
-					OrgID:        callCtx.OrgID,
-					CallerPhone:  callCtx.From,
-					CalledPhone:  callCtx.To,
-					ClinicName:   clinicName,
-					Greeting:     voiceGreeting,
-					ToolDeps:     voiceToolDeps,
-					Redis:        redisClient,
+					SidecarURL:     sidecarURL,
+					SystemPrompt:   systemPrompt,
+					Voice:          novaSonicVoice,
+					OrgID:          callCtx.OrgID,
+					CallerPhone:    callCtx.From,
+					CalledPhone:    callCtx.To,
+					ClinicName:     clinicName,
+					Greeting:       voiceGreeting,
+					ToolDeps:       voiceToolDeps,
+					Redis:          redisClient,
+					OnTranscript:   onTranscript,
+					ConversationID: conversationID,
 				},
 				callControlID,
 				mediaFormat,

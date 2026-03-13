@@ -19,17 +19,19 @@ import (
 
 // BridgeConfig holds configuration for creating a bridge.
 type BridgeConfig struct {
-	SidecarURL   string // e.g. "ws://localhost:3002/ws/nova-sonic"
-	SystemPrompt string
-	Voice        string
-	OrgID        string
-	CallerPhone  string // E.164 caller number
-	CalledPhone  string // E.164 clinic number dialed by caller
-	ClinicName   string // For ElevenLabs greeting
-	Greeting     string // Custom greeting text (optional)
-	Tools        []ToolDefinition
-	ToolDeps     *ToolDeps
-	Redis        *redis.Client // For payment confirmation pub/sub
+	SidecarURL     string // e.g. "ws://localhost:3002/ws/nova-sonic"
+	SystemPrompt   string
+	Voice          string
+	OrgID          string
+	CallerPhone    string // E.164 caller number
+	CalledPhone    string // E.164 clinic number dialed by caller
+	ClinicName     string // For ElevenLabs greeting
+	Greeting       string // Custom greeting text (optional)
+	Tools          []ToolDefinition
+	ToolDeps       *ToolDeps
+	Redis          *redis.Client // For payment confirmation pub/sub
+	OnTranscript   func(role, text string)
+	ConversationID string // Optional explicit conversation ID for transcript persistence
 }
 
 const (
@@ -49,11 +51,13 @@ type Bridge struct {
 	// telnyxOutput is the channel for audio going back to Telnyx
 	telnyxOutput chan []byte
 
-	callControlID string
-	orgID         string
-	callerPhone   string
-	calledPhone   string
-	mediaFormat   TelnyxMediaFormat
+	callControlID  string
+	orgID          string
+	callerPhone    string
+	calledPhone    string
+	mediaFormat    TelnyxMediaFormat
+	conversationID string
+	onTranscript   func(role, text string)
 
 	mu           sync.Mutex
 	closed       bool
@@ -97,10 +101,15 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 		started:             time.Now(),
 		redisClient:         cfg.Redis,
 		recentAssistantText: make(map[string]time.Time),
+		conversationID:      cfg.ConversationID,
+		onTranscript:        cfg.OnTranscript,
 	}
 
 	// Create tool handler
 	b.toolHandler = NewToolHandler(cfg.OrgID, cfg.CallerPhone, cfg.CalledPhone, cfg.ToolDeps, logger)
+	if b.conversationID == "" {
+		b.conversationID = fmt.Sprintf("voice:%s:%s", cfg.OrgID, strings.TrimPrefix(cfg.CallerPhone, "+"))
+	}
 
 	// Connect to Nova Sonic sidecar
 	sidecar, err := DialSidecar(SidecarConfig{URL: cfg.SidecarURL}, logger)
@@ -267,6 +276,10 @@ func (b *Bridge) processSidecarOutput(ctx context.Context) {
 					continue
 				}
 				b.logger.Info("bridge: transcript", "text", event.Text)
+				role, cleanText := parseTranscriptRoleAndText(event.Text)
+				if b.onTranscript != nil && cleanText != "" {
+					b.onTranscript(role, cleanText)
+				}
 				b.maybeCaptureSlotSelection(event.Text)
 				// Detect when Lauren mentions sending a deposit link — trigger SMS only after
 				// an explicit slot selection (date+time) has been captured.
@@ -476,6 +489,19 @@ func looksLikeExplicitSlotSelection(text string) bool {
 		return false
 	}
 	return weekdayDateTimePattern.MatchString(text) || monthDateTimePattern.MatchString(text)
+}
+
+func parseTranscriptRoleAndText(raw string) (role, text string) {
+	trimmed := strings.TrimSpace(raw)
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "[assistant]"):
+		return "assistant", strings.TrimSpace(trimmed[len("[assistant]"):])
+	case strings.HasPrefix(lower, "[user]"):
+		return "user", strings.TrimSpace(trimmed[len("[user]"):])
+	default:
+		return "assistant", trimmed
+	}
 }
 
 // maybeFireDepositSMS checks if Lauren's transcript indicates she's sending a deposit link,
