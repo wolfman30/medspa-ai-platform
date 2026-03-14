@@ -366,11 +366,9 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 				}
 			}
 
-			// Resolve custom greeting from clinic config
-			var voiceGreeting string
-			if cfg, err := voiceToolDeps.ClinicStore.Get(context.Background(), callCtx.OrgID); err == nil && cfg != nil {
-				voiceGreeting = cfg.AIPersona.CustomGreeting
-			}
+			// Skip sidecar ElevenLabs greeting — Telnyx TTS fires instantly on call.answered
+			// for sub-second greeting latency. Use "__SKIP__" sentinel to disable sidecar greeting.
+			voiceGreeting := "__SKIP__"
 
 			conversationID := "voice:" + callCtx.OrgID + ":" + strings.TrimPrefix(callCtx.From, "+")
 			onTranscript := func(role, text string) {

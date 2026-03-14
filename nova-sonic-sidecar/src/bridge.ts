@@ -190,19 +190,25 @@ export class CallSession {
       await this.client.start();
       this.log("info", "Nova Sonic session started");
 
-      // Send auto-greeting via ElevenLabs immediately (bypasses Nova Sonic VAD)
+      // Greeting: Skip ElevenLabs greeting if greeting is explicitly "__SKIP__"
+      // (Telnyx TTS handles the instant greeting before streaming starts).
       const clinicName = msg.config.clinicName || "our office";
       const greeting = msg.config.greeting ||
         `Hi, thanks for calling ${clinicName}! This is Lauren, how can I help you?`;
-      this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
-      // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
-      this.enqueueTTSWithCallback(greeting, () => {
-        this.greetingMuteUntil = Date.now() + 1500;
-        this.log("info", "Post-greeting mute window active for 1.5s");
-      });
-      this.greetingSent = true;
-      // Also send as transcript so Go side knows about it
-      this.send({ type: "transcript", role: "assistant", text: greeting });
+      if (greeting === "__SKIP__") {
+        this.log("info", "Skipping ElevenLabs greeting (Telnyx TTS handles it)");
+        this.greetingSent = true;
+      } else {
+        this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
+        // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
+        this.enqueueTTSWithCallback(greeting, () => {
+          this.greetingMuteUntil = Date.now() + 1500;
+          this.log("info", "Post-greeting mute window active for 1.5s");
+        });
+        this.greetingSent = true;
+        // Also send as transcript so Go side knows about it
+        this.send({ type: "transcript", role: "assistant", text: greeting });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       this.log("error", `Failed to start Nova Sonic: ${message}`);

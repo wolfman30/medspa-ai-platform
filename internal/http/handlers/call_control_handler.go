@@ -163,17 +163,16 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Step 1: Start streaming FIRST so Nova Sonic is ready before greeting.
-		// Using inbound_track ONLY to prevent TTS audio bleed into Nova Sonic
-		// (both_tracks would feed our own greeting back as "caller audio").
-		// Flow: call.answered → streaming_start → streaming.started → speak greeting
+		// Fire Telnyx TTS greeting IMMEDIATELY for instant response (<1s).
+		// Simultaneously start streaming so Nova Sonic boots in the background.
+		// Nova Sonic's system prompt is configured to NOT greet (greeting already spoken).
+		h.speakGreeting(callControlID, from, to)
 		h.startStreaming(callControlID, from, to)
 
 	case "streaming.started":
-		// Stream is live — Nova Sonic handles the greeting via its system prompt.
-		// No Telnyx TTS needed; Nova Sonic's voice is higher quality and avoids
-		// the competing-greetings problem.
-		h.logger.Info("call-control: streaming started, Nova Sonic will greet caller",
+		// Stream is live — Nova Sonic is ready. Telnyx TTS greeting may still
+		// be playing. Nova Sonic will wait for caller's first words after greeting.
+		h.logger.Info("call-control: streaming started, Telnyx TTS greeting in progress",
 			"call_control_id", callControlID,
 		)
 
