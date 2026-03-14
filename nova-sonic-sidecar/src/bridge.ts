@@ -347,7 +347,12 @@ export class CallSession {
     return (
       (lower.includes("thank") && lower.includes("calling")) ||
       (lower.includes("hi there") && lower.includes("how can i help")) ||
-      (lower.includes("welcome to") && lower.includes("how can"))
+      (lower.includes("welcome to") && lower.includes("how can")) ||
+      (lower.includes("this is lauren") && lower.includes("help")) ||
+      (lower.includes("how can i help") || lower.includes("how may i help")) ||
+      (lower.includes("what can i do for you")) ||
+      (lower.includes("i'd love to help") || lower.includes("i'd be happy to help")) ||
+      (lower.includes("great") && lower.includes("help you with"))
     );
   }
 
