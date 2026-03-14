@@ -34,6 +34,7 @@ type PostCallSMSSender interface {
 type CallControlHandler struct {
 	logger           *logging.Logger
 	telnyxAPIKey     string
+	telnyxBaseURL    string // Override for testing; defaults to "https://api.telnyx.com"
 	streamURL        string // e.g. "wss://api-dev.aiwolfsolutions.com/ws/voice"
 	orgResolver      messaging.OrgResolver
 	clinicStore      *clinic.Store
@@ -377,8 +378,12 @@ func orgIDToClinicName(orgID string) string {
 
 // sendCallControlCommand sends a command to the Telnyx Call Control API.
 func (h *CallControlHandler) sendCallControlCommand(callControlID, command string, payload map[string]interface{}) {
-	url := fmt.Sprintf("https://api.telnyx.com/v2/calls/%s/actions/%s",
-		strings.TrimSpace(callControlID), command)
+	baseURL := h.telnyxBaseURL
+	if baseURL == "" {
+		baseURL = "https://api.telnyx.com"
+	}
+	url := fmt.Sprintf("%s/v2/calls/%s/actions/%s",
+		baseURL, strings.TrimSpace(callControlID), command)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
