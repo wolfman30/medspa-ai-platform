@@ -313,10 +313,9 @@ func (h *CallControlHandler) playPreRecordedGreeting(callControlID, from, to str
 	h.logger.Info("call-control: playing pre-recorded Lauren greeting",
 		"call_control_id", callControlID, "org_id", orgID, "media_name", cfg.mediaName)
 
-	// Prefer media_name (Telnyx CDN, zero latency) with audio_url as fallback
+	// Use audio_url (media_name requires periodic re-upload and expires)
 	payload := map[string]interface{}{
-		"media_name": cfg.mediaName,
-		"audio_url":  cfg.audioURL,
+		"audio_url": cfg.audioURL,
 	}
 	h.sendCallControlCommand(callControlID, "playback_start", payload)
 }
