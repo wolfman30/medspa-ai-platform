@@ -169,6 +169,8 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		// Simultaneously start streaming so Nova Sonic boots in the background.
 		h.playPreRecordedGreeting(callControlID, from, to)
 		h.startStreaming(callControlID, from, to)
+		// Record the call server-side for demo videos and QA review
+		h.startRecording(callControlID)
 
 	case "streaming.started":
 		// Stream is live — Nova Sonic is ready. Pre-recorded greeting may still
@@ -278,6 +280,16 @@ func (h *CallControlHandler) startStreaming(callControlID, from, to string) {
 		"client_state":               clientState,
 	}
 	h.sendCallControlCommand(callControlID, "streaming_start", payload)
+}
+
+// startRecording tells Telnyx to record the call (both channels) for demo/QA purposes.
+func (h *CallControlHandler) startRecording(callControlID string) {
+	payload := map[string]interface{}{
+		"format":   "mp3",
+		"channels": "dual",
+	}
+	h.logger.Info("call-control: starting call recording", "call_control_id", callControlID)
+	h.sendCallControlCommand(callControlID, "record_start", payload)
 }
 
 // playPreRecordedGreeting plays a pre-recorded Lauren ElevenLabs greeting via Telnyx play command.
