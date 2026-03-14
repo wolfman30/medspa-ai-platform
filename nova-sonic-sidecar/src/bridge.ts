@@ -198,6 +198,11 @@ export class CallSession {
       if (greeting === "__SKIP__") {
         this.log("info", "Skipping ElevenLabs greeting (Telnyx TTS handles it)");
         this.greetingSent = true;
+        // Mute Nova Sonic input for 5s while the pre-recorded Telnyx greeting plays.
+        // Without this, Nova Sonic hears the greeting audio bleed-through and
+        // thinks the caller is speaking, causing it to respond before they talk.
+        this.greetingMuteUntil = Date.now() + 5000;
+        this.log("info", "Post-greeting mute window active for 5s (Telnyx playback)");
       } else {
         this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
         // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
