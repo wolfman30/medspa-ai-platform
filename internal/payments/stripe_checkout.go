@@ -145,6 +145,12 @@ func (s *StripeCheckoutService) CreatePaymentLink(ctx context.Context, params Ch
 	}
 
 	// Metadata for webhook processing
+	s.logger.Info("stripe checkout: setting metadata",
+		"org_id", params.OrgID,
+		"lead_id", params.LeadID,
+		"from_number", params.FromNumber,
+		"booking_intent_id", params.BookingIntentID.String(),
+		"connected_account", connectedAccountID)
 	form.Set("metadata[org_id]", params.OrgID)
 	form.Set("metadata[lead_id]", params.LeadID)
 	form.Set("metadata[booking_intent_id]", params.BookingIntentID.String())

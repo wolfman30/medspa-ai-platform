@@ -325,14 +325,29 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 	if cfg.NovaSonicSidecarURL != "" {
 		sidecarURL := cfg.NovaSonicSidecarURL
 		novaSonicVoice := cfg.NovaSonicVoice
+		// Build Stripe checkout service for voice deposits
+		var voiceCheckoutSvc voice.CheckoutLinkCreator
+		if cfg.StripeSecretKey != "" {
+			stripeSvc := payments.NewStripeCheckoutService(cfg.StripeSecretKey, cfg.StripeSuccessURL, cfg.StripeCancelURL, logger)
+			if clinicStore != nil {
+				voiceCheckoutSvc = payments.NewMultiCheckoutService(nil, stripeSvc, clinicStore, logger)
+			} else {
+				voiceCheckoutSvc = stripeSvc
+			}
+			logger.Info("voice: Stripe checkout service configured for deposits")
+		} else {
+			logger.Warn("voice: no STRIPE_SECRET_KEY — deposits will use fallback test link")
+		}
+
 		voiceToolDeps := &voice.ToolDeps{
 			MoxieClient: func() *moxieclient.Client {
 				moxieDryRun := os.Getenv("MOXIE_DRY_RUN") == "true"
 				return moxieclient.NewClient(logger, moxieclient.WithDryRun(moxieDryRun))
 			}(),
-			Messenger:   webhookMessenger,
-			ClinicStore: clinicStore,
-			LeadsRepo:   leadsRepo,
+			Messenger:       webhookMessenger,
+			ClinicStore:     clinicStore,
+			LeadsRepo:       leadsRepo,
+			CheckoutService: voiceCheckoutSvc,
 		}
 
 		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {

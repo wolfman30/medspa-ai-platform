@@ -88,7 +88,9 @@ func (h *StripeWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("stripe webhook event received", "event_id", evt.ID, "event_type", evt.Type)
+	h.logger.Info("stripe webhook event received", "event_id", evt.ID, "event_type", evt.Type,
+		"raw_metadata", evt.Data.Object.Metadata,
+		"session_id", evt.Data.Object.ID)
 
 	// Only handle checkout.session.completed
 	if evt.Type != "checkout.session.completed" {
