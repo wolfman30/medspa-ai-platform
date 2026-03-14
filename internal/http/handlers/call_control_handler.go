@@ -309,7 +309,7 @@ func (h *CallControlHandler) playPreRecordedGreeting(callControlID, from, to str
 	payload := map[string]interface{}{
 		"audio_url": audioURL,
 	}
-	h.sendCallControlCommand(callControlID, "play", payload)
+	h.sendCallControlCommand(callControlID, "playback_start", payload)
 }
 
 // speakGreeting uses Telnyx TTS to speak a greeting, then passes caller
