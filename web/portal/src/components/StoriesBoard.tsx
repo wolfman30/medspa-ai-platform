@@ -355,10 +355,29 @@ export function StoriesBoard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState('');
+  const [filters, setFilters] = useState<{ status: string; priority: string; label: string }>({
+    status: '',
+    priority: '',
+    label: '',
+  });
+  const [labelInput, setLabelInput] = useState('');
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, label: labelInput }));
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [labelInput]);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const data = await listStories();
+      const trimmedLabel = filters.label.trim();
+      const data = await listStories({
+        status: filters.status || undefined,
+        priority: filters.priority || undefined,
+        label: trimmedLabel || undefined,
+      });
       setStories(data.stories);
       setError('');
     } catch {
@@ -366,7 +385,7 @@ export function StoriesBoard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -388,10 +407,50 @@ export function StoriesBoard() {
 
   return (
     <div className="ui-container py-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-slate-900">Stories</h2>
         <button onClick={() => setShowCreate(true)} className="ui-btn ui-btn-primary text-sm">
           + Add Story
+        </button>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 sm:grid-cols-4 gap-2">
+        <select
+          className="ui-select"
+          value={filters.status}
+          onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+        >
+          <option value="">All statuses</option>
+          <option value="backlog">Backlog</option>
+          <option value="in_progress">In Progress</option>
+          <option value="review">Review</option>
+          <option value="done">Done</option>
+        </select>
+        <select
+          className="ui-select"
+          value={filters.priority}
+          onChange={(e) => setFilters((prev) => ({ ...prev, priority: e.target.value }))}
+        >
+          <option value="">All priorities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <input
+          className="ui-input"
+          placeholder="Filter by label..."
+          value={labelInput}
+          onChange={(e) => setLabelInput(e.target.value)}
+        />
+        <button
+          className="ui-btn ui-btn-ghost"
+          onClick={() => {
+            setLabelInput('');
+            setFilters({ status: '', priority: '', label: '' });
+          }}
+        >
+          Clear filters
         </button>
       </div>
 
