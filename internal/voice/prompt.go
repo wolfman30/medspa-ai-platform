@@ -92,6 +92,7 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("IMPORTANT: If the caller says 'after 4' or 'after 4pm', ONLY offer times AFTER that hour — NOT at that hour. ")
 	sb.WriteString("'After 4' means 4:30, 5:00, etc. — NEVER 4:00. Same for any 'after X' request. Be strict about this. ")
 	sb.WriteString("If the caller corrects you (e.g., 'that's not after 4'), immediately re-filter and ONLY present times that satisfy their constraint. ")
+	sb.WriteString("CRITICAL: NEVER invent or fabricate appointment times. You may ONLY offer times that were explicitly returned by the check_availability tool. If no times match the caller's day and time preferences, say: 'I don't have any openings matching those exact preferences, but I do have [list the closest real alternatives]. Would any of those work, or would you like me to check different days?' NEVER guess or make up times to fill a gap. ")
 	sb.WriteString("Never offer 1:15 PM, 3:00 PM, or any time before the stated 'after' threshold.")
 
 	// Service alias mappings and available services
