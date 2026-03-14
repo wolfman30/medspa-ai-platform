@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/wolfman30/medspa-ai-platform/internal/clinic"
 	"github.com/wolfman30/medspa-ai-platform/internal/messaging"
@@ -40,6 +41,14 @@ type CallControlHandler struct {
 	clinicStore      *clinic.Store
 	missedCallTexter MissedCallTexter
 	postCallSMS      PostCallSMSSender
+	callContext      sync.Map // call_control_id → *callCtx (carries from/to across events)
+}
+
+// callCtx stores per-call metadata that must persist across webhook events.
+// Telnyx doesn't include from/to on all event types (e.g., playback.ended).
+type callCtx struct {
+	From string
+	To   string
 }
 
 // CallControlConfig configures the handler.
@@ -164,6 +173,8 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
+		// Store call context — Telnyx doesn't include from/to on playback events
+		h.callContext.Store(callControlID, &callCtx{From: from, To: to})
 		// Play pre-recorded Lauren greeting FIRST. Streaming starts when
 		// playback finishes (call.playback.ended) so Nova Sonic doesn't
 		// hear the greeting echo or noise during playback.
@@ -172,15 +183,19 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		h.startRecording(callControlID)
 
 	case "call.playback.ended":
+		// Retrieve stored call context (from/to not available on this event)
+		storedFrom, storedTo := from, to
+		if ctx, ok := h.callContext.Load(callControlID); ok {
+			cc := ctx.(*callCtx)
+			storedFrom, storedTo = cc.From, cc.To
+		}
 		// Greeting finished playing — NOW start streaming to Nova Sonic.
-		// This ensures Nova Sonic's first audio is the caller speaking,
-		// not greeting echo or ambient noise during playback.
 		h.logger.Info("call-control: greeting playback ended, starting stream",
 			"call_control_id", callControlID,
-			"from", from,
-			"to", to,
+			"from", storedFrom,
+			"to", storedTo,
 		)
-		h.startStreaming(callControlID, from, to)
+		h.startStreaming(callControlID, storedFrom, storedTo)
 
 	case "streaming.started":
 		// Stream is live — Nova Sonic is ready. Greeting already played.
@@ -195,6 +210,7 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		)
 
 	case "call.hangup":
+		h.callContext.Delete(callControlID) // cleanup
 		h.logger.Info("call-control: call ended",
 			"call_control_id", callControlID,
 			"from", from,
