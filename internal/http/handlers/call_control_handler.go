@@ -164,18 +164,28 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Play pre-recorded Lauren greeting via Telnyx play command (instant, <1s).
-		// Audio is pre-generated with ElevenLabs and hosted on S3.
-		// Simultaneously start streaming so Nova Sonic boots in the background.
+		// Play pre-recorded Lauren greeting FIRST. Streaming starts when
+		// playback finishes (call.playback.ended) so Nova Sonic doesn't
+		// hear the greeting echo or noise during playback.
 		h.playPreRecordedGreeting(callControlID, from, to)
-		h.startStreaming(callControlID, from, to)
 		// Record the call server-side for demo videos and QA review
 		h.startRecording(callControlID)
 
+	case "call.playback.ended":
+		// Greeting finished playing — NOW start streaming to Nova Sonic.
+		// This ensures Nova Sonic's first audio is the caller speaking,
+		// not greeting echo or ambient noise during playback.
+		h.logger.Info("call-control: greeting playback ended, starting stream",
+			"call_control_id", callControlID,
+			"from", from,
+			"to", to,
+		)
+		h.startStreaming(callControlID, from, to)
+
 	case "streaming.started":
-		// Stream is live — Nova Sonic is ready. Pre-recorded greeting may still
-		// be playing. Nova Sonic will wait for caller's first words after greeting.
-		h.logger.Info("call-control: streaming started, pre-recorded greeting playing",
+		// Stream is live — Nova Sonic is ready. Greeting already played.
+		// Nova Sonic will hear the caller's first words immediately.
+		h.logger.Info("call-control: streaming started, ready for caller",
 			"call_control_id", callControlID,
 		)
 

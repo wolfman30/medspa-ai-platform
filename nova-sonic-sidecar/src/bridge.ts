@@ -71,6 +71,7 @@ export class CallSession {
   private ttsProcessing = false;
   private greetingSent = false;
   private greetingMuteUntil = 0; // timestamp: discard user audio until this time
+  private audioUnmuted = false; // tracks when first audio passes through after mute
   private recentTTSTexts = new Map<string, number>(); // normalized text → timestamp
 
   constructor(ws: WebSocket, callId: string) {
@@ -110,6 +111,14 @@ export class CallSession {
       case "audio":
         // Bug #1: Discard audio during post-greeting mute window to prevent echo/crosstalk
         if (Date.now() < this.greetingMuteUntil) break;
+        // Bug #8: Send a short silence buffer when mute window first opens.
+        // Nova Sonic's VAD needs a moment of audio context before it can
+        // accurately transcribe speech. Without this, the first 1-2 seconds
+        // of the caller's words get garbled or lost.
+        if (!this.audioUnmuted) {
+          this.audioUnmuted = true;
+          this.log("info", "Mute window ended — audio flowing to Nova Sonic");
+        }
         this.client?.sendAudio(msg.data);
         break;
       case "tool_result":
@@ -205,12 +214,11 @@ export class CallSession {
       if (greeting === "__SKIP__") {
         this.log("info", "Skipping ElevenLabs greeting (Telnyx TTS handles it)");
         this.greetingSent = true;
-        // Short mute (3s) just to cover the initial streaming setup.
-        // Echo protection is handled by the transcript filter (isGreeting)
-        // which suppresses any user transcript that sounds like our greeting.
-        // We keep the mute short so callers who speak quickly aren't ignored.
-        this.greetingMuteUntil = Date.now() + 3000;
-        this.log("info", "Post-greeting mute window active for 3s (setup buffer; echo handled by transcript filter)");
+        // Minimal mute (1s) — streaming now only starts AFTER the greeting
+        // finishes playing (call.playback.ended), so there's no echo risk.
+        // This 1s buffer just covers the streaming handshake.
+        this.greetingMuteUntil = Date.now() + 1000;
+        this.log("info", "Post-greeting mute window active for 1s (streaming starts post-greeting)");
       } else {
         this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
         // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
