@@ -12,7 +12,7 @@ import (
 
 // BuildVoiceSystemPrompt constructs a dynamic system prompt for voice calls
 // based on the clinic's configuration (providers, deposit policy, etc.).
-func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilitySummary string) string {
+func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID string) string {
 	// Defaults for unknown clinics
 	clinicName := "our clinic"
 	providerSection := ""
@@ -57,7 +57,7 @@ IMPORTANT: Your FIRST input may be an echo of the greeting itself (e.g., "hi tha
 `)
 
 	// ── BOOKING FLOW ──────────────────────────────────────────────
-	sb.WriteString(`BOOKING FLOW: Collect info ONE question at a time, in this order:
+	sb.WriteString(`BOOKING FLOW — MANDATORY STEPS (collect info ONE question at a time, in this EXACT order):
 1. SERVICE — "What service are you looking to book?" If they already named one, confirm it and move on.
 2. FULL NAME — Repeat it back: "I heard [name] — did I get that right?" If corrected, spell it out.
 3. NEW OR RETURNING — "Are you a new or returning patient?"
@@ -69,10 +69,20 @@ IMPORTANT: Your FIRST input may be an echo of the greeting itself (e.g., "hi tha
 	}
 	sb.WriteString(`
 5. PREFERRED DAYS & TIMES — "What days and times work best for you?" (ask for days, not specific dates)
+6. OFFER TIMES — ONLY NOW call check_availability and present matching slots.
+
+CRITICAL: You MUST complete steps 1-5 before EVER mentioning specific dates or times. Even if you have availability data, do NOT offer times until you have collected: service, name, patient type, provider preference, AND preferred days/times. No exceptions.
+
+CHECKPOINT — Before calling check_availability, confirm you have ALL of these:
+✓ Service confirmed
+✓ Full name confirmed
+✓ New or returning answered
+✓ Provider preference answered
+✓ Preferred days and times answered
+If ANY are missing, go back and ask for them first.
 
 Rules:
 - Ask ONE question per response. Never combine two questions.
-- Never skip steps or jump to offering times before collecting service, name, patient type, and provider.
 - If the caller already volunteered info (e.g., "I want Botox, I'm a new patient"), acknowledge it and skip to the next uncollected step.
 - If their message is cut off ("I'd like to get...") without naming a service, ask: "Sure! What service are you looking to book?"
 - If their answer to any question is garbled or nonsensical, ask them to repeat. Don't move on with bad data.
@@ -124,18 +134,10 @@ PAYMENT RULES:
 		}
 	}
 
-	// Availability data
-	if availabilitySummary != "" {
-		sb.WriteString(`
+	// Availability data — never pre-load; always use the tool
+	sb.WriteString(`
 
-AVAILABILITY DATA (general overview — use check_availability tool for filtered results after learning caller preferences):
-`)
-		sb.WriteString(availabilitySummary)
-	} else {
-		sb.WriteString(`
-
-No availability data pre-loaded. Do NOT make up times. Use check_availability tool or offer to have the team follow up.`)
-	}
+AVAILABILITY: Do NOT have any pre-loaded times. You MUST use the check_availability tool to look up openings — and ONLY after completing steps 1-5 of the booking flow. Never invent or guess times.`)
 
 	return sb.String()
 }

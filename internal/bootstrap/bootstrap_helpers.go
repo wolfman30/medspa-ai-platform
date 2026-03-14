@@ -351,12 +351,7 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 		}
 
 		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {
-			availabilitySummary := ""
-			if voiceToolDeps.MoxieClient != nil {
-				availabilitySummary = voice.FetchAvailabilitySummary(l, voiceToolDeps.MoxieClient, voiceToolDeps.ClinicStore, callCtx.OrgID)
-			}
-
-			systemPrompt := voice.BuildVoiceSystemPrompt(l, voiceToolDeps.ClinicStore, callCtx.OrgID, availabilitySummary)
+			systemPrompt := voice.BuildVoiceSystemPrompt(l, voiceToolDeps.ClinicStore, callCtx.OrgID)
 
 			// Resolve clinic name for ElevenLabs greeting
 			clinicName := "our office"

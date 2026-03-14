@@ -83,7 +83,7 @@ func TestBuildAvailableServicesSection(t *testing.T) {
 }
 
 func TestBuildVoiceSystemPrompt_IncludesAliases(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	if strings.Contains(prompt, "SERVICE NAME MAPPINGS") {
 		t.Error("should not contain alias section when no store provided")
 	}
@@ -96,7 +96,7 @@ func TestBuildVoiceSystemPrompt_DepositLanguageAndFlow(t *testing.T) {
 	cfg.DepositAmountCents = 7500
 
 	store := setupClinicStore(t, cfg)
-	prompt := BuildVoiceSystemPrompt(slog.Default(), store, orgID, "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), store, orgID)
 
 	// Deposit flow: must require slot selection before deposit talk
 	if !strings.Contains(prompt, "AFTER the caller picks a specific date AND time") {
@@ -113,7 +113,7 @@ func TestBuildVoiceSystemPrompt_DepositLanguageAndFlow(t *testing.T) {
 }
 
 func TestBuildVoiceSystemPrompt_DefaultStillEnforcesOneQuestionAtATime(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	if !strings.Contains(prompt, "ONE question at a time") {
 		t.Fatalf("expected one-question-at-a-time instruction in default prompt")
 	}
@@ -135,7 +135,7 @@ func TestBuildVoiceSystemPrompt_UsesClinicConfigFromStore(t *testing.T) {
 		t.Fatalf("loaded config name = %q, want %q", loaded.Name, "Textual Glow")
 	}
 
-	prompt := BuildVoiceSystemPrompt(slog.Default(), store, orgID, "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), store, orgID)
 	if !strings.Contains(prompt, "Textual Glow") {
 		t.Fatalf("expected prompt to include clinic name from config")
 	}
@@ -145,7 +145,7 @@ func TestBuildVoiceSystemPrompt_UsesClinicConfigFromStore(t *testing.T) {
 }
 
 func TestBuildVoiceSystemPrompt_IncludesAfterXGuardrails(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	// Must have "after X" time filtering rule
 	if !strings.Contains(prompt, "After four PM") {
 		t.Fatalf("expected after-X guidance in prompt")
@@ -156,10 +156,10 @@ func TestBuildVoiceSystemPrompt_IncludesAfterXGuardrails(t *testing.T) {
 }
 
 func TestBuildVoiceSystemPrompt_AvailabilityGuardrails(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	mustContain := []string{
-		"ONLY offer times returned by the check_availability tool",
-		"NEVER invent or guess times",
+		"MUST use the check_availability tool",
+		"Never invent or guess times",
 	}
 	for _, fragment := range mustContain {
 		if !strings.Contains(prompt, fragment) {
@@ -169,7 +169,7 @@ func TestBuildVoiceSystemPrompt_AvailabilityGuardrails(t *testing.T) {
 }
 
 func TestBuildVoiceSystemPrompt_PaymentTruthfulness(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	mustContain := []string{
 		"NEVER say payment went through unless the caller explicitly confirms",
 		"Never offer to email",
@@ -184,14 +184,14 @@ func TestBuildVoiceSystemPrompt_PaymentTruthfulness(t *testing.T) {
 }
 
 func TestBuildVoiceSystemPrompt_GreetingSuppression(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	if !strings.Contains(prompt, "Do NOT greet again") {
 		t.Fatal("expected greeting suppression instruction")
 	}
 }
 
 func TestBuildVoiceSystemPrompt_StructuredSections(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	// Verify the prompt has clear section headers
 	sections := []string{"GREETING:", "STYLE:", "BOOKING FLOW:", "AVAILABILITY:", "DEPOSIT:", "PAYMENT RULES:", "BEHAVIOR:"}
 	for _, s := range sections {
@@ -201,22 +201,22 @@ func TestBuildVoiceSystemPrompt_StructuredSections(t *testing.T) {
 	}
 }
 
-func TestBuildVoiceSystemPrompt_NoAvailabilityData(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "")
-	if !strings.Contains(prompt, "No availability data pre-loaded") {
-		t.Fatal("expected no-availability fallback message")
+func TestBuildVoiceSystemPrompt_NoPreLoadedAvailability(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
+	if !strings.Contains(prompt, "MUST use the check_availability tool") {
+		t.Fatal("expected tool-only availability instruction")
+	}
+	if strings.Contains(prompt, "AVAILABILITY DATA") {
+		t.Fatal("should not have pre-loaded availability data section")
 	}
 }
 
-func TestBuildVoiceSystemPrompt_WithAvailabilityData(t *testing.T) {
-	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "", "Tuesday March 18 at 2 PM, 3 PM")
-	if !strings.Contains(prompt, "AVAILABILITY DATA") {
-		t.Fatal("expected AVAILABILITY DATA section")
+func TestBuildVoiceSystemPrompt_MandatoryCheckpoint(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
+	if !strings.Contains(prompt, "CHECKPOINT") {
+		t.Fatal("expected CHECKPOINT section in booking flow")
 	}
-	if !strings.Contains(prompt, "Tuesday March 18") {
-		t.Fatal("expected availability times in prompt")
-	}
-	if !strings.Contains(prompt, "check_availability tool") {
-		t.Fatal("expected tool usage instruction with availability data")
+	if !strings.Contains(prompt, "MUST complete steps 1-5") {
+		t.Fatal("expected mandatory steps instruction")
 	}
 }
