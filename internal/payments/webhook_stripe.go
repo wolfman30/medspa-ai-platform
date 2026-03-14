@@ -129,6 +129,25 @@ func (h *StripeWebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		"provider_ref", providerRef,
 	)
 
+	// Voice AI deposits may not have lead_id yet — but we still need to
+	// publish the payment confirmation to Redis so Lauren can confirm on the call.
+	if fromNumber != "" && orgID != "" && (leadID == "" || intentID == "") {
+		h.logger.Info("stripe webhook: voice deposit (no lead_id), publishing payment confirmation",
+			"event_id", evt.ID, "from_number", fromNumber, "org_id", orgID)
+		if h.redis != nil {
+			channel := "voice:payment:" + fromNumber
+			if err := h.redis.Publish(r.Context(), channel, "paid").Err(); err != nil {
+				h.logger.Warn("stripe webhook: failed to publish voice payment notification",
+					"channel", channel, "error", err)
+			} else {
+				h.logger.Info("stripe webhook: published voice payment notification",
+					"channel", channel, "from_number", fromNumber)
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if orgID == "" || leadID == "" || intentID == "" {
 		h.logger.Warn("stripe webhook missing required metadata", "event_id", evt.ID, "metadata", metadata)
 		// Acknowledge to prevent retries but can't progress workflow
