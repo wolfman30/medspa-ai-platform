@@ -187,17 +187,25 @@ func (h *ToolHandler) checkBoulevardAvailability(ctx context.Context, cfg *clini
 		return `{"message": "I'm having trouble checking availability right now. I'll text you available times shortly."}`, nil
 	}
 
-	// Create per-clinic Boulevard client and adapter
+	// Create per-clinic Boulevard client and adapter with a 10-second timeout
+	// to prevent voice calls from hanging while waiting for the Boulevard API.
+	toolCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	blvdClient := boulevard.NewBoulevardClient(cfg.BoulevardBusinessID, cfg.BoulevardLocationID, nil)
 	dryRun := true // always dry-run for voice (no real bookings yet)
 	adapter := boulevard.NewBoulevardAdapter(blvdClient, dryRun, nil)
+
+	h.logger.Info("voice-tool: check_availability — querying Boulevard",
+		"service", service, "provider", provider, "org_id", h.orgID,
+		"business_id", cfg.BoulevardBusinessID)
 
 	resolvedService, serviceMatched := resolveRequestedServiceForBoulevard(cfg, service)
 	if !serviceMatched {
 		return `{"message": "I want to make sure I give you accurate openings for that exact service. Would you like me to have the team confirm the exact times and text you right away?", "exact_times_confident": false, "service_matched": false}`, nil
 	}
 
-	slots, err := adapter.ResolveAvailability(ctx, resolvedService, provider, now)
+	slots, err := adapter.ResolveAvailability(toolCtx, resolvedService, provider, now)
 	if err != nil {
 		h.logger.Error("voice-tool: boulevard availability error", "error", err)
 		return `{"message": "I'm having trouble checking availability right now. I'll text you available times shortly."}`, nil
