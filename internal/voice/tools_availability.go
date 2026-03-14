@@ -11,22 +11,26 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 )
 
+type availabilityParams struct {
+	Service            string `json:"service"`
+	PreferredDays      string `json:"preferred_days"`
+	PreferredTimes     string `json:"preferred_times"`
+	ProviderPreference string `json:"provider_preference"`
+}
+
+const noSchedulingAccessMessage = `{"message": "I don't have access to the scheduling system right now. Let me take your preferences and I'll text you available times."}`
+
 // checkAvailability handles the "check_availability" tool call by querying
 // the clinic's EMR (Moxie or Boulevard) for open appointment slots.
 func (h *ToolHandler) checkAvailability(ctx context.Context, input json.RawMessage) (string, error) {
-	var params struct {
-		Service            string `json:"service"`
-		PreferredDays      string `json:"preferred_days"`
-		PreferredTimes     string `json:"preferred_times"`
-		ProviderPreference string `json:"provider_preference"`
-	}
-	if err := json.Unmarshal(input, &params); err != nil {
-		return "", fmt.Errorf("checkAvailability: parse input: %w", err)
+	params, err := parseAvailabilityParams(input)
+	if err != nil {
+		return "", err
 	}
 
-	if h.deps == nil || h.deps.ClinicStore == nil {
+	if h.missingClinicStore() {
 		h.logger.Warn("voice-tool: check_availability — no clinic store, returning fallback")
-		return `{"message": "I don't have access to the scheduling system right now. Let me take your preferences and I'll text you available times."}`, nil
+		return noSchedulingAccessMessage, nil
 	}
 
 	cfg, err := h.deps.ClinicStore.Get(ctx, h.orgID)
@@ -34,26 +38,40 @@ func (h *ToolHandler) checkAvailability(ctx context.Context, input json.RawMessa
 		return "", fmt.Errorf("checkAvailability: get clinic config: %w", err)
 	}
 
-	loc := time.FixedZone("EST", -5*60*60)
-	if cfg.Timezone != "" {
-		if l, err := time.LoadLocation(cfg.Timezone); err == nil {
-			loc = l
-		}
-	}
+	loc := locationFromConfig(cfg)
 	now := time.Now().In(loc)
+	afterHour := parseAfterHour(strings.ToLower(params.PreferredTimes))
 
-	// Parse "after X" time preferences (e.g., "after 4", "after 3pm")
-	afterHour := -1
-	if pref := strings.ToLower(params.PreferredTimes); pref != "" {
-		afterHour = parseAfterHour(pref)
-	}
-
-	// Route to Boulevard or Moxie based on clinic config
 	if cfg.BookingPlatform == "boulevard" {
 		return h.checkBoulevardAvailability(ctx, cfg, params.Service, params.ProviderPreference, now, loc, afterHour, params.PreferredDays, params.PreferredTimes)
 	}
 
 	return h.checkMoxieAvailability(ctx, cfg, params.Service, now, loc, afterHour, params.PreferredDays, params.PreferredTimes)
+}
+
+func parseAvailabilityParams(input json.RawMessage) (availabilityParams, error) {
+	var params availabilityParams
+	if err := json.Unmarshal(input, &params); err != nil {
+		return availabilityParams{}, fmt.Errorf("checkAvailability: parse input: %w", err)
+	}
+	return params, nil
+}
+
+func (h *ToolHandler) missingClinicStore() bool {
+	return h.deps == nil || h.deps.ClinicStore == nil
+}
+
+func locationFromConfig(cfg *clinic.Config) *time.Location {
+	loc := time.FixedZone("EST", -5*60*60)
+	if cfg == nil || cfg.Timezone == "" {
+		return loc
+	}
+
+	loaded, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return loc
+	}
+	return loaded
 }
 
 // parseAfterHour extracts the hour from "after 4", "after 4pm", "after 3:00 PM" etc.
