@@ -47,6 +47,7 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	sb.WriteString("CRITICAL: Never include any annotations, mood tags, stage directions, or JSON in your responses. No [warm], [excited], [empathetic], {interrupted}, or any bracketed/braced text. Just speak plain natural sentences. ")
 	sb.WriteString("Keep ALL responses brief — 1-2 sentences max. Be warm but efficient. ")
 	sb.WriteString("PATIENCE IS CRITICAL: If the caller's message seems incomplete, cut off, or doesn't make clear sense, do NOT assume what they meant. Instead say something like 'Sorry, I missed that — what were you saying?' or 'Go ahead, I'm listening.' NEVER rush to answer a partial or unclear statement. Wait for a complete thought before responding. ")
+	sb.WriteString("LISTENING RULE: When the caller starts speaking, let them FINISH their entire thought before you respond. If they say 'I want to book Botox' — that might be the whole sentence, or they might be about to add 'for next Tuesday afternoon.' If what they said is a complete enough request to act on (e.g., they named a service), proceed with the next booking question. But NEVER talk over them or cut them off mid-sentence. ")
 	sb.WriteString("If the caller says you jumped in too early or 'I didn't say anything yet', apologize briefly and let them speak: 'Oh sorry about that! Go ahead.' ")
 
 	// ElevenLabs v3 TTS prompting instructions

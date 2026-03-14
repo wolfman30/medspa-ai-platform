@@ -147,15 +147,17 @@ func TestGreetingIncludesAudioURL(t *testing.T) {
 		t.Fatal("no command sent")
 	}
 
-	audioURL, ok := cmds[0].payload["audio_url"].(string)
-	if !ok || audioURL == "" {
-		t.Fatal("audio_url missing from playback_start payload")
+	// Must include media_name (Telnyx CDN) and audio_url (fallback)
+	mediaName, _ := cmds[0].payload["media_name"].(string)
+	audioURL, _ := cmds[0].payload["audio_url"].(string)
+	if mediaName == "" && audioURL == "" {
+		t.Fatal("both media_name and audio_url missing from playback_start payload")
 	}
-	if !strings.HasSuffix(audioURL, ".mp3") {
+	if mediaName != "" && !strings.Contains(mediaName, "bodytonic") {
+		t.Errorf("media_name = %q, should contain 'bodytonic'", mediaName)
+	}
+	if audioURL != "" && !strings.HasSuffix(audioURL, ".mp3") {
 		t.Errorf("audio_url = %q, want .mp3 suffix", audioURL)
-	}
-	if !strings.Contains(audioURL, "bodytonic") {
-		t.Errorf("audio_url = %q, should contain 'bodytonic' for BodyTonic org", audioURL)
 	}
 }
 

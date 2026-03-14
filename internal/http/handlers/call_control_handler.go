@@ -290,13 +290,19 @@ func (h *CallControlHandler) playPreRecordedGreeting(callControlID, from, to str
 		}
 	}
 
-	// Map org IDs to pre-recorded greeting URLs (ElevenLabs Lauren B voice)
-	greetingURLs := map[string]string{
-		"d9558a2d-2110-4e26-8224-1b36cd526e14": "https://api-dev.aiwolfsolutions.com/static/greetings/bodytonic.mp3",
-		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": "https://api-dev.aiwolfsolutions.com/static/greetings/forever22.mp3",
+	// Map org IDs to pre-recorded greeting audio.
+	// Primary: Telnyx media_name (pre-uploaded, zero download latency).
+	// Fallback: audio_url from our API (in case media expires).
+	type greetingConfig struct {
+		mediaName string
+		audioURL  string
+	}
+	greetings := map[string]greetingConfig{
+		"d9558a2d-2110-4e26-8224-1b36cd526e14": {mediaName: "greeting-bodytonic", audioURL: "https://api-dev.aiwolfsolutions.com/static/greetings/bodytonic.mp3"},
+		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": {mediaName: "greeting-forever22", audioURL: "https://api-dev.aiwolfsolutions.com/static/greetings/forever22.mp3"},
 	}
 
-	audioURL, ok := greetingURLs[orgID]
+	cfg, ok := greetings[orgID]
 	if !ok {
 		// Fallback: let sidecar handle greeting via ElevenLabs TTS
 		h.logger.Info("call-control: no pre-recorded greeting, sidecar will handle",
@@ -305,10 +311,12 @@ func (h *CallControlHandler) playPreRecordedGreeting(callControlID, from, to str
 	}
 
 	h.logger.Info("call-control: playing pre-recorded Lauren greeting",
-		"call_control_id", callControlID, "org_id", orgID, "url", audioURL)
+		"call_control_id", callControlID, "org_id", orgID, "media_name", cfg.mediaName)
 
+	// Prefer media_name (Telnyx CDN, zero latency) with audio_url as fallback
 	payload := map[string]interface{}{
-		"audio_url": audioURL,
+		"media_name": cfg.mediaName,
+		"audio_url":  cfg.audioURL,
 	}
 	h.sendCallControlCommand(callControlID, "playback_start", payload)
 }
