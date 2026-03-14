@@ -1,10 +1,24 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
 	httpmiddleware "github.com/wolfman30/medspa-ai-platform/internal/http/middleware"
 )
+
+// adminAuthMiddleware returns the shared JWT auth middleware used by all admin routes.
+func adminAuthMiddleware(cfg *Config) func(http.Handler) http.Handler {
+	return httpmiddleware.CognitoOrAdminJWT(
+		httpmiddleware.CognitoConfig{
+			Region:     cfg.CognitoRegion,
+			UserPoolID: cfg.CognitoUserPoolID,
+			ClientID:   cfg.CognitoClientID,
+		},
+		cfg.AdminAuthSecret,
+	)
+}
 
 // registerAdminRoutes mounts all admin-only endpoints behind JWT authentication.
 // Supports both legacy HMAC and Cognito RS256 tokens.
@@ -13,20 +27,16 @@ func registerAdminRoutes(r chi.Router, cfg *Config) {
 		return
 	}
 
-	cognitoCfg := httpmiddleware.CognitoConfig{
-		Region:     cfg.CognitoRegion,
-		UserPoolID: cfg.CognitoUserPoolID,
-		ClientID:   cfg.CognitoClientID,
-	}
+	authMW := adminAuthMiddleware(cfg)
 
 	// Revenue attribution dashboard endpoint requested by CEO dashboard.
 	if cfg.DB != nil {
 		revenueHandler := handlers.NewRevenueDashboardHandler(cfg.DB, cfg.ClinicStore, cfg.Logger)
-		r.With(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret)).Get("/api/dashboard/revenue", revenueHandler.GetRevenueDashboard)
+		r.With(authMW).Get("/api/dashboard/revenue", revenueHandler.GetRevenueDashboard)
 	}
 
 	r.Route("/admin", func(admin chi.Router) {
-		admin.Use(httpmiddleware.CognitoOrAdminJWT(cognitoCfg, cfg.AdminAuthSecret))
+		admin.Use(authMW)
 		if cfg.ConversationHandler != nil {
 		}
 		if cfg.AdminMessaging != nil {
