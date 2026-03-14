@@ -175,14 +175,22 @@ func (s *LLMService) fetchAndPresentAvailability(
 					s.logger.Warn("failed to save Boulevard cart ID", "error", saveErr)
 				}
 			}
-			// Convert Boulevard slots to AvailabilityResult, applying time preferences
-			slots := make([]PresentedSlot, 0, len(blvdSlots))
+			// Convert Boulevard slots to AvailabilityResult.
+			// First filter by business hours, then by time preferences.
+			// If time prefs are too restrictive (< 3 slots), fall back to
+			// all valid slots so the patient gets enough options.
+			validSlots := make([]PresentedSlot, 0, len(blvdSlots))
+			prefSlots := make([]PresentedSlot, 0, len(blvdSlots))
 			idx := 1
+			prefIdx := 1
 			for _, bs := range blvdSlots {
-				if !matchesTimePreferences(bs.StartAt, timePrefs) {
+				// Validate against business hours — reject slots outside operating hours
+				if cfg != nil && !isWithinBusinessHours(bs.StartAt, cfg.BusinessHours) {
+					s.logger.Info("Boulevard: slot outside business hours, skipping",
+						"slot", bs.StartAt.Format(time.RFC3339), "conversation_id", conversationID)
 					continue
 				}
-				slots = append(slots, PresentedSlot{
+				validSlots = append(validSlots, PresentedSlot{
 					Index:     idx,
 					DateTime:  bs.StartAt,
 					TimeStr:   bs.StartAt.Format("Mon Jan 2 at 3:04 PM"),
@@ -190,6 +198,24 @@ func (s *LLMService) fetchAndPresentAvailability(
 					Available: true,
 				})
 				idx++
+				if matchesTimePreferences(bs.StartAt, timePrefs) {
+					prefSlots = append(prefSlots, PresentedSlot{
+						Index:     prefIdx,
+						DateTime:  bs.StartAt,
+						TimeStr:   bs.StartAt.Format("Mon Jan 2 at 3:04 PM"),
+						Service:   prefs.ServiceInterest,
+						Available: true,
+					})
+					prefIdx++
+				}
+			}
+			// Use preference-filtered slots if enough, otherwise fall back to all valid slots
+			slots := prefSlots
+			if len(prefSlots) < 3 && len(validSlots) > len(prefSlots) {
+				s.logger.Info("Boulevard: too few slots match time prefs, showing all valid slots",
+					"pref_count", len(prefSlots), "valid_count", len(validSlots),
+					"conversation_id", conversationID)
+				slots = validSlots
 			}
 			// Spread across days like Moxie flow
 			slots = spreadSlotsAcrossDays(slots, maxSlotsToPresent, 2)
@@ -281,6 +307,41 @@ func (s *LLMService) buildTimeSelectionResponse(
 		ExactMatch: result.ExactMatch,
 		SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
 	}
+}
+
+// isWithinBusinessHours checks if a slot time falls within the clinic's business hours.
+// Returns true if no business hours are configured (appointment-only clinics).
+func isWithinBusinessHours(slotTime time.Time, bh clinic.BusinessHours) bool {
+	var hours *clinic.DayHours
+	switch slotTime.Weekday() {
+	case time.Monday:
+		hours = bh.Monday
+	case time.Tuesday:
+		hours = bh.Tuesday
+	case time.Wednesday:
+		hours = bh.Wednesday
+	case time.Thursday:
+		hours = bh.Thursday
+	case time.Friday:
+		hours = bh.Friday
+	case time.Saturday:
+		hours = bh.Saturday
+	case time.Sunday:
+		hours = bh.Sunday
+	}
+	// No hours configured for this day = clinic is closed (unless no hours at all)
+	if hours == nil {
+		// If ALL days are nil, clinic is appointment-only — allow any slot
+		if bh.Monday == nil && bh.Tuesday == nil && bh.Wednesday == nil &&
+			bh.Thursday == nil && bh.Friday == nil && bh.Saturday == nil && bh.Sunday == nil {
+			return true
+		}
+		return false // This specific day is closed
+	}
+	openMinutes := parseTimeToMinutes(hours.Open)
+	closeMinutes := parseTimeToMinutes(hours.Close)
+	slotMinutes := slotTime.Hour()*60 + slotTime.Minute()
+	return slotMinutes >= openMinutes && slotMinutes < closeMinutes
 }
 
 // filterSlotsByTimePrefs filters pre-fetched slots by patient's time preferences.
