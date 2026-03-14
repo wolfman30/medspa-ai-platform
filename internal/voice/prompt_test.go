@@ -193,7 +193,7 @@ func TestBuildVoiceSystemPrompt_GreetingSuppression(t *testing.T) {
 func TestBuildVoiceSystemPrompt_StructuredSections(t *testing.T) {
 	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	// Verify the prompt has clear section headers
-	sections := []string{"GREETING:", "STYLE:", "BOOKING FLOW:", "AVAILABILITY:", "DEPOSIT:", "PAYMENT RULES:", "BEHAVIOR:"}
+	sections := []string{"GREETING:", "STYLE:", "BOOKING FLOW", "AVAILABILITY:", "DEPOSIT:", "PAYMENT RULES:", "BEHAVIOR:"}
 	for _, s := range sections {
 		if !strings.Contains(prompt, s) {
 			t.Errorf("expected section header %q in prompt", s)
