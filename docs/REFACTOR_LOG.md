@@ -17,3 +17,4 @@
 | 2026-03-12 | #91 | Add godoc comments for exported prospects types/repository/handler symbols | `internal/prospects/{model,repository,handler}.go` |
 | 2026-03-12 | #92 | Add missing Godoc comments for exported symbols in `internal/events` | `internal/events/outbox.go`, `internal/events/processed_store.go`, `internal/events/types.go`, `internal/events/messaging_types.go` |
 | 2026-03-12 | #93 | Add godoc comments for exported types in service test and knowledge seeding scripts | `scripts/service-tests/main.go`, `scripts/seed-knowledge/main.go` |
+| 2026-03-14 | #99 | Split `system_prompt.go` (627→473+162 lines) into templates and builder logic | `internal/conversation/system_prompt_templates.go`, `internal/conversation/system_prompt.go` |
