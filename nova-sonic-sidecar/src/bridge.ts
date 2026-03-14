@@ -171,15 +171,20 @@ export class CallSession {
           return;
         }
 
+        // Route assistant text to ElevenLabs for TTS
+        if (role === "assistant") {
+          // Skip duplicate greetings — we already sent one via pre-recorded Telnyx audio.
+          // Check BEFORE send() so the greeting is never forwarded or spoken.
+          if (this.greetingSent && this.isGreeting(cleanText)) {
+            this.log("info", `Skipping duplicate greeting (blocked before send): ${cleanText.substring(0, 60)}`);
+            return; // Don't send transcript, don't TTS — completely suppress
+          }
+        }
+
         this.send({ type: "transcript", role, text: cleanText });
 
         // Route assistant text to ElevenLabs for TTS
         if (role === "assistant") {
-          // Skip duplicate greetings — we already sent one via ElevenLabs
-          if (this.greetingSent && this.isGreeting(cleanText)) {
-            this.log("info", `Skipping duplicate greeting: ${cleanText.substring(0, 60)}`);
-            return;
-          }
           // Bug #5: Dedup on normalized text content with 30-second time window
           // Nova Sonic sends duplicate responses with varying delays (sometimes >5s)
           const normalized = cleanText.trim().replace(/\s+/g, " ").toLowerCase();
