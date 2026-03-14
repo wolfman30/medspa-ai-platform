@@ -205,15 +205,12 @@ export class CallSession {
       if (greeting === "__SKIP__") {
         this.log("info", "Skipping ElevenLabs greeting (Telnyx TTS handles it)");
         this.greetingSent = true;
-        // Mute Nova Sonic input for 12s from init time. Timeline:
-        // +0s: init message received, mute starts
-        // +1-2s: Telnyx processes playback_start command
-        // +2-6s: Pre-recorded greeting plays (~4s audio)
-        // +6-9s: Phone echo (speaker→mic loop) arrives
-        // +9-12s: Safety buffer for slow networks
-        // Total: 12s covers the entire chain with margin.
-        this.greetingMuteUntil = Date.now() + 12000;
-        this.log("info", "Post-greeting mute window active for 12s (Telnyx playback + echo + buffer)");
+        // Short mute (3s) just to cover the initial streaming setup.
+        // Echo protection is handled by the transcript filter (isGreeting)
+        // which suppresses any user transcript that sounds like our greeting.
+        // We keep the mute short so callers who speak quickly aren't ignored.
+        this.greetingMuteUntil = Date.now() + 3000;
+        this.log("info", "Post-greeting mute window active for 3s (setup buffer; echo handled by transcript filter)");
       } else {
         this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
         // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
