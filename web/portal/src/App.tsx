@@ -20,6 +20,7 @@ import { TelnyxMissionControl } from './components/TelnyxMissionControl';
 import { MorningBriefs } from './components/MorningBriefs';
 import { MultiOrgRollup } from './components/MultiOrgRollup';
 import { CronCalendar } from './components/CronCalendar';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -49,7 +50,8 @@ type AppView =
   | 'telnyx'
   | 'briefs'
   | 'rollup'
-  | 'crons';
+  | 'crons'
+  | 'analytics';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -518,6 +520,13 @@ function AuthenticatedApp() {
                     Crons
                   </button>
                 )}
+                <button
+                  onClick={() => setView('analytics')}
+                  aria-current={view === 'analytics' ? 'page' : undefined}
+                  className={view === 'analytics' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                >
+                  Analytics
+                </button>
               </nav>
             )}
           </div>
@@ -535,6 +544,8 @@ function AuthenticatedApp() {
           <StoriesBoard />
         ) : view === 'agents' ? (
           <AgentTeamCard />
+        ) : view === 'analytics' ? (
+          <AnalyticsDashboard orgId={orgId} />
         ) : view === 'operations' ? (
           <ClinicOperationalDashboard orgId={orgId} />
         ) : view === 'rollup' ? (
@@ -635,6 +646,8 @@ function AuthenticatedApp() {
             orgId={orgId}
             scope={dataScope}
           />
+        ) : view === 'analytics' ? (
+          <AnalyticsDashboard orgId={orgId} />
         ) : view === 'conversations' ? (
           <ConversationList
             orgId={orgId}
