@@ -160,27 +160,32 @@ func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
 
 // shouldProcessAssistantText suppresses duplicate assistant transcripts that can arrive
 // from sidecar retries/replays. It deduplicates normalized text within a short time window.
+// Uses substring matching to catch near-duplicates where one message is a prefix/suffix of another.
 func (b *Bridge) shouldProcessAssistantText(text string) bool {
 	normalized := strings.TrimSpace(strings.ToLower(text))
 	if normalized == "" {
 		return false
 	}
 
-	// dedupWindow is the time window in which identical transcripts are suppressed.
+	// dedupWindow is the time window in which identical or near-identical transcripts are suppressed.
 	const dedupWindow = 30 * time.Second
 	now := time.Now()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if prev, ok := b.recentAssistantText[normalized]; ok && now.Sub(prev) <= dedupWindow {
-		return false
-	}
-
-	// opportunistic cleanup
-	for k, ts := range b.recentAssistantText {
+	for prev, ts := range b.recentAssistantText {
 		if now.Sub(ts) > dedupWindow {
-			delete(b.recentAssistantText, k)
+			delete(b.recentAssistantText, prev)
+			continue
+		}
+		// Exact match
+		if prev == normalized {
+			return false
+		}
+		// Fuzzy: one contains the other (catches rephrased near-duplicates)
+		if strings.Contains(normalized, prev) || strings.Contains(prev, normalized) {
+			return false
 		}
 	}
 

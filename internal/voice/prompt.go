@@ -69,9 +69,9 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 	// Qualification flow
 	sb.WriteString("When booking appointments, collect information ONE QUESTION AT A TIME in this order: ")
 	sb.WriteString("1) What service they want, ")
-	sb.WriteString("2) Their full name (repeat it back to confirm), ")
+	sb.WriteString("2) Their full name — ALWAYS repeat it back for confirmation. Say: 'I heard [name] — did I get that right?' Wait for them to confirm or correct before proceeding. If they correct you, repeat the corrected name back and spell it out: 'A-N-D-R-E-W, Andrew — got it!' Names are often misheard on the phone, so ALWAYS confirm. ")
 	sb.WriteString("3) Whether they're a new or returning patient, ")
-	sb.WriteString("4) Provider preference (ask: 'Do you have a provider preference, or first available?'), ")
+	sb.WriteString("4) Provider preference (ask: 'Do you have a provider preference, or first available?'). If the caller's response does not make sense as a provider name or 'first available', say: 'Sorry, I didn't quite catch that — did you say first available, or do you have a specific provider in mind?' Do NOT move on with a nonsensical answer. ")
 	sb.WriteString("5) Their preferred DAYS and TIMES (not dates — say 'What days and times work best for you?'). ")
 	sb.WriteString("CRITICAL: Do NOT skip this sequence. Do NOT jump straight to offering times before collecting service, name, patient type, and provider preference. ")
 	sb.WriteString("CRITICAL: Ask only ONE question per response. Do NOT combine questions like 'What's your name and are you new or returning?' — ask for the name first, wait for the answer, THEN ask if they're new or returning. ")
