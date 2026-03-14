@@ -163,16 +163,16 @@ func (h *CallControlHandler) HandleCallControl(w http.ResponseWriter, r *http.Re
 		}
 
 	case "call.answered":
-		// Fire Telnyx TTS greeting IMMEDIATELY for instant response (<1s).
+		// Play pre-recorded Lauren greeting via Telnyx play command (instant, <1s).
+		// Audio is pre-generated with ElevenLabs and hosted on S3.
 		// Simultaneously start streaming so Nova Sonic boots in the background.
-		// Nova Sonic's system prompt is configured to NOT greet (greeting already spoken).
-		h.speakGreeting(callControlID, from, to)
+		h.playPreRecordedGreeting(callControlID, from, to)
 		h.startStreaming(callControlID, from, to)
 
 	case "streaming.started":
-		// Stream is live — Nova Sonic is ready. Telnyx TTS greeting may still
+		// Stream is live — Nova Sonic is ready. Pre-recorded greeting may still
 		// be playing. Nova Sonic will wait for caller's first words after greeting.
-		h.logger.Info("call-control: streaming started, Telnyx TTS greeting in progress",
+		h.logger.Info("call-control: streaming started, pre-recorded greeting playing",
 			"call_control_id", callControlID,
 		)
 
@@ -277,6 +277,39 @@ func (h *CallControlHandler) startStreaming(callControlID, from, to string) {
 		"client_state":               clientState,
 	}
 	h.sendCallControlCommand(callControlID, "streaming_start", payload)
+}
+
+// playPreRecordedGreeting plays a pre-recorded Lauren ElevenLabs greeting via Telnyx play command.
+// The audio is pre-generated and hosted on S3 for instant playback (<1s).
+func (h *CallControlHandler) playPreRecordedGreeting(callControlID, from, to string) {
+	orgID := ""
+	if h.orgResolver != nil {
+		if resolved, err := h.orgResolver.ResolveOrgID(context.Background(), to); err == nil {
+			orgID = resolved
+		}
+	}
+
+	// Map org IDs to pre-recorded greeting URLs (ElevenLabs Lauren B voice)
+	greetingURLs := map[string]string{
+		"d9558a2d-2110-4e26-8224-1b36cd526e14": "https://api-dev.aiwolfsolutions.com/static/greetings/bodytonic.mp3",
+		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": "https://api-dev.aiwolfsolutions.com/static/greetings/forever22.mp3",
+	}
+
+	audioURL, ok := greetingURLs[orgID]
+	if !ok {
+		// Fallback: let sidecar handle greeting via ElevenLabs TTS
+		h.logger.Info("call-control: no pre-recorded greeting, sidecar will handle",
+			"call_control_id", callControlID, "org_id", orgID)
+		return
+	}
+
+	h.logger.Info("call-control: playing pre-recorded Lauren greeting",
+		"call_control_id", callControlID, "org_id", orgID, "url", audioURL)
+
+	payload := map[string]interface{}{
+		"audio_url": audioURL,
+	}
+	h.sendCallControlCommand(callControlID, "play", payload)
 }
 
 // speakGreeting uses Telnyx TTS to speak a greeting, then passes caller

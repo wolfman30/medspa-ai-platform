@@ -42,6 +42,8 @@ ENV PORT=8080
 EXPOSE 8080
 
 COPY --from=builder /bin/medspa-api /bin/medspa-api
+COPY --from=builder /app/static /app/static
+WORKDIR /app
 
 ENTRYPOINT ["/bin/medspa-api"]
 

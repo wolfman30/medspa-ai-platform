@@ -159,6 +159,19 @@ func New(cfg *Config) http.Handler {
 			r.Use(httpmiddleware.RateLimit(100, 200))
 			r.Post("/voice", cfg.MessagingHandler.TwilioVoiceWebhook)
 		})
+		// Static voice greeting audio files (pre-recorded Lauren ElevenLabs voice)
+		public.Get("/static/greetings/{file}", func(w http.ResponseWriter, r *http.Request) {
+			file := chi.URLParam(r, "file")
+			// Sanitize: only allow alphanumeric + hyphens + .mp3
+			if len(file) > 50 || !isValidGreetingFile(file) {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "audio/mpeg")
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			http.ServeFile(w, r, "static/greetings/"+file)
+		})
+
 		if cfg.SquareWebhook != nil {
 			public.Post("/webhooks/square", cfg.SquareWebhook.Handle)
 		}
@@ -522,4 +535,17 @@ func readinessHandler(cfg *Config) http.HandlerFunc {
 		resp := map[string]interface{}{"ready": ready, "checks": checks}
 		json.NewEncoder(w).Encode(resp)
 	}
+}
+
+// isValidGreetingFile checks that a filename is safe for static serving.
+func isValidGreetingFile(name string) bool {
+	if len(name) < 5 || name[len(name)-4:] != ".mp3" {
+		return false
+	}
+	for _, c := range name[:len(name)-4] {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
