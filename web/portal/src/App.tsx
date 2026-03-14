@@ -19,6 +19,7 @@ import { ClinicOperationalDashboard } from './components/ClinicOperationalDashbo
 import { TelnyxMissionControl } from './components/TelnyxMissionControl';
 import { MorningBriefs } from './components/MorningBriefs';
 import { MultiOrgRollup } from './components/MultiOrgRollup';
+import { CronCalendar } from './components/CronCalendar';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -47,7 +48,8 @@ type AppView =
   | 'operations'
   | 'telnyx'
   | 'briefs'
-  | 'rollup';
+  | 'rollup'
+  | 'crons';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -507,6 +509,15 @@ function AuthenticatedApp() {
                     Revenue Rollup
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('crons')}
+                    aria-current={view === 'crons' ? 'page' : undefined}
+                    className={view === 'crons' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Crons
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -530,6 +541,8 @@ function AuthenticatedApp() {
           <MultiOrgRollup />
         ) : view === 'telnyx' ? (
           <TelnyxMissionControl />
+        ) : view === 'crons' ? (
+          <CronCalendar />
         ) : view === 'finances' ? (
           <FinanceDashboard />
         ) : view === 'leads' ? (
