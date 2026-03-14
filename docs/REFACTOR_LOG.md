@@ -18,3 +18,4 @@
 | 2026-03-12 | #92 | Add missing Godoc comments for exported symbols in `internal/events` | `internal/events/outbox.go`, `internal/events/processed_store.go`, `internal/events/types.go`, `internal/events/messaging_types.go` |
 | 2026-03-12 | #93 | Add godoc comments for exported types in service test and knowledge seeding scripts | `scripts/service-tests/main.go`, `scripts/seed-knowledge/main.go` |
 | 2026-03-14 | #99 | Split `system_prompt.go` (627→473+162 lines) into templates and builder logic | `internal/conversation/system_prompt_templates.go`, `internal/conversation/system_prompt.go` |
+| 2026-03-14 | #100 | Split `llm_helpers.go` (578→3 files: helpers, content detection, lead helpers) + decompose 140-line `appendContext()` into 6 focused helpers | `internal/conversation/llm_helpers.go`, `llm_content_detection.go`, `llm_lead_helpers.go` |
