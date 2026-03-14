@@ -155,6 +155,13 @@ export class CallSession {
         // Skip empty or whitespace-only after cleanup
         if (!cleanText) return;
 
+        // Bug #7: Suppress echo — if Nova Sonic transcribes USER audio that
+        // sounds like our own greeting, it's phone echo, not the caller.
+        if (role === "user" && this.isGreeting(cleanText)) {
+          this.log("info", `Suppressing greeting echo from user audio: ${cleanText.substring(0, 60)}`);
+          return;
+        }
+
         this.send({ type: "transcript", role, text: cleanText });
 
         // Route assistant text to ElevenLabs for TTS
@@ -198,11 +205,15 @@ export class CallSession {
       if (greeting === "__SKIP__") {
         this.log("info", "Skipping ElevenLabs greeting (Telnyx TTS handles it)");
         this.greetingSent = true;
-        // Mute Nova Sonic input for 8s while the pre-recorded Telnyx greeting plays.
-        // The greeting is ~4s, but phone echo (speaker → mic loop on caller's
-        // device) can arrive 1-3s after playback ends. 8s covers greeting + echo.
-        this.greetingMuteUntil = Date.now() + 8000;
-        this.log("info", "Post-greeting mute window active for 8s (Telnyx playback + echo)");
+        // Mute Nova Sonic input for 12s from init time. Timeline:
+        // +0s: init message received, mute starts
+        // +1-2s: Telnyx processes playback_start command
+        // +2-6s: Pre-recorded greeting plays (~4s audio)
+        // +6-9s: Phone echo (speaker→mic loop) arrives
+        // +9-12s: Safety buffer for slow networks
+        // Total: 12s covers the entire chain with margin.
+        this.greetingMuteUntil = Date.now() + 12000;
+        this.log("info", "Post-greeting mute window active for 12s (Telnyx playback + echo + buffer)");
       } else {
         this.log("info", `Sending auto-greeting via ElevenLabs: ${greeting}`);
         // Bug #1: After greeting TTS finishes, mute user audio for 1.5s to prevent echo
