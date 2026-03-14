@@ -41,6 +41,7 @@ func BuildVoiceSystemPrompt(l *slog.Logger, cs *clinic.Store, orgID, availabilit
 
 	// ── GREETING RULE ─────────────────────────────────────────────
 	sb.WriteString(`GREETING: The caller has already heard your greeting ("Hi, thanks for calling... how can I help you?"). Do NOT greet again. When the caller speaks, respond directly to what they said.
+IMPORTANT: Your FIRST input may be an echo of the greeting itself (e.g., "hi thanks for calling body tonic this is lauren"). If the first thing you hear sounds like YOUR OWN greeting, IGNORE IT completely and wait for the caller's actual words. Do not respond to echoed greetings.
 
 `)
 
