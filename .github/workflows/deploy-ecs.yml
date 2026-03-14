@@ -415,6 +415,25 @@ jobs:
         run: |
           go test -tags integration -v -timeout 120s ./internal/emr/boulevard/ -run TestIntegration
 
+      - name: Verify voice greeting audio files are served
+        env:
+          API_BASE_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
+        run: |
+          echo "Checking pre-recorded greeting files..."
+          for clinic in bodytonic forever22; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE_URL}/static/greetings/${clinic}.mp3")
+            if [ "$STATUS" != "200" ]; then
+              echo "❌ Greeting file ${clinic}.mp3 returned HTTP ${STATUS}"
+              exit 1
+            fi
+            SIZE=$(curl -s "${API_BASE_URL}/static/greetings/${clinic}.mp3" | wc -c)
+            if [ "$SIZE" -lt 10000 ]; then
+              echo "❌ Greeting file ${clinic}.mp3 too small (${SIZE} bytes) — likely corrupt"
+              exit 1
+            fi
+            echo "✅ ${clinic}.mp3 — HTTP 200, ${SIZE} bytes"
+          done
+
       - name: Run E2E smoke test (happy-path)
         env:
           API_BASE_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
