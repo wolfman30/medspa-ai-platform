@@ -147,17 +147,23 @@ func TestGreetingIncludesAudioURL(t *testing.T) {
 		t.Fatal("no command sent")
 	}
 
-	// Must include media_name (Telnyx CDN) and audio_url (fallback)
-	mediaName, _ := cmds[0].payload["media_name"].(string)
-	audioURL, _ := cmds[0].payload["audio_url"].(string)
-	if mediaName == "" && audioURL == "" {
-		t.Fatal("both media_name and audio_url missing from playback_start payload")
+	// Must include audio_url
+	audioURL, ok := cmds[0].payload["audio_url"].(string)
+	if !ok || audioURL == "" {
+		t.Fatal("audio_url missing from playback_start payload")
 	}
-	if mediaName != "" && !strings.Contains(mediaName, "bodytonic") {
-		t.Errorf("media_name = %q, should contain 'bodytonic'", mediaName)
-	}
-	if audioURL != "" && !strings.HasSuffix(audioURL, ".mp3") {
+	if !strings.HasSuffix(audioURL, ".mp3") {
 		t.Errorf("audio_url = %q, want .mp3 suffix", audioURL)
+	}
+	if !strings.Contains(audioURL, "bodytonic") {
+		t.Errorf("audio_url = %q, should contain 'bodytonic' for BodyTonic org", audioURL)
+	}
+
+	// REGRESSION: Telnyx returns 422 if both media_name AND audio_url are sent.
+	// Only ONE is allowed per payload.
+	_, hasMediaName := cmds[0].payload["media_name"]
+	if hasMediaName && audioURL != "" {
+		t.Error("REGRESSION: payload has BOTH media_name and audio_url — Telnyx returns 422. Use only one.")
 	}
 }
 
