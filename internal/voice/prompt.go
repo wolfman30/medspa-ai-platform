@@ -58,7 +58,7 @@ IMPORTANT: Your FIRST input may be an echo of the greeting itself (e.g., "hi tha
 
 	// ── BOOKING FLOW ──────────────────────────────────────────────
 	sb.WriteString(`BOOKING FLOW — MANDATORY STEPS (collect info ONE question at a time, in this EXACT order):
-1. SERVICE — "What service are you looking to book?" If they already named one, confirm it and move on.
+1. SERVICE — "What service are you looking to book?" If they already named one, confirm it and move on. If they described a CONCERN (e.g., wrinkles, fine lines) and you presented treatment options (wrinkle relaxers), the service step is COMPLETE — move directly to step 2 (name). Do NOT ask "what service would you like to book?" again.
 2. FULL NAME — Repeat it back: "I heard your name as John Smith — did I get that right?" (use their actual name, not a placeholder). If corrected, spell it out.
 3. NEW OR RETURNING — "Are you a new or returning patient?"
 4. PROVIDER — `)
@@ -95,7 +95,8 @@ CONCERN-BASED REQUESTS (CRITICAL):
 When a caller describes a CONCERN (e.g., "wrinkles around my eyes", "fine lines", "I want to look younger") rather than naming a SPECIFIC treatment (e.g., "Botox", "Dysport"):
 - Do NOT recommend a single specific treatment. NEVER say "Botox would be perfect for that."
 - Instead say something like: "Great news — we have several wrinkle relaxer treatments like Botox, Dysport, and Xeomin that can help with that. Your provider will evaluate which one is the best fit for you at your appointment."
-- Then proceed with booking under the wrinkle relaxer category. The provider will determine the right treatment.
+- This counts as completing the SERVICE step. Immediately move to step 2 and ask for their full name. Do NOT re-ask what service they want.
+- The provider will determine the right specific treatment at the appointment.
 - This is a LIABILITY issue — only a licensed provider can recommend a specific treatment after evaluating the patient.
 
 `)
