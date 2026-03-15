@@ -499,6 +499,146 @@ func TestProcessMessage_MoxieGuardrailAsksNameFirst(t *testing.T) {
 	}
 }
 
+// Boulevard clinics must also get qualification guardrails
+func TestProcessMessage_BoulevardGuardrailAsksNameFirst(t *testing.T) {
+	ts := setupService(t,
+		withLLMResponses("Hello!", "May I have your full name?"),
+		withClinicConfig("org-blvd", func(cfg *clinic.Config) {
+			cfg.BookingPlatform = "boulevard"
+			cfg.BoulevardBusinessID = "biz-123"
+			cfg.BoulevardLocationID = "loc-456"
+			cfg.Services = []string{"Botox"}
+			cfg.ServiceAliases = map[string]string{"botox": "Botox"}
+		}),
+	)
+	startConv(t, ts, "conv-blvd-name", "org-blvd", "Hi")
+
+	_, err := ts.svc.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: "conv-blvd-name",
+		OrgID:          "org-blvd",
+		Message:        "I want Botox",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lastReq := ts.llm.requests[len(ts.llm.requests)-1]
+	foundNameGuardrail := false
+	for _, msg := range lastReq.Messages {
+		if strings.Contains(msg.Content, "MUST ask for their full name") || strings.Contains(msg.Content, "NAME is #1") {
+			foundNameGuardrail = true
+			break
+		}
+	}
+	if !foundNameGuardrail {
+		for _, s := range lastReq.System {
+			if strings.Contains(s, "MUST ask for their full name") || strings.Contains(s, "NAME is #1") {
+				foundNameGuardrail = true
+				break
+			}
+		}
+	}
+	if !foundNameGuardrail {
+		t.Fatalf("expected name guardrail for Boulevard clinic, but none found")
+	}
+}
+
+func TestProcessMessage_BoulevardGuardrailAsksSchedule(t *testing.T) {
+	ts := setupService(t,
+		withLLMResponses("Hello!", "Great!", "Have you visited before?", "What days work best?"),
+		withClinicConfig("org-blvd-sched", func(cfg *clinic.Config) {
+			cfg.BookingPlatform = "boulevard"
+			cfg.BoulevardBusinessID = "biz-123"
+			cfg.BoulevardLocationID = "loc-456"
+			cfg.Services = []string{"Botox"}
+			cfg.ServiceAliases = map[string]string{"botox": "Botox"}
+		}),
+	)
+	startConv(t, ts, "conv-blvd-sched", "org-blvd-sched", "Hi")
+
+	// Provide service + name + patient type but NOT schedule
+	msgs := []struct{ msg string }{
+		{"I want Botox"},
+		{"My name is Jane Smith"},
+		{"I'm a new patient"},
+	}
+	for _, m := range msgs {
+		_, err := ts.svc.ProcessMessage(context.Background(), MessageRequest{
+			ConversationID: "conv-blvd-sched",
+			OrgID:          "org-blvd-sched",
+			Message:        m.msg,
+			Channel:        ChannelSMS,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error on %q: %v", m.msg, err)
+		}
+	}
+
+	lastReq := ts.llm.requests[len(ts.llm.requests)-1]
+	foundScheduleGuardrail := false
+	for _, msg := range lastReq.Messages {
+		if strings.Contains(msg.Content, "SCHEDULE") && strings.Contains(msg.Content, "preferred days and times") {
+			foundScheduleGuardrail = true
+			break
+		}
+	}
+	if !foundScheduleGuardrail {
+		for _, s := range lastReq.System {
+			if strings.Contains(s, "SCHEDULE") && strings.Contains(s, "preferred days and times") {
+				foundScheduleGuardrail = true
+				break
+			}
+		}
+	}
+	if !foundScheduleGuardrail {
+		t.Fatalf("expected schedule guardrail for Boulevard clinic after name+service+patientType, but none found")
+	}
+}
+
+func TestProcessMessage_BoulevardConcernBasedGuardrail(t *testing.T) {
+	ts := setupService(t,
+		withLLMResponses("Hello!", "Several great options..."),
+		withClinicConfig("org-blvd-concern", func(cfg *clinic.Config) {
+			cfg.BookingPlatform = "boulevard"
+			cfg.BoulevardBusinessID = "biz-123"
+			cfg.BoulevardLocationID = "loc-456"
+			cfg.Services = []string{"Botox", "Dysport", "Xeomin"}
+		}),
+	)
+	startConv(t, ts, "conv-blvd-concern", "org-blvd-concern", "Hi")
+
+	_, err := ts.svc.ProcessMessage(context.Background(), MessageRequest{
+		ConversationID: "conv-blvd-concern",
+		OrgID:          "org-blvd-concern",
+		Message:        "I want to get rid of wrinkles around my eyes",
+		Channel:        ChannelSMS,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lastReq := ts.llm.requests[len(ts.llm.requests)-1]
+	foundConcernGuardrail := false
+	for _, msg := range lastReq.Messages {
+		if strings.Contains(msg.Content, "CONCERN") && strings.Contains(msg.Content, "wrinkle relaxer") {
+			foundConcernGuardrail = true
+			break
+		}
+	}
+	if !foundConcernGuardrail {
+		for _, s := range lastReq.System {
+			if strings.Contains(s, "CONCERN") && strings.Contains(s, "wrinkle relaxer") {
+				foundConcernGuardrail = true
+				break
+			}
+		}
+	}
+	if !foundConcernGuardrail {
+		t.Fatalf("expected concern-based guardrail for Boulevard clinic when patient mentions wrinkles")
+	}
+}
+
 // Phase 8: LLM response sanitization
 func TestProcessMessage_SanitizesLLMResponse(t *testing.T) {
 	ts := setupService(t, withLLMResponses("Hello!", "**Bold text** with `code`"))
