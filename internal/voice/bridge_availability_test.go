@@ -109,9 +109,9 @@ func TestMatchesVoicePreferences_MinutePrecision(t *testing.T) {
 	prefs := parseVoiceTimePreferences("after 2:30 weekdays")
 
 	slot200pm := time.Date(2026, 3, 16, 14, 0, 0, 0, time.UTC)  // Monday 2:00 PM
-	slot215pm := time.Date(2026, 3, 16, 14, 15, 0, 0, time.UTC)  // Monday 2:15 PM
-	slot230pm := time.Date(2026, 3, 16, 14, 30, 0, 0, time.UTC)  // Monday 2:30 PM
-	slot300pm := time.Date(2026, 3, 16, 15, 0, 0, 0, time.UTC)   // Monday 3:00 PM
+	slot215pm := time.Date(2026, 3, 16, 14, 15, 0, 0, time.UTC) // Monday 2:15 PM
+	slot230pm := time.Date(2026, 3, 16, 14, 30, 0, 0, time.UTC) // Monday 2:30 PM
+	slot300pm := time.Date(2026, 3, 16, 15, 0, 0, 0, time.UTC)  // Monday 3:00 PM
 
 	if matchesVoicePreferences(slot200pm, prefs) {
 		t.Error("2:00 PM should NOT match 'after 2:30'")

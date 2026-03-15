@@ -202,10 +202,10 @@ func (b *Bridge) maybeFilterAndInjectSlots(ctx context.Context, text string) {
 
 // voiceTimePrefs holds parsed time preferences for voice filtering.
 type voiceTimePrefs struct {
-	daysOfWeek  []time.Weekday
-	afterHour   int // -1 if not set
-	afterMinute int // 0 if not set (used with afterHour)
-	beforeHour  int // -1 if not set
+	daysOfWeek   []time.Weekday
+	afterHour    int // -1 if not set
+	afterMinute  int // 0 if not set (used with afterHour)
+	beforeHour   int // -1 if not set
 	beforeMinute int // 0 if not set (used with beforeHour)
 }
 
