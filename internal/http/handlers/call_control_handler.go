@@ -336,7 +336,7 @@ func (h *CallControlHandler) playPreRecordedGreeting(callControlID, from, to str
 		audioURL  string
 	}
 	greetings := map[string]greetingConfig{
-		"d9558a2d-2110-4e26-8224-1b36cd526e14": {mediaName: "greeting-bodytonic", audioURL: "https://api-dev.aiwolfsolutions.com/static/greetings/bodytonic.mp3"},
+		"d9558a2d-2110-4e26-8224-1b36cd526e14": {mediaName: "greeting-bodywise", audioURL: "https://api-dev.aiwolfsolutions.com/static/greetings/bodywise.mp3"},
 		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": {mediaName: "greeting-forever22", audioURL: "https://api-dev.aiwolfsolutions.com/static/greetings/forever22.mp3"},
 	}
 

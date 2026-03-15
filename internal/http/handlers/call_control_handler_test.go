@@ -155,8 +155,8 @@ func TestGreetingIncludesAudioURL(t *testing.T) {
 	if !strings.HasSuffix(audioURL, ".mp3") {
 		t.Errorf("audio_url = %q, want .mp3 suffix", audioURL)
 	}
-	if !strings.Contains(audioURL, "bodytonic") {
-		t.Errorf("audio_url = %q, should contain 'bodytonic' for BodyTonic org", audioURL)
+	if !strings.Contains(audioURL, "bodywise") {
+		t.Errorf("audio_url = %q, should contain 'bodywise' for BodyWise org", audioURL)
 	}
 
 	// REGRESSION: Telnyx returns 422 if both media_name AND audio_url are sent.
@@ -200,7 +200,7 @@ func TestAllKnownOrgsHaveGreetingURLs(t *testing.T) {
 
 	// This must match the map in playPreRecordedGreeting
 	greetingURLs := map[string]string{
-		"d9558a2d-2110-4e26-8224-1b36cd526e14": "https://api-dev.aiwolfsolutions.com/static/greetings/bodytonic.mp3",
+		"d9558a2d-2110-4e26-8224-1b36cd526e14": "https://api-dev.aiwolfsolutions.com/static/greetings/bodywise.mp3",
 		"d0f9d4b4-05d2-40b3-ad4b-ae9a3b5c8599": "https://api-dev.aiwolfsolutions.com/static/greetings/forever22.mp3",
 	}
 
