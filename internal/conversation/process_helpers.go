@@ -209,10 +209,13 @@ func (s *LLMService) fetchAndPresentAvailability(
 					prefIdx++
 				}
 			}
-			// Use preference-filtered slots if enough, otherwise fall back to all valid slots
+			// Use preference-filtered slots. If none match, fall back to all valid
+			// slots so the patient gets SOMETHING — but never mix filtered and
+			// unfiltered. If the patient said "after 4" and only 1 slot is after 4,
+			// show that 1 slot. Don't pad with 3:30 PM slots that violate their request.
 			slots := prefSlots
-			if len(prefSlots) < 3 && len(validSlots) > len(prefSlots) {
-				s.logger.Info("Boulevard: too few slots match time prefs, showing all valid slots",
+			if len(prefSlots) == 0 && len(validSlots) > 0 {
+				s.logger.Info("Boulevard: no slots match time prefs, falling back to all valid slots",
 					"pref_count", len(prefSlots), "valid_count", len(validSlots),
 					"conversation_id", conversationID)
 				slots = validSlots
