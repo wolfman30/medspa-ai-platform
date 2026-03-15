@@ -402,7 +402,14 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 								slotLines = append(slotLines, fmt.Sprintf("- %s", s.StartAt.Format("Mon Jan 2 at 3:04 PM")))
 							}
 							if len(slotLines) > 0 {
-								systemPrompt += "\n\nPRE-FETCHED AVAILABILITY (real times from the booking system — use these when the caller asks for times):\n" + strings.Join(slotLines, "\n") + "\n\nThese are REAL available slots. When the caller gives you their time preferences, match against these slots and offer the ones that fit. Do NOT invent other times."
+								systemPrompt += "\n\n=== AVAILABLE APPOINTMENT TIMES (FROM BOOKING SYSTEM) ===\n" +
+									"THESE ARE THE ONLY TIMES THAT EXIST. There are NO other times.\n" +
+									"You MUST pick from this list. Any time not on this list DOES NOT EXIST.\n\n" +
+									strings.Join(slotLines, "\n") +
+									"\n\n=== END OF AVAILABLE TIMES ===\n" +
+									"STRICT RULE: If the caller wants times not on this list, say: " +
+									"\"I don't have openings matching that right now. Would you like to hear what I do have available?\" " +
+									"Then read times from the list above. NEVER say a time that is not on the list."
 							}
 							logger.Info("voice: pre-fetched Boulevard availability", "raw_slots", len(slots), "valid_slots", len(validSlots), "org_id", callCtx.OrgID, "times", strings.Join(slotLines, "; "))
 						} else if blvdErr != nil {
