@@ -352,7 +352,7 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 			CheckoutService: voiceCheckoutSvc,
 		}
 
-		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {
+		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (voice.VoiceBridge, error) {
 			systemPrompt := voice.BuildVoiceSystemPrompt(l, voiceToolDeps.ClinicStore, callCtx.OrgID)
 
 			// Pre-fetch Boulevard availability so Lauren has real slots
@@ -459,6 +459,29 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 				}); err != nil {
 					logger.Error("voice bridge: failed to persist transcript", "error", err, "conversation_id", conversationID)
 				}
+			}
+
+			// Choose bridge implementation based on VOICE_ENGINE
+			if voice.GetVoiceEngine() == "modular" {
+				return voice.NewModularBridge(
+					context.Background(),
+					voice.ModularBridgeConfig{
+						DeepgramAPIKey:   os.Getenv("DEEPGRAM_API_KEY"),
+						ElevenLabsAPIKey: os.Getenv("ELEVENLABS_API_KEY"),
+						SystemPrompt:     systemPrompt,
+						OrgID:            callCtx.OrgID,
+						CallerPhone:      callCtx.From,
+						CalledPhone:      callCtx.To,
+						ClinicName:       clinicName,
+						ToolDeps:         voiceToolDeps,
+						Redis:            redisClient,
+						OnTranscript:     onTranscript,
+						ConversationID:   conversationID,
+					},
+					callControlID,
+					mediaFormat,
+					l,
+				)
 			}
 
 			return voice.NewBridge(

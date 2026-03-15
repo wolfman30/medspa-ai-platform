@@ -79,14 +79,22 @@ type TelnyxStop struct {
 	Reason        string `json:"reason,omitempty"`
 }
 
+// VoiceBridge is the interface that both Bridge (Nova Sonic) and ModularBridge
+// (Deepgram→Claude→ElevenLabs) implement for Telnyx media streaming.
+type VoiceBridge interface {
+	SendAudio(audio []byte) error
+	ReadAudioForTelnyx() ([]byte, bool)
+	Close()
+}
+
 // TelnyxWSHandler handles the WebSocket connection from Telnyx.
 type TelnyxWSHandler struct {
 	logger        *slog.Logger
 	bridgeFactory BridgeFactory
 }
 
-// BridgeFactory creates a new Bridge for each incoming call.
-type BridgeFactory func(logger *slog.Logger, callControlID string, mediaFormat TelnyxMediaFormat, callCtx CallContext) (*Bridge, error)
+// BridgeFactory creates a new VoiceBridge for each incoming call.
+type BridgeFactory func(logger *slog.Logger, callControlID string, mediaFormat TelnyxMediaFormat, callCtx CallContext) (VoiceBridge, error)
 
 // NewTelnyxWSHandler creates the WebSocket handler.
 func NewTelnyxWSHandler(logger *slog.Logger, factory BridgeFactory) *TelnyxWSHandler {
@@ -123,7 +131,7 @@ type telnyxSession struct {
 	conn       *websocket.Conn
 	logger     *slog.Logger
 	factory    BridgeFactory
-	bridge     *Bridge
+	bridge     VoiceBridge
 	mu         sync.Mutex
 	mediaCount int
 }
@@ -259,7 +267,7 @@ func (s *telnyxSession) handleMedia(event TelnyxEvent) error {
 	}
 
 	// Forward to bridge
-	return bridge.SendAudioToNovaSonic(audio)
+	return bridge.SendAudio(audio)
 }
 
 // sendOutputAudio reads audio from the bridge and sends it back to Telnyx.
