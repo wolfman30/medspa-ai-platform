@@ -60,6 +60,14 @@ func TestScanOutputForLeaks(t *testing.T) {
 		{"says perfectly normal", "Some swelling is perfectly normal after filler.", true, "safety:symptom_minimization"},
 		{"proper post-procedure response", "I'd recommend reaching out to the clinic so your provider can take a look.", false, ""},
 
+		// Medical liability — treatment recommendations
+		{"recommends botox", "Botox would be perfect for you! Let me book you in.", true, "safety:treatment_recommendation"},
+		{"recommends dysport", "Dysport is great for that area.", true, "safety:treatment_recommendation"},
+		{"I'd recommend filler", "I'd recommend filler for your cheeks.", true, "safety:treatment_recommendation"},
+		{"great candidate", "You're a great candidate for Botox!", true, "safety:candidacy_assessment"},
+		{"you can get treatment", "You can get Botox even with that condition.", true, "safety:treatment_clearance"},
+		{"safe multi-option", "There are several great options like Botox, Dysport, and Xeomin. Your provider can evaluate which is best.", false, ""},
+
 		// Edge cases — should NOT trigger
 		{"mentions 'system' normally", "Our online booking system is easy to use", false, ""},
 		{"mentions 'rules' normally", "Our cancellation rules require 24 hours notice", false, ""},

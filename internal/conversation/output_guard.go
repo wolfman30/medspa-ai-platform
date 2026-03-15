@@ -53,6 +53,12 @@ var outputLeakPatterns = []outputLeakPattern{
 	// Weight loss drug names — carrier spam filters block these
 	{regexp.MustCompile(`(?i)\b(semaglutide|tirzepatide|ozempic|wegovy|mounjaro|glp-?1)\b`), "spam:drug_name", false},
 
+	// Medical liability — treatment recommendations
+	{regexp.MustCompile(`(?i)(botox|dysport|xeomin|filler|microneedling|chemical peel|ipl|laser)\s+(would be|is|are)\s+(perfect|ideal|great|best|right)\s+(for (you|that|this|your))`), "safety:treatment_recommendation", false},
+	{regexp.MustCompile(`(?i)i('d| would)\s+recommend\s+(botox|dysport|xeomin|filler|microneedling|a chemical peel|ipl|laser)`), "safety:treatment_recommendation", false},
+	{regexp.MustCompile(`(?i)you('re| are)\s+(a )?(great|good|perfect|ideal)\s+candidate`), "safety:candidacy_assessment", false},
+	{regexp.MustCompile(`(?i)you\s+(can|should|shouldn't|cannot|can't)\s+(get|have|do|use|try)\s+(botox|dysport|xeomin|filler|treatment)`), "safety:treatment_clearance", false},
+
 	// Post-procedure symptom minimization — never say symptoms are "normal"
 	{regexp.MustCompile(`(?i)(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry|expected)`), "safety:symptom_minimization", false},
 	{regexp.MustCompile(`(?i)\b(normal|common|expected|typical)\s+(side effect|part of|after|following|reaction|response)\b`), "safety:symptom_minimization", false},
@@ -102,6 +108,11 @@ func sanitizeOutput(reply string) string {
 	cleaned := regexp.MustCompile(`(?i)[^.!?]*\bi('m| am) (a|an) (AI|artificial intelligence|language model|LLM|GPT|Claude|chatbot)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(reply, "")
 	// Remove sentences containing banned drug names (carrier spam filter)
 	cleaned = regexp.MustCompile(`(?i)[^.!?]*\b(semaglutide|tirzepatide|ozempic|wegovy|mounjaro|glp-?1)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	// Remove sentences with treatment recommendations / candidacy assessments
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*(botox|dysport|xeomin|filler|microneedling|chemical peel|ipl|laser)\s+(would be|is|are)\s+(perfect|ideal|great|best|right)\s+(for (you|that|this|your))[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*i('d| would)\s+recommend\s+(botox|dysport|xeomin|filler|microneedling|a chemical peel|ipl|laser)[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*you('re| are)\s+(a )?(great|good|perfect|ideal)\s+candidate[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
+	cleaned = regexp.MustCompile(`(?i)[^.!?]*you\s+(can|should|shouldn't|cannot|can't)\s+(get|have|do|use|try)\s+(botox|dysport|xeomin|filler|treatment)[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
 	// Remove sentences that minimize post-procedure symptoms
 	cleaned = regexp.MustCompile(`(?i)[^.!?]*(that's|that is|it's|it is|this is|is|are)\s+(completely |totally |perfectly |very )?(normal|nothing to worry|expected)[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
 	cleaned = regexp.MustCompile(`(?i)[^.!?]*\b(normal|common|expected|typical)\s+(side effect|part of|after|following|reaction|response)\b[^.!?]*[.!?]?\s*`).ReplaceAllString(cleaned, "")
