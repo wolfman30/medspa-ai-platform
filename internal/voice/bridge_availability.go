@@ -202,13 +202,15 @@ func (b *Bridge) maybeFilterAndInjectSlots(ctx context.Context, text string) {
 
 // voiceTimePrefs holds parsed time preferences for voice filtering.
 type voiceTimePrefs struct {
-	daysOfWeek []time.Weekday
-	afterHour  int // -1 if not set
-	beforeHour int // -1 if not set
+	daysOfWeek  []time.Weekday
+	afterHour   int // -1 if not set
+	afterMinute int // 0 if not set (used with afterHour)
+	beforeHour  int // -1 if not set
+	beforeMinute int // 0 if not set (used with beforeHour)
 }
 
 func parseVoiceTimePreferences(text string) voiceTimePrefs {
-	p := voiceTimePrefs{afterHour: -1, beforeHour: -1}
+	p := voiceTimePrefs{afterHour: -1, afterMinute: 0, beforeHour: -1, beforeMinute: 0}
 	lower := strings.ToLower(text)
 
 	// Parse days
@@ -232,18 +234,44 @@ func parseVoiceTimePreferences(text string) voiceTimePrefs {
 		"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
 		"eleven": 11, "twelve": 12,
 	}
-	afterPattern := regexp.MustCompile(`(?i)after\s+(\w+)(?::(\d{2}))?\s*(?:o'clock\s*)?(?:p\.?m\.?)?`)
+	// Match "after 2:30", "after 230", "after two thirty", "after 2 PM", etc.
+	afterPattern := regexp.MustCompile(`(?i)after\s+(\w+)(?:[:\s](\d{2}))?\s*(?:o'clock\s*)?(?:p\.?m\.?)?`)
 	if m := afterPattern.FindStringSubmatch(lower); len(m) >= 2 {
 		hour := 0
 		if n, ok := wordToNum[m[1]]; ok {
 			hour = n
 		} else {
-			fmt.Sscanf(m[1], "%d", &hour)
+			// Handle "230" as "2:30" — if the number is > 99, split into hour+minute
+			raw := 0
+			fmt.Sscanf(m[1], "%d", &raw)
+			if raw >= 100 && raw <= 1259 {
+				hour = raw / 100
+				p.afterMinute = raw % 100
+			} else {
+				hour = raw
+			}
+		}
+		// Capture explicit minutes from "2:30" format
+		if len(m) >= 3 && m[2] != "" {
+			fmt.Sscanf(m[2], "%d", &p.afterMinute)
 		}
 		if hour > 0 && hour < 12 {
 			hour += 12 // assume PM for voice
 		}
 		p.afterHour = hour
+	}
+	// Handle spoken "two thirty" → afterMinute = 30
+	thirtyPattern := regexp.MustCompile(`(?i)after\s+(\w+)\s+thirty`)
+	if m := thirtyPattern.FindStringSubmatch(lower); len(m) >= 2 {
+		p.afterMinute = 30
+	}
+	fifteenPattern := regexp.MustCompile(`(?i)after\s+(\w+)\s+fifteen`)
+	if m := fifteenPattern.FindStringSubmatch(lower); len(m) >= 2 {
+		p.afterMinute = 15
+	}
+	fortyFivePattern := regexp.MustCompile(`(?i)after\s+(\w+)\s+forty.?five`)
+	if m := fortyFivePattern.FindStringSubmatch(lower); len(m) >= 2 {
+		p.afterMinute = 45
 	}
 
 	// "morning" = before noon, "afternoon" = after noon, "evening" = after 5
@@ -275,14 +303,22 @@ func matchesVoicePreferences(slotTime time.Time, prefs voiceTimePrefs) bool {
 		}
 	}
 
-	// Check after hour
-	if prefs.afterHour >= 0 && slotTime.Hour() < prefs.afterHour {
-		return false
+	// Check after hour+minute (e.g., "after 2:30" means slot must be >= 14:30)
+	if prefs.afterHour >= 0 {
+		slotMinutes := slotTime.Hour()*60 + slotTime.Minute()
+		afterMinutes := prefs.afterHour*60 + prefs.afterMinute
+		if slotMinutes < afterMinutes {
+			return false
+		}
 	}
 
-	// Check before hour
-	if prefs.beforeHour >= 0 && slotTime.Hour() >= prefs.beforeHour {
-		return false
+	// Check before hour+minute
+	if prefs.beforeHour >= 0 {
+		slotMinutes := slotTime.Hour()*60 + slotTime.Minute()
+		beforeMinutes := prefs.beforeHour*60 + prefs.beforeMinute
+		if slotMinutes >= beforeMinutes {
+			return false
+		}
 	}
 
 	return true

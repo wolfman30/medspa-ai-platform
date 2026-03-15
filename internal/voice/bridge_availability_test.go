@@ -78,3 +78,51 @@ func TestMatchesVoicePreferences(t *testing.T) {
 		t.Error("11:00 AM on Monday should NOT match 'weekdays after 4pm'")
 	}
 }
+
+func TestParseVoiceTimePreferences_MinutePrecision(t *testing.T) {
+	tests := []struct {
+		input      string
+		wantHour   int
+		wantMinute int
+	}{
+		{"after 2:30", 14, 30},
+		{"after 230", 14, 30},
+		{"after two thirty", 14, 30},
+		{"after 4:15 pm", 16, 15},
+		{"after four forty-five", 16, 45},
+		{"after 3", 15, 0},
+		{"weekdays after 2:30", 14, 30},
+	}
+	for _, tt := range tests {
+		prefs := parseVoiceTimePreferences(tt.input)
+		if prefs.afterHour != tt.wantHour {
+			t.Errorf("%q: afterHour = %d, want %d", tt.input, prefs.afterHour, tt.wantHour)
+		}
+		if prefs.afterMinute != tt.wantMinute {
+			t.Errorf("%q: afterMinute = %d, want %d", tt.input, prefs.afterMinute, tt.wantMinute)
+		}
+	}
+}
+
+func TestMatchesVoicePreferences_MinutePrecision(t *testing.T) {
+	// "after 2:30" should reject 2:00 PM and 2:15 PM but accept 2:30 PM and 3:00 PM
+	prefs := parseVoiceTimePreferences("after 2:30 weekdays")
+
+	slot200pm := time.Date(2026, 3, 16, 14, 0, 0, 0, time.UTC)  // Monday 2:00 PM
+	slot215pm := time.Date(2026, 3, 16, 14, 15, 0, 0, time.UTC)  // Monday 2:15 PM
+	slot230pm := time.Date(2026, 3, 16, 14, 30, 0, 0, time.UTC)  // Monday 2:30 PM
+	slot300pm := time.Date(2026, 3, 16, 15, 0, 0, 0, time.UTC)   // Monday 3:00 PM
+
+	if matchesVoicePreferences(slot200pm, prefs) {
+		t.Error("2:00 PM should NOT match 'after 2:30'")
+	}
+	if matchesVoicePreferences(slot215pm, prefs) {
+		t.Error("2:15 PM should NOT match 'after 2:30'")
+	}
+	if !matchesVoicePreferences(slot230pm, prefs) {
+		t.Error("2:30 PM SHOULD match 'after 2:30'")
+	}
+	if !matchesVoicePreferences(slot300pm, prefs) {
+		t.Error("3:00 PM SHOULD match 'after 2:30'")
+	}
+}
