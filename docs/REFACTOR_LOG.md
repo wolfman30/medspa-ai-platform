@@ -21,3 +21,4 @@
 | 2026-03-14 | #100 | Split `llm_helpers.go` (578→3 files: helpers, content detection, lead helpers) + decompose 140-line `appendContext()` into 6 focused helpers | `internal/conversation/llm_helpers.go`, `llm_content_detection.go`, `llm_lead_helpers.go` |
 | 2026-03-14 | #101 | Split `router.go` (551→219 lines) into 4 domain route files (public, admin, portal, tenant) | `internal/api/router/routes_{public,admin,portal,tenant}.go` |
 | 2026-03-15 | #102 | Decompose `SendDeposit` (197→~30 line orchestrator + 7 helpers: parseIDs, checkDuplicate, createIntent, resolveFrom, resolveCheckout, buildSMS, sendSMS, emitEvent) | `internal/conversation/deposit_sender.go` |
+| 2026-03-15 | #104 | Remove 2,231 lines of dead code: unwired `internal/support/` (1,294 lines) and `internal/rebooking/` (933 lines) packages + commented-out voice callback in telnyx_webhooks.go | `internal/support/*`, `internal/rebooking/*`, `internal/http/handlers/telnyx_webhooks.go` |
