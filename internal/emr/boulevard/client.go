@@ -318,7 +318,7 @@ func (c *BoulevardClient) GetAvailableSlots(ctx context.Context, serviceName, pr
 		return nil, cartID, err
 	}
 
-	dates, err := c.GetBookableDates(ctx, cartID, 7, tz)
+	dates, err := c.GetBookableDates(ctx, cartID, 30, tz)
 	if err != nil {
 		return nil, cartID, err
 	}
@@ -326,9 +326,9 @@ func (c *BoulevardClient) GetAvailableSlots(ctx context.Context, serviceName, pr
 		return nil, cartID, nil // no availability
 	}
 
-	// Collect slots from first few dates
+	// Collect slots from available dates (up to 10 dates for broader coverage)
 	var allSlots []TimeSlot
-	maxDates := 3
+	maxDates := 10
 	if len(dates) < maxDates {
 		maxDates = len(dates)
 	}
