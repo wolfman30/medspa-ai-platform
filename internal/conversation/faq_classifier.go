@@ -66,7 +66,7 @@ const faqClassifierPrompt = `Classify this medspa question into ONE category. Re
 Categories:
 - hydrafacial_vs_diamondglow: Comparing HydraFacial and DiamondGlow facials
 - hylenex_vs_fillers: Comparing Hylenex/filler dissolving with dermal fillers (NOT about Botox)
-- botox_vs_fillers: Comparing Botox/neurotoxins with dermal fillers (NOT about dissolving)
+- botox_vs_fillers: Comparing Botox/wrinkle relaxers with dermal fillers (NOT about dissolving)
 - peel_vs_microneedling: Comparing chemical peels with microneedling
 - laser_hair_sessions: Questions about how many laser hair removal sessions needed
 - botox_duration: Questions about how long Botox lasts
