@@ -220,3 +220,91 @@ func TestBuildVoiceSystemPrompt_MandatoryCheckpoint(t *testing.T) {
 		t.Fatal("expected mandatory steps instruction")
 	}
 }
+
+// ── Voice Prompt Regression Tests ──────────────────────────────────────
+// These tests verify that critical rules are present in the generated prompt
+// to prevent regressions where Lauren misbehaves.
+
+func TestPromptContainsServiceValidationRule(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "d9558a2d")
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"rejects non-service words", "NOT a recognizable med spa service"},
+		{"lists example garbage words", `"talk"`},
+		{"lists common services", "Botox, filler, microneedling"},
+	}
+	for _, c := range checks {
+		t.Run(c.name, func(t *testing.T) {
+			if !strings.Contains(prompt, c.contains) {
+				t.Errorf("prompt missing service validation rule: %q", c.contains)
+			}
+		})
+	}
+}
+
+func TestPromptContainsFillerWordRule(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "d9558a2d")
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"identifies filler words", `"alright"`},
+		{"says they are not answers", "NOT answers to questions"},
+		{"instructs to re-ask", "wait for their actual answer"},
+	}
+	for _, c := range checks {
+		t.Run(c.name, func(t *testing.T) {
+			if !strings.Contains(prompt, c.contains) {
+				t.Errorf("prompt missing filler word rule: %q", c.contains)
+			}
+		})
+	}
+}
+
+func TestPromptNoPlaceholderBrackets(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "d9558a2d")
+	// [name] and [service] placeholders cause Nova Sonic to output brackets literally
+	badPatterns := []string{"[name]", "[service]"}
+	for _, p := range badPatterns {
+		if strings.Contains(prompt, p) {
+			t.Errorf("prompt contains bracket placeholder %q which Nova Sonic outputs literally", p)
+		}
+	}
+}
+
+func TestPromptGreetingSuppression(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "d9558a2d")
+	if !strings.Contains(prompt, "Do NOT greet again") {
+		t.Error("prompt missing greeting suppression rule")
+	}
+	if !strings.Contains(prompt, "IGNORE IT completely") {
+		t.Error("prompt missing echo ignore rule")
+	}
+}
+
+func TestPromptOneQuestionRule(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "d9558a2d")
+	if !strings.Contains(prompt, "ONE question per response") {
+		t.Error("prompt missing one-question-per-response rule")
+	}
+}
+
+func TestPromptBookingFlowOrder(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "d9558a2d")
+	// Verify the 6 steps exist in order
+	steps := []string{"SERVICE", "FULL NAME", "NEW OR RETURNING", "PROVIDER", "PREFERRED DAYS", "OFFER TIMES"}
+	lastIdx := -1
+	for _, step := range steps {
+		idx := strings.Index(prompt, step)
+		if idx == -1 {
+			t.Errorf("booking flow missing step: %s", step)
+			continue
+		}
+		if idx <= lastIdx {
+			t.Errorf("booking flow step %s is out of order (at %d, previous at %d)", step, idx, lastIdx)
+		}
+		lastIdx = idx
+	}
+}
