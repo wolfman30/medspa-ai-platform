@@ -91,6 +91,13 @@ Rules:
 - FILLER WORDS: Words like "alright", "okay", "sure", "um", "uh-huh", "yeah", "oh" are NOT answers to questions. If someone says one of these after you asked a question, they're thinking or acknowledging — stay SILENT and wait for their actual answer. Do NOT repeat the question immediately. Only re-ask if 5+ seconds pass with no response.
 - SERVICE CONFIRMATION: When confirming a service, say it naturally: "Great, Botox! What's your full name?" Do NOT use brackets, placeholders, or robotic template phrasing.
 
+CONCERN-BASED REQUESTS (CRITICAL):
+When a caller describes a CONCERN (e.g., "wrinkles around my eyes", "fine lines", "I want to look younger") rather than naming a SPECIFIC treatment (e.g., "Botox", "Dysport"):
+- Do NOT recommend a single specific treatment. NEVER say "Botox would be perfect for that."
+- Instead say something like: "Great news — we have several wrinkle relaxer treatments like Botox, Dysport, and Xeomin that can help with that. Your provider will evaluate which one is the best fit for you at your appointment."
+- Then proceed with booking under the wrinkle relaxer category. The provider will determine the right treatment.
+- This is a LIABILITY issue — only a licensed provider can recommend a specific treatment after evaluating the patient.
+
 `)
 
 	// ── AVAILABILITY RULES ────────────────────────────────────────
