@@ -22,6 +22,7 @@ import { MultiOrgRollup } from './components/MultiOrgRollup';
 import { CronCalendar } from './components/CronCalendar';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { SMSSendTool } from './components/SMSSendTool';
+import { ColdCallScripts } from './components/ColdCallScripts';
 import { getOnboardingStatus, lookupOrgByEmail, registerClinic, listOrgs, type ApiScope, type OrgListItem } from './api/client';
 import { AuthProvider, useAuth, LoginForm } from './auth';
 import {
@@ -53,7 +54,8 @@ type AppView =
   | 'rollup'
   | 'crons'
   | 'analytics'
-  | 'sms-send';
+  | 'sms-send'
+  | 'cold-calls';
 
 // Admin users can view all orgs
 const ADMIN_EMAILS = ['andrew@aiwolfsolutions.com', 'wolfpassion20@gmail.com', 'aiwolftwin@gmail.com'];
@@ -538,6 +540,15 @@ function AuthenticatedApp() {
                     SMS
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setView('cold-calls')}
+                    aria-current={view === 'cold-calls' ? 'page' : undefined}
+                    className={view === 'cold-calls' ? 'ui-btn ui-btn-dark' : 'ui-btn ui-btn-ghost'}
+                  >
+                    Cold Calls
+                  </button>
+                )}
               </nav>
             )}
           </div>
@@ -559,6 +570,8 @@ function AuthenticatedApp() {
           <AnalyticsDashboard orgId={orgId} />
         ) : view === 'sms-send' ? (
           <SMSSendTool orgId={orgId} />
+        ) : view === 'cold-calls' ? (
+          <ColdCallScripts />
         ) : view === 'operations' ? (
           <ClinicOperationalDashboard orgId={orgId} />
         ) : view === 'rollup' ? (
