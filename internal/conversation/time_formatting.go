@@ -116,6 +116,21 @@ func FormatSlotNoLongerAvailableMessage(selectedTime time.Time, remainingSlots [
 	return sb.String()
 }
 
+// FormatTimeSlotsWithCustomHeader formats slots with a custom header message
+// (e.g., when no slots match the patient's time preference).
+func FormatTimeSlotsWithCustomHeader(slots []PresentedSlot, header string) string {
+	if len(slots) == 0 {
+		return header
+	}
+	var sb strings.Builder
+	sb.WriteString(header + "\n\n")
+	for _, slot := range slots {
+		sb.WriteString(fmt.Sprintf("  %d → %s\n", slot.Index, slot.TimeStr))
+	}
+	sb.WriteString("\nJust reply with the number that works best!")
+	return sb.String()
+}
+
 // FormatTimeSelectionConfirmation formats the confirmation message after time selection
 func FormatTimeSelectionConfirmation(selectedTime time.Time, service string, depositAmount int) string {
 	timeStr := selectedTime.Format("Monday, January 2 at 3:04 PM")

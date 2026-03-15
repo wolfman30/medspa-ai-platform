@@ -215,19 +215,32 @@ func (s *LLMService) fetchAndPresentAvailability(
 			// show that 1 slot. Don't pad with 3:30 PM slots that violate their request.
 			slots := prefSlots
 			if len(prefSlots) == 0 && len(validSlots) > 0 {
-				s.logger.Info("Boulevard: no slots match time prefs, falling back to all valid slots",
+				s.logger.Info("Boulevard: no slots match time prefs, showing closest alternatives with explanation",
 					"pref_count", len(prefSlots), "valid_count", len(validSlots),
 					"conversation_id", conversationID)
+				// Don't silently ignore the patient's time preference.
+				// Show the closest available slots but explain they don't match.
 				slots = validSlots
+				result = &AvailabilityResult{
+					Slots:      slots,
+					ExactMatch: false,
+					Message:    fmt.Sprintf("I wasn't able to find any openings that match your preference for %s, but here are the closest available times:", FormatPreferencesForLLM(timePrefs)),
+				}
 			}
 			// Spread across days like Moxie flow
 			slots = spreadSlotsAcrossDays(slots, maxSlotsToPresent, 2)
 			for i := range slots {
 				slots[i].Index = i + 1
 			}
-			result = &AvailabilityResult{
-				Slots:      slots,
-				ExactMatch: true,
+			if result == nil {
+				// Only set result if not already set (e.g., by mismatch message above)
+				result = &AvailabilityResult{
+					Slots:      slots,
+					ExactMatch: true,
+				}
+			} else {
+				// Preserve mismatch message but update slots after spread
+				result.Slots = slots
 			}
 		}
 	} else if s.moxieClient != nil && cfg != nil && cfg.MoxieConfig != nil {
@@ -304,11 +317,17 @@ func (s *LLMService) buildTimeSelectionResponse(
 		)
 	}
 
+	smsMsg := FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch)
+	// If we have a custom message (e.g., time preference mismatch explanation),
+	// use it as the header instead of the generic one.
+	if result.Message != "" && !result.ExactMatch {
+		smsMsg = FormatTimeSlotsWithCustomHeader(result.Slots, result.Message)
+	}
 	return &TimeSelectionResponse{
 		Slots:      result.Slots,
 		Service:    prefs.ServiceInterest,
 		ExactMatch: result.ExactMatch,
-		SMSMessage: FormatTimeSlotsForSMS(result.Slots, prefs.ServiceInterest, result.ExactMatch),
+		SMSMessage: smsMsg,
 	}
 }
 
