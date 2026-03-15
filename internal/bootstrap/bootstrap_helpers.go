@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	auditcompliance "github.com/wolfman30/medspa-ai-platform/internal/compliance"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
+	"github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 	moxieclient "github.com/wolfman30/medspa-ai-platform/internal/emr/moxie"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
 	"github.com/wolfman30/medspa-ai-platform/internal/http/handlers"
@@ -352,6 +354,30 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 
 		voiceWSHandler = voice.NewTelnyxWSHandler(slog.Default(), func(l *slog.Logger, callControlID string, mediaFormat voice.TelnyxMediaFormat, callCtx voice.CallContext) (*voice.Bridge, error) {
 			systemPrompt := voice.BuildVoiceSystemPrompt(l, voiceToolDeps.ClinicStore, callCtx.OrgID)
+
+			// Pre-fetch Boulevard availability so Lauren has real slots
+			// (Nova Sonic tool calling is disabled due to audio incompatibility)
+			if voiceToolDeps.ClinicStore != nil {
+				if cfg, err := voiceToolDeps.ClinicStore.Get(context.Background(), callCtx.OrgID); err == nil && cfg != nil && cfg.UsesBoulevardBooking() {
+					if blvdClient := boulevard.NewBoulevardClient(cfg.BoulevardBusinessID, cfg.BoulevardLocationID, logger); blvdClient != nil {
+						adapter := boulevard.NewBoulevardAdapter(blvdClient, os.Getenv("MOXIE_DRY_RUN") == "true", logger)
+						fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 8*time.Second)
+						slots, _, blvdErr := adapter.ResolveAvailabilityWithCart(fetchCtx, "", "", time.Now())
+						fetchCancel()
+						if blvdErr == nil && len(slots) > 0 {
+							var slotLines []string
+							for i, s := range slots {
+								if i >= 12 { break }
+								slotLines = append(slotLines, fmt.Sprintf("- %s", s.StartAt.Format("Mon Jan 2 at 3:04 PM")))
+							}
+							systemPrompt += "\n\nPRE-FETCHED AVAILABILITY (real times from the booking system — use these when the caller asks for times):\n" + strings.Join(slotLines, "\n") + "\n\nThese are REAL available slots. When the caller gives you their time preferences, match against these slots and offer the ones that fit. Do NOT invent other times."
+							logger.Info("voice: pre-fetched Boulevard availability", "slot_count", len(slots), "org_id", callCtx.OrgID)
+						} else if blvdErr != nil {
+							logger.Warn("voice: Boulevard prefetch failed", "error", blvdErr, "org_id", callCtx.OrgID)
+						}
+					}
+				}
+			}
 
 			// Resolve clinic name for ElevenLabs greeting
 			clinicName := "our office"
