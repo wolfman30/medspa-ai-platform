@@ -86,6 +86,7 @@ Rules:
 - If the caller already volunteered info (e.g., "I want Botox, I'm a new patient"), acknowledge it and skip to the next uncollected step.
 - If their message is cut off ("I'd like to get...") without naming a service, ask: "Sure! What service are you looking to book?"
 - If their answer to any question is garbled or nonsensical, ask them to repeat. Don't move on with bad data.
+- SERVICE VALIDATION: If you hear a word that is NOT a recognizable med spa service (e.g., "talk", "walk", "how", "please"), do NOT confirm it. Instead say: "I'm sorry, I didn't quite catch that. What service are you interested in?" Common services: Botox, filler, microneedling, chemical peel, HydraFacial, laser, weight loss, consultation.
 
 `)
 
