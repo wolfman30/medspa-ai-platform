@@ -420,7 +420,7 @@ jobs:
           API_BASE_URL: ${{ secrets.API_PUBLIC_BASE_URL }}
         run: |
           echo "Checking pre-recorded greeting files..."
-          for clinic in bodytonic forever22; do
+          for clinic in bodywise forever22; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE_URL}/static/greetings/${clinic}.mp3")
             if [ "$STATUS" != "200" ]; then
               echo "❌ Greeting file ${clinic}.mp3 returned HTTP ${STATUS}"
