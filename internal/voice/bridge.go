@@ -72,6 +72,9 @@ type Bridge struct {
 	// slotSelectionCaptured is set once Lauren explicitly confirms a date+time slot.
 	// Deposit SMS is gated on this to prevent premature payment prompts.
 	slotSelectionCaptured bool
+	// availabilityFetched tracks whether we've fetched service-specific availability.
+	availabilityFetched bool
+
 	// paymentConfirmed tracks whether payment was confirmed during this call.
 	paymentConfirmed bool
 	// paymentConfirmationAnnounced ensures we only inject payment confirmation once per call.
@@ -298,6 +301,7 @@ func (b *Bridge) handleTextEvent(ctx context.Context, event NovaSonicEvent) {
 		b.onTranscript(role, cleanText)
 	}
 	b.maybeCaptureSlotSelection(event.Text)
+	b.maybeFetchAvailability(ctx, event.Text)
 	// Detect when Lauren mentions sending a deposit link — trigger SMS only after
 	// an explicit slot selection (date+time) has been captured.
 	// Nova Sonic tools are disabled (AWS limitation), so we fire SMS from Go side
