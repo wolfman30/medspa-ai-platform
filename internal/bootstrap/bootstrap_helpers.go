@@ -365,15 +365,46 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 						slots, _, blvdErr := adapter.ResolveAvailabilityWithCart(fetchCtx, "", "", time.Now())
 						fetchCancel()
 						if blvdErr == nil && len(slots) > 0 {
+							// Filter slots against business hours
+							getDayHours := func(bh clinic.BusinessHours, day time.Weekday) *clinic.DayHours {
+								switch day {
+								case time.Monday:
+									return bh.Monday
+								case time.Tuesday:
+									return bh.Tuesday
+								case time.Wednesday:
+									return bh.Wednesday
+								case time.Thursday:
+									return bh.Thursday
+								case time.Friday:
+									return bh.Friday
+								case time.Saturday:
+									return bh.Saturday
+								case time.Sunday:
+									return bh.Sunday
+								}
+								return nil
+							}
+							var validSlots []boulevard.TimeSlot
+							for _, s := range slots {
+								dh := getDayHours(cfg.BusinessHours, s.StartAt.Weekday())
+								if dh == nil {
+									// Day not configured = clinic closed that day, skip
+									continue
+								}
+								validSlots = append(validSlots, s)
+							}
 							var slotLines []string
-							for i, s := range slots {
-								if i >= 12 {
+							for i, s := range validSlots {
+								if i >= 20 {
 									break
 								}
 								slotLines = append(slotLines, fmt.Sprintf("- %s", s.StartAt.Format("Mon Jan 2 at 3:04 PM")))
 							}
-							systemPrompt += "\n\nPRE-FETCHED AVAILABILITY (real times from the booking system — use these when the caller asks for times):\n" + strings.Join(slotLines, "\n") + "\n\nThese are REAL available slots. When the caller gives you their time preferences, match against these slots and offer the ones that fit. Do NOT invent other times."
-							logger.Info("voice: pre-fetched Boulevard availability", "slot_count", len(slots), "org_id", callCtx.OrgID)
+							if len(slotLines) > 0 {
+								systemPrompt += "\n\nPRE-FETCHED AVAILABILITY (real times from the booking system — use these when the caller asks for times):\n" + strings.Join(slotLines, "\n") + "\n\nThese are REAL available slots. When the caller gives you their time preferences, match against these slots and offer the ones that fit. Do NOT invent other times."
+							}
+							logger.Info("voice: pre-fetched Boulevard availability", "raw_slots", len(slots), "valid_slots", len(validSlots), "org_id", callCtx.OrgID, "times", strings.Join(slotLines, "; "))
 						} else if blvdErr != nil {
 							logger.Warn("voice: Boulevard prefetch failed", "error", blvdErr, "org_id", callCtx.OrgID)
 						}
