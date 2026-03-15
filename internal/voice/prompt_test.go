@@ -308,3 +308,22 @@ func TestPromptBookingFlowOrder(t *testing.T) {
 		lastIdx = idx
 	}
 }
+
+func TestPromptAntiHallucinationRule(t *testing.T) {
+	prompt := BuildVoiceSystemPrompt(nil, nil, "test-org")
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"declares zero knowledge", "ZERO knowledge of available appointment times"},
+		{"requires tool call", "ONLY way to get real times is by calling the check_availability tool"},
+		{"labels hallucination as lying", "you are LYING to the patient"},
+	}
+	for _, c := range checks {
+		t.Run(c.name, func(t *testing.T) {
+			if !strings.Contains(prompt, c.contains) {
+				t.Errorf("prompt missing anti-hallucination rule: %q", c.contains)
+			}
+		})
+	}
+}

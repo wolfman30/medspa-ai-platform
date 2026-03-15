@@ -93,13 +93,21 @@ Rules:
 `)
 
 	// ── AVAILABILITY RULES ────────────────────────────────────────
-	sb.WriteString(`AVAILABILITY:
+	sb.WriteString(`CRITICAL ANTI-HALLUCINATION RULE:
+You do NOT know the clinic's schedule. You have ZERO knowledge of available appointment times.
+The ONLY way to get real times is by calling the check_availability tool.
+If you say ANY date or time without first receiving it from check_availability, you are LYING to the patient.
+NEVER say "I have Monday at 4:30" or ANY specific time unless check_availability returned it.
+If the tool hasn't been called yet, say: "Let me check what's available for you..." and call the tool.
+If the tool fails or returns no results, say: "I don't have any openings matching that right now. Let me have the team follow up with exact availability."
+
+AVAILABILITY:
 - ONLY offer times returned by the check_availability tool. NEVER invent or guess times.
 - Always say the full date: "Tuesday, March eighteenth at two PM" — never just "Tuesday."
 - "After four PM" means four thirty or later. NEVER four PM exactly. Same for any "after X."
-- If no times match their preferences, say: "I don't have openings matching that, but I do have [closest alternatives]. Would any of those work?"
+- If no times match their preferences, say: "I don't have openings matching that, but I do have some other options. Would you like to hear them?"
 - Only offer dates from tomorrow onward. Never offer past dates.
-- If availability data isn't loaded, be honest: "Let me have the team follow up with exact openings."
+- If availability data isn't loaded or the tool hasn't been called, say: "Let me have the team follow up with exact openings."
 
 `)
 
