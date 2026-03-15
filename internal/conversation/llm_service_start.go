@@ -156,25 +156,25 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Intro)
 	history = append(history, ChatMessage{Role: ChatRoleUser, Content: formatIntroMessage(safeReq, conversationID)})
 
-	if startCfg != nil && startCfg.UsesMoxieBooking() {
+	if startCfg != nil && (startCfg.UsesMoxieBooking() || startCfg.UsesBoulevardBooking()) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 		if prefs.ServiceInterest != "" && s.prefetcher != nil {
 			s.prefetcher.StartPrefetch(ctx, req.OrgID, startCfg, prefs.ServiceInterest, prefs.ProviderPreference)
 		}
 		if prefs.ServiceInterest != "" && prefs.Name == "" && !lastAssistantAskedForName(history) {
-			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] The patient mentioned a service but you do NOT have their name yet. NAME is #1 in the Moxie checklist and MUST be collected before anything else. You MUST ask for their full name NOW. Do NOT ask about patient type, schedule, provider, or email yet. Ask something like: 'Great choice! May I have your full name?'"})
+			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] The patient mentioned a service but you do NOT have their name yet. NAME is #1 in the booking checklist and MUST be collected before anything else. You MUST ask for their full name NOW. Do NOT ask about patient type, schedule, provider, or email yet. Do NOT present availability. Ask something like: 'Great choice! May I have your full name?'"})
 		}
 		if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType == "" {
-			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] You have the patient's name and service interest. Next in the checklist is PATIENT TYPE (#3). You MUST ask if they are a new or returning patient NOW. Do NOT ask about schedule, email, or provider yet. Ask something like: 'Have you visited us before, or would this be your first time?'"})
+			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] You have the patient's name and service interest. Next in the checklist is PATIENT TYPE (#3). You MUST ask if they are a new or returning patient NOW. Do NOT ask about schedule, email, or provider yet. Do NOT present availability. Ask something like: 'Have you visited us before, or would this be your first time?'"})
 		}
 		if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType != "" && prefs.PreferredDays == "" && prefs.PreferredTimes == "" {
-			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] You have the patient's name, service, and patient type. Next in the Moxie checklist is SCHEDULE (#4). You MUST ask about their preferred days and times NOW. Do NOT ask for email or provider preference yet."})
+			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] You have the patient's name, service, and patient type. Next in the booking checklist is SCHEDULE (#4). You MUST ask about their preferred days and times NOW. Do NOT ask for email or provider preference yet. Do NOT present availability."})
 		}
 		if prefs.ServiceInterest != "" && prefs.ProviderPreference == "" && (prefs.PreferredDays != "" || prefs.PreferredTimes != "") {
 			resolvedService := startCfg.ResolveServiceName(prefs.ServiceInterest)
 			if startCfg.ServiceNeedsProviderPreference(resolvedService) {
 				providerList := buildProviderGuardrailList(startCfg, resolvedService)
-				history = append(history, ChatMessage{Role: ChatRoleSystem, Content: fmt.Sprintf("[SYSTEM GUARDRAIL] The patient wants %s which has multiple providers.%s You MUST ask about provider preference NOW. Do NOT ask for email yet. Ask: 'Do you have a provider preference, or would you like the first available appointment?'", prefs.ServiceInterest, providerList)})
+				history = append(history, ChatMessage{Role: ChatRoleSystem, Content: fmt.Sprintf("[SYSTEM GUARDRAIL] The patient wants %s which has multiple providers.%s You MUST ask about provider preference NOW. Do NOT ask for email yet. Do NOT present availability yet. Ask: 'Do you have a provider preference, or would you like the first available appointment?'", prefs.ServiceInterest, providerList)})
 			}
 		}
 	}
@@ -226,10 +226,21 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 
 	resp := &Response{ConversationID: conversationID, Message: reply, Timestamp: time.Now().UTC()}
 
+	// Count user messages in history to detect first message. On the very first
+	// message, old lead data may satisfy ShouldFetchAvailability but the patient
+	// hasn't actually gone through the qualification flow in THIS conversation.
+	// Force them through name → patient type → schedule → provider before fetching.
+	userMsgCount := 0
+	for _, m := range history {
+		if m.Role == ChatRoleUser {
+			userMsgCount++
+		}
+	}
+
 	moxieAPIReady := s.moxieClient != nil && startCfg != nil && startCfg.MoxieConfig != nil
 	boulevardReady := s.boulevardAdapter != nil && startCfg != nil && startCfg.UsesBoulevardBooking()
 	bookingAPIReady := moxieAPIReady || boulevardReady
-	if bookingAPIReady && usesMoxie && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
+	if bookingAPIReady && usesMoxie && userMsgCount > 1 && ShouldFetchAvailabilityWithConfig(history, nil, startCfg) {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 		if !hasSchedulePreferences(&prefs) {
 			s.logger.Info("StartConversation: skipping time selection — no schedule preferences yet", "conversation_id", conversationID)
