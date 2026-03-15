@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/wolfman30/medspa-ai-platform/internal/emr/boulevard"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -74,6 +75,10 @@ type Bridge struct {
 	slotSelectionCaptured bool
 	// availabilityFetched tracks whether we've fetched service-specific availability.
 	availabilityFetched bool
+	// fetchedSlots stores the raw slots from Boulevard for later filtering.
+	fetchedSlots []boulevard.TimeSlot
+	// timePreferenceInjected tracks whether we've already injected filtered slots.
+	timePreferenceInjected bool
 
 	// paymentConfirmed tracks whether payment was confirmed during this call.
 	paymentConfirmed bool
@@ -302,6 +307,7 @@ func (b *Bridge) handleTextEvent(ctx context.Context, event NovaSonicEvent) {
 	}
 	b.maybeCaptureSlotSelection(event.Text)
 	b.maybeFetchAvailability(ctx, event.Text)
+	b.maybeFilterAndInjectSlots(ctx, event.Text)
 	// Detect when Lauren mentions sending a deposit link — trigger SMS only after
 	// an explicit slot selection (date+time) has been captured.
 	// Nova Sonic tools are disabled (AWS limitation), so we fire SMS from Go side
