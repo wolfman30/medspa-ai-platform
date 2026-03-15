@@ -95,9 +95,10 @@ func (s *LLMService) handleFAQClassification(ctx context.Context, pc *processCon
 }
 
 // injectMoxieQualificationGuardrails appends system guardrails to enforce
-// the Moxie qualification order: name → service → patient type → schedule → provider → email.
+// the booking qualification order: name → service → patient type → schedule → provider → email.
+// Applies to all booking platforms (Moxie and Boulevard).
 func (s *LLMService) injectMoxieQualificationGuardrails(ctx context.Context, pc *processContext) {
-	if pc.cfg == nil || !pc.cfg.UsesMoxieBooking() {
+	if pc.cfg == nil || !pc.cfg.UsesBookingAPI() {
 		return
 	}
 

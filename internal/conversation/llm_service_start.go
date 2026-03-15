@@ -156,7 +156,7 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 	history = s.appendContext(ctx, history, req.OrgID, req.LeadID, req.ClinicID, req.Intro)
 	history = append(history, ChatMessage{Role: ChatRoleUser, Content: formatIntroMessage(safeReq, conversationID)})
 
-	if startCfg != nil && startCfg.UsesMoxieBooking() {
+	if startCfg != nil && startCfg.UsesBookingAPI() {
 		prefs, _ := extractPreferences(history, serviceAliasesFromConfig(startCfg))
 		if prefs.ServiceInterest != "" && s.prefetcher != nil {
 			s.prefetcher.StartPrefetch(ctx, req.OrgID, startCfg, prefs.ServiceInterest, prefs.ProviderPreference)
