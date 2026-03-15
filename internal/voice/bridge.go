@@ -174,8 +174,9 @@ func NewBridge(ctx context.Context, cfg BridgeConfig, callControlID string, medi
 	return b, nil
 }
 
-// SendAudioToNovaSonic forwards audio from Telnyx to Nova Sonic via the sidecar.
-func (b *Bridge) SendAudioToNovaSonic(audio []byte) error {
+// SendAudio forwards audio from Telnyx to Nova Sonic via the sidecar.
+// Implements VoiceBridge.
+func (b *Bridge) SendAudio(audio []byte) error {
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
