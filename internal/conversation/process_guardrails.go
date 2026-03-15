@@ -108,14 +108,14 @@ func (s *LLMService) injectMoxieQualificationGuardrails(ctx context.Context, pc 
 		s.prefetcher.StartPrefetch(ctx, pc.req.OrgID, pc.cfg, prefs.ServiceInterest, prefs.ProviderPreference)
 	}
 
-	// Concern-based guardrail (wrinkles, fine lines, anti-aging → consultation)
-	if prefs.ServiceInterest == "consultation" && prefs.Name == "" {
+	// Concern-based guardrail (wrinkles, fine lines, anti-aging → wrinkle relaxer category)
+	if isConcernBasedService(prefs.ServiceInterest) && prefs.Name == "" {
 		pc.history = append(pc.history, ChatMessage{
 			Role: ChatRoleSystem,
 			Content: "[SYSTEM GUARDRAIL] The patient described a CONCERN (e.g., wrinkles, fine lines, aging), NOT a specific treatment. " +
-				"Do NOT recommend a single treatment like Botox. Instead: (1) Mention 2-3 relevant treatments the clinic offers " +
-				"(e.g., Botox, Dysport, Xeomin for wrinkles). (2) Explain that a licensed provider will evaluate which is best. " +
-				"(3) Offer to book a consultation. Then ask for their full name to proceed.",
+				"Do NOT recommend a single treatment like Botox. Instead: (1) Mention that there are several great options like Botox, Dysport, and Xeomin (wrinkle relaxers). " +
+				"(2) Explain that the provider will evaluate which is best at their appointment. " +
+				"(3) Proceed to book them — we'll search availability under the wrinkle relaxer category and leave a note for the provider. Ask for their full name to get started.",
 		})
 	} else if prefs.ServiceInterest != "" && prefs.Name == "" && !lastAssistantAskedForName(pc.history) {
 		// Name guardrail

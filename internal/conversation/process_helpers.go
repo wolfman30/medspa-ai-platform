@@ -104,11 +104,23 @@ func (s *LLMService) fetchAndPresentAvailability(
 ) *TimeSelectionResponse {
 	timePrefs := ExtractTimePreferences(prefs.PreferredDays + " " + prefs.PreferredTimes)
 
-	// Resolve patient-facing service name to booking-platform search term
+	// Resolve patient-facing service name to booking-platform search term.
+	// For concern-based categories (e.g., "wrinkle relaxer"), resolve to the
+	// actual bookable service (e.g., "Botox") and capture the provider note.
 	scraperServiceName := prefs.ServiceInterest
+	var concernNote string
+	if bookingSvc, note := ResolveConcernToBookingService(prefs.ServiceInterest); bookingSvc != "" {
+		scraperServiceName = bookingSvc
+		concernNote = note
+		// Store concern note in scheduling notes for the lead/operator
+		if prefs.Notes == "" {
+			prefs.Notes = concernNote
+		}
+	}
 	if cfg != nil {
 		scraperServiceName = cfg.ResolveServiceName(scraperServiceName)
 	}
+	_ = concernNote // may be used later for booking notes
 
 	s.events.ServiceExtracted(ctx, conversationID, orgID, prefs.ServiceInterest, scraperServiceName)
 

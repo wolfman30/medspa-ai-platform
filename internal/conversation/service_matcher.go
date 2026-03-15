@@ -128,9 +128,9 @@ var universalServicePatterns = []struct {
 	{"peel", "peel"},
 	{"laser", "laser"},
 	{"injectable", "injectables"},
-	{"wrinkle", "consultation"},
-	{"anti-aging", "consultation"},
-	{"fine lines", "consultation"},
+	{"wrinkle", "wrinkle relaxer"},
+	{"anti-aging", "wrinkle relaxer"},
+	{"fine lines", "wrinkle relaxer"},
 }
 
 // ---------- past service patterns ----------
@@ -170,6 +170,37 @@ var pastServicePatterns = []struct {
 	{"got jeuveau", "Jeuveau"},
 	{"had xeomin", "Xeomin"},
 	{"got xeomin", "Xeomin"},
+}
+
+// ---------- concern-based service categories ----------
+
+// concernBasedServices maps concern categories to the booking service and a provider note.
+// When a patient describes a concern (not a specific treatment), we book under the
+// right service category but attach a note for the provider.
+var concernBasedServices = map[string]struct {
+	bookingService string // the actual service to search availability for
+	providerNote   string // note to attach to the booking
+}{
+	"wrinkle relaxer": {
+		bookingService: "Botox", // search availability under Botox (covers Botox/Dysport/Xeomin category)
+		providerNote:   "Patient wants to address wrinkles — needs provider guidance on best option (Botox, Dysport, or Xeomin).",
+	},
+}
+
+// isConcernBasedService returns true if the service interest is a concern category
+// rather than a specific treatment.
+func isConcernBasedService(service string) bool {
+	_, ok := concernBasedServices[strings.ToLower(service)]
+	return ok
+}
+
+// ResolveConcernToBookingService returns the actual bookable service name for a
+// concern-based category, plus a provider note. Returns empty strings if not concern-based.
+func ResolveConcernToBookingService(service string) (bookingService, providerNote string) {
+	if info, ok := concernBasedServices[strings.ToLower(service)]; ok {
+		return info.bookingService, info.providerNote
+	}
+	return "", ""
 }
 
 // ---------- service matching ----------

@@ -161,10 +161,10 @@ func (s *LLMService) StartConversation(ctx context.Context, req StartRequest) (*
 		if prefs.ServiceInterest != "" && s.prefetcher != nil {
 			s.prefetcher.StartPrefetch(ctx, req.OrgID, startCfg, prefs.ServiceInterest, prefs.ProviderPreference)
 		}
-		if prefs.ServiceInterest == "consultation" && prefs.Name == "" {
+		if isConcernBasedService(prefs.ServiceInterest) && prefs.Name == "" {
 			// Concern-based request (wrinkles, fine lines, anti-aging) — don't recommend a single treatment.
 			// Present multiple options and book a consultation.
-			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] The patient described a CONCERN (e.g., wrinkles, fine lines, aging), NOT a specific treatment. Do NOT recommend a single treatment like Botox. Instead: (1) Mention 2-3 relevant treatments the clinic offers (e.g., Botox, Dysport, Xeomin for wrinkles). (2) Explain that a licensed provider will evaluate which is best for them. (3) Offer to book a consultation. Example: 'There are several great options for that — like Botox, Dysport, and Xeomin. Your provider can evaluate which would work best for you during a consultation. Would you like to schedule one?' Then ask for their full name to proceed."})
+			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] The patient described a CONCERN (e.g., wrinkles, fine lines, aging), NOT a specific treatment. Do NOT recommend a single treatment like Botox. Instead: (1) Mention that there are several great options like Botox, Dysport, and Xeomin (wrinkle relaxers). (2) Explain that the provider will evaluate which is best for them at their appointment. (3) Proceed to book them — we'll search availability under the wrinkle relaxer category and leave a note for the provider about their specific concern. Ask for their full name to get started."})
 		} else if prefs.ServiceInterest != "" && prefs.Name == "" && !lastAssistantAskedForName(history) {
 			history = append(history, ChatMessage{Role: ChatRoleSystem, Content: "[SYSTEM GUARDRAIL] The patient mentioned a service but you do NOT have their name yet. NAME is #1 in the Moxie checklist and MUST be collected before anything else. You MUST ask for their full name NOW. Do NOT ask about patient type, schedule, provider, or email yet. Ask something like: 'Great choice! May I have your full name?'"})
 		}
