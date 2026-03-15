@@ -128,9 +128,9 @@ var universalServicePatterns = []struct {
 	{"peel", "peel"},
 	{"laser", "laser"},
 	{"injectable", "injectables"},
-	{"wrinkle", "Botox"},
-	{"anti-aging", "Botox"},
-	{"fine lines", "Botox"},
+	{"wrinkle", "consultation"},
+	{"anti-aging", "consultation"},
+	{"fine lines", "consultation"},
 }
 
 // ---------- past service patterns ----------
