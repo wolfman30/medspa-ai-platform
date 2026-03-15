@@ -260,6 +260,9 @@ func isCommonWord(word string) bool {
 		"would": true, "could": true, "should": true, "will": true,
 		"inquiring": true, "writing": true, "reaching": true, "contacting": true,
 		"wondering": true, "asking": true, "checking": true, "getting": true,
+		"rid": true, "remove": true, "fix": true, "reduce": true, "smooth": true,
+		"wrinkle": true, "wrinkles": true, "lines": true, "aging": true,
+		"these": true, "those": true, "around": true, "eyes": true,
 	}
 	return common[strings.ToLower(word)]
 }
