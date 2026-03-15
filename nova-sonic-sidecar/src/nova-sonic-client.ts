@@ -20,7 +20,7 @@ import { type ToolSpec } from "./tools.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const MODEL_ID = "amazon.nova-2-sonic-v1:0";
+const MODEL_ID = "amazon.nova-sonic-v1:0";
 const SESSION_MAX_MS = 8 * 60 * 1000; // 8 minutes
 const RENEWAL_BUFFER_MS = 30 * 1000; // renew 30s before expiry
 
