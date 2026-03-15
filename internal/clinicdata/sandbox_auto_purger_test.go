@@ -42,7 +42,7 @@ func TestSandboxAutoPurger_PurgesWhenPhoneMatches(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("DELETE FROM conversation_jobs").WithArgs(conversationID, conversationIDE164).WillReturnResult(pgxmock.NewResult("DELETE", 1))
-	mock.ExpectExec("DELETE FROM conversation_messages").WithArgs(conversationID, conversationIDE164).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectExec("DELETE FROM conversation_messages").WithArgs(orgID, conversationID, conversationIDE164, digits).WillReturnResult(pgxmock.NewResult("DELETE", 0))
 	mock.ExpectExec("DELETE FROM conversations").WithArgs(orgID, conversationID, conversationIDE164, digits).WillReturnResult(pgxmock.NewResult("DELETE", 0))
 	mock.ExpectExec("DELETE FROM outbox").WithArgs(orgID, digits).WillReturnResult(pgxmock.NewResult("DELETE", 0))
 	mock.ExpectExec("DELETE FROM payments").WithArgs(orgID, digits).WillReturnResult(pgxmock.NewResult("DELETE", 1))

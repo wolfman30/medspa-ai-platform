@@ -216,7 +216,23 @@ func main() {
 	// Notifications bootstrap
 	githubWebhookHandler := bootstrap.BootstrapNotifications(cfg, logger)
 
-	// Instagram DM adapter
+	// Instagram DM adapter — validate optional env vars
+	{
+		igEnvVars := map[string]string{
+			"INSTAGRAM_PAGE_ACCESS_TOKEN": os.Getenv("INSTAGRAM_PAGE_ACCESS_TOKEN"),
+			"INSTAGRAM_APP_SECRET":        os.Getenv("INSTAGRAM_APP_SECRET"),
+			"INSTAGRAM_VERIFY_TOKEN":      os.Getenv("INSTAGRAM_VERIFY_TOKEN"),
+		}
+		var missing []string
+		for k, v := range igEnvVars {
+			if v == "" {
+				missing = append(missing, k)
+			}
+		}
+		if len(missing) > 0 {
+			logger.Warn("instagram DM channel disabled: missing env vars", "missing", missing)
+		}
+	}
 	var igAdapter *instagram.Adapter
 	if igToken := os.Getenv("INSTAGRAM_PAGE_ACCESS_TOKEN"); igToken != "" {
 		igCfg := instagram.AdapterConfig{

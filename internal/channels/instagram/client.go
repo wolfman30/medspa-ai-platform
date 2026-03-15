@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultGraphAPIBase = "https://graph.facebook.com/v22.0"
+	defaultGraphAPIBase = "https://graph.facebook.com/v24.0"
 	defaultHTTPTimeout  = 10 * time.Second
 )
 
