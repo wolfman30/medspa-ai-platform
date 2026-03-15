@@ -119,12 +119,12 @@ export class CallSession {
           this.audioBuffer = [];
           this.log("info", "Mute window ended — buffering first 500ms of audio for STT warmup");
         }
-        // Buffer the first 500ms of audio, then flush all at once.
+        // Buffer the first 750ms of audio, then flush all at once.
         // This gives Nova Sonic's VAD a complete speech onset rather than
         // partial frames that get garbled ("Botox" → "talk").
         if (this.audioBuffer) {
           this.audioBuffer.push(msg.data);
-          if (Date.now() - this.audioBufferStart! >= 500) {
+          if (Date.now() - this.audioBufferStart! >= 750) {
             this.log("info", `Flushing audio buffer: ${this.audioBuffer.length} frames`);
             for (const frame of this.audioBuffer) {
               this.client?.sendAudio(frame);

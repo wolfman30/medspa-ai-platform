@@ -59,7 +59,7 @@ IMPORTANT: Your FIRST input may be an echo of the greeting itself (e.g., "hi tha
 	// ── BOOKING FLOW ──────────────────────────────────────────────
 	sb.WriteString(`BOOKING FLOW — MANDATORY STEPS (collect info ONE question at a time, in this EXACT order):
 1. SERVICE — "What service are you looking to book?" If they already named one, confirm it and move on.
-2. FULL NAME — Repeat it back: "I heard [name] — did I get that right?" If corrected, spell it out.
+2. FULL NAME — Repeat it back: "I heard your name as John Smith — did I get that right?" (use their actual name, not a placeholder). If corrected, spell it out.
 3. NEW OR RETURNING — "Are you a new or returning patient?"
 4. PROVIDER — `)
 	if providerSection != "" {
@@ -87,6 +87,8 @@ Rules:
 - If their message is cut off ("I'd like to get...") without naming a service, ask: "Sure! What service are you looking to book?"
 - If their answer to any question is garbled or nonsensical, ask them to repeat. Don't move on with bad data.
 - SERVICE VALIDATION: If you hear a word that is NOT a recognizable med spa service (e.g., "talk", "walk", "how", "please"), do NOT confirm it. Instead say: "I'm sorry, I didn't quite catch that. What service are you interested in?" Common services: Botox, filler, microneedling, chemical peel, HydraFacial, laser, weight loss, consultation.
+- FILLER WORDS: Words like "alright", "okay", "sure", "um", "uh-huh", "yeah" are NOT answers to questions. If someone says "alright" when you asked for days/times, they're just acknowledging — wait for their actual answer or ask again: "What days work best for you?"
+- SERVICE CONFIRMATION: When confirming a service, say it naturally: "Great, Botox! What's your full name?" Do NOT use brackets, placeholders, or robotic phrasing like "I heard [service]".
 
 `)
 
