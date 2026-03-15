@@ -99,10 +99,17 @@ func (p *Purger) PurgePhone(ctx context.Context, orgID string, phone string, opt
 		return PurgeResult{}, fmt.Errorf("clinicdata: delete conversation jobs: %w", err)
 	}
 
+	// Delete conversation_messages for ALL conversations that match — including
+	// those found by phone-digit regex. Without this, the wider conversations
+	// DELETE hits a foreign key constraint because messages still reference them.
 	resp.Deleted.ConversationMessages, err = execRowsAffected(ctx, tx, `
 		DELETE FROM conversation_messages
-		WHERE conversation_id = $1 OR conversation_id = $2
-	`, conversationIDDigits, conversationIDE164)
+		WHERE conversation_id IN (
+			SELECT conversation_id FROM conversations
+			WHERE org_id = $1
+			  AND (conversation_id = $2 OR conversation_id = $3 OR regexp_replace(phone, '\D', '', 'g') = $4)
+		)
+	`, orgID, conversationIDDigits, conversationIDE164, digits)
 	if err != nil {
 		return PurgeResult{}, fmt.Errorf("clinicdata: delete conversation messages: %w", err)
 	}
