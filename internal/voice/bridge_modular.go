@@ -275,7 +275,7 @@ func (b *ModularBridge) handleUserInput(ctx context.Context, text string) {
 	b.mu.Unlock()
 
 	// Send to Claude and get response (may include tool calls)
-	response, err := b.claude.SendMessage(ctx, "user", text)
+	response, err := b.claude.SendMessage(ctx, text)
 	if err != nil {
 		b.logger.Error("modular-bridge: claude error", "error", err)
 		return
@@ -348,13 +348,12 @@ func (b *ModularBridge) synthesizeAndStream(ctx context.Context, text string) er
 	if err != nil {
 		return fmt.Errorf("synthesizeAndStream: open session: %w", err)
 	}
+	defer session.Close()
 
 	if err := session.SendText(text); err != nil {
-		session.Close()
 		return fmt.Errorf("synthesizeAndStream: send text: %w", err)
 	}
 	if err := session.Flush(); err != nil {
-		session.Close()
 		return fmt.Errorf("synthesizeAndStream: flush: %w", err)
 	}
 
@@ -365,6 +364,14 @@ func (b *ModularBridge) synthesizeAndStream(ctx context.Context, text string) er
 			continue
 		}
 		b.outputChunks++
+
+		b.mu.Lock()
+		if b.closed {
+			b.mu.Unlock()
+			return nil
+		}
+		b.mu.Unlock()
+
 		select {
 		case b.telnyxOutput <- output:
 		default:
@@ -378,7 +385,7 @@ func (b *ModularBridge) synthesizeAndStream(ctx context.Context, text string) er
 // injectSystemMessage sends a system-initiated message through Claude → TTS.
 func (b *ModularBridge) injectSystemMessage(text string) {
 	ctx := b.ctx
-	response, err := b.claude.SendMessage(ctx, "user", fmt.Sprintf("[SYSTEM: Say this to the caller: %s]", text))
+	response, err := b.claude.SendMessage(ctx, fmt.Sprintf("[SYSTEM: Say this to the caller: %s]", text))
 	if err != nil {
 		b.logger.Error("modular-bridge: inject message error", "error", err)
 		return

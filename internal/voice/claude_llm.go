@@ -88,7 +88,7 @@ func NewClaudeLLM(ctx context.Context, cfg ClaudeLLMConfig, logger *slog.Logger)
 }
 
 // SendMessage sends a user message to Claude and returns the response.
-func (c *ClaudeLLM) SendMessage(ctx context.Context, role, text string) (*ClaudeResponse, error) {
+func (c *ClaudeLLM) SendMessage(ctx context.Context, text string) (*ClaudeResponse, error) {
 	userMsg := brtypes.Message{
 		Role: brtypes.ConversationRoleUser,
 		Content: []brtypes.ContentBlock{
