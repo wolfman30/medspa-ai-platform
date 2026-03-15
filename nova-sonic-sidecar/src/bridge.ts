@@ -72,6 +72,8 @@ export class CallSession {
   private greetingSent = false;
   private greetingMuteUntil = 0; // timestamp: discard user audio until this time
   private audioUnmuted = false; // tracks when first audio passes through after mute
+  private audioBuffer: string[] | null = null; // buffer first 500ms of audio for STT warmup
+  private audioBufferStart: number | null = null;
   private recentTTSTexts = new Map<string, number>(); // normalized text → timestamp
 
   constructor(ws: WebSocket, callId: string) {
@@ -111,13 +113,26 @@ export class CallSession {
       case "audio":
         // Bug #1: Discard audio during post-greeting mute window to prevent echo/crosstalk
         if (Date.now() < this.greetingMuteUntil) break;
-        // Bug #8: Send a short silence buffer when mute window first opens.
-        // Nova Sonic's VAD needs a moment of audio context before it can
-        // accurately transcribe speech. Without this, the first 1-2 seconds
-        // of the caller's words get garbled or lost.
         if (!this.audioUnmuted) {
           this.audioUnmuted = true;
-          this.log("info", "Mute window ended — audio flowing to Nova Sonic");
+          this.audioBufferStart = Date.now();
+          this.audioBuffer = [];
+          this.log("info", "Mute window ended — buffering first 500ms of audio for STT warmup");
+        }
+        // Buffer the first 500ms of audio, then flush all at once.
+        // This gives Nova Sonic's VAD a complete speech onset rather than
+        // partial frames that get garbled ("Botox" → "talk").
+        if (this.audioBuffer) {
+          this.audioBuffer.push(msg.data);
+          if (Date.now() - this.audioBufferStart! >= 500) {
+            this.log("info", `Flushing audio buffer: ${this.audioBuffer.length} frames`);
+            for (const frame of this.audioBuffer) {
+              this.client?.sendAudio(frame);
+            }
+            this.audioBuffer = null;
+            this.audioBufferStart = null;
+          }
+          break;
         }
         this.client?.sendAudio(msg.data);
         break;
