@@ -362,7 +362,10 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 					if blvdClient := boulevard.NewBoulevardClient(cfg.BoulevardBusinessID, cfg.BoulevardLocationID, logger); blvdClient != nil {
 						adapter := boulevard.NewBoulevardAdapter(blvdClient, os.Getenv("MOXIE_DRY_RUN") == "true", logger)
 						fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 8*time.Second)
-						slots, _, blvdErr := adapter.ResolveAvailabilityWithCart(fetchCtx, "", "", time.Now())
+						// Fetch for common services to get broad availability
+						// Empty string matches first service alphabetically which may have limited days
+						// "Botox" is the most commonly requested service
+						slots, _, blvdErr := adapter.ResolveAvailabilityWithCart(fetchCtx, "Botox", "", time.Now())
 						fetchCancel()
 						if blvdErr == nil && len(slots) > 0 {
 							// Filter slots against business hours
