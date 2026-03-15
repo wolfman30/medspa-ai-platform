@@ -10,6 +10,7 @@ import (
 	"github.com/wolfman30/medspa-ai-platform/internal/api/router"
 	appbootstrap "github.com/wolfman30/medspa-ai-platform/internal/app/bootstrap"
 	"github.com/wolfman30/medspa-ai-platform/internal/bootstrap"
+	"github.com/wolfman30/medspa-ai-platform/internal/channels/instagram"
 	appconfig "github.com/wolfman30/medspa-ai-platform/internal/config"
 	"github.com/wolfman30/medspa-ai-platform/internal/conversation"
 	"github.com/wolfman30/medspa-ai-platform/internal/events"
@@ -215,6 +216,26 @@ func main() {
 	// Notifications bootstrap
 	githubWebhookHandler := bootstrap.BootstrapNotifications(cfg, logger)
 
+	// Instagram DM adapter
+	var igAdapter *instagram.Adapter
+	if igToken := os.Getenv("INSTAGRAM_PAGE_ACCESS_TOKEN"); igToken != "" {
+		igCfg := instagram.AdapterConfig{
+			PageAccessToken: igToken,
+			AppSecret:       os.Getenv("INSTAGRAM_APP_SECRET"),
+			VerifyToken:     os.Getenv("INSTAGRAM_VERIFY_TOKEN"),
+			Publisher:       conversationPublisher,
+			Logger:          logger,
+		}
+		if sqlDB != nil {
+			igCfg.OrgResolver = instagram.NewDBOrgResolver(sqlDB)
+		}
+		if leadsRepo != nil {
+			igCfg.LeadResolver = instagram.NewSimpleLeadResolver(leadsRepo)
+		}
+		igAdapter = instagram.NewAdapter(igCfg)
+		logger.Info("instagram DM adapter initialized")
+	}
+
 	// Setup router
 	routerCfg := &router.Config{
 		Logger:                 logger,
@@ -260,6 +281,7 @@ func main() {
 		EvidenceS3Client:       evidenceS3,
 		EvidenceS3Bucket:       cfg.S3TrainingBucket,
 		EvidenceS3Region:       cfg.AWSRegion,
+		InstagramAdapter:       igAdapter,
 		VoiceAIHandler:         voiceAIHandler,
 		VoiceWSHandler:         voiceWSHandler,
 		CallControlHandler:     callControlHandler,
