@@ -182,10 +182,6 @@ func (h *TelnyxWebhookHandler) voiceAckMessage(ctx context.Context, orgID string
 			return cfg.AIPersona.CustomGreeting
 		}
 
-		// Voice AI callback disabled for now — text-back only until voice is production-ready
-		// if cfg.VoiceAIEnabled {
-		// 	return messaging.InstantAckMessageWithCallback(strings.TrimSpace(cfg.Name))
-		// }
 	}
 
 	// Fall back to standard template with clinic name (no callback option)
