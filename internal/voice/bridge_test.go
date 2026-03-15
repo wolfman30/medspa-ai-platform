@@ -224,6 +224,13 @@ func TestLooksLikeExplicitSlotSelection(t *testing.T) {
 	if looksLikeExplicitSlotSelection("I can check Thursday afternoon if that works") {
 		t.Fatal("did not expect vague time reference to count as explicit slot selection")
 	}
+	// Nova Sonic renders times as words — must detect spoken slot confirmations
+	if !looksLikeExplicitSlotSelection("Great, you're all set for Thursday, March twentieth at four thirty PM.") {
+		t.Fatal("expected spoken word slot confirmation to be detected")
+	}
+	if !looksLikeExplicitSlotSelection("All set for Tuesday, March eighteenth at two PM.") {
+		t.Fatal("expected 'all set' with spoken time to be detected")
+	}
 }
 
 func TestPaymentConfirmationChannel(t *testing.T) {

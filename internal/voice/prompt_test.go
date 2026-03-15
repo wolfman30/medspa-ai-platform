@@ -171,7 +171,7 @@ func TestBuildVoiceSystemPrompt_AvailabilityGuardrails(t *testing.T) {
 func TestBuildVoiceSystemPrompt_PaymentTruthfulness(t *testing.T) {
 	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	mustContain := []string{
-		"NEVER say payment went through unless the caller explicitly confirms",
+		"NEVER say \"you're all booked\" or end the call until the caller EXPLICITLY confirms",
 		"Never offer to email",
 		"Never invent capabilities",
 		"404",

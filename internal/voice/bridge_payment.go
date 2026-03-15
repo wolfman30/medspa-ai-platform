@@ -87,10 +87,24 @@ func (b *Bridge) maybeCaptureSlotSelection(text string) {
 // phrase and a specific date+time reference.
 func looksLikeExplicitSlotSelection(text string) bool {
 	normalized := strings.ToLower(text)
-	if !(strings.Contains(normalized, "works") || strings.Contains(normalized, "perfect") || strings.Contains(normalized, "great") || strings.Contains(normalized, "awesome") || strings.Contains(normalized, "book")) {
+	hasConfirmation := strings.Contains(normalized, "works") || strings.Contains(normalized, "perfect") ||
+		strings.Contains(normalized, "great") || strings.Contains(normalized, "awesome") ||
+		strings.Contains(normalized, "book") || strings.Contains(normalized, "all set") ||
+		strings.Contains(normalized, "confirmed") || strings.Contains(normalized, "scheduled")
+	if !hasConfirmation {
 		return false
 	}
-	return weekdayDateTimePattern.MatchString(text) || monthDateTimePattern.MatchString(text)
+	// Match numeric patterns (e.g., "Tuesday, March 18 at 2:00 PM")
+	if weekdayDateTimePattern.MatchString(text) || monthDateTimePattern.MatchString(text) {
+		return true
+	}
+	// Match spoken word patterns (e.g., "Thursday, March twentieth at four thirty PM")
+	// Nova Sonic renders times as words, so also detect day names + "at" + time words
+	hasDay := regexp.MustCompile(`(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b`).MatchString(normalized)
+	hasMonth := regexp.MustCompile(`(?i)\b(january|february|march|april|may|june|july|august|september|october|november|december)\b`).MatchString(normalized)
+	hasTimeWord := regexp.MustCompile(`(?i)\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirty|forty|fifteen|forty five|noon|o'clock)\b.{0,20}\b(am|pm|a\.m\.|p\.m\.)\b`).MatchString(normalized)
+	hasAt := strings.Contains(normalized, " at ")
+	return (hasDay || hasMonth) && hasAt && hasTimeWord
 }
 
 // parseTranscriptRoleAndText extracts the role prefix ([assistant] or [user]) and
