@@ -367,7 +367,9 @@ func BootstrapVoice(deps VoiceDeps) VoiceBootstrap {
 						if blvdErr == nil && len(slots) > 0 {
 							var slotLines []string
 							for i, s := range slots {
-								if i >= 12 { break }
+								if i >= 12 {
+									break
+								}
 								slotLines = append(slotLines, fmt.Sprintf("- %s", s.StartAt.Format("Mon Jan 2 at 3:04 PM")))
 							}
 							systemPrompt += "\n\nPRE-FETCHED AVAILABILITY (real times from the booking system — use these when the caller asks for times):\n" + strings.Join(slotLines, "\n") + "\n\nThese are REAL available slots. When the caller gives you their time preferences, match against these slots and offer the ones that fit. Do NOT invent other times."
