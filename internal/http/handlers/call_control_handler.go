@@ -413,7 +413,7 @@ func orgIDToClinicName(orgID string) string {
 		"brilliant-aesthetics":                 "Brilliant Aesthetics",
 		"lucys-laser-medspa":                   "Lucy's Laser and Med Spa",
 		"adela-medical-spa":                    "Adela Medical Spa",
-		"d9558a2d-2110-4e26-8224-1b36cd526e14": "BodyTonic Medspa",
+		"d9558a2d-2110-4e26-8224-1b36cd526e14": "BodyTonic Med Spa",
 	}
 	if name, ok := names[orgID]; ok {
 		return name
