@@ -158,7 +158,7 @@ func TestBuildVoiceSystemPrompt_IncludesAfterXGuardrails(t *testing.T) {
 func TestBuildVoiceSystemPrompt_AvailabilityGuardrails(t *testing.T) {
 	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
 	mustContain := []string{
-		"MUST use the check_availability tool",
+		"PRE-FETCHED AVAILABILITY",
 		"Never invent or guess times",
 	}
 	for _, fragment := range mustContain {
@@ -203,7 +203,7 @@ func TestBuildVoiceSystemPrompt_StructuredSections(t *testing.T) {
 
 func TestBuildVoiceSystemPrompt_NoPreLoadedAvailability(t *testing.T) {
 	prompt := BuildVoiceSystemPrompt(slog.Default(), nil, "")
-	if !strings.Contains(prompt, "MUST use the check_availability tool") {
+	if !strings.Contains(prompt, "PRE-FETCHED AVAILABILITY") {
 		t.Fatal("expected tool-only availability instruction")
 	}
 	if strings.Contains(prompt, "AVAILABILITY DATA") {
@@ -315,9 +315,9 @@ func TestPromptAntiHallucinationRule(t *testing.T) {
 		name     string
 		contains string
 	}{
-		{"declares zero knowledge", "ZERO knowledge of available appointment times"},
-		{"requires tool call", "ONLY way to get real times is by calling the check_availability tool"},
-		{"labels hallucination as lying", "you are LYING to the patient"},
+		{"declares pre-fetched availability", "PRE-FETCHED AVAILABILITY section"},
+		{"restricts to real slots", "ONLY times you are allowed to offer"},
+		{"forbids inventing times", "NEVER invent, guess, or make up any times"},
 	}
 	for _, c := range checks {
 		t.Run(c.name, func(t *testing.T) {
