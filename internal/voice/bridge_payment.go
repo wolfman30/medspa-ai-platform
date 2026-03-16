@@ -173,24 +173,42 @@ func (b *Bridge) maybeFireDepositSMS(ctx context.Context, text string) {
 		return
 	}
 	slotSelected := b.slotSelectionCaptured
+	slotDateSeen := b.slotDateTimeSeen
+	availFetched := b.availabilityFetched
 	b.mu.Unlock()
-
-	if !slotSelected {
-		b.logger.Info("bridge: deposit intent ignored until slot is explicitly selected",
-			"caller", b.callerPhone,
-			"text", text,
-		)
-		return
-	}
 
 	lower := strings.ToLower(text)
 	// Detect deposit link intent: Lauren says she'll text/send a deposit/payment link
 	hasDeposit := strings.Contains(lower, "deposit") || strings.Contains(lower, "payment")
-	hasSend := strings.Contains(lower, "text you") || strings.Contains(lower, "send you") || strings.Contains(lower, "sending")
-	hasLink := strings.Contains(lower, "link") || strings.Contains(lower, "secure link") || strings.Contains(lower, "secure deposit")
+	hasSend := strings.Contains(lower, "text you") || strings.Contains(lower, "send you") ||
+		strings.Contains(lower, "sending") || strings.Contains(lower, "sent you") ||
+		strings.Contains(lower, "i'll text") || strings.Contains(lower, "i will text")
+	hasLink := strings.Contains(lower, "link") || strings.Contains(lower, "secure link") ||
+		strings.Contains(lower, "secure deposit")
+	hasFiftyDollar := strings.Contains(lower, "fifty") || strings.Contains(lower, "$50") ||
+		strings.Contains(lower, "50 dollar") || strings.Contains(lower, "fifty dollar")
 
-	if !(hasDeposit && hasSend) && !(hasDeposit && hasLink) {
+	isDepositIntent := (hasDeposit && hasSend) || (hasDeposit && hasLink) || (hasFiftyDollar && (hasSend || hasLink || hasDeposit))
+
+	if !isDepositIntent {
 		return
+	}
+
+	// Gate: require slot selection OR at least a date/time mention + availability fetched.
+	// This prevents premature deposit but doesn't block when slot detection is too strict.
+	if !slotSelected && !(slotDateSeen && availFetched) {
+		b.logger.Info("bridge: deposit intent detected but no slot confirmed yet",
+			"caller", b.callerPhone,
+			"slot_selected", slotSelected,
+			"date_seen", slotDateSeen,
+			"avail_fetched", availFetched,
+			"text", text,
+		)
+		// Force-capture slot since Lauren is clearly in the deposit phase
+		b.mu.Lock()
+		b.slotSelectionCaptured = true
+		b.mu.Unlock()
+		b.logger.Info("bridge: force-capturing slot selection (Lauren reached deposit phase)")
 	}
 
 	b.mu.Lock()

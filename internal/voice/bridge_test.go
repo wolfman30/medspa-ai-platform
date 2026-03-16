@@ -198,19 +198,21 @@ func TestBridgeMaybeFireDepositSMS_DuplicateTranscriptVariantsStillSendOnce(t *t
 	}
 }
 
-func TestBridgeMaybeFireDepositSMS_DoesNotFireBeforeExplicitSlotSelection(t *testing.T) {
+func TestBridgeMaybeFireDepositSMS_ForcesCaptureWhenLaurenReachesDepositPhase(t *testing.T) {
 	b, messenger := newBridgeForDepositTests(t)
 
+	// Even without explicit slot selection, if Lauren says she's sending the deposit link,
+	// we trust her and force-capture the slot. This handles Nova 2 Sonic split transcripts.
 	b.maybeFireDepositSMS(context.Background(), "I'll text you the deposit link now.")
 
 	select {
 	case <-messenger.ch:
-		t.Fatal("unexpected SMS send before explicit slot selection")
-	case <-time.After(150 * time.Millisecond):
-		// expected
+		// expected — deposit SMS should fire
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected SMS send when Lauren reaches deposit phase")
 	}
-	if got := messenger.count(); got != 0 {
-		t.Fatalf("expected 0 SMS sends, got %d", got)
+	if got := messenger.count(); got != 1 {
+		t.Fatalf("expected 1 SMS send, got %d", got)
 	}
 }
 
