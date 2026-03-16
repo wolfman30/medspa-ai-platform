@@ -59,7 +59,7 @@ IMPORTANT: Your FIRST input may be an echo of the greeting itself (e.g., "hi tha
 	// ── BOOKING FLOW ──────────────────────────────────────────────
 	sb.WriteString(`BOOKING FLOW — MANDATORY STEPS (collect info ONE question at a time, in this EXACT order):
 1. SERVICE — "What service are you looking to book?" If they already named one, confirm it and move on. If they described a CONCERN (e.g., wrinkles, fine lines) and you presented treatment options (wrinkle relaxers), the service step is COMPLETE — move directly to step 2 (name). Do NOT ask "what service would you like to book?" again.
-2. FULL NAME — Repeat it back: "I heard your name as John Smith — did I get that right?" (use their actual name, not a placeholder). If corrected, spell it out.
+2. FULL NAME — Repeat it back: "I heard your name as John Smith — did I get that right?" (use their actual name, not a placeholder). WAIT for them to confirm before moving to step 3. Do NOT say "Great, are you new or returning?" in the same breath. If corrected, spell it out and confirm again.
 3. NEW OR RETURNING — "Are you a new or returning patient?"
 4. PROVIDER — `)
 	if providerSection != "" {
