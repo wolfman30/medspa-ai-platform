@@ -22,7 +22,7 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 const (
-	ModelID          = "amazon.nova-sonic-v1:0"
+	ModelID          = "amazon.nova-2-sonic-v1:0"
 	DefaultVoice     = "tiffany"
 	MaxSessionLength = 8 * time.Minute
 	RenewalBuffer    = 30 * time.Second // start renewal 30s before limit
