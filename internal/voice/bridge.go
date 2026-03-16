@@ -73,6 +73,10 @@ type Bridge struct {
 	// slotSelectionCaptured is set once Lauren explicitly confirms a date+time slot.
 	// Deposit SMS is gated on this to prevent premature payment prompts.
 	slotSelectionCaptured bool
+	// slotDateTimeSeen tracks if a date+time was mentioned in recent assistant text.
+	slotDateTimeSeen bool
+	// slotConfirmSeen tracks if a booking confirmation phrase was in recent assistant text.
+	slotConfirmSeen bool
 	// availabilityFetched tracks whether we've fetched service-specific availability.
 	availabilityFetched bool
 	// userServiceDetected tracks whether we detected a service in user transcript.

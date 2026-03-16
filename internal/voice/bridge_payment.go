@@ -73,14 +73,56 @@ var (
 )
 
 // maybeCaptureSlotSelection records when Lauren explicitly confirms a date+time slot.
+// Handles both single-message confirmations and split transcripts where the date/time
+// and confirmation phrase arrive in separate events (common with Nova 2 Sonic).
 func (b *Bridge) maybeCaptureSlotSelection(text string) {
-	if !looksLikeExplicitSlotSelection(text) {
+	// Check for single-message match first (original behavior)
+	if looksLikeExplicitSlotSelection(text) {
+		b.mu.Lock()
+		b.slotSelectionCaptured = true
+		b.mu.Unlock()
+		b.logger.Info("bridge: slot selection captured (single message)", "text", text)
 		return
 	}
 
+	// Track date/time and confirmation phrases separately for split transcripts
+	normalized := strings.ToLower(text)
+	role, _ := parseTranscriptRoleAndText(text)
+	if role != "assistant" {
+		return
+	}
+
+	hasDateTime := weekdayDateTimePattern.MatchString(text) || monthDateTimePattern.MatchString(text)
+	if !hasDateTime {
+		// Check spoken word patterns
+		hasDay := regexp.MustCompile(`(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b`).MatchString(normalized)
+		hasMonth := regexp.MustCompile(`(?i)\b(january|february|march|april|may|june|july|august|september|october|november|december)\b`).MatchString(normalized)
+		hasTimeWord := regexp.MustCompile(`(?i)\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirty|forty|fifteen|forty.five|noon|o'clock)\b.{0,20}\b(am|pm|a\.m\.|p\.m\.)\b`).MatchString(normalized)
+		hasAt := strings.Contains(normalized, " at ")
+		hasDateTime = (hasDay || hasMonth) && hasAt && hasTimeWord
+	}
+
+	hasConfirm := strings.Contains(normalized, "works") || strings.Contains(normalized, "perfect") ||
+		strings.Contains(normalized, "great") || strings.Contains(normalized, "awesome") ||
+		strings.Contains(normalized, "book") || strings.Contains(normalized, "all set") ||
+		strings.Contains(normalized, "confirmed") || strings.Contains(normalized, "scheduled") ||
+		strings.Contains(normalized, "reserved") || strings.Contains(normalized, "got you down")
+
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.slotSelectionCaptured = true
+	if hasDateTime {
+		b.slotDateTimeSeen = true
+	}
+	if hasConfirm {
+		b.slotConfirmSeen = true
+	}
+	// If we've seen both (even across separate messages), capture the slot
+	if b.slotDateTimeSeen && b.slotConfirmSeen && !b.slotSelectionCaptured {
+		b.slotSelectionCaptured = true
+		b.mu.Unlock()
+		b.logger.Info("bridge: slot selection captured (split messages)", "text", text)
+		return
+	}
+	b.mu.Unlock()
 }
 
 // looksLikeExplicitSlotSelection returns true if the text contains both a confirmation
