@@ -129,15 +129,36 @@ func (s *LLMService) injectMoxieQualificationGuardrails(ctx context.Context, pc 
 		})
 	}
 
-	// Patient type guardrail
+	// Name confirmation guardrail — confirm name before moving to patient type.
+	// If the name was just provided and the last assistant message didn't confirm it, force confirmation.
 	if prefs.ServiceInterest != "" && prefs.Name != "" && prefs.PatientType == "" {
-		pc.history = append(pc.history, ChatMessage{
-			Role: ChatRoleSystem,
-			Content: "[SYSTEM GUARDRAIL] You have the patient's name and service interest. " +
-				"Next in the checklist is PATIENT TYPE (#3). " +
-				"You MUST ask if they are a new or returning patient NOW. Do NOT ask about schedule, email, or provider yet. " +
-				"Ask something like: 'Have you visited us before, or would this be your first time?'",
-		})
+		lastAssistant := lastAssistantContent(pc.history)
+		nameConfirmed := lastAssistant != "" && (strings.Contains(strings.ToLower(lastAssistant), strings.ToLower(prefs.Name)) ||
+			assistantConfirmedName(lastAssistant))
+		userConfirmedName := lastUserConfirmedName(pc.history)
+
+		if !nameConfirmed {
+			// Name was just given — confirm it first, don't ask patient type yet
+			pc.history = append(pc.history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: fmt.Sprintf("[SYSTEM GUARDRAIL] The patient just gave their name as %s. "+
+					"You MUST confirm the name back to them and WAIT for their reply. "+
+					"Do NOT ask any other questions in the same message. "+
+					"Just say something like: 'Got it — %s, right?' and wait for confirmation.", prefs.Name, prefs.Name),
+			})
+		} else if !userConfirmedName {
+			// We confirmed the name but haven't gotten the user's yes/no yet — wait
+			// (No guardrail needed, just don't inject patient type guardrail)
+		} else {
+			// Name is confirmed — proceed to patient type
+			pc.history = append(pc.history, ChatMessage{
+				Role: ChatRoleSystem,
+				Content: "[SYSTEM GUARDRAIL] You have the patient's name and service interest. " +
+					"Next in the checklist is PATIENT TYPE (#3). " +
+					"You MUST ask if they are a new or returning patient NOW. Do NOT ask about schedule, email, or provider yet. " +
+					"Ask something like: 'Have you visited us before, or would this be your first time?'",
+			})
+		}
 	}
 
 	// Schedule guardrail
@@ -176,4 +197,62 @@ func (s *LLMService) injectMoxieQualificationGuardrails(ctx context.Context, pc 
 			})
 		}
 	}
+}
+
+// lastAssistantContent returns the content of the most recent assistant message.
+func lastAssistantContent(history []ChatMessage) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == ChatRoleAssistant {
+			return history[i].Content
+		}
+	}
+	return ""
+}
+
+// assistantConfirmedName checks if the assistant message contains a name confirmation pattern.
+func assistantConfirmedName(msg string) bool {
+	lower := strings.ToLower(msg)
+	confirmPatterns := []string{
+		"right?", "correct?", "did i get that right",
+		"is that right", "is that correct", "did i spell",
+		"got it —", "got it -", "got it,",
+	}
+	for _, p := range confirmPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// lastUserConfirmedName checks if the most recent user message after a name confirmation
+// is an affirmative response (yes, yeah, correct, etc.).
+func lastUserConfirmedName(history []ChatMessage) bool {
+	// Find the last assistant message that confirmed a name, then check the user reply
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == ChatRoleUser {
+			lower := strings.ToLower(strings.TrimSpace(history[i].Content))
+			// Check if this is an affirmative reply
+			affirmatives := []string{
+				"yes", "yeah", "yep", "yup", "correct", "that's right",
+				"right", "that's correct", "you got it", "perfect", "exactly",
+				"that's me", "thats right", "thats correct", "si", "mhm", "uh huh",
+			}
+			for _, a := range affirmatives {
+				if strings.Contains(lower, a) {
+					return true
+				}
+			}
+			// Also check if they corrected the name — that counts as "confirmed" (with new name)
+			if strings.Contains(lower, "no") || strings.Contains(lower, "actually") ||
+				strings.Contains(lower, "it's") || strings.Contains(lower, "its ") {
+				return true // They responded — name interaction is done (correction handled by extractor)
+			}
+			return false // User replied with something but not a confirmation
+		}
+		if history[i].Role == ChatRoleAssistant && assistantConfirmedName(history[i].Content) {
+			return false // Found confirmation but no user reply yet
+		}
+	}
+	return false
 }
