@@ -75,6 +75,8 @@ type Bridge struct {
 	slotSelectionCaptured bool
 	// availabilityFetched tracks whether we've fetched service-specific availability.
 	availabilityFetched bool
+	// userServiceDetected tracks whether we detected a service in user transcript.
+	userServiceDetected bool
 	// fetchedSlots stores the raw slots from Boulevard for later filtering.
 	fetchedSlots []boulevard.TimeSlot
 	// timePreferenceInjected tracks whether we've already injected filtered slots.
@@ -306,6 +308,7 @@ func (b *Bridge) handleTextEvent(ctx context.Context, event NovaSonicEvent) {
 		b.onTranscript(role, cleanText)
 	}
 	b.maybeCaptureSlotSelection(event.Text)
+	b.maybeDetectUserService(ctx, event.Text)
 	b.maybeFetchAvailability(ctx, event.Text)
 	b.maybeFilterAndInjectSlots(ctx, event.Text)
 	// Detect when Lauren mentions sending a deposit link — trigger SMS only after

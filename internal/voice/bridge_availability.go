@@ -26,6 +26,74 @@ func newBoulevardClientForVoice(cfg *clinic.Config, logger *slog.Logger) *boulev
 	return boulevard.NewBoulevardAdapter(client, false, l) // Never dry-run for availability reads
 }
 
+// voiceServiceNames is a list of recognizable service names for user-side detection.
+var voiceServiceNames = []string{
+	"botox", "dysport", "xeomin", "filler", "lip filler", "cheek filler",
+	"microneedling", "hydrafacial", "chemical peel", "laser", "ipl",
+	"weight loss", "semaglutide", "consultation", "facial", "prp",
+	"kybella", "tattoo removal", "thread lift", "pdo thread",
+}
+
+// maybeDetectUserService checks if a user transcript contains a service name that
+// Lauren may have missed (e.g., due to echo/timing issues). If detected, injects
+// a system message to ensure Lauren doesn't re-ask for the service.
+func (b *Bridge) maybeDetectUserService(ctx context.Context, text string) {
+	role, cleanText := parseTranscriptRoleAndText(text)
+	if role != "user" {
+		return
+	}
+
+	b.mu.Lock()
+	alreadyDetected := b.userServiceDetected
+	b.mu.Unlock()
+	if alreadyDetected {
+		return
+	}
+
+	lower := strings.ToLower(cleanText)
+	var detected string
+	for _, svc := range voiceServiceNames {
+		if strings.Contains(lower, svc) {
+			detected = svc
+			break
+		}
+	}
+
+	// Also check concern-based patterns
+	if detected == "" {
+		concernPatterns := []string{"wrinkle", "fine lines", "anti-aging", "anti aging"}
+		for _, p := range concernPatterns {
+			if strings.Contains(lower, p) {
+				detected = "wrinkle relaxer"
+				break
+			}
+		}
+	}
+
+	if detected == "" {
+		return
+	}
+
+	b.mu.Lock()
+	if b.userServiceDetected {
+		b.mu.Unlock()
+		return
+	}
+	b.userServiceDetected = true
+	b.mu.Unlock()
+
+	b.logger.Info("bridge: detected service in user transcript",
+		"service", detected, "caller", b.callerPhone, "text", cleanText)
+
+	// Inject system message so Lauren knows the service was mentioned
+	injectText := fmt.Sprintf("[SYSTEM: The caller just said they want %s. "+
+		"Do NOT ask what service they want — they already told you. "+
+		"Confirm the service and move to the next step (full name).]", detected)
+	if err := b.sidecar.InjectText(injectText); err != nil {
+		b.logger.Error("bridge: failed to inject user service detection", "error", err)
+	}
+}
+
 // serviceConfirmationPattern matches Lauren confirming a service: "Great, Botox!" or "microneedling!"
 var serviceConfirmationPattern = regexp.MustCompile(`(?i)\b(?:great|perfect|awesome|wonderful|sure),?\s+([A-Za-z][A-Za-z /&-]+?)(?:!|\.|\s*What)`)
 
